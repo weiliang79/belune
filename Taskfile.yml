@@ -1,0 +1,114 @@
+version: '3'
+
+dotenv: ['.env']
+
+vars:
+  API_DIR: apps/api
+  WEB_DIR: apps/web
+  INFRA_DIR: infra
+
+tasks:
+  # ─── Development ───────────────────────────────────────────────
+
+  dev:api:
+    desc: Run Go API with hot reload
+    dir: '{{.API_DIR}}'
+    cmd: air
+    env:
+      ENV_FILE: '{{.ROOT_DIR}}/.env'
+
+  dev:web:
+    desc: Run SvelteKit dev server
+    dir: '{{.WEB_DIR}}'
+    cmd: npm run dev
+
+  dev:infra:
+    desc: Start Postgres, Redis, Caddy via Docker Compose
+    dir: '{{.INFRA_DIR}}'
+    cmd: docker compose up -d
+
+  dev:infra:down:
+    desc: Stop infrastructure containers
+    dir: '{{.INFRA_DIR}}'
+    cmd: docker compose down
+
+  # ─── Build ─────────────────────────────────────────────────────
+
+  build:web:
+    desc: Build SvelteKit static output
+    dir: '{{.WEB_DIR}}'
+    cmds:
+      - npm run build
+      - cp -r build/* ../api/frontend/
+
+  build:api:
+    desc: Build Go binary with embedded frontend
+    dir: '{{.API_DIR}}'
+    cmd: go build -o ../../paas ./cmd/server
+
+  build:
+    desc: Build everything (frontend then backend)
+    cmds:
+      - task: build:web
+      - task: build:api
+
+  # ─── Code Generation ──────────────────────────────────────────
+
+  generate:sqlc:
+    desc: Regenerate sqlc Go code from SQL queries
+    dir: '{{.API_DIR}}'
+    cmd: sqlc generate
+
+  generate:types:
+    desc: Regenerate types from OpenAPI spec
+    cmds:
+      - 'echo "TODO: Add OpenAPI type generation commands"'
+
+  # ─── Database ──────────────────────────────────────────────────
+
+  db:migrate:up:
+    desc: Run all pending migrations
+    dir: '{{.API_DIR}}'
+    cmd: migrate -path internal/migrations -database "${DATABASE_URL}" up
+
+  db:migrate:down:
+    desc: Rollback last migration
+    dir: '{{.API_DIR}}'
+    cmd: migrate -path internal/migrations -database "${DATABASE_URL}" down 1
+
+  db:migrate:create:
+    desc: Create a new migration file
+    dir: '{{.API_DIR}}'
+    cmd: migrate create -ext sql -dir internal/migrations -seq {{.CLI_ARGS}}
+
+  # ─── Testing ───────────────────────────────────────────────────
+
+  test:api:
+    desc: Run Go tests
+    dir: '{{.API_DIR}}'
+    cmd: go test ./...
+
+  test:web:
+    desc: Run Svelte component tests
+    dir: '{{.WEB_DIR}}'
+    cmd: npm run test
+
+  test:
+    desc: Run all tests
+    cmds:
+      - task: test:api
+      - task: test:web
+
+  # ─── Linting & Formatting ─────────────────────────────────────
+
+  lint:
+    desc: Run all linters
+    cmds:
+      - cd {{.API_DIR}} && golangci-lint run
+      - cd {{.WEB_DIR}} && npm run lint
+
+  fmt:
+    desc: Format all code
+    cmds:
+      - cd {{.API_DIR}} && gofmt -w .
+      - cd {{.WEB_DIR}} && npx prettier --write .

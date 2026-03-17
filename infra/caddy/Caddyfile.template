@@ -1,0 +1,12 @@
+{
+	admin 0.0.0.0:2019
+}
+
+# Default site — PaaS dashboard
+:80 {
+	reverse_proxy localhost:8080
+}
+
+# Per-app configs are managed dynamically via the Caddy Admin API
+# See: infra/caddy/sites/
+import sites/*

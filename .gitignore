@@ -1,0 +1,45 @@
+# Binaries
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+paas
+
+# Go
+apps/api/tmp/
+apps/api/frontend/*.html
+apps/api/frontend/*.js
+apps/api/frontend/*.css
+apps/api/frontend/**/*
+!apps/api/frontend/.gitkeep
+
+# Node
+node_modules/
+dist/
+.svelte-kit/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Generated
+packages/types/generated/go/*
+packages/types/generated/ts/*
+!packages/types/generated/go/.gitkeep
+!packages/types/generated/ts/.gitkeep
+apps/api/internal/store/generated/*
+!apps/api/internal/store/generated/.gitkeep
+
+# Test
+coverage/
+*.out
