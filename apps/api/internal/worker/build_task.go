@@ -7,7 +7,7 @@ import (
 	"github.com/hibiken/asynq"
 )
 
-func HandleBuildTask(ctx context.Context, t *asynq.Task) error {
+func (h *TaskHandler) HandleBuildTask(ctx context.Context, t *asynq.Task) error {
 	slog.Info("handling build task", "payload", string(t.Payload()))
 	// TODO: Run build via builder chain (Dockerfile → CNB → Nixpacks)
 	return nil

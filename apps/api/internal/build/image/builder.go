@@ -2,15 +2,19 @@ package image
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/ungweiliang/selfhost-paas/internal/build"
+	"github.com/ungweiliang/selfhost-paas/internal/runtime"
 )
 
 // Builder handles pre-built images — just pull and deploy, no build step.
-type Builder struct{}
+type Builder struct {
+	runtime runtime.ContainerRuntime
+}
 
-func New() *Builder {
-	return &Builder{}
+func New(rt runtime.ContainerRuntime) *Builder {
+	return &Builder{runtime: rt}
 }
 
 func (b *Builder) Name() string { return "image" }
@@ -20,6 +24,8 @@ func (b *Builder) CanBuild(ctx context.Context, sourceDir string) bool {
 }
 
 func (b *Builder) Build(ctx context.Context, opts build.BuildOptions) (*build.BuildResult, error) {
-	// TODO: Pull the pre-built image
+	if err := b.runtime.PullImage(ctx, opts.ImageTag); err != nil {
+		return nil, fmt.Errorf("pull image: %w", err)
+	}
 	return &build.BuildResult{ImageTag: opts.ImageTag}, nil
 }

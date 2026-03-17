@@ -17,5 +17,10 @@ UPDATE services SET
 WHERE id = $1
 RETURNING *;
 
+-- name: UpdateServiceStatus :one
+UPDATE services SET status = $2, updated_at = NOW()
+WHERE id = $1
+RETURNING *;
+
 -- name: DeleteService :exec
 DELETE FROM services WHERE id = $1;

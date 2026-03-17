@@ -10,9 +10,20 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/hibiken/asynq"
+
+	"github.com/ungweiliang/selfhost-paas/internal/build"
+	"github.com/ungweiliang/selfhost-paas/internal/build/buildpacks"
+	"github.com/ungweiliang/selfhost-paas/internal/build/dockerfile"
+	"github.com/ungweiliang/selfhost-paas/internal/build/image"
+	"github.com/ungweiliang/selfhost-paas/internal/build/nixpacks"
 	"github.com/ungweiliang/selfhost-paas/internal/config"
+	"github.com/ungweiliang/selfhost-paas/internal/proxy/caddy"
+	"github.com/ungweiliang/selfhost-paas/internal/runtime/docker"
 	"github.com/ungweiliang/selfhost-paas/internal/server"
 	"github.com/ungweiliang/selfhost-paas/internal/store"
+	"github.com/ungweiliang/selfhost-paas/internal/store/generated"
+	"github.com/ungweiliang/selfhost-paas/internal/worker"
 )
 
 func main() {
@@ -22,6 +33,7 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Database
 	db, err := store.Connect(cfg.DatabaseURL)
 	if err != nil {
 		slog.Error("failed to connect to database", "error", err)
@@ -29,7 +41,50 @@ func main() {
 	}
 	defer db.Close()
 
-	srv := server.New(cfg, db)
+	queries := generated.New(db)
+
+	// Docker runtime
+	dockerClient, err := docker.New()
+	if err != nil {
+		slog.Error("failed to create docker client", "error", err)
+		os.Exit(1)
+	}
+	defer dockerClient.Close()
+
+	// Caddy proxy
+	caddyClient := caddy.New(cfg.CaddyAdminURL)
+
+	// Asynq client for enqueuing tasks
+	asynqClient := asynq.NewClient(asynq.RedisClientOpt{Addr: cfg.RedisURL})
+	defer asynqClient.Close()
+
+	// Build chain: Dockerfile → Buildpacks → Nixpacks
+	buildChain := build.NewChain(
+		dockerfile.New(dockerClient),
+		buildpacks.New(dockerClient),
+		nixpacks.New(),
+		image.New(dockerClient),
+	)
+
+	// Worker for background tasks
+	taskHandler := &worker.TaskHandler{
+		Runtime:       dockerClient,
+		Proxy:         caddyClient,
+		Queries:       queries,
+		Chain:         buildChain,
+		EncryptionKey: cfg.EncryptionKey,
+	}
+
+	w := worker.New(cfg.RedisURL, taskHandler)
+	go func() {
+		if err := w.Start(); err != nil {
+			slog.Error("worker failed to start", "error", err)
+		}
+	}()
+	defer w.Stop()
+
+	// HTTP server
+	srv := server.New(cfg, db, queries, asynqClient, dockerClient)
 
 	httpServer := &http.Server{
 		Addr:         fmt.Sprintf(":%d", cfg.Port),

@@ -4,11 +4,14 @@ import (
 	"github.com/go-chi/chi/v5"
 	chiMiddleware "github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
+	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/ungweiliang/selfhost-paas/internal/config"
 	"github.com/ungweiliang/selfhost-paas/internal/handler"
+	"github.com/ungweiliang/selfhost-paas/internal/runtime"
 	"github.com/ungweiliang/selfhost-paas/internal/server/middleware"
+	"github.com/ungweiliang/selfhost-paas/internal/store/generated"
 )
 
 type Server struct {
@@ -18,11 +21,11 @@ type Server struct {
 	handler *handler.Handler
 }
 
-func New(cfg *config.Config, db *pgxpool.Pool) *Server {
+func New(cfg *config.Config, db *pgxpool.Pool, queries *generated.Queries, asynqClient *asynq.Client, rt runtime.ContainerRuntime) *Server {
 	s := &Server{
 		cfg:     cfg,
 		db:      db,
-		handler: handler.New(cfg, db),
+		handler: handler.New(cfg, db, queries, asynqClient, rt),
 	}
 
 	s.router = s.setupRouter()
