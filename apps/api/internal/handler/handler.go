@@ -8,7 +8,9 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/ungweiliang/selfhost-paas/internal/config"
+	"github.com/ungweiliang/selfhost-paas/internal/proxy"
 	"github.com/ungweiliang/selfhost-paas/internal/runtime"
+	"github.com/ungweiliang/selfhost-paas/internal/service"
 	"github.com/ungweiliang/selfhost-paas/internal/store/generated"
 )
 
@@ -18,15 +20,19 @@ type Handler struct {
 	queries *generated.Queries
 	asynq   *asynq.Client
 	runtime runtime.ContainerRuntime
+	proxy   proxy.ProxyManager
+	auth    *service.AuthService
 }
 
-func New(cfg *config.Config, db *pgxpool.Pool, queries *generated.Queries, asynqClient *asynq.Client, rt runtime.ContainerRuntime) *Handler {
+func New(cfg *config.Config, db *pgxpool.Pool, queries *generated.Queries, asynqClient *asynq.Client, rt runtime.ContainerRuntime, pm proxy.ProxyManager, auth *service.AuthService) *Handler {
 	return &Handler{
 		cfg:     cfg,
 		db:      db,
 		queries: queries,
 		asynq:   asynqClient,
 		runtime: rt,
+		proxy:   pm,
+		auth:    auth,
 	}
 }
 

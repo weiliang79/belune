@@ -6,5 +6,8 @@ INSERT INTO domains (service_id, hostname, ssl_enabled)
 VALUES ($1, $2, $3)
 RETURNING *;
 
+-- name: GetDomain :one
+SELECT * FROM domains WHERE id = $1;
+
 -- name: DeleteDomain :exec
 DELETE FROM domains WHERE id = $1;

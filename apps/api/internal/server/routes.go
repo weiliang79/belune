@@ -5,12 +5,12 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/ungweiliang/selfhost-paas/internal/config"
 	"github.com/ungweiliang/selfhost-paas/internal/handler"
 	"github.com/ungweiliang/selfhost-paas/internal/server/middleware"
+	"github.com/ungweiliang/selfhost-paas/internal/service"
 )
 
-func registerRoutes(r chi.Router, h *handler.Handler, cfg *config.Config) {
+func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService) {
 	// Health check
 	r.Get("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -21,11 +21,13 @@ func registerRoutes(r chi.Router, h *handler.Handler, cfg *config.Config) {
 	r.Group(func(r chi.Router) {
 		r.Post("/api/auth/login", h.Login)
 		r.Post("/api/auth/logout", h.Logout)
+		r.Get("/api/auth/setup", h.Setup)
+		r.Post("/api/auth/setup", h.Setup)
 	})
 
 	// Protected routes
 	r.Group(func(r chi.Router) {
-		r.Use(middleware.Auth(cfg.JWTSecret))
+		r.Use(middleware.Auth(auth))
 
 		r.Get("/api/auth/me", h.Me)
 

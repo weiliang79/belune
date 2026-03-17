@@ -9,8 +9,10 @@ import (
 
 	"github.com/ungweiliang/selfhost-paas/internal/config"
 	"github.com/ungweiliang/selfhost-paas/internal/handler"
+	"github.com/ungweiliang/selfhost-paas/internal/proxy"
 	"github.com/ungweiliang/selfhost-paas/internal/runtime"
 	"github.com/ungweiliang/selfhost-paas/internal/server/middleware"
+	"github.com/ungweiliang/selfhost-paas/internal/service"
 	"github.com/ungweiliang/selfhost-paas/internal/store/generated"
 )
 
@@ -19,13 +21,17 @@ type Server struct {
 	db      *pgxpool.Pool
 	router  chi.Router
 	handler *handler.Handler
+	auth    *service.AuthService
 }
 
-func New(cfg *config.Config, db *pgxpool.Pool, queries *generated.Queries, asynqClient *asynq.Client, rt runtime.ContainerRuntime) *Server {
+func New(cfg *config.Config, db *pgxpool.Pool, queries *generated.Queries, asynqClient *asynq.Client, rt runtime.ContainerRuntime, pm proxy.ProxyManager) *Server {
+	auth := service.NewAuthService(queries, cfg.JWTSecret)
+
 	s := &Server{
 		cfg:     cfg,
 		db:      db,
-		handler: handler.New(cfg, db, queries, asynqClient, rt),
+		auth:    auth,
+		handler: handler.New(cfg, db, queries, asynqClient, rt, pm, auth),
 	}
 
 	s.router = s.setupRouter()
@@ -53,7 +59,7 @@ func (s *Server) setupRouter() chi.Router {
 	}))
 
 	// Register routes
-	registerRoutes(r, s.handler, s.cfg)
+	registerRoutes(r, s.handler, s.auth)
 
 	return r
 }

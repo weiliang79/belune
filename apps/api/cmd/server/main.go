@@ -84,7 +84,7 @@ func main() {
 	defer w.Stop()
 
 	// HTTP server
-	srv := server.New(cfg, db, queries, asynqClient, dockerClient)
+	srv := server.New(cfg, db, queries, asynqClient, dockerClient, caddyClient)
 
 	httpServer := &http.Server{
 		Addr:         fmt.Sprintf(":%d", cfg.Port),

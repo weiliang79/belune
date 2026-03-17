@@ -204,5 +204,77 @@ func (h *Handler) RestartService(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusAccepted, deployment)
 }
 
-func (h *Handler) UpdateService(w http.ResponseWriter, r *http.Request) { notImplemented(w, r) }
-func (h *Handler) DeleteService(w http.ResponseWriter, r *http.Request) { notImplemented(w, r) }
+type updateServiceRequest struct {
+	Name              string `json:"name"`
+	SourceRepo        string `json:"source_repo"`
+	SourceImage       string `json:"source_image"`
+	DockerfilePath    string `json:"dockerfile_path"`
+	BuildTypeOverride string `json:"build_type_override"`
+	BuilderImage      string `json:"builder_image"`
+}
+
+func (h *Handler) UpdateService(w http.ResponseWriter, r *http.Request) {
+	serviceID := chi.URLParam(r, "serviceId")
+	var serviceUUID pgtype.UUID
+	if err := serviceUUID.Scan(serviceID); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid service id")
+		return
+	}
+
+	// Get current service to preserve unchanged fields
+	current, err := h.queries.GetService(r.Context(), serviceUUID)
+	if err != nil {
+		writeError(w, http.StatusNotFound, "service not found")
+		return
+	}
+
+	var req updateServiceRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	name := current.Name
+	if req.Name != "" {
+		name = req.Name
+	}
+
+	svc, err := h.queries.UpdateService(r.Context(), generated.UpdateServiceParams{
+		ID:                serviceUUID,
+		Name:              name,
+		SourceRepo:        pgtype.Text{String: req.SourceRepo, Valid: req.SourceRepo != ""},
+		SourceImage:       pgtype.Text{String: req.SourceImage, Valid: req.SourceImage != ""},
+		DockerfilePath:    pgtype.Text{String: req.DockerfilePath, Valid: req.DockerfilePath != ""},
+		BuildTypeOverride: pgtype.Text{String: req.BuildTypeOverride, Valid: req.BuildTypeOverride != ""},
+		BuilderImage:      pgtype.Text{String: req.BuilderImage, Valid: req.BuilderImage != ""},
+		CustomBuildpacks:  current.CustomBuildpacks,
+		Status:            current.Status,
+	})
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to update service")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, svc)
+}
+
+func (h *Handler) DeleteService(w http.ResponseWriter, r *http.Request) {
+	serviceID := chi.URLParam(r, "serviceId")
+	var serviceUUID pgtype.UUID
+	if err := serviceUUID.Scan(serviceID); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid service id")
+		return
+	}
+
+	// Stop and remove the container
+	containerName := fmt.Sprintf("paas-%s", serviceID[:8])
+	_ = h.runtime.StopContainer(r.Context(), containerName)
+	_ = h.runtime.RemoveContainer(r.Context(), containerName)
+
+	if err := h.queries.DeleteService(r.Context(), serviceUUID); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to delete service")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
+}
