@@ -48,6 +48,7 @@ func (c *Client) CreateContainer(ctx context.Context, cfg runtime.ContainerConfi
 		&container.Config{
 			Image:        cfg.Image,
 			Env:          env,
+			Cmd:          cfg.Cmd,
 			ExposedPorts: exposedPorts,
 			Labels:       labels,
 		},

@@ -9,5 +9,11 @@ INSERT INTO databases (project_id, type, name, version, status, internal_host, i
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 RETURNING *;
 
+-- name: UpdateDatabaseStatus :one
+UPDATE databases SET status = $2 WHERE id = $1 RETURNING *;
+
+-- name: UpdateDatabaseAfterProvision :one
+UPDATE databases SET status = $2, internal_host = $3, internal_port = $4 WHERE id = $1 RETURNING *;
+
 -- name: DeleteDatabase :exec
 DELETE FROM databases WHERE id = $1;

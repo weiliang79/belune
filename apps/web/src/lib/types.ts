@@ -67,4 +67,6 @@ export interface Database {
   internal_host: string;
   internal_port: number;
   created_at: string;
+  credentials?: Record<string, string>;
+  connection_string?: string;
 }

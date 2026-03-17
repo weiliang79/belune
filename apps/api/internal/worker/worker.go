@@ -46,6 +46,7 @@ func (w *Worker) Start() error {
 	mux.HandleFunc(TypeDeploy, w.handler.HandleDeployTask)
 	mux.HandleFunc(TypeBuild, w.handler.HandleBuildTask)
 	mux.HandleFunc(TypeCleanup, w.handler.HandleCleanupTask)
+	mux.HandleFunc(TypeProvisionDB, w.handler.HandleProvisionDBTask)
 
 	slog.Info("starting worker server")
 	return w.server.Start(mux)

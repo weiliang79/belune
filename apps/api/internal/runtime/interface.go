@@ -12,6 +12,7 @@ type ContainerConfig struct {
 	Ports   map[string]string // host:container
 	Volumes map[string]string // host:container
 	Network string
+	Cmd     []string
 }
 
 type ContainerInfo struct {
