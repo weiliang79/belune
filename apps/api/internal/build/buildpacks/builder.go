@@ -2,6 +2,9 @@ package buildpacks
 
 import (
 	"context"
+	"fmt"
+	"log/slog"
+	"os/exec"
 
 	"github.com/ungweiliang/selfhost-paas/internal/build"
 	"github.com/ungweiliang/selfhost-paas/internal/runtime"
@@ -23,7 +26,10 @@ func New(rt runtime.ContainerRuntime) *Builder {
 func (b *Builder) Name() string { return "buildpacks" }
 
 func (b *Builder) CanBuild(ctx context.Context, sourceDir string) bool {
-	// CNB can attempt to build most source directories
+	if _, err := exec.LookPath("pack"); err != nil {
+		slog.Debug("pack CLI not found, skipping buildpacks builder")
+		return false
+	}
 	return true
 }
 
@@ -33,12 +39,32 @@ func (b *Builder) Build(ctx context.Context, opts build.BuildOptions) (*build.Bu
 		builderImage = opts.BuilderImage
 	}
 
-	// TODO: Run `pack build` with:
-	//   --builder <builderImage>
-	//   --buildpack <bp1> --buildpack <bp2> ... (if opts.Buildpacks is set)
-	//   --tag <opts.ImageTag>
-	//   --path <opts.SourceDir>
-	_ = builderImage
+	args := []string{
+		"build", opts.ImageTag,
+		"--builder", builderImage,
+		"--path", opts.SourceDir,
+		"--trust-builder",
+	}
 
-	return &build.BuildResult{ImageTag: opts.ImageTag}, nil
+	for _, bp := range opts.Buildpacks {
+		args = append(args, "--buildpack", bp)
+	}
+
+	for k, v := range opts.Env {
+		args = append(args, "--env", fmt.Sprintf("%s=%s", k, v))
+	}
+
+	slog.Info("running pack build", "image", opts.ImageTag, "builder", builderImage)
+	cmd := exec.CommandContext(ctx, "pack", args...)
+	output, err := cmd.CombinedOutput()
+	logs := string(output)
+
+	if err != nil {
+		return nil, fmt.Errorf("pack build failed: %w\nOutput:\n%s", err, logs)
+	}
+
+	return &build.BuildResult{
+		ImageTag: opts.ImageTag,
+		Logs:     logs,
+	}, nil
 }

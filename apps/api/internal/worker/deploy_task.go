@@ -56,6 +56,22 @@ func (h *TaskHandler) HandleDeployTask(ctx context.Context, t *asynq.Task) error
 	// Ensure the paas network exists
 	_ = h.Runtime.CreateNetwork(ctx, "paas-net")
 
+	// Fetch and decrypt env vars (needed for both build-time and runtime)
+	envVars, err := h.Queries.ListEnvVarsByService(ctx, serviceID)
+	if err != nil {
+		slog.Warn("failed to fetch env vars, continuing without them", "error", err)
+	}
+
+	env := make(map[string]string)
+	for _, ev := range envVars {
+		decrypted, err := crypto.Decrypt(ev.ValueEncrypted, h.EncryptionKey)
+		if err != nil {
+			slog.Warn("failed to decrypt env var, skipping", "key", ev.Key, "error", err)
+			continue
+		}
+		env[ev.Key] = string(decrypted)
+	}
+
 	var imageName string
 	var commitSHA string
 
@@ -88,13 +104,19 @@ func (h *TaskHandler) HandleDeployTask(ctx context.Context, t *asynq.Task) error
 		commitSHA = cloneResult.CommitSHA
 		slog.Info("cloned repository", "commit", commitSHA)
 
-		// Determine builder: use override if set, otherwise auto-detect
+		// Parse custom buildpacks from service config
+		var customBuildpacks []string
+		if len(svc.CustomBuildpacks) > 0 {
+			_ = json.Unmarshal(svc.CustomBuildpacks, &customBuildpacks)
+		}
+
 		buildOpts := build.BuildOptions{
 			SourceDir:      tmpDir,
 			ImageTag:       imageName,
 			DockerfilePath: svc.DockerfilePath.String,
 			BuilderImage:   svc.BuilderImage.String,
-			Env:            map[string]string{},
+			Buildpacks:     customBuildpacks,
+			Env:            env,
 		}
 
 		// Update status to building
@@ -109,28 +131,21 @@ func (h *TaskHandler) HandleDeployTask(ctx context.Context, t *asynq.Task) error
 			h.failDeployment(ctx, deploymentID, fmt.Sprintf("build: %v", err))
 			return fmt.Errorf("build: %w", err)
 		}
+
+		// Store build logs in deployment record
+		if result.Logs != "" {
+			h.Queries.UpdateDeploymentBuildLogs(ctx, generated.UpdateDeploymentBuildLogsParams{
+				ID:        deploymentID,
+				BuildLogs: pgtype.Text{String: result.Logs, Valid: true},
+			})
+		}
+
 		imageName = result.ImageTag
 		slog.Info("build completed", "image", imageName)
 
 	default:
 		h.failDeployment(ctx, deploymentID, fmt.Sprintf("unknown service type: %s", svc.Type))
 		return fmt.Errorf("unknown service type: %s", svc.Type)
-	}
-
-	// Fetch env vars for the service
-	envVars, err := h.Queries.ListEnvVarsByService(ctx, serviceID)
-	if err != nil {
-		slog.Warn("failed to fetch env vars, continuing without them", "error", err)
-	}
-
-	env := make(map[string]string)
-	for _, ev := range envVars {
-		decrypted, err := crypto.Decrypt(ev.ValueEncrypted, h.EncryptionKey)
-		if err != nil {
-			slog.Warn("failed to decrypt env var, skipping", "key", ev.Key, "error", err)
-			continue
-		}
-		env[ev.Key] = string(decrypted)
 	}
 
 	// Create and start container

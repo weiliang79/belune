@@ -13,3 +13,6 @@ RETURNING *;
 UPDATE deployments SET status = $2, error_message = $3, finished_at = NOW()
 WHERE id = $1
 RETURNING *;
+
+-- name: UpdateDeploymentBuildLogs :exec
+UPDATE deployments SET build_logs = $2 WHERE id = $1;
