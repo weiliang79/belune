@@ -1,3 +1,13 @@
-import { writable } from 'svelte/store';
+import { create } from "zustand";
 
-export const sidebarOpen = writable(true);
+interface SidebarState {
+  isOpen: boolean;
+  toggle: () => void;
+  setOpen: (open: boolean) => void;
+}
+
+export const useSidebarStore = create<SidebarState>((set) => ({
+  isOpen: true,
+  toggle: () => set((s) => ({ isOpen: !s.isOpen })),
+  setOpen: (isOpen) => set({ isOpen }),
+}));

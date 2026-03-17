@@ -1,10 +1,16 @@
-import { writable } from 'svelte/store';
+import { create } from "zustand";
+import type { User } from "@/lib/types";
 
-interface User {
-	id: string;
-	email: string;
-	role: string;
+interface AuthState {
+  user: User | null;
+  isAuthenticated: boolean;
+  setUser: (user: User) => void;
+  clearUser: () => void;
 }
 
-export const user = writable<User | null>(null);
-export const isAuthenticated = writable(false);
+export const useAuthStore = create<AuthState>((set) => ({
+  user: null,
+  isAuthenticated: false,
+  setUser: (user) => set({ user, isAuthenticated: true }),
+  clearUser: () => set({ user: null, isAuthenticated: false }),
+}));

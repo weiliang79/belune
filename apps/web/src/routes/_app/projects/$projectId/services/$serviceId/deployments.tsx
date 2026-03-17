@@ -1,0 +1,97 @@
+import { createFileRoute } from "@tanstack/react-router";
+import { useDeployments } from "@/lib/hooks/use-deployments";
+import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { formatDate, formatDuration } from "@/lib/utils/format";
+import { useState } from "react";
+
+export const Route = createFileRoute(
+  "/_app/projects/$projectId/services/$serviceId/deployments",
+)({
+  component: DeploymentsPage,
+});
+
+const statusVariant: Record<
+  string,
+  "default" | "secondary" | "destructive" | "outline"
+> = {
+  success: "default",
+  pending: "secondary",
+  building: "secondary",
+  deploying: "secondary",
+  failed: "destructive",
+};
+
+function DeploymentsPage() {
+  const { projectId, serviceId } = Route.useParams();
+  const { data: deployments, isLoading } = useDeployments(projectId, serviceId);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+
+  if (isLoading) {
+    return <div className="text-muted-foreground">Loading deployments...</div>;
+  }
+
+  if (!deployments || deployments.length === 0) {
+    return (
+      <Card>
+        <CardContent className="text-muted-foreground py-12 text-center">
+          No deployments yet. Deploy your service to see history here.
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      {deployments.map((d) => {
+        const duration =
+          d.finished_at && d.started_at
+            ? formatDuration(
+                new Date(d.finished_at).getTime() -
+                  new Date(d.started_at).getTime(),
+              )
+            : null;
+
+        return (
+          <Card
+            key={d.id}
+            className="hover:bg-muted/50 cursor-pointer transition-colors"
+            onClick={() => setExpandedId(expandedId === d.id ? null : d.id)}
+          >
+            <CardContent className="py-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <Badge variant={statusVariant[d.status] ?? "outline"}>
+                    {d.status}
+                  </Badge>
+                  <span className="text-muted-foreground text-sm">
+                    {d.triggered_by}
+                  </span>
+                  {d.commit_sha && (
+                    <span className="text-muted-foreground font-mono text-xs">
+                      {d.commit_sha.slice(0, 7)}
+                    </span>
+                  )}
+                </div>
+                <div className="text-muted-foreground flex items-center gap-3 text-xs">
+                  {duration && <span>{duration}</span>}
+                  <span>{formatDate(d.started_at)}</span>
+                </div>
+              </div>
+              {expandedId === d.id && d.build_logs && (
+                <pre className="bg-muted mt-3 max-h-64 overflow-auto rounded p-3 font-mono text-xs">
+                  {d.build_logs}
+                </pre>
+              )}
+              {expandedId === d.id && d.error_message && (
+                <div className="bg-destructive/10 text-destructive mt-3 rounded p-3 text-sm">
+                  {d.error_message}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        );
+      })}
+    </div>
+  );
+}

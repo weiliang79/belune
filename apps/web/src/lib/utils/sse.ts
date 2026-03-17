@@ -1,17 +1,17 @@
 export function createEventSource(
-	url: string,
-	onMessage: (data: string) => void,
-	onError?: (error: Event) => void
+  url: string,
+  onMessage: (data: string) => void,
+  onError?: (event: Event) => void,
 ): EventSource {
-	const source = new EventSource(url);
+  const source = new EventSource(url, { withCredentials: true });
 
-	source.onmessage = (event) => {
-		onMessage(event.data);
-	};
+  source.onmessage = (event) => {
+    onMessage(event.data);
+  };
 
-	source.onerror = (event) => {
-		if (onError) onError(event);
-	};
+  if (onError) {
+    source.onerror = onError;
+  }
 
-	return source;
+  return source;
 }

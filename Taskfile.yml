@@ -18,7 +18,7 @@ tasks:
       ENV_FILE: '{{.ROOT_DIR}}/.env'
 
   dev:web:
-    desc: Run SvelteKit dev server
+    desc: Run React dev server
     dir: '{{.WEB_DIR}}'
     cmd: npm run dev
 
@@ -35,7 +35,7 @@ tasks:
   # ─── Build ─────────────────────────────────────────────────────
 
   build:web:
-    desc: Build SvelteKit static output
+    desc: Build React static output
     dir: '{{.WEB_DIR}}'
     cmds:
       - npm run build
@@ -89,7 +89,7 @@ tasks:
     cmd: go test ./...
 
   test:web:
-    desc: Run Svelte component tests
+    desc: Run React tests
     dir: '{{.WEB_DIR}}'
     cmd: npm run test
 
