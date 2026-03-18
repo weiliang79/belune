@@ -86,3 +86,16 @@ export function useRestartService(projectId: string, serviceId: string) {
       }),
   });
 }
+
+export function useUpdateWebhook(projectId: string, serviceId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: Parameters<typeof servicesApi.updateWebhook>[2]) =>
+      servicesApi.updateWebhook(projectId, serviceId, data),
+    onSuccess: () => {
+      qc.invalidateQueries({
+        queryKey: queryKeys.services.detail(projectId, serviceId),
+      });
+    },
+  });
+}

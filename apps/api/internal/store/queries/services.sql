@@ -24,3 +24,10 @@ RETURNING *;
 
 -- name: DeleteService :exec
 DELETE FROM services WHERE id = $1;
+
+-- name: ListServicesBySourceRepo :many
+SELECT * FROM services WHERE source_repo = $1 AND webhook_secret IS NOT NULL;
+
+-- name: UpdateServiceWebhook :one
+UPDATE services SET webhook_secret = $2, auto_deploy_branch = $3, updated_at = NOW()
+WHERE id = $1 RETURNING *;

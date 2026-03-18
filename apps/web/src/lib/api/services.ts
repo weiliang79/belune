@@ -59,3 +59,17 @@ export function restartService(projectId: string, serviceId: string) {
     `/projects/${projectId}/services/${serviceId}/restart`,
   );
 }
+
+export function updateWebhook(
+  projectId: string,
+  serviceId: string,
+  data: {
+    webhook_secret?: string;
+    auto_deploy_branch?: string;
+  },
+) {
+  return api.put<Service>(
+    `/projects/${projectId}/services/${serviceId}/webhook`,
+    data,
+  );
+}

@@ -25,6 +25,8 @@ export interface Service {
   build_type_override: string | null;
   builder_image: string | null;
   status: string;
+  webhook_secret: string | null;
+  auto_deploy_branch: string | null;
   created_at: string;
   updated_at: string;
 }

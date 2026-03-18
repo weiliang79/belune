@@ -23,6 +23,9 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService)
 		r.Post("/api/auth/logout", h.Logout)
 		r.Get("/api/auth/setup", h.Setup)
 		r.Post("/api/auth/setup", h.Setup)
+
+		// Webhooks (unauthenticated — verified via HMAC/token per-service)
+		r.Post("/api/webhooks/push", h.HandleWebhookPush)
 	})
 
 	// Protected routes
@@ -44,6 +47,7 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService)
 		r.Get("/api/projects/{projectId}/services/{serviceId}", h.GetService)
 		r.Put("/api/projects/{projectId}/services/{serviceId}", h.UpdateService)
 		r.Delete("/api/projects/{projectId}/services/{serviceId}", h.DeleteService)
+		r.Put("/api/projects/{projectId}/services/{serviceId}/webhook", h.UpdateServiceWebhook)
 		r.Post("/api/projects/{projectId}/services/{serviceId}/deploy", h.DeployService)
 		r.Post("/api/projects/{projectId}/services/{serviceId}/stop", h.StopService)
 		r.Post("/api/projects/{projectId}/services/{serviceId}/restart", h.RestartService)

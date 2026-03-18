@@ -3,6 +3,7 @@ import {
   useService,
   useUpdateService,
   useDeleteService,
+  useUpdateWebhook,
 } from "@/lib/hooks/use-services";
 import { useForm } from "@tanstack/react-form";
 import { z } from "zod";
@@ -22,7 +23,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Separator } from "@/components/ui/separator";
-import { useState } from "react";
+import { useState, useCallback } from "react";
 
 export const Route = createFileRoute(
   "/_app/projects/$projectId/services/$serviceId/settings",
@@ -35,8 +36,11 @@ function ServiceSettingsPage() {
   const navigate = useNavigate();
   const { data: service } = useService(projectId, serviceId);
   const updateService = useUpdateService(projectId, serviceId);
+  const updateWebhook = useUpdateWebhook(projectId, serviceId);
   const deleteService = useDeleteService(projectId);
   const [error, setError] = useState("");
+  const [webhookError, setWebhookError] = useState("");
+  const [webhookSuccess, setWebhookSuccess] = useState("");
 
   const form = useForm({
     defaultValues: {
@@ -59,6 +63,33 @@ function ServiceSettingsPage() {
       }
     },
   });
+
+  const webhookForm = useForm({
+    defaultValues: {
+      webhook_secret: service?.webhook_secret ?? "",
+      auto_deploy_branch: service?.auto_deploy_branch ?? "main",
+    },
+    onSubmit: async ({ value }) => {
+      setWebhookError("");
+      setWebhookSuccess("");
+      try {
+        await updateWebhook.mutateAsync({
+          webhook_secret: value.webhook_secret,
+          auto_deploy_branch: value.auto_deploy_branch || "main",
+        });
+        setWebhookSuccess("Webhook settings saved.");
+      } catch (e) {
+        setWebhookError(e instanceof Error ? e.message : "Update failed");
+      }
+    },
+  });
+
+  const generateSecret = useCallback(() => {
+    const bytes = new Uint8Array(32);
+    crypto.getRandomValues(bytes);
+    const secret = Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+    webhookForm.setFieldValue("webhook_secret", secret);
+  }, [webhookForm]);
 
   if (!service) return null;
 
@@ -152,6 +183,94 @@ function ServiceSettingsPage() {
           </form>
         </CardContent>
       </Card>
+
+      {service.type === "git" && (
+        <>
+          <Separator />
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Webhook (Auto-Deploy)</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-muted-foreground text-sm mb-4">
+                Configure a webhook secret to enable push-to-deploy. Add this URL
+                as a webhook in your GitHub or GitLab repository:
+              </p>
+              <div className="bg-muted rounded-md px-3 py-2 text-sm font-mono mb-4 break-all">
+                {window.location.origin}/api/webhooks/push
+              </div>
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  webhookForm.handleSubmit();
+                }}
+                className="space-y-4"
+              >
+                {webhookError && (
+                  <div className="bg-destructive/10 text-destructive rounded-md px-3 py-2 text-sm">
+                    {webhookError}
+                  </div>
+                )}
+                {webhookSuccess && (
+                  <div className="bg-green-500/10 text-green-700 dark:text-green-400 rounded-md px-3 py-2 text-sm">
+                    {webhookSuccess}
+                  </div>
+                )}
+                <webhookForm.Field
+                  name="webhook_secret"
+                  children={(field) => (
+                    <div className="space-y-2">
+                      <Label>Webhook Secret</Label>
+                      <div className="flex gap-2">
+                        <Input
+                          value={field.state.value}
+                          onBlur={field.handleBlur}
+                          onChange={(e) => field.handleChange(e.target.value)}
+                          placeholder="Enter or generate a secret"
+                          className="font-mono"
+                        />
+                        <Button type="button" variant="outline" onClick={generateSecret}>
+                          Generate
+                        </Button>
+                      </div>
+                      <p className="text-muted-foreground text-xs">
+                        Use this secret when configuring the webhook in your git provider.
+                      </p>
+                    </div>
+                  )}
+                />
+                <webhookForm.Field
+                  name="auto_deploy_branch"
+                  children={(field) => (
+                    <div className="space-y-2">
+                      <Label>Auto-Deploy Branch</Label>
+                      <Input
+                        value={field.state.value}
+                        onBlur={field.handleBlur}
+                        onChange={(e) => field.handleChange(e.target.value)}
+                        placeholder="main"
+                      />
+                      <p className="text-muted-foreground text-xs">
+                        Only pushes to this branch will trigger a deploy.
+                      </p>
+                    </div>
+                  )}
+                />
+                <webhookForm.Subscribe
+                  selector={(s) => s.isSubmitting}
+                  children={(isSubmitting) => (
+                    <Button type="submit" disabled={isSubmitting}>
+                      {isSubmitting ? "Saving..." : "Save Webhook Settings"}
+                    </Button>
+                  )}
+                />
+              </form>
+            </CardContent>
+          </Card>
+        </>
+      )}
 
       <Separator />
 
