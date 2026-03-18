@@ -26,9 +26,8 @@ function ProjectLayout() {
   }
 
   const tabs = [
-    { to: `/projects/${projectId}`, label: "Overview", exact: true },
-    { to: `/projects/${projectId}/services`, label: "Applications" },
-    { to: `/projects/${projectId}/databases`, label: "Databases" },
+    { to: `/projects/${projectId}`, label: "Applications" },
+    { to: `/projects/${projectId}/settings`, label: "Settings" },
   ];
 
   return (
@@ -40,9 +39,10 @@ function ProjectLayout() {
 
       <nav className="flex gap-1 border-b">
         {tabs.map((tab) => {
-          const isActive = tab.exact
-            ? currentPath === tab.to
-            : currentPath.startsWith(tab.to);
+          const isActive =
+            tab.to === `/projects/${projectId}`
+              ? !currentPath.startsWith(`/projects/${projectId}/settings`)
+              : currentPath.startsWith(tab.to);
           return (
             <Link
               key={tab.to}

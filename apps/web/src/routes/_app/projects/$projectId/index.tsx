@@ -1,175 +1,424 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import {
-  useProject,
-  useUpdateProject,
-  useDeleteProject,
-} from "@/lib/hooks/use-projects";
-import { useForm } from "@tanstack/react-form";
-import { z } from "zod";
+import { useState } from "react";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
-import { Separator } from "@/components/ui/separator";
-import { formatDate } from "@/lib/utils/format";
-import { useState } from "react";
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { useServices, useCreateService } from "@/lib/hooks/use-services";
+import { useDatabases, useCreateDatabase } from "@/lib/hooks/use-databases";
+import { Plus, Database as DatabaseIcon, AppWindow, Loader2 } from "lucide-react";
 
 export const Route = createFileRoute("/_app/projects/$projectId/")({
   component: ProjectOverview,
 });
 
+function slugify(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
+}
+
+const DB_TYPES = ["postgres", "mysql", "redis", "mongo"] as const;
+const DEFAULT_VERSIONS: Record<string, string> = {
+  postgres: "16",
+  mysql: "8",
+  redis: "7",
+  mongo: "7",
+};
+
 function ProjectOverview() {
   const { projectId } = Route.useParams();
   const navigate = useNavigate();
-  const { data: project } = useProject(projectId);
-  const updateProject = useUpdateProject(projectId);
-  const deleteProject = useDeleteProject();
-  const [error, setError] = useState("");
+  const { data: services, isLoading: servicesLoading } =
+    useServices(projectId);
+  const { data: databases, isLoading: databasesLoading } =
+    useDatabases(projectId);
+  const createService = useCreateService(projectId);
+  const createDb = useCreateDatabase(projectId);
 
-  const form = useForm({
-    defaultValues: {
-      name: project?.name ?? "",
-      slug: project?.slug ?? "",
-    },
-    onSubmit: async ({ value }) => {
-      setError("");
-      try {
-        await updateProject.mutateAsync(value);
-      } catch (e) {
-        setError(e instanceof Error ? e.message : "Update failed");
-      }
-    },
-  });
+  // App dialog state
+  const [appDialogOpen, setAppDialogOpen] = useState(false);
+  const [appName, setAppName] = useState("");
+  const [serviceType, setServiceType] = useState<"image" | "git">("image");
+  const [sourceImage, setSourceImage] = useState("");
+  const [sourceRepo, setSourceRepo] = useState("");
+  const [dockerfilePath, setDockerfilePath] = useState("Dockerfile");
+  const [buildType, setBuildType] = useState("dockerfile");
+  const [appError, setAppError] = useState("");
 
-  if (!project) return null;
+  // DB dialog state
+  const [dbDialogOpen, setDbDialogOpen] = useState(false);
+  const [dbName, setDbName] = useState("");
+  const [dbType, setDbType] = useState<string>("postgres");
+  const [dbVersion, setDbVersion] = useState("");
+
+  const handleCreateApp = async () => {
+    setAppError("");
+    if (!appName.trim()) {
+      setAppError("Application name is required");
+      return;
+    }
+    if (serviceType === "image" && !sourceImage.trim()) {
+      setAppError("Image name is required");
+      return;
+    }
+    if (serviceType === "git" && !sourceRepo.trim()) {
+      setAppError("Repository URL is required");
+      return;
+    }
+    try {
+      const service = await createService.mutateAsync({
+        name: appName.trim(),
+        type: serviceType,
+        ...(serviceType === "image"
+          ? { source_image: sourceImage, build_type: "image" }
+          : {
+              source_repo: sourceRepo,
+              dockerfile_path: dockerfilePath,
+              build_type: buildType,
+            }),
+      });
+      setAppDialogOpen(false);
+      setAppName("");
+      setSourceImage("");
+      setSourceRepo("");
+      setDockerfilePath("Dockerfile");
+      setBuildType("dockerfile");
+      setServiceType("image");
+      setAppError("");
+      navigate({
+        to: "/projects/$projectId/services/$serviceId",
+        params: { projectId, serviceId: service.id },
+      });
+    } catch (e) {
+      setAppError(
+        e instanceof Error ? e.message : "Failed to create application",
+      );
+    }
+  };
+
+  const handleCreateDb = () => {
+    if (!dbName.trim()) return;
+    createDb.mutate(
+      { name: dbName.trim(), type: dbType, version: dbVersion || undefined },
+      {
+        onSuccess: () => {
+          setDbDialogOpen(false);
+          setDbName("");
+          setDbType("postgres");
+          setDbVersion("");
+        },
+      },
+    );
+  };
+
+  if (servicesLoading || databasesLoading) {
+    return <div className="text-muted-foreground">Loading resources...</div>;
+  }
+
+  const hasServices = services && services.length > 0;
+  const hasDatabases = databases && databases.length > 0;
+  const isEmpty = !hasServices && !hasDatabases;
 
   return (
-    <div className="space-y-6">
-      <Card>
-        <CardHeader>
-          <CardTitle>Project Details</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-2 text-sm">
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">ID</span>
-            <span className="font-mono text-xs">{project.id}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">Created</span>
-            <span>{formatDate(project.created_at)}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">Updated</span>
-            <span>{formatDate(project.updated_at)}</span>
-          </div>
-        </CardContent>
-      </Card>
+    <div className="space-y-8">
+      <div className="flex items-center justify-between">
+        <h2 className="text-lg font-semibold">Resources</h2>
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            render={
+              <Button>
+                <Plus className="mr-1 h-4 w-4" />
+                Add New
+              </Button>
+            }
+          />
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onClick={() => setAppDialogOpen(true)}>
+              <AppWindow className="mr-2 h-4 w-4" />
+              Application
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setDbDialogOpen(true)}>
+              <DatabaseIcon className="mr-2 h-4 w-4" />
+              Database
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Edit Project</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              form.handleSubmit();
-            }}
-            className="space-y-4"
-          >
-            {error && (
+      {/* Create Application Dialog */}
+      <Dialog open={appDialogOpen} onOpenChange={setAppDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>New Application</DialogTitle>
+            <DialogDescription>
+              Add an application to your project.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            {appError && (
               <div className="bg-destructive/10 text-destructive rounded-md px-3 py-2 text-sm">
-                {error}
+                {appError}
               </div>
             )}
-            <form.Field
-              name="name"
-              validators={{ onChange: z.string().min(1, "Name is required") }}
-              children={(field) => (
-                <div className="space-y-2">
-                  <Label htmlFor="edit-name">Name</Label>
-                  <Input
-                    id="edit-name"
-                    value={field.state.value}
-                    onBlur={field.handleBlur}
-                    onChange={(e) => field.handleChange(e.target.value)}
-                  />
-                </div>
+            <div className="space-y-2">
+              <Label htmlFor="app-name">Application Name</Label>
+              <Input
+                id="app-name"
+                value={appName}
+                onChange={(e) => setAppName(e.target.value)}
+                placeholder="my-api"
+              />
+              {appName.trim() && (
+                <p className="text-muted-foreground text-xs">
+                  Slug: <span className="font-mono">{slugify(appName)}</span>
+                </p>
               )}
-            />
-            <form.Field
-              name="slug"
-              validators={{ onChange: z.string().min(1, "Slug is required") }}
-              children={(field) => (
-                <div className="space-y-2">
-                  <Label htmlFor="edit-slug">Slug</Label>
-                  <Input
-                    id="edit-slug"
-                    value={field.state.value}
-                    onBlur={field.handleBlur}
-                    onChange={(e) => field.handleChange(e.target.value)}
-                  />
-                </div>
-              )}
-            />
-            <form.Subscribe
-              selector={(s) => s.isSubmitting}
-              children={(isSubmitting) => (
-                <Button type="submit" disabled={isSubmitting}>
-                  {isSubmitting ? "Saving..." : "Save Changes"}
-                </Button>
-              )}
-            />
-          </form>
-        </CardContent>
-      </Card>
-
-      <Separator />
-
-      <Card className="border-destructive/50">
-        <CardHeader>
-          <CardTitle className="text-destructive">Danger Zone</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <AlertDialog>
-            <AlertDialogTrigger render={<Button variant="destructive" />}>
-              Delete Project
-            </AlertDialogTrigger>
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle>Delete {project.name}?</AlertDialogTitle>
-                <AlertDialogDescription>
-                  This will permanently delete the project, all its applications,
-                  and stop all running containers. This action cannot be undone.
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                <AlertDialogAction
-                  onClick={async () => {
-                    await deleteProject.mutateAsync(projectId);
-                    navigate({ to: "/projects" });
-                  }}
+            </div>
+            <div className="space-y-2">
+              <Label>Source Type</Label>
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant={serviceType === "image" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setServiceType("image")}
                 >
-                  Delete
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
-        </CardContent>
-      </Card>
+                  Docker Image
+                </Button>
+                <Button
+                  type="button"
+                  variant={serviceType === "git" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setServiceType("git")}
+                >
+                  Git Repository
+                </Button>
+              </div>
+            </div>
+            {serviceType === "image" ? (
+              <div className="space-y-2">
+                <Label htmlFor="source-image">Docker Image</Label>
+                <Input
+                  id="source-image"
+                  value={sourceImage}
+                  onChange={(e) => setSourceImage(e.target.value)}
+                  placeholder="nginx:latest"
+                />
+              </div>
+            ) : (
+              <>
+                <div className="space-y-2">
+                  <Label htmlFor="source-repo">Repository URL</Label>
+                  <Input
+                    id="source-repo"
+                    value={sourceRepo}
+                    onChange={(e) => setSourceRepo(e.target.value)}
+                    placeholder="https://github.com/user/repo.git"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Build Type</Label>
+                  <div className="flex flex-wrap gap-2">
+                    {["dockerfile", "buildpacks", "railpack"].map((bt) => (
+                      <Button
+                        key={bt}
+                        type="button"
+                        variant={buildType === bt ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => setBuildType(bt)}
+                      >
+                        {bt}
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+                {buildType === "dockerfile" && (
+                  <div className="space-y-2">
+                    <Label htmlFor="dockerfile-path">Dockerfile Path</Label>
+                    <Input
+                      id="dockerfile-path"
+                      value={dockerfilePath}
+                      onChange={(e) => setDockerfilePath(e.target.value)}
+                      placeholder="Dockerfile"
+                    />
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+          <DialogFooter>
+            <Button
+              onClick={handleCreateApp}
+              disabled={createService.isPending}
+            >
+              {createService.isPending && (
+                <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+              )}
+              Create Application
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Create Database Dialog */}
+      <Dialog open={dbDialogOpen} onOpenChange={setDbDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Create Database</DialogTitle>
+            <DialogDescription>
+              Provision a new managed database instance.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label htmlFor="db-name">Name</Label>
+              <Input
+                id="db-name"
+                value={dbName}
+                onChange={(e) => setDbName(e.target.value)}
+                placeholder="my-database"
+              />
+              {dbName.trim() && (
+                <p className="text-muted-foreground text-xs">
+                  Slug: <span className="font-mono">{slugify(dbName)}</span>
+                </p>
+              )}
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="db-type">Type</Label>
+              <select
+                id="db-type"
+                value={dbType}
+                onChange={(e) => {
+                  setDbType(e.target.value);
+                  setDbVersion("");
+                }}
+                className="border-input bg-background ring-offset-background focus-visible:ring-ring flex h-9 w-full rounded-md border px-3 py-1 text-sm focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
+              >
+                {DB_TYPES.map((t) => (
+                  <option key={t} value={t}>
+                    {t.charAt(0).toUpperCase() + t.slice(1)}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="db-version">Version</Label>
+              <Input
+                id="db-version"
+                value={dbVersion}
+                onChange={(e) => setDbVersion(e.target.value)}
+                placeholder={DEFAULT_VERSIONS[dbType] || "latest"}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              onClick={handleCreateDb}
+              disabled={!dbName.trim() || createDb.isPending}
+            >
+              {createDb.isPending && (
+                <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+              )}
+              Create
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {isEmpty ? (
+        <Card>
+          <CardContent className="flex flex-col items-center justify-center py-12">
+            <p className="text-muted-foreground mb-4">
+              No applications or databases yet. Click "Add New" above to get
+              started.
+            </p>
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="grid gap-3 sm:grid-cols-2">
+          {services?.map((service) => (
+            <Link
+              key={service.id}
+              to="/projects/$projectId/services/$serviceId"
+              params={{ projectId, serviceId: service.id }}
+            >
+              <Card className="hover:bg-muted/50 cursor-pointer transition-colors">
+                <CardHeader className="pb-2">
+                  <div className="flex items-start justify-between">
+                    <CardTitle className="text-base">{service.name}</CardTitle>
+                    <Badge
+                      variant={
+                        service.status === "running" ? "default" : "secondary"
+                      }
+                    >
+                      {service.status}
+                    </Badge>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-muted-foreground flex gap-2 text-xs">
+                    <Badge variant="outline">{service.type}</Badge>
+                    <Badge variant="outline">{service.build_type}</Badge>
+                  </div>
+                </CardContent>
+              </Card>
+            </Link>
+          ))}
+          {databases?.map((db) => (
+            <Link
+              key={db.id}
+              to="/projects/$projectId/databases/$databaseId"
+              params={{ projectId, databaseId: db.id }}
+            >
+              <Card className="hover:bg-muted/50 cursor-pointer transition-colors">
+                <CardHeader className="pb-2">
+                  <div className="flex items-start justify-between">
+                    <div className="flex items-center gap-2">
+                      <DatabaseIcon className="text-muted-foreground h-4 w-4" />
+                      <CardTitle className="text-base">{db.name}</CardTitle>
+                    </div>
+                    <Badge
+                      variant={
+                        db.status === "running"
+                          ? "default"
+                          : db.status === "failed"
+                            ? "destructive"
+                            : "secondary"
+                      }
+                    >
+                      {db.status}
+                    </Badge>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-muted-foreground flex gap-2 text-xs">
+                    <Badge variant="outline">{db.type}</Badge>
+                    <Badge variant="outline">v{db.version}</Badge>
+                  </div>
+                </CardContent>
+              </Card>
+            </Link>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

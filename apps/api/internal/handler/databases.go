@@ -11,6 +11,7 @@ import (
 	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/ungweiliang/selfhost-paas/internal/naming"
 	"github.com/ungweiliang/selfhost-paas/internal/pkg/crypto"
 	"github.com/ungweiliang/selfhost-paas/internal/store/generated"
 )
@@ -111,6 +112,7 @@ func (h *Handler) CreateDatabase(w http.ResponseWriter, r *http.Request) {
 		ProjectID:            projectUUID,
 		Type:                 req.Type,
 		Name:                 req.Name,
+		Slug:                 naming.Slugify(req.Name),
 		Version:              req.Version,
 		Status:               "creating",
 		InternalHost:         pgtype.Text{},

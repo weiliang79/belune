@@ -15,7 +15,7 @@ export function createProject(data: { name: string; slug: string }) {
 
 export function updateProject(
   id: string,
-  data: { name: string; slug: string },
+  data: { name: string },
 ) {
   return api.put<Project>(`/projects/${id}`, data);
 }

@@ -10,7 +10,7 @@ VALUES ($1, $2, $3)
 RETURNING *;
 
 -- name: UpdateProject :one
-UPDATE projects SET name = $2, slug = $3, updated_at = NOW()
+UPDATE projects SET name = $2, updated_at = NOW()
 WHERE id = $1
 RETURNING *;
 

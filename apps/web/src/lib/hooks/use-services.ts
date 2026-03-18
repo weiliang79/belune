@@ -13,6 +13,12 @@ export function useService(projectId: string, serviceId: string) {
   return useQuery({
     queryKey: queryKeys.services.detail(projectId, serviceId),
     queryFn: () => servicesApi.getService(projectId, serviceId),
+    refetchInterval: (query) => {
+      const status = query.state.data?.status;
+      const isTransitional =
+        status === "deploying" || status === "building" || status === "pending";
+      return isTransitional ? 3000 : false;
+    },
   });
 }
 

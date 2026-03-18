@@ -78,7 +78,6 @@ func (h *Handler) ListProjects(w http.ResponseWriter, r *http.Request) {
 
 type updateProjectRequest struct {
 	Name string `json:"name"`
-	Slug string `json:"slug"`
 }
 
 func (h *Handler) UpdateProject(w http.ResponseWriter, r *http.Request) {
@@ -95,15 +94,14 @@ func (h *Handler) UpdateProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.Name == "" || req.Slug == "" {
-		writeError(w, http.StatusBadRequest, "name and slug are required")
+	if req.Name == "" {
+		writeError(w, http.StatusBadRequest, "name is required")
 		return
 	}
 
 	project, err := h.queries.UpdateProject(r.Context(), generated.UpdateProjectParams{
 		ID:   uuid,
 		Name: req.Name,
-		Slug: req.Slug,
 	})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to update project")

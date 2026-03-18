@@ -76,6 +76,7 @@ export interface Database {
   project_id: string;
   type: "postgres" | "mysql" | "redis" | "mongo";
   name: string;
+  slug: string;
   version: string;
   status: string;
   internal_host: string;
