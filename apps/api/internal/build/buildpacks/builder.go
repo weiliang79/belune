@@ -3,8 +3,10 @@ package buildpacks
 import (
 	"context"
 	"fmt"
+	"io"
 	"log/slog"
 	"os/exec"
+	"strings"
 
 	"github.com/ungweiliang/selfhost-paas/internal/build"
 	"github.com/ungweiliang/selfhost-paas/internal/runtime"
@@ -56,8 +58,18 @@ func (b *Builder) Build(ctx context.Context, opts build.BuildOptions) (*build.Bu
 
 	slog.Info("running pack build", "image", opts.ImageTag, "builder", builderImage)
 	cmd := exec.CommandContext(ctx, "pack", args...)
-	output, err := cmd.CombinedOutput()
-	logs := string(output)
+
+	var logBuf strings.Builder
+	writers := []io.Writer{&logBuf}
+	if opts.LogWriter != nil {
+		writers = append(writers, opts.LogWriter)
+	}
+	multi := io.MultiWriter(writers...)
+	cmd.Stdout = multi
+	cmd.Stderr = multi
+
+	err := cmd.Run()
+	logs := logBuf.String()
 
 	if err != nil {
 		return nil, fmt.Errorf("pack build failed: %w\nOutput:\n%s", err, logs)

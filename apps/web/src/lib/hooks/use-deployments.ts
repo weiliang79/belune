@@ -6,6 +6,12 @@ export function useDeployments(projectId: string, serviceId: string) {
   return useQuery({
     queryKey: queryKeys.deployments.all(projectId, serviceId),
     queryFn: () => deploymentsApi.listDeployments(projectId, serviceId),
+    refetchInterval: (query) => {
+      const hasActive = query.state.data?.some((d) =>
+        ["pending", "building", "deploying"].includes(d.status),
+      );
+      return hasActive ? 3000 : false;
+    },
   });
 }
 

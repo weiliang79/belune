@@ -18,7 +18,7 @@ type createServiceRequest struct {
 	SourceRepo     string `json:"source_repo"`     // for git type
 	SourceImage    string `json:"source_image"`    // for image type
 	DockerfilePath string `json:"dockerfile_path"` // optional
-	BuildType      string `json:"build_type"`      // dockerfile, buildpacks, nixpacks, image
+	BuildType      string `json:"build_type"`      // dockerfile, buildpacks, railpack, image
 }
 
 func (h *Handler) CreateService(w http.ResponseWriter, r *http.Request) {

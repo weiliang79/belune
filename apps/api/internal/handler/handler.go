@@ -6,6 +6,7 @@ import (
 
 	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/redis/go-redis/v9"
 
 	"github.com/ungweiliang/selfhost-paas/internal/config"
 	"github.com/ungweiliang/selfhost-paas/internal/proxy"
@@ -22,9 +23,10 @@ type Handler struct {
 	runtime runtime.ContainerRuntime
 	proxy   proxy.ProxyManager
 	auth    *service.AuthService
+	rdb     *redis.Client
 }
 
-func New(cfg *config.Config, db *pgxpool.Pool, queries *generated.Queries, asynqClient *asynq.Client, rt runtime.ContainerRuntime, pm proxy.ProxyManager, auth *service.AuthService) *Handler {
+func New(cfg *config.Config, db *pgxpool.Pool, queries *generated.Queries, asynqClient *asynq.Client, rt runtime.ContainerRuntime, pm proxy.ProxyManager, auth *service.AuthService, rdb *redis.Client) *Handler {
 	return &Handler{
 		cfg:     cfg,
 		db:      db,
@@ -33,6 +35,7 @@ func New(cfg *config.Config, db *pgxpool.Pool, queries *generated.Queries, asynq
 		runtime: rt,
 		proxy:   pm,
 		auth:    auth,
+		rdb:     rdb,
 	}
 }
 

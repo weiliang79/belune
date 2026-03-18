@@ -1,6 +1,9 @@
 package build
 
-import "context"
+import (
+	"context"
+	"io"
+)
 
 // BuildOptions contains configuration for a build.
 type BuildOptions struct {
@@ -10,7 +13,8 @@ type BuildOptions struct {
 	BuilderImage   string            // CNB builder image (for buildpacks builder)
 	Buildpacks     []string          // Ordered list of buildpack URIs (for buildpacks builder)
 	Env            map[string]string // Build-time environment variables
-	BuildType      string            // Preferred builder: "dockerfile", "buildpacks", "nixpacks" (empty = auto)
+	BuildType      string            // Preferred builder: "dockerfile", "buildpacks", "railpack" (empty = auto)
+	LogWriter      io.Writer         // If set, build output is streamed here in real-time
 }
 
 // BuildResult contains the result of a build.

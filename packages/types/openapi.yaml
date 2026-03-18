@@ -89,7 +89,7 @@ paths:
                 type: { type: string, enum: [git, image] }
                 source_repo: { type: string }
                 source_image: { type: string }
-                build_type: { type: string, enum: [dockerfile, buildpacks, nixpacks, railpack, image] }
+                build_type: { type: string, enum: [dockerfile, buildpacks, railpack, image] }
                 builder_image: { type: string }
                 custom_buildpacks: { type: array, items: { type: string } }
               required: [name, type]

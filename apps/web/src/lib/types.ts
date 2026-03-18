@@ -21,7 +21,7 @@ export interface Service {
   source_repo: string | null;
   source_image: string | null;
   dockerfile_path: string;
-  build_type: "dockerfile" | "buildpacks" | "nixpacks" | "railpack" | "image";
+  build_type: "dockerfile" | "buildpacks" | "railpack" | "image";
   build_type_override: string | null;
   builder_image: string | null;
   status: string;

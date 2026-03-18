@@ -12,8 +12,7 @@ type Config struct {
 	RedisURL       string
 	JWTSecret      string
 	EncryptionKey  string
-	CaddyAdminURL  string
-	FeatureRailpack bool
+	CaddyAdminURL string
 }
 
 func Load() (*Config, error) {
@@ -23,8 +22,7 @@ func Load() (*Config, error) {
 		RedisURL:       getEnv("REDIS_URL", "redis://localhost:6379"),
 		JWTSecret:      getEnv("JWT_SECRET", ""),
 		EncryptionKey:  getEnv("ENCRYPTION_KEY", ""),
-		CaddyAdminURL:  getEnv("CADDY_ADMIN_URL", "http://localhost:2019"),
-		FeatureRailpack: getEnvBool("FEATURE_RAILPACK", false),
+		CaddyAdminURL: getEnv("CADDY_ADMIN_URL", "http://localhost:2019"),
 	}
 
 	if cfg.JWTSecret == "" {

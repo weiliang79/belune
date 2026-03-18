@@ -55,6 +55,7 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService)
 		// Deployments
 		r.Get("/api/projects/{projectId}/services/{serviceId}/deployments", h.ListDeployments)
 		r.Get("/api/projects/{projectId}/services/{serviceId}/deployments/{deploymentId}", h.GetDeployment)
+		r.Get("/api/projects/{projectId}/services/{serviceId}/deployments/{deploymentId}/build-logs", h.StreamBuildLogs)
 
 		// Logs
 		r.Get("/api/projects/{projectId}/services/{serviceId}/logs", h.StreamLogs)

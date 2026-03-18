@@ -11,12 +11,13 @@ import (
 	"time"
 
 	"github.com/hibiken/asynq"
+	"github.com/redis/go-redis/v9"
 
 	"github.com/ungweiliang/selfhost-paas/internal/build"
 	"github.com/ungweiliang/selfhost-paas/internal/build/buildpacks"
 	"github.com/ungweiliang/selfhost-paas/internal/build/dockerfile"
 	"github.com/ungweiliang/selfhost-paas/internal/build/image"
-	"github.com/ungweiliang/selfhost-paas/internal/build/nixpacks"
+	"github.com/ungweiliang/selfhost-paas/internal/build/railpack"
 	"github.com/ungweiliang/selfhost-paas/internal/config"
 	"github.com/ungweiliang/selfhost-paas/internal/proxy/caddy"
 	"github.com/ungweiliang/selfhost-paas/internal/runtime/docker"
@@ -63,11 +64,20 @@ func main() {
 	asynqClient := asynq.NewClient(redisOpt)
 	defer asynqClient.Close()
 
-	// Build chain: Dockerfile → Buildpacks → Nixpacks
+	// Redis client for build log pub/sub
+	redisOptions, err := redis.ParseURL(cfg.RedisURL)
+	if err != nil {
+		slog.Error("failed to parse redis URL for pub/sub", "error", err)
+		os.Exit(1)
+	}
+	rdb := redis.NewClient(redisOptions)
+	defer rdb.Close()
+
+	// Build chain: Dockerfile → Buildpacks → Railpack
 	buildChain := build.NewChain(
 		dockerfile.New(dockerClient),
 		buildpacks.New(dockerClient),
-		nixpacks.New(),
+		railpack.New(),
 		image.New(dockerClient),
 	)
 
@@ -78,6 +88,7 @@ func main() {
 		Queries:       queries,
 		Chain:         buildChain,
 		EncryptionKey: cfg.EncryptionKey,
+		RedisClient:   rdb,
 	}
 
 	w := worker.New(redisOpt, taskHandler)
@@ -97,13 +108,13 @@ func main() {
 	}
 
 	// HTTP server
-	srv := server.New(cfg, db, queries, asynqClient, dockerClient, caddyClient)
+	srv := server.New(cfg, db, queries, asynqClient, dockerClient, caddyClient, rdb)
 
 	httpServer := &http.Server{
 		Addr:         fmt.Sprintf(":%d", cfg.Port),
 		Handler:      srv.Router(),
 		ReadTimeout:  15 * time.Second,
-		WriteTimeout: 15 * time.Second,
+		WriteTimeout: 0, // Disabled to support SSE streaming endpoints
 		IdleTimeout:  60 * time.Second,
 	}
 

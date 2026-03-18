@@ -182,7 +182,7 @@ function NewServicePage() {
                       <div className="space-y-2">
                         <Label>Build Type</Label>
                         <div className="flex flex-wrap gap-2">
-                          {["dockerfile", "buildpacks", "nixpacks"].map((bt) => (
+                          {["dockerfile", "buildpacks", "railpack"].map((bt) => (
                             <Button
                               key={bt}
                               type="button"

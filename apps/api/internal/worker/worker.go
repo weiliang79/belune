@@ -5,6 +5,7 @@ import (
 	"log/slog"
 
 	"github.com/hibiken/asynq"
+	"github.com/redis/go-redis/v9"
 
 	"github.com/ungweiliang/selfhost-paas/internal/build"
 	"github.com/ungweiliang/selfhost-paas/internal/proxy"
@@ -19,6 +20,7 @@ type TaskHandler struct {
 	Queries       *generated.Queries
 	Chain         *build.Chain
 	EncryptionKey string
+	RedisClient   *redis.Client
 }
 
 type Worker struct {

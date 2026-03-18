@@ -12,6 +12,7 @@ import (
 
 	"github.com/ungweiliang/selfhost-paas/internal/build"
 	"github.com/ungweiliang/selfhost-paas/internal/git"
+	"github.com/ungweiliang/selfhost-paas/internal/pkg/buildlog"
 	"github.com/ungweiliang/selfhost-paas/internal/pkg/crypto"
 	"github.com/ungweiliang/selfhost-paas/internal/store/generated"
 )
@@ -95,6 +96,10 @@ func (h *TaskHandler) HandleBuildTask(ctx context.Context, t *asynq.Task) error 
 
 	imageName := fmt.Sprintf("paas-%s:%s", payload.ServiceID[:8], payload.DeploymentID[:8])
 
+	// Set up build log streaming via Redis pub/sub
+	pub := buildlog.NewPublisher(h.RedisClient, payload.DeploymentID)
+	logWriter := buildlog.NewLineWriter(pub, ctx)
+
 	buildOpts := build.BuildOptions{
 		SourceDir:      tmpDir,
 		ImageTag:       imageName,
@@ -102,10 +107,13 @@ func (h *TaskHandler) HandleBuildTask(ctx context.Context, t *asynq.Task) error 
 		BuilderImage:   svc.BuilderImage.String,
 		Buildpacks:     customBuildpacks,
 		Env:            env,
+		LogWriter:      logWriter,
 	}
 
 	slog.Info("building image", "tag", imageName)
 	result, err := h.Chain.Build(ctx, buildOpts)
+	logWriter.Flush()
+	pub.Close(ctx)
 	if err != nil {
 		h.failDeployment(ctx, deploymentID, fmt.Sprintf("build: %v", err))
 		return fmt.Errorf("build: %w", err)

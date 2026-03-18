@@ -12,6 +12,7 @@ import (
 
 	"github.com/ungweiliang/selfhost-paas/internal/build"
 	"github.com/ungweiliang/selfhost-paas/internal/git"
+	"github.com/ungweiliang/selfhost-paas/internal/pkg/buildlog"
 	"github.com/ungweiliang/selfhost-paas/internal/pkg/crypto"
 	"github.com/ungweiliang/selfhost-paas/internal/proxy"
 	"github.com/ungweiliang/selfhost-paas/internal/runtime"
@@ -110,6 +111,10 @@ func (h *TaskHandler) HandleDeployTask(ctx context.Context, t *asynq.Task) error
 			_ = json.Unmarshal(svc.CustomBuildpacks, &customBuildpacks)
 		}
 
+		// Set up build log streaming via Redis pub/sub
+		pub := buildlog.NewPublisher(h.RedisClient, payload.DeploymentID)
+		logWriter := buildlog.NewLineWriter(pub, ctx)
+
 		buildOpts := build.BuildOptions{
 			SourceDir:      tmpDir,
 			ImageTag:       imageName,
@@ -118,6 +123,7 @@ func (h *TaskHandler) HandleDeployTask(ctx context.Context, t *asynq.Task) error
 			Buildpacks:     customBuildpacks,
 			Env:            env,
 			BuildType:      svc.BuildType,
+			LogWriter:      logWriter,
 		}
 
 		// Update status to building
@@ -128,6 +134,8 @@ func (h *TaskHandler) HandleDeployTask(ctx context.Context, t *asynq.Task) error
 
 		slog.Info("building image", "tag", imageName)
 		result, err := h.Chain.Build(ctx, buildOpts)
+		logWriter.Flush()
+		pub.Close(ctx)
 		if err != nil {
 			h.failDeployment(ctx, deploymentID, fmt.Sprintf("build: %v", err))
 			return fmt.Errorf("build: %w", err)

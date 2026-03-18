@@ -6,6 +6,7 @@ import (
 	"github.com/go-chi/cors"
 	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/redis/go-redis/v9"
 
 	"github.com/ungweiliang/selfhost-paas/internal/config"
 	"github.com/ungweiliang/selfhost-paas/internal/handler"
@@ -24,14 +25,14 @@ type Server struct {
 	auth    *service.AuthService
 }
 
-func New(cfg *config.Config, db *pgxpool.Pool, queries *generated.Queries, asynqClient *asynq.Client, rt runtime.ContainerRuntime, pm proxy.ProxyManager) *Server {
+func New(cfg *config.Config, db *pgxpool.Pool, queries *generated.Queries, asynqClient *asynq.Client, rt runtime.ContainerRuntime, pm proxy.ProxyManager, rdb *redis.Client) *Server {
 	auth := service.NewAuthService(queries, cfg.JWTSecret)
 
 	s := &Server{
 		cfg:     cfg,
 		db:      db,
 		auth:    auth,
-		handler: handler.New(cfg, db, queries, asynqClient, rt, pm, auth),
+		handler: handler.New(cfg, db, queries, asynqClient, rt, pm, auth, rdb),
 	}
 
 	s.router = s.setupRouter()
