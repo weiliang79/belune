@@ -8,6 +8,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/ungweiliang/selfhost-paas/internal/naming"
 	"github.com/ungweiliang/selfhost-paas/internal/proxy"
 	"github.com/ungweiliang/selfhost-paas/internal/store/generated"
 )
@@ -65,7 +66,12 @@ func (h *Handler) AddDomain(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Add Caddy proxy route for this domain
-	containerName := fmt.Sprintf("paas-%s", serviceID[:8])
+	row, err := h.queries.GetServiceWithProjectSlug(r.Context(), serviceUUID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to resolve project")
+		return
+	}
+	containerName := naming.ContainerName(row.ProjectSlug, row.Slug, serviceID)
 	_ = h.proxy.AddRoute(r.Context(), proxy.RouteConfig{
 		Hostname:  req.Hostname,
 		TargetURL: fmt.Sprintf("http://%s:8080", containerName),

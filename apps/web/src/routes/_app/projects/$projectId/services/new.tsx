@@ -30,7 +30,7 @@ function NewServicePage() {
     onSubmit: async ({ value }) => {
       setError("");
       if (!value.name) {
-        setError("Service name is required");
+        setError("Application name is required");
         return;
       }
       if (serviceType === "image" && !value.source_image) {
@@ -58,7 +58,7 @@ function NewServicePage() {
           params: { projectId, serviceId: service.id },
         });
       } catch (e) {
-        setError(e instanceof Error ? e.message : "Failed to create service");
+        setError(e instanceof Error ? e.message : "Failed to create application");
       }
     },
   });
@@ -66,8 +66,8 @@ function NewServicePage() {
   return (
     <div className="mx-auto max-w-lg space-y-6">
       <div>
-        <h1 className="text-2xl font-bold">Deploy New Service</h1>
-        <p className="text-muted-foreground">Add a service to your project.</p>
+        <h1 className="text-2xl font-bold">New Application</h1>
+        <p className="text-muted-foreground">Add an application to your project.</p>
       </div>
 
       <Card>
@@ -89,11 +89,11 @@ function NewServicePage() {
             <form.Field
               name="name"
               validators={{
-                onChange: z.string().min(1, "Service name is required"),
+                onChange: z.string().min(1, "Application name is required"),
               }}
               children={(field) => (
                 <div className="space-y-2">
-                  <Label htmlFor="name">Service Name</Label>
+                  <Label htmlFor="name">Application Name</Label>
                   <Input
                     id="name"
                     placeholder="my-api"
@@ -239,7 +239,7 @@ function NewServicePage() {
                 selector={(s) => s.isSubmitting}
                 children={(isSubmitting) => (
                   <Button type="submit" disabled={isSubmitting}>
-                    {isSubmitting ? "Creating..." : "Create Service"}
+                    {isSubmitting ? "Creating..." : "Create Application"}
                   </Button>
                 )}
               />

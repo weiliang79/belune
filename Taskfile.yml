@@ -76,6 +76,13 @@ tasks:
     dir: '{{.API_DIR}}'
     cmd: migrate -path internal/migrations -database "${DATABASE_URL}" down 1
 
+  db:migrate:fresh:
+    desc: Drop all tables and re-run all migrations
+    dir: '{{.API_DIR}}'
+    cmds:
+      - migrate -path internal/migrations -database "${DATABASE_URL}" drop -f
+      - migrate -path internal/migrations -database "${DATABASE_URL}" up
+
   db:migrate:create:
     desc: Create a new migration file
     dir: '{{.API_DIR}}'

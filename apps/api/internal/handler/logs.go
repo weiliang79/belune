@@ -6,13 +6,25 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/ungweiliang/selfhost-paas/internal/naming"
 	"github.com/ungweiliang/selfhost-paas/internal/pkg/sse"
 )
 
 func (h *Handler) StreamLogs(w http.ResponseWriter, r *http.Request) {
 	serviceID := chi.URLParam(r, "serviceId")
-	containerName := fmt.Sprintf("paas-%s", serviceID[:8])
+	var serviceUUID pgtype.UUID
+	if err := serviceUUID.Scan(serviceID); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid service id")
+		return
+	}
+	row, err := h.queries.GetServiceWithProjectSlug(r.Context(), serviceUUID)
+	if err != nil {
+		writeError(w, http.StatusNotFound, "service not found")
+		return
+	}
+	containerName := naming.ContainerName(row.ProjectSlug, row.Slug, serviceID)
 
 	writer, err := sse.NewWriter(w)
 	if err != nil {

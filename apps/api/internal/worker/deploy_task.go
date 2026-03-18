@@ -12,6 +12,7 @@ import (
 
 	"github.com/ungweiliang/selfhost-paas/internal/build"
 	"github.com/ungweiliang/selfhost-paas/internal/git"
+	"github.com/ungweiliang/selfhost-paas/internal/naming"
 	"github.com/ungweiliang/selfhost-paas/internal/pkg/buildlog"
 	"github.com/ungweiliang/selfhost-paas/internal/pkg/crypto"
 	"github.com/ungweiliang/selfhost-paas/internal/proxy"
@@ -41,16 +42,30 @@ func (h *TaskHandler) HandleDeployTask(ctx context.Context, t *asynq.Task) error
 		Status: "deploying",
 	})
 
-	// Fetch service details
-	svc, err := h.Queries.GetService(ctx, serviceID)
+	// Fetch service details with project slug
+	svcRow, err := h.Queries.GetServiceWithProjectSlug(ctx, serviceID)
 	if err != nil {
 		h.failDeployment(ctx, deploymentID, fmt.Sprintf("fetch service: %v", err))
 		return fmt.Errorf("get service: %w", err)
 	}
+	// Map row to a usable service reference
+	svc := generated.Service{
+		ID: svcRow.ID, ProjectID: svcRow.ProjectID, Name: svcRow.Name,
+		Type: svcRow.Type, SourceRepo: svcRow.SourceRepo, SourceImage: svcRow.SourceImage,
+		DockerfilePath: svcRow.DockerfilePath, BuildType: svcRow.BuildType,
+		BuilderImage: svcRow.BuilderImage, CustomBuildpacks: svcRow.CustomBuildpacks,
+		Status: svcRow.Status,
+	}
 
-	containerName := fmt.Sprintf("paas-%s", payload.ServiceID[:8])
+	containerName := naming.ContainerName(svcRow.ProjectSlug, svcRow.Slug, payload.ServiceID)
 
-	// Stop and remove existing container if any (ignore errors)
+	// Stop and remove existing container if any (try all naming formats)
+	intermediateContainerName := naming.IntermediateContainerName(svcRow.ProjectSlug, payload.ServiceID)
+	oldContainerName := naming.OldContainerName(payload.ServiceID)
+	_ = h.Runtime.StopContainer(ctx, oldContainerName)
+	_ = h.Runtime.RemoveContainer(ctx, oldContainerName)
+	_ = h.Runtime.StopContainer(ctx, intermediateContainerName)
+	_ = h.Runtime.RemoveContainer(ctx, intermediateContainerName)
 	_ = h.Runtime.StopContainer(ctx, containerName)
 	_ = h.Runtime.RemoveContainer(ctx, containerName)
 
@@ -86,7 +101,7 @@ func (h *TaskHandler) HandleDeployTask(ctx context.Context, t *asynq.Task) error
 		}
 
 	case "git":
-		imageName = fmt.Sprintf("paas-%s:%s", payload.ServiceID[:8], payload.DeploymentID[:8])
+		imageName = naming.ImageTag(svcRow.ProjectSlug, svcRow.Slug, payload.ServiceID, payload.DeploymentID)
 
 		// Clone the repository
 		tmpDir, err := os.MkdirTemp("", "paas-build-*")

@@ -12,6 +12,7 @@ import (
 
 	"github.com/ungweiliang/selfhost-paas/internal/build"
 	"github.com/ungweiliang/selfhost-paas/internal/git"
+	"github.com/ungweiliang/selfhost-paas/internal/naming"
 	"github.com/ungweiliang/selfhost-paas/internal/pkg/buildlog"
 	"github.com/ungweiliang/selfhost-paas/internal/pkg/crypto"
 	"github.com/ungweiliang/selfhost-paas/internal/store/generated"
@@ -39,11 +40,17 @@ func (h *TaskHandler) HandleBuildTask(ctx context.Context, t *asynq.Task) error 
 		Status: "building",
 	})
 
-	// Fetch service details
-	svc, err := h.Queries.GetService(ctx, serviceID)
+	// Fetch service details with project slug
+	svcRow, err := h.Queries.GetServiceWithProjectSlug(ctx, serviceID)
 	if err != nil {
 		h.failDeployment(ctx, deploymentID, fmt.Sprintf("fetch service: %v", err))
 		return fmt.Errorf("get service: %w", err)
+	}
+	svc := generated.Service{
+		ID: svcRow.ID, ProjectID: svcRow.ProjectID, Name: svcRow.Name,
+		Type: svcRow.Type, SourceRepo: svcRow.SourceRepo, DockerfilePath: svcRow.DockerfilePath,
+		BuildType: svcRow.BuildType, BuilderImage: svcRow.BuilderImage,
+		CustomBuildpacks: svcRow.CustomBuildpacks, Status: svcRow.Status,
 	}
 
 	// Image-type services have nothing to build
@@ -94,7 +101,7 @@ func (h *TaskHandler) HandleBuildTask(ctx context.Context, t *asynq.Task) error 
 		_ = json.Unmarshal(svc.CustomBuildpacks, &customBuildpacks)
 	}
 
-	imageName := fmt.Sprintf("paas-%s:%s", payload.ServiceID[:8], payload.DeploymentID[:8])
+	imageName := naming.ImageTag(svcRow.ProjectSlug, svcRow.Slug, payload.ServiceID, payload.DeploymentID)
 
 	// Set up build log streaming via Redis pub/sub
 	pub := buildlog.NewPublisher(h.RedisClient, payload.DeploymentID)

@@ -4,9 +4,15 @@ SELECT * FROM services WHERE project_id = $1 ORDER BY created_at DESC;
 -- name: GetService :one
 SELECT * FROM services WHERE id = $1;
 
+-- name: GetServiceWithProjectSlug :one
+SELECT s.*, p.slug as project_slug
+FROM services s
+JOIN projects p ON p.id = s.project_id
+WHERE s.id = $1;
+
 -- name: CreateService :one
-INSERT INTO services (project_id, name, type, source_repo, source_image, dockerfile_path, build_type)
-VALUES ($1, $2, $3, $4, $5, $6, $7)
+INSERT INTO services (project_id, name, slug, type, source_repo, source_image, dockerfile_path, build_type)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 RETURNING *;
 
 -- name: UpdateService :one

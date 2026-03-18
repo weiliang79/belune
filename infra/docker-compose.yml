@@ -39,6 +39,13 @@ services:
       - caddydata:/data
       - caddyconfig:/config
 
+  buildkit:
+    image: moby/buildkit:latest
+    privileged: true
+    ports:
+      - "1234:1234"
+    command: --addr tcp://0.0.0.0:1234
+
 volumes:
   pgdata:
   redisdata:

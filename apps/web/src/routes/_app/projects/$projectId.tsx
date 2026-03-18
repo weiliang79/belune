@@ -27,7 +27,7 @@ function ProjectLayout() {
 
   const tabs = [
     { to: `/projects/${projectId}`, label: "Overview", exact: true },
-    { to: `/projects/${projectId}/services`, label: "Services" },
+    { to: `/projects/${projectId}/services`, label: "Applications" },
     { to: `/projects/${projectId}/databases`, label: "Databases" },
   ];
 

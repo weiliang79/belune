@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"os"
 	"os/exec"
 	"strings"
 
@@ -18,6 +19,13 @@ func New() *Builder {
 }
 
 func (b *Builder) Name() string { return "railpack" }
+
+func buildkitHost() string {
+	if h := os.Getenv("BUILDKIT_HOST"); h != "" {
+		return h
+	}
+	return "tcp://localhost:1234"
+}
 
 func (b *Builder) CanBuild(ctx context.Context, sourceDir string) bool {
 	if _, err := exec.LookPath("railpack"); err != nil {
@@ -39,6 +47,7 @@ func (b *Builder) Build(ctx context.Context, opts build.BuildOptions) (*build.Bu
 
 	slog.Info("running railpack build", "image", opts.ImageTag, "source", opts.SourceDir)
 	cmd := exec.CommandContext(ctx, "railpack", args...)
+	cmd.Env = append(os.Environ(), "BUILDKIT_HOST="+buildkitHost())
 
 	var logBuf strings.Builder
 	writers := []io.Writer{&logBuf}

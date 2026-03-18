@@ -9,6 +9,7 @@ import (
 	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/ungweiliang/selfhost-paas/internal/naming"
 	"github.com/ungweiliang/selfhost-paas/internal/store/generated"
 )
 
@@ -53,6 +54,13 @@ func (h *TaskHandler) HandleCleanupTask(ctx context.Context, t *asynq.Task) erro
 			continue
 		}
 
+		// Get project slug for image naming
+		project, err := h.Queries.GetProject(ctx, svc.ProjectID)
+		if err != nil {
+			slog.Warn("failed to get project for service", "service_id", serviceIDStr, "error", err)
+			continue
+		}
+
 		// Get deployments beyond the retain count
 		oldDeployments, err := h.Queries.ListOldDeployments(ctx, generated.ListOldDeploymentsParams{
 			ServiceID: svc.ID,
@@ -66,13 +74,17 @@ func (h *TaskHandler) HandleCleanupTask(ctx context.Context, t *asynq.Task) erro
 		for _, dep := range oldDeployments {
 			deploymentIDStr := formatUUID(dep.ID)
 
-			// Try to remove the build image (ignore errors — may already be gone or be an external image)
+			// Try to remove the build image (try both old and new naming)
 			if svc.Type == "git" && deploymentIDStr != "" {
-				imageName := fmt.Sprintf("paas-%s:%s", serviceIDStr[:8], deploymentIDStr[:8])
+				imageName := naming.ImageTag(project.Slug, svc.Slug, serviceIDStr, deploymentIDStr)
+				oldImageName := fmt.Sprintf("paas-%s:%s", serviceIDStr[:8], deploymentIDStr[:8])
 				if err := h.Runtime.RemoveImage(ctx, imageName); err != nil {
 					slog.Debug("could not remove image", "image", imageName, "error", err)
 				} else {
 					slog.Info("removed old image", "image", imageName)
+				}
+				if err := h.Runtime.RemoveImage(ctx, oldImageName); err != nil {
+					slog.Debug("could not remove legacy image", "image", oldImageName, "error", err)
 				}
 			}
 

@@ -151,7 +151,7 @@ function ProjectOverview() {
               <AlertDialogHeader>
                 <AlertDialogTitle>Delete {project.name}?</AlertDialogTitle>
                 <AlertDialogDescription>
-                  This will permanently delete the project, all its services,
+                  This will permanently delete the project, all its applications,
                   and stop all running containers. This action cannot be undone.
                 </AlertDialogDescription>
               </AlertDialogHeader>

@@ -43,6 +43,9 @@ func (c *Client) CreateContainer(ctx context.Context, cfg runtime.ContainerConfi
 	labels := map[string]string{
 		labelManagedBy: labelValue,
 	}
+	for k, v := range cfg.Labels {
+		labels[k] = v
+	}
 
 	resp, err := c.cli.ContainerCreate(ctx,
 		&container.Config{
@@ -133,6 +136,7 @@ func (c *Client) ListContainers(ctx context.Context) ([]runtime.ContainerInfo, e
 			Image:  ctr.Image,
 			Status: ctr.State,
 			Ports:  ports,
+			Labels: ctr.Labels,
 		})
 	}
 

@@ -13,6 +13,7 @@ type ContainerConfig struct {
 	Volumes map[string]string // host:container
 	Network string
 	Cmd     []string
+	Labels  map[string]string
 }
 
 type ContainerInfo struct {
@@ -21,6 +22,7 @@ type ContainerInfo struct {
 	Image  string
 	Status string
 	Ports  map[string]string
+	Labels map[string]string
 }
 
 // ContainerRuntime abstracts container operations.

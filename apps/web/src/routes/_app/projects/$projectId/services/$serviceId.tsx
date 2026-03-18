@@ -8,6 +8,7 @@ import {
   useService,
   useDeployService,
   useStopService,
+  useStartService,
   useRestartService,
 } from "@/lib/hooks/use-services";
 import { Badge } from "@/components/ui/badge";
@@ -25,16 +26,17 @@ function ServiceLayout() {
   const { data: service, isLoading } = useService(projectId, serviceId);
   const deploy = useDeployService(projectId, serviceId);
   const stop = useStopService(projectId, serviceId);
+  const start = useStartService(projectId, serviceId);
   const restart = useRestartService(projectId, serviceId);
   const routerState = useRouterState();
   const currentPath = routerState.location.pathname;
 
   if (isLoading) {
-    return <div className="text-muted-foreground">Loading service...</div>;
+    return <div className="text-muted-foreground">Loading application...</div>;
   }
 
   if (!service) {
-    return <div className="text-destructive">Service not found.</div>;
+    return <div className="text-destructive">Application not found.</div>;
   }
 
   const basePath = `/projects/${projectId}/services/${serviceId}`;
@@ -77,18 +79,29 @@ function ServiceLayout() {
             size="sm"
             variant="outline"
             onClick={() => restart.mutate()}
-            disabled={restart.isPending}
+            disabled={restart.isPending || service.status !== "running"}
           >
             Restart
           </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => stop.mutate()}
-            disabled={stop.isPending}
-          >
-            Stop
-          </Button>
+          {service.status === "running" ? (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => stop.mutate()}
+              disabled={stop.isPending}
+            >
+              {stop.isPending ? "Stopping..." : "Stop"}
+            </Button>
+          ) : (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => start.mutate()}
+              disabled={start.isPending || service.status === "deploying" || service.status === "building"}
+            >
+              {start.isPending ? "Starting..." : "Start"}
+            </Button>
+          )}
         </div>
       </div>
 

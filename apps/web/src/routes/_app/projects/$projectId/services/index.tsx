@@ -13,32 +13,32 @@ function ServicesPage() {
   const { data: services, isLoading } = useServices(projectId);
 
   if (isLoading) {
-    return <div className="text-muted-foreground">Loading services...</div>;
+    return <div className="text-muted-foreground">Loading applications...</div>;
   }
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold">Services</h2>
+        <h2 className="text-lg font-semibold">Applications</h2>
         <Link
           to="/projects/$projectId/services/new"
           params={{ projectId }}
           className={buttonVariants()}
         >
-          Deploy Service
+          New Application
         </Link>
       </div>
 
       {!services || services.length === 0 ? (
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-12">
-            <p className="text-muted-foreground mb-4">No services yet.</p>
+            <p className="text-muted-foreground mb-4">No applications yet.</p>
             <Link
               to="/projects/$projectId/services/new"
               params={{ projectId }}
               className={buttonVariants()}
             >
-              Deploy your first service
+              Create your first application
             </Link>
           </CardContent>
         </Card>

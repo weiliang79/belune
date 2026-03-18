@@ -76,6 +76,17 @@ export function useStopService(projectId: string, serviceId: string) {
   });
 }
 
+export function useStartService(projectId: string, serviceId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => servicesApi.startService(projectId, serviceId),
+    onSuccess: () =>
+      qc.invalidateQueries({
+        queryKey: queryKeys.services.detail(projectId, serviceId),
+      }),
+  });
+}
+
 export function useRestartService(projectId: string, serviceId: string) {
   const qc = useQueryClient();
   return useMutation({

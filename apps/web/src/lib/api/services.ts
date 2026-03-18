@@ -49,13 +49,19 @@ export function deployService(projectId: string, serviceId: string) {
 }
 
 export function stopService(projectId: string, serviceId: string) {
-  return api.post<{ status: string }>(
+  return api.post<Service>(
     `/projects/${projectId}/services/${serviceId}/stop`,
   );
 }
 
+export function startService(projectId: string, serviceId: string) {
+  return api.post<Service>(
+    `/projects/${projectId}/services/${serviceId}/start`,
+  );
+}
+
 export function restartService(projectId: string, serviceId: string) {
-  return api.post<{ status: string }>(
+  return api.post<Service>(
     `/projects/${projectId}/services/${serviceId}/restart`,
   );
 }

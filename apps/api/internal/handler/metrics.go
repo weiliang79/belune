@@ -3,7 +3,6 @@ package handler
 import (
 	"encoding/json"
 	"net/http"
-	"strings"
 
 	"github.com/hibiken/asynq"
 )
@@ -34,9 +33,6 @@ func (h *Handler) GetMetrics(w http.ResponseWriter, r *http.Request) {
 	containers, err := h.runtime.ListContainers(ctx)
 	if err == nil {
 		for _, c := range containers {
-			if !strings.HasPrefix(c.Name, "paas-") {
-				continue
-			}
 			stats.Total++
 			if c.Status == "running" {
 				stats.Running++

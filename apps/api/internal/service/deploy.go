@@ -9,6 +9,7 @@ import (
 	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/ungweiliang/selfhost-paas/internal/naming"
 	"github.com/ungweiliang/selfhost-paas/internal/proxy"
 	"github.com/ungweiliang/selfhost-paas/internal/runtime"
 	"github.com/ungweiliang/selfhost-paas/internal/store/generated"
@@ -72,11 +73,16 @@ func (s *DeployService) Deploy(ctx context.Context, serviceID pgtype.UUID) (gene
 
 // Stop stops a running service container.
 func (s *DeployService) Stop(ctx context.Context, serviceID pgtype.UUID) error {
-	containerName := fmt.Sprintf("paas-%s", uuidToString(serviceID)[:8])
+	row, err := s.queries.GetServiceWithProjectSlug(ctx, serviceID)
+	if err != nil {
+		return fmt.Errorf("get service: %w", err)
+	}
+	serviceIDStr := uuidToString(serviceID)
+	containerName := naming.ContainerName(row.ProjectSlug, row.Slug, serviceIDStr)
 	if err := s.runtime.StopContainer(ctx, containerName); err != nil {
 		return fmt.Errorf("stop container: %w", err)
 	}
-	_, err := s.queries.UpdateServiceStatus(ctx, generated.UpdateServiceStatusParams{
+	_, err = s.queries.UpdateServiceStatus(ctx, generated.UpdateServiceStatusParams{
 		ID:     serviceID,
 		Status: "stopped",
 	})
@@ -85,8 +91,12 @@ func (s *DeployService) Stop(ctx context.Context, serviceID pgtype.UUID) error {
 
 // Restart stops and re-deploys a service.
 func (s *DeployService) Restart(ctx context.Context, serviceID pgtype.UUID) (generated.Deployment, error) {
-	// Stop existing container (ignore errors if not running)
-	containerName := fmt.Sprintf("paas-%s", uuidToString(serviceID)[:8])
+	row, err := s.queries.GetServiceWithProjectSlug(ctx, serviceID)
+	if err != nil {
+		return generated.Deployment{}, fmt.Errorf("get service: %w", err)
+	}
+	serviceIDStr := uuidToString(serviceID)
+	containerName := naming.ContainerName(row.ProjectSlug, row.Slug, serviceIDStr)
 	_ = s.runtime.StopContainer(ctx, containerName)
 	_ = s.runtime.RemoveContainer(ctx, containerName)
 

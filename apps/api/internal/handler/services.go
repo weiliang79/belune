@@ -9,6 +9,7 @@ import (
 	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/ungweiliang/selfhost-paas/internal/naming"
 	"github.com/ungweiliang/selfhost-paas/internal/store/generated"
 )
 
@@ -43,6 +44,7 @@ func (h *Handler) CreateService(w http.ResponseWriter, r *http.Request) {
 	svc, err := h.queries.CreateService(r.Context(), generated.CreateServiceParams{
 		ProjectID:      projectUUID,
 		Name:           req.Name,
+		Slug:           naming.Slugify(req.Name),
 		Type:           req.Type,
 		SourceRepo:     pgtype.Text{String: req.SourceRepo, Valid: req.SourceRepo != ""},
 		SourceImage:    pgtype.Text{String: req.SourceImage, Valid: req.SourceImage != ""},
@@ -145,18 +147,60 @@ func (h *Handler) StopService(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	containerName := fmt.Sprintf("paas-%s", serviceID[:8])
+	row, err := h.queries.GetServiceWithProjectSlug(r.Context(), serviceUUID)
+	if err != nil {
+		writeError(w, http.StatusNotFound, "service not found")
+		return
+	}
+
+	containerName := naming.ContainerName(row.ProjectSlug, row.Slug, serviceID)
 	if err := h.runtime.StopContainer(r.Context(), containerName); err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to stop service")
 		return
 	}
 
-	h.queries.UpdateServiceStatus(r.Context(), generated.UpdateServiceStatusParams{
+	svc, err := h.queries.UpdateServiceStatus(r.Context(), generated.UpdateServiceStatusParams{
 		ID:     serviceUUID,
 		Status: "stopped",
 	})
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to update service status")
+		return
+	}
 
-	writeJSON(w, http.StatusOK, map[string]string{"status": "stopped"})
+	writeJSON(w, http.StatusOK, svc)
+}
+
+func (h *Handler) StartService(w http.ResponseWriter, r *http.Request) {
+	serviceID := chi.URLParam(r, "serviceId")
+	var serviceUUID pgtype.UUID
+	if err := serviceUUID.Scan(serviceID); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid service id")
+		return
+	}
+
+	row, err := h.queries.GetServiceWithProjectSlug(r.Context(), serviceUUID)
+	if err != nil {
+		writeError(w, http.StatusNotFound, "service not found")
+		return
+	}
+
+	containerName := naming.ContainerName(row.ProjectSlug, row.Slug, serviceID)
+	if err := h.runtime.StartContainer(r.Context(), containerName); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to start service: "+err.Error())
+		return
+	}
+
+	svc, err := h.queries.UpdateServiceStatus(r.Context(), generated.UpdateServiceStatusParams{
+		ID:     serviceUUID,
+		Status: "running",
+	})
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to update service status")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, svc)
 }
 
 func (h *Handler) RestartService(w http.ResponseWriter, r *http.Request) {
@@ -167,41 +211,33 @@ func (h *Handler) RestartService(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Verify service exists
-	_, err := h.queries.GetService(r.Context(), serviceUUID)
+	row, err := h.queries.GetServiceWithProjectSlug(r.Context(), serviceUUID)
 	if err != nil {
 		writeError(w, http.StatusNotFound, "service not found")
 		return
 	}
 
-	// Stop existing container (ignore errors)
-	containerName := fmt.Sprintf("paas-%s", serviceID[:8])
-	_ = h.runtime.StopContainer(r.Context(), containerName)
-	_ = h.runtime.RemoveContainer(r.Context(), containerName)
+	// Stop and start the existing container (no rebuild)
+	containerName := naming.ContainerName(row.ProjectSlug, row.Slug, serviceID)
+	if err := h.runtime.StopContainer(r.Context(), containerName); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to stop container: "+err.Error())
+		return
+	}
+	if err := h.runtime.StartContainer(r.Context(), containerName); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to start container: "+err.Error())
+		return
+	}
 
-	// Trigger a new deploy
-	deployment, err := h.queries.CreateDeployment(r.Context(), generated.CreateDeploymentParams{
-		ServiceID:   serviceUUID,
-		Status:      "pending",
-		TriggeredBy: "manual",
+	svc, err := h.queries.UpdateServiceStatus(r.Context(), generated.UpdateServiceStatusParams{
+		ID:     serviceUUID,
+		Status: "running",
 	})
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to create deployment")
+		writeError(w, http.StatusInternalServerError, "failed to update service status")
 		return
 	}
 
-	payload, _ := json.Marshal(deployPayload{
-		ServiceID:    serviceID,
-		DeploymentID: fmt.Sprintf("%x-%x-%x-%x-%x", deployment.ID.Bytes[0:4], deployment.ID.Bytes[4:6], deployment.ID.Bytes[6:8], deployment.ID.Bytes[8:10], deployment.ID.Bytes[10:16]),
-	})
-
-	task := asynq.NewTask("deploy", payload)
-	if _, err := h.asynq.Enqueue(task, asynq.Queue("critical")); err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to enqueue deploy task")
-		return
-	}
-
-	writeJSON(w, http.StatusAccepted, deployment)
+	writeJSON(w, http.StatusOK, svc)
 }
 
 type updateServiceRequest struct {
@@ -266,10 +302,17 @@ func (h *Handler) DeleteService(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Stop and remove the container
-	containerName := fmt.Sprintf("paas-%s", serviceID[:8])
+	// Stop and remove the container (try all naming formats for compatibility)
+	row, _ := h.queries.GetServiceWithProjectSlug(r.Context(), serviceUUID)
+	containerName := naming.ContainerName(row.ProjectSlug, row.Slug, serviceID)
+	intermediateContainerName := naming.IntermediateContainerName(row.ProjectSlug, serviceID)
+	oldContainerName := naming.OldContainerName(serviceID)
 	_ = h.runtime.StopContainer(r.Context(), containerName)
 	_ = h.runtime.RemoveContainer(r.Context(), containerName)
+	_ = h.runtime.StopContainer(r.Context(), intermediateContainerName)
+	_ = h.runtime.RemoveContainer(r.Context(), intermediateContainerName)
+	_ = h.runtime.StopContainer(r.Context(), oldContainerName)
+	_ = h.runtime.RemoveContainer(r.Context(), oldContainerName)
 
 	if err := h.queries.DeleteService(r.Context(), serviceUUID); err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to delete service")

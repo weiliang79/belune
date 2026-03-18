@@ -8,6 +8,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/ungweiliang/selfhost-paas/internal/naming"
 	"github.com/ungweiliang/selfhost-paas/internal/server/middleware"
 	"github.com/ungweiliang/selfhost-paas/internal/store/generated"
 )
@@ -121,13 +122,20 @@ func (h *Handler) DeleteProject(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Stop and remove all service containers for this project
+	project, _ := h.queries.GetProject(r.Context(), uuid)
 	services, err := h.queries.ListServicesByProject(r.Context(), uuid)
 	if err == nil {
 		for _, svc := range services {
 			svcID := fmt.Sprintf("%x-%x-%x-%x-%x", svc.ID.Bytes[0:4], svc.ID.Bytes[4:6], svc.ID.Bytes[6:8], svc.ID.Bytes[8:10], svc.ID.Bytes[10:16])
-			containerName := fmt.Sprintf("paas-%s", svcID[:8])
+			containerName := naming.ContainerName(project.Slug, svc.Slug, svcID)
+			intermediateContainerName := naming.IntermediateContainerName(project.Slug, svcID)
+			oldContainerName := naming.OldContainerName(svcID)
 			_ = h.runtime.StopContainer(r.Context(), containerName)
 			_ = h.runtime.RemoveContainer(r.Context(), containerName)
+			_ = h.runtime.StopContainer(r.Context(), intermediateContainerName)
+			_ = h.runtime.RemoveContainer(r.Context(), intermediateContainerName)
+			_ = h.runtime.StopContainer(r.Context(), oldContainerName)
+			_ = h.runtime.RemoveContainer(r.Context(), oldContainerName)
 		}
 	}
 

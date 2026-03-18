@@ -50,6 +50,7 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService)
 		r.Put("/api/projects/{projectId}/services/{serviceId}/webhook", h.UpdateServiceWebhook)
 		r.Post("/api/projects/{projectId}/services/{serviceId}/deploy", h.DeployService)
 		r.Post("/api/projects/{projectId}/services/{serviceId}/stop", h.StopService)
+		r.Post("/api/projects/{projectId}/services/{serviceId}/start", h.StartService)
 		r.Post("/api/projects/{projectId}/services/{serviceId}/restart", h.RestartService)
 
 		// Deployments

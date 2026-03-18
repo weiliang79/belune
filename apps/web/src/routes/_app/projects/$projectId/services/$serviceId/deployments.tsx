@@ -4,6 +4,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/lib/hooks/query-keys";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import type { Deployment } from "@/lib/types";
 import { formatDate, formatDuration } from "@/lib/utils/format";
 import { useState, useEffect, useRef } from "react";
 
@@ -24,20 +25,18 @@ const statusVariant: Record<
   failed: "destructive",
 };
 
-function BuildLogStream({
-  projectId,
-  serviceId,
-  deploymentId,
-}: {
-  projectId: string;
-  serviceId: string;
-  deploymentId: string;
-}) {
+function useBuildLogStream(
+  projectId: string,
+  serviceId: string,
+  deploymentId: string,
+  isBuilding: boolean,
+) {
   const [lines, setLines] = useState<string[]>([]);
-  const scrollRef = useRef<HTMLPreElement>(null);
   const queryClient = useQueryClient();
 
   useEffect(() => {
+    if (!isBuilding) return;
+
     const url = `/api/projects/${projectId}/services/${serviceId}/deployments/${deploymentId}/build-logs`;
     const source = new EventSource(url, { withCredentials: true });
 
@@ -62,7 +61,13 @@ function BuildLogStream({
     return () => {
       source.close();
     };
-  }, [projectId, serviceId, deploymentId, queryClient]);
+  }, [projectId, serviceId, deploymentId, isBuilding, queryClient]);
+
+  return lines;
+}
+
+function BuildLogViewer({ lines }: { lines: string[] }) {
+  const scrollRef = useRef<HTMLPreElement>(null);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -86,10 +91,71 @@ function BuildLogStream({
   );
 }
 
+function DeploymentCard({
+  deployment: d,
+  projectId,
+  serviceId,
+}: {
+  deployment: Deployment;
+  projectId: string;
+  serviceId: string;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const isBuilding = d.status === "building" || d.status === "pending";
+  const lines = useBuildLogStream(projectId, serviceId, d.id, isBuilding);
+
+  const duration =
+    d.finished_at && d.started_at
+      ? formatDuration(
+          new Date(d.finished_at).getTime() -
+            new Date(d.started_at).getTime(),
+        )
+      : null;
+
+  return (
+    <Card
+      className="hover:bg-muted/50 cursor-pointer transition-colors"
+      onClick={() => setExpanded(!expanded)}
+    >
+      <CardContent className="py-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <Badge variant={statusVariant[d.status] ?? "outline"}>
+              {d.status}
+            </Badge>
+            <span className="text-muted-foreground text-sm">
+              {d.triggered_by}
+            </span>
+            {d.commit_sha && (
+              <span className="text-muted-foreground font-mono text-xs">
+                {d.commit_sha.slice(0, 7)}
+              </span>
+            )}
+          </div>
+          <div className="text-muted-foreground flex items-center gap-3 text-xs">
+            {duration && <span>{duration}</span>}
+            <span>{formatDate(d.started_at)}</span>
+          </div>
+        </div>
+        {expanded && isBuilding && <BuildLogViewer lines={lines} />}
+        {expanded && !isBuilding && d.build_logs && (
+          <pre className="bg-muted mt-3 max-h-64 overflow-auto rounded p-3 font-mono text-xs">
+            {d.build_logs}
+          </pre>
+        )}
+        {expanded && d.error_message && (
+          <div className="bg-destructive/10 text-destructive mt-3 rounded p-3 text-sm">
+            {d.error_message}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 function DeploymentsPage() {
   const { projectId, serviceId } = Route.useParams();
   const { data: deployments, isLoading } = useDeployments(projectId, serviceId);
-  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   if (isLoading) {
     return <div className="text-muted-foreground">Loading deployments...</div>;
@@ -107,64 +173,14 @@ function DeploymentsPage() {
 
   return (
     <div className="space-y-3">
-      {deployments.map((d) => {
-        const duration =
-          d.finished_at && d.started_at
-            ? formatDuration(
-                new Date(d.finished_at).getTime() -
-                  new Date(d.started_at).getTime(),
-              )
-            : null;
-
-        const isBuilding = d.status === "building" || d.status === "pending";
-
-        return (
-          <Card
-            key={d.id}
-            className="hover:bg-muted/50 cursor-pointer transition-colors"
-            onClick={() => setExpandedId(expandedId === d.id ? null : d.id)}
-          >
-            <CardContent className="py-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <Badge variant={statusVariant[d.status] ?? "outline"}>
-                    {d.status}
-                  </Badge>
-                  <span className="text-muted-foreground text-sm">
-                    {d.triggered_by}
-                  </span>
-                  {d.commit_sha && (
-                    <span className="text-muted-foreground font-mono text-xs">
-                      {d.commit_sha.slice(0, 7)}
-                    </span>
-                  )}
-                </div>
-                <div className="text-muted-foreground flex items-center gap-3 text-xs">
-                  {duration && <span>{duration}</span>}
-                  <span>{formatDate(d.started_at)}</span>
-                </div>
-              </div>
-              {expandedId === d.id && isBuilding && (
-                <BuildLogStream
-                  projectId={projectId}
-                  serviceId={serviceId}
-                  deploymentId={d.id}
-                />
-              )}
-              {expandedId === d.id && !isBuilding && d.build_logs && (
-                <pre className="bg-muted mt-3 max-h-64 overflow-auto rounded p-3 font-mono text-xs">
-                  {d.build_logs}
-                </pre>
-              )}
-              {expandedId === d.id && d.error_message && (
-                <div className="bg-destructive/10 text-destructive mt-3 rounded p-3 text-sm">
-                  {d.error_message}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        );
-      })}
+      {deployments.map((d) => (
+        <DeploymentCard
+          key={d.id}
+          deployment={d}
+          projectId={projectId}
+          serviceId={serviceId}
+        />
+      ))}
     </div>
   );
 }

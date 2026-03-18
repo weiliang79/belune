@@ -24,6 +24,7 @@ CREATE TABLE services (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
     name VARCHAR(255) NOT NULL,
+    slug VARCHAR(255) NOT NULL,
     type VARCHAR(50) NOT NULL CHECK (type IN ('git', 'image')),
     source_repo TEXT,
     source_image TEXT,
@@ -40,6 +41,7 @@ CREATE TABLE services (
 );
 
 CREATE INDEX idx_services_project_id ON services(project_id);
+CREATE UNIQUE INDEX idx_services_slug_per_project ON services(project_id, slug);
 
 -- Deployments
 CREATE TABLE deployments (
