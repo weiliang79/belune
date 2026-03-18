@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/docker/docker/api/types"
+	"github.com/docker/docker/api/types/filters"
 )
 
 func (c *Client) PullImage(ctx context.Context, image string) error {
@@ -52,6 +53,22 @@ func (c *Client) BuildImage(ctx context.Context, contextDir, dockerfile, tag str
 		return fmt.Errorf("reading build response: %w", err)
 	}
 
+	return nil
+}
+
+func (c *Client) RemoveImage(ctx context.Context, img string) error {
+	_, err := c.cli.ImageRemove(ctx, img, types.ImageRemoveOptions{PruneChildren: true})
+	if err != nil {
+		return fmt.Errorf("remove image %s: %w", img, err)
+	}
+	return nil
+}
+
+func (c *Client) PruneImages(ctx context.Context) error {
+	_, err := c.cli.ImagesPrune(ctx, filters.NewArgs(filters.Arg("dangling", "true")))
+	if err != nil {
+		return fmt.Errorf("prune images: %w", err)
+	}
 	return nil
 }
 

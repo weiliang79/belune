@@ -278,3 +278,44 @@ func (h *Handler) DeleteService(w http.ResponseWriter, r *http.Request) {
 
 	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
 }
+
+func (h *Handler) BuildService(w http.ResponseWriter, r *http.Request) {
+	serviceID := chi.URLParam(r, "serviceId")
+	var serviceUUID pgtype.UUID
+	if err := serviceUUID.Scan(serviceID); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid service id")
+		return
+	}
+
+	// Verify service exists
+	_, err := h.queries.GetService(r.Context(), serviceUUID)
+	if err != nil {
+		writeError(w, http.StatusNotFound, "service not found")
+		return
+	}
+
+	// Create deployment record
+	deployment, err := h.queries.CreateDeployment(r.Context(), generated.CreateDeploymentParams{
+		ServiceID:   serviceUUID,
+		Status:      "pending",
+		TriggeredBy: "manual",
+	})
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to create deployment")
+		return
+	}
+
+	// Enqueue build task (not deploy)
+	payload, _ := json.Marshal(deployPayload{
+		ServiceID:    serviceID,
+		DeploymentID: fmt.Sprintf("%x-%x-%x-%x-%x", deployment.ID.Bytes[0:4], deployment.ID.Bytes[4:6], deployment.ID.Bytes[6:8], deployment.ID.Bytes[8:10], deployment.ID.Bytes[10:16]),
+	})
+
+	task := asynq.NewTask("build", payload)
+	if _, err := h.asynq.Enqueue(task, asynq.Queue("default")); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to enqueue build task")
+		return
+	}
+
+	writeJSON(w, http.StatusAccepted, deployment)
+}

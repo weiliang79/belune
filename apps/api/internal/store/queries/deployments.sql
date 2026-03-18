@@ -16,3 +16,12 @@ RETURNING *;
 
 -- name: UpdateDeploymentBuildLogs :exec
 UPDATE deployments SET build_logs = $2 WHERE id = $1;
+
+-- name: ListOldDeployments :many
+SELECT * FROM deployments WHERE service_id = $1 ORDER BY started_at DESC OFFSET $2;
+
+-- name: DeleteDeployment :exec
+DELETE FROM deployments WHERE id = $1;
+
+-- name: CountDeployments :one
+SELECT count(*) FROM deployments;

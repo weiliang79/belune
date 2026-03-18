@@ -74,7 +74,11 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService)
 		r.Get("/api/projects/{projectId}/databases/{databaseId}", h.GetDatabase)
 		r.Delete("/api/projects/{projectId}/databases/{databaseId}", h.DeleteDatabase)
 
-		// Metrics
+		// Metrics & Cleanup
 		r.Get("/api/metrics", h.GetMetrics)
+		r.Post("/api/cleanup", h.TriggerCleanup)
+
+		// Build (standalone build without deploy)
+		r.Post("/api/projects/{projectId}/services/{serviceId}/build", h.BuildService)
 	})
 }

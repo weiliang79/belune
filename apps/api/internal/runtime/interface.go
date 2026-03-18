@@ -37,4 +37,7 @@ type ContainerRuntime interface {
 	RemoveNetwork(ctx context.Context, name string) error
 	CreateVolume(ctx context.Context, name string) error
 	RemoveVolume(ctx context.Context, name string) error
+	RemoveImage(ctx context.Context, image string) error
+	PruneImages(ctx context.Context) error
+	PruneVolumes(ctx context.Context) error
 }

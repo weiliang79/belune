@@ -59,6 +59,18 @@ export interface EnvVar {
   is_secret: boolean;
 }
 
+export interface MetricsOverview {
+  projects: number;
+  services: number;
+  databases: number;
+  deployments: number;
+  containers: {
+    running: number;
+    stopped: number;
+    total: number;
+  };
+}
+
 export interface Database {
   id: string;
   project_id: string;

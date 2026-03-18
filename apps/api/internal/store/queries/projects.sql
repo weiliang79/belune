@@ -16,3 +16,6 @@ RETURNING *;
 
 -- name: DeleteProject :exec
 DELETE FROM projects WHERE id = $1;
+
+-- name: CountProjects :one
+SELECT count(*) FROM projects;

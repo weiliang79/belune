@@ -33,6 +33,7 @@ export const queryKeys = {
     all: (projectId: string, serviceId: string) =>
       ["projects", projectId, "services", serviceId, "env"] as const,
   },
+  metrics: ["metrics"] as const,
   databases: {
     all: (projectId: string) =>
       ["projects", projectId, "databases"] as const,

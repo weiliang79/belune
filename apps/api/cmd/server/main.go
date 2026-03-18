@@ -83,6 +83,14 @@ func main() {
 	}()
 	defer w.Stop()
 
+	// Cleanup scheduler (runs every 24h)
+	scheduler, err := w.StartScheduler()
+	if err != nil {
+		slog.Warn("failed to start cleanup scheduler", "error", err)
+	} else {
+		defer scheduler.Shutdown()
+	}
+
 	// HTTP server
 	srv := server.New(cfg, db, queries, asynqClient, dockerClient, caddyClient)
 
