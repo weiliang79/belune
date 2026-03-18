@@ -23,10 +23,24 @@ var defaultVersions = map[string]string{
 	"mongo":    "7",
 }
 
+type createDatabaseCredentials struct {
+	User         string `json:"user"`
+	Password     string `json:"password"`
+	DatabaseName string `json:"database_name"`
+}
+
 type createDatabaseRequest struct {
-	Name    string `json:"name"`
-	Type    string `json:"type"`
-	Version string `json:"version"`
+	Name        string                    `json:"name"`
+	Slug        string                    `json:"slug"`
+	Type        string                    `json:"type"`
+	Version     string                    `json:"version"`
+	Credentials *createDatabaseCredentials `json:"credentials"`
+}
+
+var defaultUsers = map[string]string{
+	"postgres": "postgres",
+	"mysql":    "root",
+	"mongo":    "admin",
 }
 
 type provisionDBPayload struct {
@@ -69,6 +83,18 @@ func (h *Handler) CreateDatabase(w http.ResponseWriter, r *http.Request) {
 		req.Version = defaultVersions[req.Type]
 	}
 
+	// Fetch project for slug
+	project, err := h.queries.GetProject(r.Context(), projectUUID)
+	if err != nil {
+		writeError(w, http.StatusNotFound, "project not found")
+		return
+	}
+
+	baseSlug := naming.Slugify(req.Name)
+	if req.Slug != "" {
+		baseSlug = naming.Slugify(req.Slug)
+	}
+
 	// Generate random password
 	passwordBytes := make([]byte, 16)
 	if _, err := rand.Read(passwordBytes); err != nil {
@@ -77,22 +103,37 @@ func (h *Handler) CreateDatabase(w http.ResponseWriter, r *http.Request) {
 	}
 	password := hex.EncodeToString(passwordBytes)
 
+	// Determine effective credential values
+	user := defaultUsers[req.Type]
+	dbName := req.Name
+	if req.Credentials != nil {
+		if req.Credentials.User != "" {
+			user = req.Credentials.User
+		}
+		if req.Credentials.Password != "" {
+			password = req.Credentials.Password
+		}
+		if req.Credentials.DatabaseName != "" {
+			dbName = req.Credentials.DatabaseName
+		}
+	}
+
 	// Build credentials based on type
 	creds := make(map[string]string)
 	switch req.Type {
 	case "postgres":
-		creds["user"] = "paas"
+		creds["user"] = user
 		creds["password"] = password
-		creds["database"] = req.Name
+		creds["database"] = dbName
 	case "mysql":
 		creds["root_password"] = password
-		creds["user"] = "paas"
+		creds["user"] = user
 		creds["password"] = password
-		creds["database"] = req.Name
+		creds["database"] = dbName
 	case "redis":
 		creds["password"] = password
 	case "mongo":
-		creds["username"] = "paas"
+		creds["username"] = user
 		creds["password"] = password
 	}
 
@@ -112,7 +153,7 @@ func (h *Handler) CreateDatabase(w http.ResponseWriter, r *http.Request) {
 		ProjectID:            projectUUID,
 		Type:                 req.Type,
 		Name:                 req.Name,
-		Slug:                 naming.Slugify(req.Name),
+		Slug:                 baseSlug,
 		Version:              req.Version,
 		Status:               "creating",
 		InternalHost:         pgtype.Text{},
@@ -124,10 +165,17 @@ func (h *Handler) CreateDatabase(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Enqueue provision task
+	// Construct final slug: {projectSlug}-{baseSlug}-{shortId}
 	dbIDStr := fmt.Sprintf("%x-%x-%x-%x-%x",
 		db.ID.Bytes[0:4], db.ID.Bytes[4:6], db.ID.Bytes[6:8], db.ID.Bytes[8:10], db.ID.Bytes[10:16])
+	finalSlug := fmt.Sprintf("%s-%s-%s", project.Slug, baseSlug, dbIDStr[:8])
+	_ = h.queries.UpdateDatabaseSlug(r.Context(), generated.UpdateDatabaseSlugParams{
+		ID:   db.ID,
+		Slug: finalSlug,
+	})
+	db.Slug = finalSlug
 
+	// Enqueue provision task
 	payload, _ := json.Marshal(provisionDBPayload{DatabaseID: dbIDStr})
 	task := asynq.NewTask("provision_db", payload)
 	if _, err := h.asynq.Enqueue(task, asynq.Queue("critical")); err != nil {
@@ -194,13 +242,17 @@ func (h *Handler) DeleteDatabase(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Stop and remove container + volume
-	containerName := fmt.Sprintf("paas-db-%s", databaseID[:8])
-	volumeName := fmt.Sprintf("paas-dbvol-%s", databaseID[:8])
+	// Fetch database to get slug for container name
+	db, err := h.queries.GetDatabase(r.Context(), dbUUID)
+	if err != nil {
+		writeError(w, http.StatusNotFound, "database not found")
+		return
+	}
 
-	_ = h.runtime.StopContainer(r.Context(), containerName)
-	_ = h.runtime.RemoveContainer(r.Context(), containerName)
-	_ = h.runtime.RemoveVolume(r.Context(), volumeName)
+	// Stop and remove container + volume
+	_ = h.runtime.StopContainer(r.Context(), db.Slug)
+	_ = h.runtime.RemoveContainer(r.Context(), db.Slug)
+	_ = h.runtime.RemoveVolume(r.Context(), db.Slug+"-vol")
 
 	if err := h.queries.DeleteDatabase(r.Context(), dbUUID); err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to delete database")

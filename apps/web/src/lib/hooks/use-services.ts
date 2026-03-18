@@ -6,6 +6,7 @@ export function useServices(projectId: string) {
   return useQuery({
     queryKey: queryKeys.services.all(projectId),
     queryFn: () => servicesApi.listServices(projectId),
+    refetchInterval: 5000,
   });
 }
 

@@ -13,6 +13,7 @@ export function createService(
   projectId: string,
   data: {
     name: string;
+    slug?: string;
     type: "git" | "image";
     source_repo?: string;
     source_image?: string;

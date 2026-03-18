@@ -46,8 +46,8 @@ func (h *TaskHandler) HandleProvisionDBTask(ctx context.Context, t *asynq.Task) 
 		return fmt.Errorf("unmarshal credentials: %w", err)
 	}
 
-	containerName := fmt.Sprintf("paas-db-%s", payload.DatabaseID[:8])
-	volumeName := fmt.Sprintf("paas-dbvol-%s", payload.DatabaseID[:8])
+	containerName := db.Slug
+	volumeName := fmt.Sprintf("%s-vol", db.Slug)
 
 	// Determine image, port, data dir, env vars, and cmd based on db type
 	var (

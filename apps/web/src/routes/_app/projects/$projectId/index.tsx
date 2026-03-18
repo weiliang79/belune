@@ -21,7 +21,14 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useServices, useCreateService } from "@/lib/hooks/use-services";
 import { useDatabases, useCreateDatabase } from "@/lib/hooks/use-databases";
-import { Plus, Database as DatabaseIcon, AppWindow, Loader2 } from "lucide-react";
+import {
+  Plus,
+  Database as DatabaseIcon,
+  AppWindow,
+  Loader2,
+  ChevronDown,
+  ChevronUp,
+} from "lucide-react";
 
 export const Route = createFileRoute("/_app/projects/$projectId/")({
   component: ProjectOverview,
@@ -41,6 +48,12 @@ const DEFAULT_VERSIONS: Record<string, string> = {
   redis: "7",
   mongo: "7",
 };
+const DEFAULT_USERS: Record<string, string> = {
+  postgres: "postgres",
+  mysql: "root",
+  redis: "",
+  mongo: "admin",
+};
 
 function ProjectOverview() {
   const { projectId } = Route.useParams();
@@ -55,6 +68,8 @@ function ProjectOverview() {
   // App dialog state
   const [appDialogOpen, setAppDialogOpen] = useState(false);
   const [appName, setAppName] = useState("");
+  const [appSlug, setAppSlug] = useState("");
+  const [appSlugManual, setAppSlugManual] = useState(false);
   const [serviceType, setServiceType] = useState<"image" | "git">("image");
   const [sourceImage, setSourceImage] = useState("");
   const [sourceRepo, setSourceRepo] = useState("");
@@ -65,8 +80,14 @@ function ProjectOverview() {
   // DB dialog state
   const [dbDialogOpen, setDbDialogOpen] = useState(false);
   const [dbName, setDbName] = useState("");
+  const [dbSlug, setDbSlug] = useState("");
+  const [dbSlugManual, setDbSlugManual] = useState(false);
   const [dbType, setDbType] = useState<string>("postgres");
   const [dbVersion, setDbVersion] = useState("");
+  const [showCredentials, setShowCredentials] = useState(false);
+  const [dbUser, setDbUser] = useState("");
+  const [dbPassword, setDbPassword] = useState("");
+  const [dbDatabaseName, setDbDatabaseName] = useState("");
 
   const handleCreateApp = async () => {
     setAppError("");
@@ -85,6 +106,7 @@ function ProjectOverview() {
     try {
       const service = await createService.mutateAsync({
         name: appName.trim(),
+        slug: appSlug || undefined,
         type: serviceType,
         ...(serviceType === "image"
           ? { source_image: sourceImage, build_type: "image" }
@@ -96,6 +118,8 @@ function ProjectOverview() {
       });
       setAppDialogOpen(false);
       setAppName("");
+      setAppSlug("");
+      setAppSlugManual(false);
       setSourceImage("");
       setSourceRepo("");
       setDockerfilePath("Dockerfile");
@@ -115,14 +139,34 @@ function ProjectOverview() {
 
   const handleCreateDb = () => {
     if (!dbName.trim()) return;
+    const credentials =
+      showCredentials && (dbUser || dbPassword || dbDatabaseName)
+        ? {
+            user: dbUser || undefined,
+            password: dbPassword || undefined,
+            database_name: dbDatabaseName || undefined,
+          }
+        : undefined;
     createDb.mutate(
-      { name: dbName.trim(), type: dbType, version: dbVersion || undefined },
+      {
+        name: dbName.trim(),
+        slug: dbSlug || undefined,
+        type: dbType,
+        version: dbVersion || undefined,
+        credentials,
+      },
       {
         onSuccess: () => {
           setDbDialogOpen(false);
           setDbName("");
+          setDbSlug("");
+          setDbSlugManual(false);
           setDbType("postgres");
           setDbVersion("");
+          setShowCredentials(false);
+          setDbUser("");
+          setDbPassword("");
+          setDbDatabaseName("");
         },
       },
     );
@@ -182,14 +226,30 @@ function ProjectOverview() {
               <Input
                 id="app-name"
                 value={appName}
-                onChange={(e) => setAppName(e.target.value)}
+                onChange={(e) => {
+                  setAppName(e.target.value);
+                  if (!appSlugManual) {
+                    setAppSlug(slugify(e.target.value));
+                  }
+                }}
                 placeholder="my-api"
               />
-              {appName.trim() && (
-                <p className="text-muted-foreground text-xs">
-                  Slug: <span className="font-mono">{slugify(appName)}</span>
-                </p>
-              )}
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="app-slug">Slug</Label>
+              <Input
+                id="app-slug"
+                value={appSlug}
+                onChange={(e) => {
+                  setAppSlug(slugify(e.target.value));
+                  setAppSlugManual(true);
+                }}
+                placeholder={appName ? slugify(appName) : "auto-generated"}
+              />
+              <p className="text-muted-foreground text-xs">
+                Used in container naming. Auto-generated from name unless
+                overridden.
+              </p>
             </div>
             <div className="space-y-2">
               <Label>Source Type</Label>
@@ -292,14 +352,30 @@ function ProjectOverview() {
               <Input
                 id="db-name"
                 value={dbName}
-                onChange={(e) => setDbName(e.target.value)}
+                onChange={(e) => {
+                  setDbName(e.target.value);
+                  if (!dbSlugManual) {
+                    setDbSlug(slugify(e.target.value));
+                  }
+                }}
                 placeholder="my-database"
               />
-              {dbName.trim() && (
-                <p className="text-muted-foreground text-xs">
-                  Slug: <span className="font-mono">{slugify(dbName)}</span>
-                </p>
-              )}
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="db-slug">Slug</Label>
+              <Input
+                id="db-slug"
+                value={dbSlug}
+                onChange={(e) => {
+                  setDbSlug(slugify(e.target.value));
+                  setDbSlugManual(true);
+                }}
+                placeholder={dbName ? slugify(dbName) : "auto-generated"}
+              />
+              <p className="text-muted-foreground text-xs">
+                Used in container naming. Auto-generated from name unless
+                overridden.
+              </p>
             </div>
             <div className="space-y-2">
               <Label htmlFor="db-type">Type</Label>
@@ -309,6 +385,9 @@ function ProjectOverview() {
                 onChange={(e) => {
                   setDbType(e.target.value);
                   setDbVersion("");
+                  setDbUser("");
+                  setDbPassword("");
+                  setDbDatabaseName("");
                 }}
                 className="border-input bg-background ring-offset-background focus-visible:ring-ring flex h-9 w-full rounded-md border px-3 py-1 text-sm focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
               >
@@ -327,6 +406,60 @@ function ProjectOverview() {
                 onChange={(e) => setDbVersion(e.target.value)}
                 placeholder={DEFAULT_VERSIONS[dbType] || "latest"}
               />
+            </div>
+            <div className="space-y-2">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="w-full justify-between"
+                onClick={() => setShowCredentials(!showCredentials)}
+              >
+                Credential Overrides
+                {showCredentials ? (
+                  <ChevronUp className="ml-1 h-4 w-4" />
+                ) : (
+                  <ChevronDown className="ml-1 h-4 w-4" />
+                )}
+              </Button>
+              {showCredentials && (
+                <div className="space-y-3 rounded-md border p-3">
+                  {dbType !== "redis" && (
+                    <div className="space-y-1">
+                      <Label htmlFor="db-user">User</Label>
+                      <Input
+                        id="db-user"
+                        value={dbUser}
+                        onChange={(e) => setDbUser(e.target.value)}
+                        placeholder={DEFAULT_USERS[dbType] || ""}
+                      />
+                    </div>
+                  )}
+                  <div className="space-y-1">
+                    <Label htmlFor="db-password">Password</Label>
+                    <Input
+                      id="db-password"
+                      value={dbPassword}
+                      onChange={(e) => setDbPassword(e.target.value)}
+                      placeholder="auto-generated"
+                    />
+                  </div>
+                  {(dbType === "postgres" || dbType === "mysql") && (
+                    <div className="space-y-1">
+                      <Label htmlFor="db-database-name">Database Name</Label>
+                      <Input
+                        id="db-database-name"
+                        value={dbDatabaseName}
+                        onChange={(e) => setDbDatabaseName(e.target.value)}
+                        placeholder={dbName || "same as name"}
+                      />
+                    </div>
+                  )}
+                  <p className="text-muted-foreground text-xs">
+                    Leave empty to use defaults.
+                  </p>
+                </div>
+              )}
             </div>
           </div>
           <DialogFooter>

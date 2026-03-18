@@ -41,5 +41,8 @@ WHERE id = $1 RETURNING *;
 -- name: ListAllServices :many
 SELECT * FROM services;
 
+-- name: UpdateServiceSlug :exec
+UPDATE services SET slug = $2 WHERE id = $1;
+
 -- name: CountServices :one
 SELECT count(*) FROM services;

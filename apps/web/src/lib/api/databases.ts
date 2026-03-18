@@ -11,7 +11,17 @@ export function getDatabase(projectId: string, databaseId: string) {
 
 export function createDatabase(
   projectId: string,
-  data: { name: string; type: string; version?: string },
+  data: {
+    name: string;
+    slug?: string;
+    type: string;
+    version?: string;
+    credentials?: {
+      user?: string;
+      password?: string;
+      database_name?: string;
+    };
+  },
 ) {
   return api.post<Database>(`/projects/${projectId}/databases`, data);
 }

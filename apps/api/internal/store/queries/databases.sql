@@ -18,5 +18,8 @@ UPDATE databases SET status = $2, internal_host = $3, internal_port = $4 WHERE i
 -- name: DeleteDatabase :exec
 DELETE FROM databases WHERE id = $1;
 
+-- name: UpdateDatabaseSlug :exec
+UPDATE databases SET slug = $2 WHERE id = $1;
+
 -- name: CountDatabases :one
 SELECT count(*) FROM databases;

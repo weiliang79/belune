@@ -15,6 +15,7 @@ import (
 
 type createServiceRequest struct {
 	Name           string `json:"name"`
+	Slug           string `json:"slug"`            // optional, auto-generated from name if empty
 	Type           string `json:"type"`            // "git" or "image"
 	SourceRepo     string `json:"source_repo"`     // for git type
 	SourceImage    string `json:"source_image"`    // for image type
@@ -41,10 +42,22 @@ func (h *Handler) CreateService(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Fetch project to get its slug for the final slug format
+	project, err := h.queries.GetProject(r.Context(), projectUUID)
+	if err != nil {
+		writeError(w, http.StatusNotFound, "project not found")
+		return
+	}
+
+	baseSlug := naming.Slugify(req.Name)
+	if req.Slug != "" {
+		baseSlug = naming.Slugify(req.Slug)
+	}
+
 	svc, err := h.queries.CreateService(r.Context(), generated.CreateServiceParams{
 		ProjectID:      projectUUID,
 		Name:           req.Name,
-		Slug:           naming.Slugify(req.Name),
+		Slug:           baseSlug,
 		Type:           req.Type,
 		SourceRepo:     pgtype.Text{String: req.SourceRepo, Valid: req.SourceRepo != ""},
 		SourceImage:    pgtype.Text{String: req.SourceImage, Valid: req.SourceImage != ""},
@@ -55,6 +68,16 @@ func (h *Handler) CreateService(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "failed to create service")
 		return
 	}
+
+	// Construct final slug: {projectSlug}-{baseSlug}-{shortId}
+	svcID := fmt.Sprintf("%x-%x-%x-%x-%x",
+		svc.ID.Bytes[0:4], svc.ID.Bytes[4:6], svc.ID.Bytes[6:8], svc.ID.Bytes[8:10], svc.ID.Bytes[10:16])
+	finalSlug := fmt.Sprintf("%s-%s-%s", project.Slug, baseSlug, svcID[:8])
+	_ = h.queries.UpdateServiceSlug(r.Context(), generated.UpdateServiceSlugParams{
+		ID:   svc.ID,
+		Slug: finalSlug,
+	})
+	svc.Slug = finalSlug
 
 	writeJSON(w, http.StatusCreated, svc)
 }
