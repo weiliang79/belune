@@ -91,7 +91,7 @@ function NewProjectPage() {
                   />
                   {field.state.meta.errors.length > 0 && (
                     <p className="text-destructive text-sm">
-                      {field.state.meta.errors[0]?.toString()}
+                      {typeof field.state.meta.errors[0] === 'string' ? field.state.meta.errors[0] : field.state.meta.errors[0]?.message}
                     </p>
                   )}
                 </div>
@@ -120,7 +120,7 @@ function NewProjectPage() {
                   />
                   {field.state.meta.errors.length > 0 && (
                     <p className="text-destructive text-sm">
-                      {field.state.meta.errors[0]?.toString()}
+                      {typeof field.state.meta.errors[0] === 'string' ? field.state.meta.errors[0] : field.state.meta.errors[0]?.message}
                     </p>
                   )}
                 </div>

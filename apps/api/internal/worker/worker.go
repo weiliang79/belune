@@ -24,12 +24,12 @@ type TaskHandler struct {
 type Worker struct {
 	server   *asynq.Server
 	handler  *TaskHandler
-	redisURL string
+	redisOpt asynq.RedisConnOpt
 }
 
-func New(redisURL string, handler *TaskHandler) *Worker {
+func New(redisOpt asynq.RedisConnOpt, handler *TaskHandler) *Worker {
 	srv := asynq.NewServer(
-		asynq.RedisClientOpt{Addr: redisURL},
+		redisOpt,
 		asynq.Config{
 			Concurrency: 5,
 			Queues: map[string]int{
@@ -40,7 +40,7 @@ func New(redisURL string, handler *TaskHandler) *Worker {
 		},
 	)
 
-	return &Worker{server: srv, handler: handler, redisURL: redisURL}
+	return &Worker{server: srv, handler: handler, redisOpt: redisOpt}
 }
 
 func (w *Worker) Start() error {
@@ -56,7 +56,7 @@ func (w *Worker) Start() error {
 
 func (w *Worker) StartScheduler() (*asynq.Scheduler, error) {
 	scheduler := asynq.NewScheduler(
-		asynq.RedisClientOpt{Addr: w.redisURL},
+		w.redisOpt,
 		nil,
 	)
 

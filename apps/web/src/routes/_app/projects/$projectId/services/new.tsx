@@ -29,12 +29,24 @@ function NewServicePage() {
     },
     onSubmit: async ({ value }) => {
       setError("");
+      if (!value.name) {
+        setError("Service name is required");
+        return;
+      }
+      if (serviceType === "image" && !value.source_image) {
+        setError("Image name is required");
+        return;
+      }
+      if (serviceType === "git" && !value.source_repo) {
+        setError("Repository URL is required");
+        return;
+      }
       try {
         const service = await createService.mutateAsync({
           name: value.name,
           type: serviceType,
           ...(serviceType === "image"
-            ? { source_image: value.source_image }
+            ? { source_image: value.source_image, build_type: "image" }
             : {
                 source_repo: value.source_repo,
                 dockerfile_path: value.dockerfile_path,
@@ -91,7 +103,7 @@ function NewServicePage() {
                   />
                   {field.state.meta.errors.length > 0 && (
                     <p className="text-destructive text-sm">
-                      {field.state.meta.errors[0]?.toString()}
+                      {typeof field.state.meta.errors[0] === 'string' ? field.state.meta.errors[0] : field.state.meta.errors[0]?.message}
                     </p>
                   )}
                 </div>
@@ -123,9 +135,6 @@ function NewServicePage() {
             {serviceType === "image" ? (
               <form.Field
                 name="source_image"
-                validators={{
-                  onChange: z.string().min(1, "Image name is required"),
-                }}
                 children={(field) => (
                   <div className="space-y-2">
                     <Label htmlFor="source_image">Docker Image</Label>
@@ -138,7 +147,7 @@ function NewServicePage() {
                     />
                     {field.state.meta.errors.length > 0 && (
                       <p className="text-destructive text-sm">
-                        {field.state.meta.errors[0]?.toString()}
+                        {typeof field.state.meta.errors[0] === 'string' ? field.state.meta.errors[0] : field.state.meta.errors[0]?.message}
                       </p>
                     )}
                   </div>
@@ -148,9 +157,6 @@ function NewServicePage() {
               <>
                 <form.Field
                   name="source_repo"
-                  validators={{
-                    onChange: z.string().url("Must be a valid URL"),
-                  }}
                   children={(field) => (
                     <div className="space-y-2">
                       <Label htmlFor="source_repo">Repository URL</Label>
@@ -163,47 +169,56 @@ function NewServicePage() {
                       />
                       {field.state.meta.errors.length > 0 && (
                         <p className="text-destructive text-sm">
-                          {field.state.meta.errors[0]?.toString()}
+                          {typeof field.state.meta.errors[0] === 'string' ? field.state.meta.errors[0] : field.state.meta.errors[0]?.message}
                         </p>
                       )}
                     </div>
                   )}
                 />
                 <form.Field
-                  name="dockerfile_path"
+                  name="build_type"
                   children={(field) => (
-                    <div className="space-y-2">
-                      <Label htmlFor="dockerfile_path">Dockerfile Path</Label>
-                      <Input
-                        id="dockerfile_path"
-                        placeholder="Dockerfile"
-                        value={field.state.value}
-                        onBlur={field.handleBlur}
-                        onChange={(e) => field.handleChange(e.target.value)}
-                      />
-                    </div>
+                    <>
+                      <div className="space-y-2">
+                        <Label>Build Type</Label>
+                        <div className="flex flex-wrap gap-2">
+                          {["dockerfile", "buildpacks", "nixpacks"].map((bt) => (
+                            <Button
+                              key={bt}
+                              type="button"
+                              variant={
+                                field.state.value === bt
+                                  ? "default"
+                                  : "outline"
+                              }
+                              size="sm"
+                              onClick={() => field.handleChange(bt)}
+                            >
+                              {bt}
+                            </Button>
+                          ))}
+                        </div>
+                      </div>
+                      {field.state.value === "dockerfile" && (
+                        <form.Field
+                          name="dockerfile_path"
+                          children={(dfField) => (
+                            <div className="space-y-2">
+                              <Label htmlFor="dockerfile_path">Dockerfile Path</Label>
+                              <Input
+                                id="dockerfile_path"
+                                placeholder="Dockerfile"
+                                value={dfField.state.value}
+                                onBlur={dfField.handleBlur}
+                                onChange={(e) => dfField.handleChange(e.target.value)}
+                              />
+                            </div>
+                          )}
+                        />
+                      )}
+                    </>
                   )}
                 />
-                <div className="space-y-2">
-                  <Label>Build Type</Label>
-                  <div className="flex flex-wrap gap-2">
-                    {["dockerfile", "buildpacks", "nixpacks"].map((bt) => (
-                      <Button
-                        key={bt}
-                        type="button"
-                        variant={
-                          form.getFieldValue("build_type") === bt
-                            ? "default"
-                            : "outline"
-                        }
-                        size="sm"
-                        onClick={() => form.setFieldValue("build_type", bt)}
-                      >
-                        {bt}
-                      </Button>
-                    ))}
-                  </div>
-                </div>
               </>
             )}
 

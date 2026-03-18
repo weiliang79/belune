@@ -55,7 +55,12 @@ func main() {
 	caddyClient := caddy.New(cfg.CaddyAdminURL)
 
 	// Asynq client for enqueuing tasks
-	asynqClient := asynq.NewClient(asynq.RedisClientOpt{Addr: cfg.RedisURL})
+	redisOpt, err := asynq.ParseRedisURI(cfg.RedisURL)
+	if err != nil {
+		slog.Error("failed to parse redis URL", "error", err)
+		os.Exit(1)
+	}
+	asynqClient := asynq.NewClient(redisOpt)
 	defer asynqClient.Close()
 
 	// Build chain: Dockerfile → Buildpacks → Nixpacks
@@ -75,7 +80,7 @@ func main() {
 		EncryptionKey: cfg.EncryptionKey,
 	}
 
-	w := worker.New(cfg.RedisURL, taskHandler)
+	w := worker.New(redisOpt, taskHandler)
 	go func() {
 		if err := w.Start(); err != nil {
 			slog.Error("worker failed to start", "error", err)

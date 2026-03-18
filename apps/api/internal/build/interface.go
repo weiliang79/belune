@@ -10,6 +10,7 @@ type BuildOptions struct {
 	BuilderImage   string            // CNB builder image (for buildpacks builder)
 	Buildpacks     []string          // Ordered list of buildpack URIs (for buildpacks builder)
 	Env            map[string]string // Build-time environment variables
+	BuildType      string            // Preferred builder: "dockerfile", "buildpacks", "nixpacks" (empty = auto)
 }
 
 // BuildResult contains the result of a build.

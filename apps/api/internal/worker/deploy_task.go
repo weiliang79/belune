@@ -117,6 +117,7 @@ func (h *TaskHandler) HandleDeployTask(ctx context.Context, t *asynq.Task) error
 			BuilderImage:   svc.BuilderImage.String,
 			Buildpacks:     customBuildpacks,
 			Env:            env,
+			BuildType:      svc.BuildType,
 		}
 
 		// Update status to building
