@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useServices, useCreateService } from "@/lib/hooks/use-services";
 import { useDatabases, useCreateDatabase } from "@/lib/hooks/use-databases";
+import { StatusBadge } from "@/lib/components/status-badge";
 import {
   Plus,
   Database as DatabaseIcon,
@@ -183,7 +184,7 @@ function ProjectOverview() {
   return (
     <div className="space-y-8">
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold">Resources</h2>
+        <h2 className="text-lg font-semibold">Applications</h2>
         <DropdownMenu>
           <DropdownMenuTrigger
             render={
@@ -497,13 +498,7 @@ function ProjectOverview() {
                 <CardHeader className="pb-2">
                   <div className="flex items-start justify-between">
                     <CardTitle className="text-base">{service.name}</CardTitle>
-                    <Badge
-                      variant={
-                        service.status === "running" ? "default" : "secondary"
-                      }
-                    >
-                      {service.status}
-                    </Badge>
+                    <StatusBadge status={service.status} />
                   </div>
                 </CardHeader>
                 <CardContent>
@@ -528,17 +523,7 @@ function ProjectOverview() {
                       <DatabaseIcon className="text-muted-foreground h-4 w-4" />
                       <CardTitle className="text-base">{db.name}</CardTitle>
                     </div>
-                    <Badge
-                      variant={
-                        db.status === "running"
-                          ? "default"
-                          : db.status === "failed"
-                            ? "destructive"
-                            : "secondary"
-                      }
-                    >
-                      {db.status}
-                    </Badge>
+                    <StatusBadge status={db.status} />
                   </div>
                 </CardHeader>
                 <CardContent>

@@ -6,6 +6,7 @@ import {
 } from "@tanstack/react-router";
 import { useProject } from "@/lib/hooks/use-projects";
 import { cn } from "@/lib/utils";
+import { AppBreadcrumb } from "@/lib/components/app-breadcrumb";
 
 export const Route = createFileRoute("/_app/projects/$projectId")({
   component: ProjectLayout,
@@ -25,6 +26,14 @@ function ProjectLayout() {
     return <div className="text-destructive">Project not found.</div>;
   }
 
+  // Hide project chrome when viewing a service or database detail page
+  const isChildDetail =
+    currentPath.includes("/services/") || currentPath.includes("/databases/");
+
+  if (isChildDetail) {
+    return <Outlet />;
+  }
+
   const tabs = [
     { to: `/projects/${projectId}`, label: "Applications" },
     { to: `/projects/${projectId}/settings`, label: "Settings" },
@@ -32,6 +41,13 @@ function ProjectLayout() {
 
   return (
     <div className="space-y-6">
+      <AppBreadcrumb
+        items={[
+          { label: "Projects", to: "/projects" },
+          { label: project.name },
+        ]}
+      />
+
       <div>
         <h1 className="text-2xl font-bold">{project.name}</h1>
         <p className="text-muted-foreground text-sm">{project.slug}</p>

@@ -17,6 +17,7 @@ export interface Service {
   id: string;
   project_id: string;
   name: string;
+  slug: string;
   type: "git" | "image";
   source_repo: string | null;
   source_image: string | null;

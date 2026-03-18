@@ -22,8 +22,11 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { useDatabase, useDeleteDatabase } from "@/lib/hooks/use-databases";
+import { useProject } from "@/lib/hooks/use-projects";
 import { copyToClipboard } from "@/lib/utils/clipboard";
 import { Copy, Check, Loader2, Trash2 } from "lucide-react";
+import { AppBreadcrumb } from "@/lib/components/app-breadcrumb";
+import { StatusBadge } from "@/lib/components/status-badge";
 
 export const Route = createFileRoute(
   "/_app/projects/$projectId/databases/$databaseId",
@@ -57,6 +60,7 @@ function DatabaseDetailPage() {
   const { projectId, databaseId } = Route.useParams();
   const navigate = useNavigate();
   const { data: db, isLoading } = useDatabase(projectId, databaseId);
+  const { data: project } = useProject(projectId);
   const deleteDb = useDeleteDatabase(projectId);
 
   if (isLoading || !db) {
@@ -72,7 +76,7 @@ function DatabaseDetailPage() {
     deleteDb.mutate(databaseId, {
       onSuccess: () => {
         navigate({
-          to: "/projects/$projectId/databases",
+          to: "/projects/$projectId",
           params: { projectId },
         });
       },
@@ -81,23 +85,25 @@ function DatabaseDetailPage() {
 
   return (
     <div className="space-y-6">
+      <AppBreadcrumb
+        items={[
+          { label: "Projects", to: "/projects" },
+          {
+            label: project?.name ?? "Project",
+            to: `/projects/${projectId}`,
+          },
+          { label: db.name },
+        ]}
+      />
+
       <div className="flex items-start justify-between">
         <div>
           <h2 className="text-xl font-semibold">{db.name}</h2>
+          <p className="text-muted-foreground text-sm">{db.slug}</p>
           <div className="text-muted-foreground mt-1 flex items-center gap-2 text-sm">
             <Badge variant="outline">{db.type}</Badge>
             <Badge variant="outline">v{db.version}</Badge>
-            <Badge
-              variant={
-                db.status === "running"
-                  ? "default"
-                  : db.status === "failed"
-                    ? "destructive"
-                    : "secondary"
-              }
-            >
-              {db.status}
-            </Badge>
+            <StatusBadge status={db.status} />
           </div>
         </div>
       </div>

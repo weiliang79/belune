@@ -11,9 +11,11 @@ import {
   useStartService,
   useRestartService,
 } from "@/lib/hooks/use-services";
-import { Badge } from "@/components/ui/badge";
+import { useProject } from "@/lib/hooks/use-projects";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { AppBreadcrumb } from "@/lib/components/app-breadcrumb";
+import { StatusBadge } from "@/lib/components/status-badge";
 
 export const Route = createFileRoute(
   "/_app/projects/$projectId/services/$serviceId",
@@ -24,6 +26,7 @@ export const Route = createFileRoute(
 function ServiceLayout() {
   const { projectId, serviceId } = Route.useParams();
   const { data: service, isLoading } = useService(projectId, serviceId);
+  const { data: project } = useProject(projectId);
   const deploy = useDeployService(projectId, serviceId);
   const stop = useStopService(projectId, serviceId);
   const start = useStartService(projectId, serviceId);
@@ -49,23 +52,26 @@ function ServiceLayout() {
     { to: `${basePath}/settings`, label: "Settings" },
   ];
 
-  const statusColor =
-    {
-      running: "bg-green-500",
-      stopped: "bg-gray-500",
-      deploying: "bg-yellow-500",
-      failed: "bg-red-500",
-    }[service.status] ?? "bg-gray-500";
-
   return (
     <div className="space-y-6">
+      <AppBreadcrumb
+        items={[
+          { label: "Projects", to: "/projects" },
+          {
+            label: project?.name ?? "Project",
+            to: `/projects/${projectId}`,
+          },
+          { label: service.name },
+        ]}
+      />
+
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <h1 className="text-2xl font-bold">{service.name}</h1>
-          <Badge variant="outline" className="gap-1.5">
-            <span className={cn("size-2 rounded-full", statusColor)} />
-            {service.status}
-          </Badge>
+        <div>
+          <div className="flex items-center gap-3">
+            <h1 className="text-2xl font-bold">{service.name}</h1>
+            <StatusBadge status={service.status} />
+          </div>
+          <p className="text-muted-foreground text-sm">{service.slug}</p>
         </div>
         <div className="flex gap-2">
           <Button

@@ -1,13 +1,27 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useProjects } from "@/lib/hooks/use-projects";
+import { useServices } from "@/lib/hooks/use-services";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { buttonVariants } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { formatDate } from "@/lib/utils/format";
+import { AppBreadcrumb } from "@/lib/components/app-breadcrumb";
+import type { Project } from "@/lib/types";
 
 export const Route = createFileRoute("/_app/projects/")({
   component: ProjectsPage,
 });
+
+function ProjectServiceCount({ projectId }: { projectId: string }) {
+  const { data: services } = useServices(projectId);
+  if (!services) return null;
+  const running = services.filter((s) => s.status === "running").length;
+  return (
+    <p className="text-muted-foreground text-xs">
+      {running} / {services.length} applications running
+    </p>
+  );
+}
 
 function ProjectsPage() {
   const { data: projects, isLoading } = useProjects();
@@ -18,6 +32,7 @@ function ProjectsPage() {
 
   return (
     <div className="space-y-6">
+      <AppBreadcrumb items={[{ label: "Projects" }]} />
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">Projects</h1>
@@ -55,6 +70,7 @@ function ProjectsPage() {
                   </div>
                 </CardHeader>
                 <CardContent>
+                  <ProjectServiceCount projectId={project.id} />
                   <p className="text-muted-foreground text-xs">
                     Created {formatDate(project.created_at)}
                   </p>

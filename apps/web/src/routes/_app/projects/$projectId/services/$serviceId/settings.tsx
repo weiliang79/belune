@@ -157,19 +157,22 @@ function ServiceSettingsPage() {
                     </div>
                   )}
                 />
-                <form.Field
-                  name="dockerfile_path"
-                  children={(field) => (
-                    <div className="space-y-2">
-                      <Label>Dockerfile Path</Label>
-                      <Input
-                        value={field.state.value}
-                        onBlur={field.handleBlur}
-                        onChange={(e) => field.handleChange(e.target.value)}
-                      />
-                    </div>
-                  )}
-                />
+                {(service.build_type_override ?? service.build_type) ===
+                  "dockerfile" && (
+                  <form.Field
+                    name="dockerfile_path"
+                    children={(field) => (
+                      <div className="space-y-2">
+                        <Label>Dockerfile Path</Label>
+                        <Input
+                          value={field.state.value}
+                          onBlur={field.handleBlur}
+                          onChange={(e) => field.handleChange(e.target.value)}
+                        />
+                      </div>
+                    )}
+                  />
+                )}
               </>
             )}
             <form.Subscribe
