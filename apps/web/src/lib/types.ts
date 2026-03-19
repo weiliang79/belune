@@ -1,7 +1,8 @@
 export interface User {
   id: string;
   email: string;
-  role: string;
+  role: "admin" | "member";
+  created_at?: string;
 }
 
 export interface Project {

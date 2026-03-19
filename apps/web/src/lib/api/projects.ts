@@ -23,3 +23,7 @@ export function updateProject(
 export function deleteProject(id: string) {
   return api.delete<void>(`/projects/${id}`);
 }
+
+export function transferProject(id: string, userId: string) {
+  return api.put<Project>(`/projects/${id}/transfer`, { user_id: userId });
+}

@@ -3,9 +3,13 @@ import {
   useProject,
   useUpdateProject,
   useDeleteProject,
+  useTransferProject,
 } from "@/lib/hooks/use-projects";
+import { useUsers } from "@/lib/hooks/use-users";
+import { useAuthStore } from "@/lib/stores/auth";
 import { useForm } from "@tanstack/react-form";
 import { z } from "zod";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -124,6 +128,8 @@ function ProjectSettings() {
         </CardContent>
       </Card>
 
+      <TransferOwnerCard projectId={projectId} currentOwnerId={project.user_id} />
+
       <Separator />
 
       <Card className="border-destructive/50">
@@ -160,5 +166,68 @@ function ProjectSettings() {
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+function TransferOwnerCard({
+  projectId,
+  currentOwnerId,
+}: {
+  projectId: string;
+  currentOwnerId: string;
+}) {
+  const currentUser = useAuthStore((s) => s.user);
+  const isAdmin = currentUser?.role === "admin";
+  const { data: users } = useUsers();
+  const transferProject = useTransferProject(projectId);
+  const [selectedUserId, setSelectedUserId] = useState(currentOwnerId);
+
+  if (!isAdmin) return null;
+
+  const currentOwner = users?.find((u) => u.id === currentOwnerId);
+
+  const handleTransfer = () => {
+    if (selectedUserId === currentOwnerId) return;
+    transferProject.mutate(selectedUserId, {
+      onSuccess: () => toast.success("Project ownership transferred"),
+      onError: (err) => toast.error(err.message),
+    });
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Project Owner</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="space-y-2">
+          <Label>Owner</Label>
+          <select
+            className="border-input bg-background flex h-9 w-full rounded-md border px-3 py-1 text-sm"
+            value={selectedUserId}
+            onChange={(e) => setSelectedUserId(e.target.value)}
+          >
+            {users?.map((user) => (
+              <option key={user.id} value={user.id}>
+                {user.email}
+                {user.id === currentOwnerId ? " (current)" : ""}
+              </option>
+            )) ?? (
+              <option value={currentOwnerId}>
+                {currentOwner?.email ?? currentOwnerId}
+              </option>
+            )}
+          </select>
+        </div>
+        <Button
+          onClick={handleTransfer}
+          disabled={
+            selectedUserId === currentOwnerId || transferProject.isPending
+          }
+        >
+          {transferProject.isPending ? "Transferring..." : "Transfer Ownership"}
+        </Button>
+      </CardContent>
+    </Card>
   );
 }

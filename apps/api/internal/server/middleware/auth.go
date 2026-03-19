@@ -56,6 +56,23 @@ func extractToken(r *http.Request) string {
 	return ""
 }
 
+// RequireRole returns a middleware that checks the user's role against the allowed roles.
+// Must be used after Auth middleware.
+func RequireRole(roles ...string) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			role := RoleFromContext(r.Context())
+			for _, allowed := range roles {
+				if role == allowed {
+					next.ServeHTTP(w, r)
+					return
+				}
+			}
+			http.Error(w, `{"error":"forbidden"}`, http.StatusForbidden)
+		})
+	}
+}
+
 // UserIDFromContext returns the authenticated user's ID from the request context.
 func UserIDFromContext(ctx context.Context) string {
 	v, _ := ctx.Value(ctxUserID).(string)

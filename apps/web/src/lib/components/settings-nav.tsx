@@ -1,14 +1,21 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import { cn } from "@/lib/utils";
+import { useAuthStore } from "@/lib/stores/auth";
 
 export function SettingsNav() {
   const routerState = useRouterState();
   const currentPath = routerState.location.pathname;
+  const user = useAuthStore((s) => s.user);
+  const isAdmin = user?.role === "admin";
 
   const tabs = [
     { to: "/settings", label: "General", exact: true },
-    { to: "/settings/server", label: "Server" },
-    { to: "/settings/team", label: "Team" },
+    ...(isAdmin
+      ? [
+          { to: "/settings/server", label: "Server" },
+          { to: "/settings/team", label: "Team" },
+        ]
+      : []),
   ];
 
   return (

@@ -19,3 +19,11 @@ DELETE FROM projects WHERE id = $1;
 
 -- name: CountProjects :one
 SELECT count(*) FROM projects;
+
+-- name: ListAllProjects :many
+SELECT * FROM projects ORDER BY created_at DESC;
+
+-- name: UpdateProjectOwner :one
+UPDATE projects SET user_id = $2, updated_at = NOW()
+WHERE id = $1
+RETURNING *;

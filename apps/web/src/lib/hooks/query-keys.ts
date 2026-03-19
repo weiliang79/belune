@@ -33,6 +33,9 @@ export const queryKeys = {
     all: (projectId: string, applicationId: string) =>
       ["projects", projectId, "applications", applicationId, "env"] as const,
   },
+  users: {
+    all: ["users"] as const,
+  },
   metrics: ["metrics"] as const,
   databases: {
     all: (projectId: string) =>

@@ -46,11 +46,32 @@ func (h *Handler) CreateProject(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, project)
 }
 
+// canAccessProject checks if the current user can access the given project.
+// Admins can access all projects; members can only access their own.
+func (h *Handler) canAccessProject(r *http.Request, projectID pgtype.UUID) bool {
+	role := middleware.RoleFromContext(r.Context())
+	if role == "admin" {
+		return true
+	}
+	project, err := h.queries.GetProject(r.Context(), projectID)
+	if err != nil {
+		return false
+	}
+	var userID pgtype.UUID
+	userID.Scan(middleware.UserIDFromContext(r.Context()))
+	return project.UserID == userID
+}
+
 func (h *Handler) GetProject(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "projectId")
 	var uuid pgtype.UUID
 	if err := uuid.Scan(id); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid project id")
+		return
+	}
+
+	if !h.canAccessProject(r, uuid) {
+		writeError(w, http.StatusForbidden, "access denied")
 		return
 	}
 
@@ -64,6 +85,18 @@ func (h *Handler) GetProject(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) ListProjects(w http.ResponseWriter, r *http.Request) {
+	role := middleware.RoleFromContext(r.Context())
+
+	if role == "admin" {
+		projects, err := h.queries.ListAllProjects(r.Context())
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "failed to list projects")
+			return
+		}
+		writeJSON(w, http.StatusOK, projects)
+		return
+	}
+
 	var userID pgtype.UUID
 	userID.Scan(middleware.UserIDFromContext(r.Context()))
 
@@ -85,6 +118,11 @@ func (h *Handler) UpdateProject(w http.ResponseWriter, r *http.Request) {
 	var uuid pgtype.UUID
 	if err := uuid.Scan(id); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid project id")
+		return
+	}
+
+	if !h.canAccessProject(r, uuid) {
+		writeError(w, http.StatusForbidden, "access denied")
 		return
 	}
 
@@ -119,6 +157,11 @@ func (h *Handler) DeleteProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if !h.canAccessProject(r, uuid) {
+		writeError(w, http.StatusForbidden, "access denied")
+		return
+	}
+
 	// Stop and remove all application containers for this project
 	project, _ := h.queries.GetProject(r.Context(), uuid)
 	applications, err := h.queries.ListApplicationsByProject(r.Context(), uuid)
@@ -143,4 +186,58 @@ func (h *Handler) DeleteProject(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
+}
+
+type transferProjectRequest struct {
+	UserID string `json:"user_id"`
+}
+
+func (h *Handler) TransferProject(w http.ResponseWriter, r *http.Request) {
+	// Admin-only operation
+	role := middleware.RoleFromContext(r.Context())
+	if role != "admin" {
+		writeError(w, http.StatusForbidden, "only admins can transfer projects")
+		return
+	}
+
+	id := chi.URLParam(r, "projectId")
+	var projectUUID pgtype.UUID
+	if err := projectUUID.Scan(id); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid project id")
+		return
+	}
+
+	var req transferProjectRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	if req.UserID == "" {
+		writeError(w, http.StatusBadRequest, "user_id is required")
+		return
+	}
+
+	// Verify target user exists
+	var newOwnerID pgtype.UUID
+	if err := newOwnerID.Scan(req.UserID); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid user id")
+		return
+	}
+
+	if _, err := h.queries.GetUserByID(r.Context(), newOwnerID); err != nil {
+		writeError(w, http.StatusNotFound, "target user not found")
+		return
+	}
+
+	project, err := h.queries.UpdateProjectOwner(r.Context(), generated.UpdateProjectOwnerParams{
+		ID:     projectUUID,
+		UserID: newOwnerID,
+	})
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to transfer project")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, project)
 }

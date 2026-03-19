@@ -33,6 +33,18 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService)
 		r.Use(middleware.Auth(auth))
 
 		r.Get("/api/auth/me", h.Me)
+		r.Put("/api/auth/password", h.ChangeOwnPassword)
+
+		// Admin-only routes
+		r.Group(func(r chi.Router) {
+			r.Use(middleware.RequireRole("admin"))
+
+			r.Get("/api/users", h.ListUsers)
+			r.Post("/api/users", h.CreateUser)
+			r.Put("/api/users/{userId}/role", h.UpdateUserRole)
+			r.Delete("/api/users/{userId}", h.DeleteUser)
+			r.Put("/api/users/{userId}/password", h.ResetUserPassword)
+		})
 
 		// Projects
 		r.Get("/api/projects", h.ListProjects)
@@ -40,6 +52,7 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService)
 		r.Get("/api/projects/{projectId}", h.GetProject)
 		r.Put("/api/projects/{projectId}", h.UpdateProject)
 		r.Delete("/api/projects/{projectId}", h.DeleteProject)
+		r.Put("/api/projects/{projectId}/transfer", h.TransferProject) // admin-only enforced in handler
 
 		// Applications
 		r.Get("/api/projects/{projectId}/applications", h.ListApplications)
@@ -76,9 +89,12 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService)
 		r.Get("/api/projects/{projectId}/databases/{databaseId}", h.GetDatabase)
 		r.Delete("/api/projects/{projectId}/databases/{databaseId}", h.DeleteDatabase)
 
-		// Metrics & Cleanup
-		r.Get("/api/metrics", h.GetMetrics)
-		r.Post("/api/cleanup", h.TriggerCleanup)
+		// Metrics & Cleanup (admin-only)
+		r.Group(func(r chi.Router) {
+			r.Use(middleware.RequireRole("admin"))
+			r.Get("/api/metrics", h.GetMetrics)
+			r.Post("/api/cleanup", h.TriggerCleanup)
+		})
 
 		// Build (standalone build without deploy)
 		r.Post("/api/projects/{projectId}/applications/{applicationId}/build", h.BuildApplication)
