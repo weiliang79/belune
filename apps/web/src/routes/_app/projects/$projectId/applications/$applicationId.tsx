@@ -119,7 +119,7 @@ function ApplicationLayout() {
           return (
             <Link
               key={tab.to}
-              to={tab.to as any}
+              to={tab.to}
               className={cn(
                 "border-b-2 px-3 py-2 text-sm font-medium whitespace-nowrap transition-colors",
                 isActive

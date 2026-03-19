@@ -65,12 +65,12 @@ function ProjectSettings() {
             <span className="font-mono text-xs">{project.id}</span>
           </div>
           <div className="flex justify-between">
-            <span className="text-muted-foreground">Created</span>
-            <span>{formatDate(project.created_at)}</span>
-          </div>
-          <div className="flex justify-between">
             <span className="text-muted-foreground">Slug</span>
             <span className="font-mono text-xs">{project.slug}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-muted-foreground">Created</span>
+            <span>{formatDate(project.created_at)}</span>
           </div>
           <div className="flex justify-between">
             <span className="text-muted-foreground">Updated</span>
@@ -139,8 +139,9 @@ function ProjectSettings() {
               <AlertDialogHeader>
                 <AlertDialogTitle>Delete {project.name}?</AlertDialogTitle>
                 <AlertDialogDescription>
-                  This will permanently delete the project, all its applications,
-                  and stop all running containers. This action cannot be undone.
+                  This will permanently delete the project, all its
+                  applications, and stop all running containers. This action
+                  cannot be undone.
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>

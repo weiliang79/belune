@@ -20,6 +20,7 @@ export function createDatabase(
       user?: string;
       password?: string;
       database_name?: string;
+      root_password?: string;
     };
   },
 ) {

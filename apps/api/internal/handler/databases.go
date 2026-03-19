@@ -27,6 +27,7 @@ type createDatabaseCredentials struct {
 	User         string `json:"user"`
 	Password     string `json:"password"`
 	DatabaseName string `json:"database_name"`
+	RootPassword string `json:"root_password"`
 }
 
 type createDatabaseRequest struct {
@@ -40,6 +41,7 @@ type createDatabaseRequest struct {
 var defaultUsers = map[string]string{
 	"postgres": "postgres",
 	"mysql":    "root",
+	"redis":    "default",
 	"mongo":    "admin",
 }
 
@@ -126,7 +128,18 @@ func (h *Handler) CreateDatabase(w http.ResponseWriter, r *http.Request) {
 		creds["password"] = password
 		creds["database"] = dbName
 	case "mysql":
-		creds["root_password"] = password
+		rootPassword := ""
+		if req.Credentials != nil && req.Credentials.RootPassword != "" {
+			rootPassword = req.Credentials.RootPassword
+		} else {
+			rootPasswordBytes := make([]byte, 16)
+			if _, err := rand.Read(rootPasswordBytes); err != nil {
+				writeError(w, http.StatusInternalServerError, "failed to generate root password")
+				return
+			}
+			rootPassword = hex.EncodeToString(rootPasswordBytes)
+		}
+		creds["root_password"] = rootPassword
 		creds["user"] = user
 		creds["password"] = password
 		creds["database"] = dbName

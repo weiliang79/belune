@@ -6,7 +6,6 @@ import { buttonVariants } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { formatDate } from "@/lib/utils/format";
 import { AppBreadcrumb } from "@/lib/components/app-breadcrumb";
-import type { Project } from "@/lib/types";
 
 export const Route = createFileRoute("/_app/projects/")({
   component: ProjectsPage,

@@ -13,7 +13,7 @@ const statusColor: Record<string, string> = {
 
 export function StatusBadge({ status }: { status: string }) {
   return (
-    <Badge variant="outline" className="gap-1.5">
+    <Badge variant="outline" className="gap-1.5 capitalize">
       <span
         className={cn(
           "size-2 rounded-full",

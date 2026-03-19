@@ -62,7 +62,7 @@ function ProjectLayout() {
           return (
             <Link
               key={tab.to}
-              to={tab.to as any}
+              to={tab.to}
               className={cn(
                 "border-b-2 px-4 py-2 text-sm font-medium transition-colors",
                 isActive

@@ -23,6 +23,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Separator } from "@/components/ui/separator";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { useState, useCallback } from "react";
 
 export const Route = createFileRoute(
@@ -48,6 +49,7 @@ function ApplicationSettingsPage() {
       source_repo: application?.source_repo ?? "",
       source_image: application?.source_image ?? "",
       dockerfile_path: application?.dockerfile_path ?? "",
+      build_type_override: application?.build_type_override ?? "",
     },
     onSubmit: async ({ value }) => {
       setError("");
@@ -57,6 +59,7 @@ function ApplicationSettingsPage() {
           source_repo: value.source_repo || undefined,
           source_image: value.source_image || undefined,
           dockerfile_path: value.dockerfile_path || undefined,
+          build_type_override: value.build_type_override || undefined,
         });
       } catch (e) {
         setError(e instanceof Error ? e.message : "Update failed");
@@ -127,6 +130,39 @@ function ApplicationSettingsPage() {
                 </div>
               )}
             />
+            <div className="space-y-2">
+              <Label>Type</Label>
+              <ToggleGroup variant="outline" value={[application.type]} disabled className="justify-start">
+                <ToggleGroupItem value="image">Docker Image</ToggleGroupItem>
+                <ToggleGroupItem value="git">Git Repository</ToggleGroupItem>
+              </ToggleGroup>
+            </div>
+            {application.type === "git" && (
+              <form.Field
+                name="build_type_override"
+                children={(field) => {
+                  const effectiveValue = field.state.value || application.build_type;
+                  return (
+                    <div className="space-y-2">
+                      <Label>Build Type</Label>
+                      <ToggleGroup variant="outline"
+                        value={[effectiveValue]}
+                        onValueChange={(v) => {
+                          if (v.length > 0) {
+                            field.handleChange(v[0] === application.build_type ? "" : v[0]);
+                          }
+                        }}
+                        className="justify-start"
+                      >
+                        <ToggleGroupItem value="dockerfile">Dockerfile</ToggleGroupItem>
+                        <ToggleGroupItem value="buildpacks">Buildpacks</ToggleGroupItem>
+                        <ToggleGroupItem value="railpack">Railpack</ToggleGroupItem>
+                      </ToggleGroup>
+                    </div>
+                  );
+                }}
+              />
+            )}
             {application.type === "image" && (
               <form.Field
                 name="source_image"

@@ -1,6 +1,12 @@
 import { useState } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -19,9 +25,13 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { useApplications, useCreateApplication } from "@/lib/hooks/use-applications";
+import {
+  useApplications,
+  useCreateApplication,
+} from "@/lib/hooks/use-applications";
 import { useDatabases, useCreateDatabase } from "@/lib/hooks/use-databases";
 import { StatusBadge } from "@/lib/components/status-badge";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import {
   Plus,
   Database as DatabaseIcon,
@@ -29,6 +39,7 @@ import {
   Loader2,
   ChevronDown,
   ChevronUp,
+  AppWindowIcon,
 } from "lucide-react";
 
 export const Route = createFileRoute("/_app/projects/$projectId/")({
@@ -52,7 +63,7 @@ const DEFAULT_VERSIONS: Record<string, string> = {
 const DEFAULT_USERS: Record<string, string> = {
   postgres: "postgres",
   mysql: "root",
-  redis: "",
+  redis: "default",
   mongo: "admin",
 };
 
@@ -89,6 +100,7 @@ function ProjectOverview() {
   const [dbUser, setDbUser] = useState("");
   const [dbPassword, setDbPassword] = useState("");
   const [dbDatabaseName, setDbDatabaseName] = useState("");
+  const [dbRootPassword, setDbRootPassword] = useState("");
 
   const handleCreateApp = async () => {
     setAppError("");
@@ -141,11 +153,13 @@ function ProjectOverview() {
   const handleCreateDb = () => {
     if (!dbName.trim()) return;
     const credentials =
-      showCredentials && (dbUser || dbPassword || dbDatabaseName)
+      showCredentials &&
+      (dbUser || dbPassword || dbDatabaseName || dbRootPassword)
         ? {
             user: dbUser || undefined,
             password: dbPassword || undefined,
             database_name: dbDatabaseName || undefined,
+            root_password: dbRootPassword || undefined,
           }
         : undefined;
     createDb.mutate(
@@ -168,6 +182,7 @@ function ProjectOverview() {
           setDbUser("");
           setDbPassword("");
           setDbDatabaseName("");
+          setDbRootPassword("");
         },
       },
     );
@@ -254,24 +269,17 @@ function ProjectOverview() {
             </div>
             <div className="space-y-2">
               <Label>Source Type</Label>
-              <div className="flex gap-2">
-                <Button
-                  type="button"
-                  variant={appType === "image" ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => setAppType("image")}
-                >
-                  Docker Image
-                </Button>
-                <Button
-                  type="button"
-                  variant={appType === "git" ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => setAppType("git")}
-                >
-                  Git Repository
-                </Button>
-              </div>
+              <ToggleGroup
+                variant="outline"
+                value={[appType]}
+                onValueChange={(v) => {
+                  if (v.length > 0) setAppType(v[0] as "image" | "git");
+                }}
+                className="justify-start"
+              >
+                <ToggleGroupItem value="image">Docker Image</ToggleGroupItem>
+                <ToggleGroupItem value="git">Git Repository</ToggleGroupItem>
+              </ToggleGroup>
             </div>
             {appType === "image" ? (
               <div className="space-y-2">
@@ -296,19 +304,22 @@ function ProjectOverview() {
                 </div>
                 <div className="space-y-2">
                   <Label>Build Type</Label>
-                  <div className="flex flex-wrap gap-2">
-                    {["dockerfile", "buildpacks", "railpack"].map((bt) => (
-                      <Button
-                        key={bt}
-                        type="button"
-                        variant={buildType === bt ? "default" : "outline"}
-                        size="sm"
-                        onClick={() => setBuildType(bt)}
-                      >
-                        {bt}
-                      </Button>
-                    ))}
-                  </div>
+                  <ToggleGroup
+                    variant="outline"
+                    value={[buildType]}
+                    onValueChange={(v) => {
+                      if (v.length > 0) setBuildType(v[0]);
+                    }}
+                    className="justify-start"
+                  >
+                    <ToggleGroupItem value="dockerfile">
+                      Dockerfile
+                    </ToggleGroupItem>
+                    <ToggleGroupItem value="buildpacks">
+                      Buildpacks
+                    </ToggleGroupItem>
+                    <ToggleGroupItem value="railpack">Railpack</ToggleGroupItem>
+                  </ToggleGroup>
                 </div>
                 {buildType === "dockerfile" && (
                   <div className="space-y-2">
@@ -389,6 +400,7 @@ function ProjectOverview() {
                   setDbUser("");
                   setDbPassword("");
                   setDbDatabaseName("");
+                  setDbRootPassword("");
                 }}
                 className="border-input bg-background ring-offset-background focus-visible:ring-ring flex h-9 w-full rounded-md border px-3 py-1 text-sm focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
               >
@@ -400,12 +412,12 @@ function ProjectOverview() {
               </select>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="db-version">Version</Label>
+              <Label htmlFor="db-version">Image Tag</Label>
               <Input
                 id="db-version"
                 value={dbVersion}
                 onChange={(e) => setDbVersion(e.target.value)}
-                placeholder={DEFAULT_VERSIONS[dbType] || "latest"}
+                placeholder={`e.g. ${DEFAULT_VERSIONS[dbType] || "latest"}, ${DEFAULT_VERSIONS[dbType] || "latest"}-alpine`}
               />
             </div>
             <div className="space-y-2">
@@ -440,11 +452,24 @@ function ProjectOverview() {
                     <Label htmlFor="db-password">Password</Label>
                     <Input
                       id="db-password"
+                      type="password"
                       value={dbPassword}
                       onChange={(e) => setDbPassword(e.target.value)}
                       placeholder="auto-generated"
                     />
                   </div>
+                  {dbType === "mysql" && (
+                    <div className="space-y-1">
+                      <Label htmlFor="db-root-password">Root Password</Label>
+                      <Input
+                        id="db-root-password"
+                        type="password"
+                        value={dbRootPassword}
+                        onChange={(e) => setDbRootPassword(e.target.value)}
+                        placeholder="auto-generated"
+                      />
+                    </div>
+                  )}
                   {(dbType === "postgres" || dbType === "mysql") && (
                     <div className="space-y-1">
                       <Label htmlFor="db-database-name">Database Name</Label>
@@ -497,14 +522,32 @@ function ProjectOverview() {
               <Card className="hover:bg-muted/50 cursor-pointer transition-colors">
                 <CardHeader className="pb-2">
                   <div className="flex items-start justify-between">
-                    <CardTitle className="text-base">{application.name}</CardTitle>
+                    <div className="flex items-start gap-2">
+                      <AppWindowIcon className="text-muted-foreground size-4" />
+                      <div className="flex flex-col">
+                        <CardTitle className="text-base leading-none">
+                          {application.name}
+                        </CardTitle>
+                        <CardDescription className="text-sm">
+                          {application.slug}
+                        </CardDescription>
+                      </div>
+                    </div>
                     <StatusBadge status={application.status} />
                   </div>
                 </CardHeader>
                 <CardContent>
                   <div className="text-muted-foreground flex gap-2 text-xs">
-                    <Badge variant="outline">{application.type}</Badge>
-                    <Badge variant="outline">{application.build_type}</Badge>
+                    <Badge variant="outline" className="capitalize">{application.type}</Badge>
+                    {application.type === "image" ? (
+                      <Badge variant="outline">
+                        {application.source_image}
+                      </Badge>
+                    ) : (
+                      <Badge variant="outline" className="capitalize">
+                        {application.build_type}
+                      </Badge>
+                    )}
                   </div>
                 </CardContent>
               </Card>
@@ -519,17 +562,25 @@ function ProjectOverview() {
               <Card className="hover:bg-muted/50 cursor-pointer transition-colors">
                 <CardHeader className="pb-2">
                   <div className="flex items-start justify-between">
-                    <div className="flex items-center gap-2">
-                      <DatabaseIcon className="text-muted-foreground h-4 w-4" />
-                      <CardTitle className="text-base">{db.name}</CardTitle>
+                    <div className="flex items-start gap-2">
+                      <DatabaseIcon className="text-muted-foreground size-4" />
+                      <div className="flex flex-col">
+                        <CardTitle className="text-base leading-none">
+                          {db.name}
+                        </CardTitle>
+                        <CardDescription className="text-sm">
+                          {db.slug}
+                        </CardDescription>
+                      </div>
                     </div>
                     <StatusBadge status={db.status} />
                   </div>
                 </CardHeader>
                 <CardContent>
                   <div className="text-muted-foreground flex gap-2 text-xs">
-                    <Badge variant="outline">{db.type}</Badge>
-                    <Badge variant="outline">v{db.version}</Badge>
+                    <Badge variant="outline">
+                      {db.type}:{db.version}
+                    </Badge>
                   </div>
                 </CardContent>
               </Card>

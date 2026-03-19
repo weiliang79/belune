@@ -46,7 +46,12 @@ function CopyButton({ value }: { value: string }) {
   };
 
   return (
-    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={handleCopy}>
+    <Button
+      variant="ghost"
+      size="icon"
+      className="h-7 w-7"
+      onClick={handleCopy}
+    >
       {copied ? (
         <Check className="h-3.5 w-3.5 text-green-500" />
       ) : (
@@ -101,8 +106,9 @@ function DatabaseDetailPage() {
           <h2 className="text-xl font-semibold">{db.name}</h2>
           <p className="text-muted-foreground text-sm">{db.slug}</p>
           <div className="text-muted-foreground mt-1 flex items-center gap-2 text-sm">
-            <Badge variant="outline">{db.type}</Badge>
-            <Badge variant="outline">v{db.version}</Badge>
+            <Badge variant="outline">
+              {db.type}:{db.version}
+            </Badge>
             <StatusBadge status={db.status} />
           </div>
         </div>
@@ -170,7 +176,7 @@ function DatabaseDetailPage() {
                     Connection String
                   </p>
                   <div className="bg-muted flex items-center justify-between rounded-md px-3 py-2">
-                    <code className="break-all text-xs">
+                    <code className="text-xs break-all">
                       {db.connection_string}
                     </code>
                     <CopyButton value={db.connection_string} />
