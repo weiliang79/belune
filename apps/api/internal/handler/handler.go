@@ -15,18 +15,23 @@ import (
 	"github.com/ungweiliang/selfhost-paas/internal/store/generated"
 )
 
+// TaskEnqueuer abstracts task queue operations for testability.
+type TaskEnqueuer interface {
+	Enqueue(task *asynq.Task, opts ...asynq.Option) (*asynq.TaskInfo, error)
+}
+
 type Handler struct {
 	cfg     *config.Config
 	db      *pgxpool.Pool
 	queries *generated.Queries
-	asynq   *asynq.Client
+	asynq   TaskEnqueuer
 	runtime runtime.ContainerRuntime
 	proxy   proxy.ProxyManager
 	auth    *service.AuthService
 	rdb     *redis.Client
 }
 
-func New(cfg *config.Config, db *pgxpool.Pool, queries *generated.Queries, asynqClient *asynq.Client, rt runtime.ContainerRuntime, pm proxy.ProxyManager, auth *service.AuthService, rdb *redis.Client) *Handler {
+func New(cfg *config.Config, db *pgxpool.Pool, queries *generated.Queries, asynqClient TaskEnqueuer, rt runtime.ContainerRuntime, pm proxy.ProxyManager, auth *service.AuthService, rdb *redis.Client) *Handler {
 	return &Handler{
 		cfg:     cfg,
 		db:      db,

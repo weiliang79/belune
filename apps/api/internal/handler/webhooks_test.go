@@ -1,0 +1,134 @@
+package handler_test
+
+import (
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/ungweiliang/selfhost-paas/internal/testutil"
+)
+
+func TestUpdateApplicationWebhook(t *testing.T) {
+	resetDB(t)
+	token := env.SetupAdmin(t, "admin@test.com", "password123")
+	project := env.CreateProject(t, token, "Test Project", "test-project")
+	projectID := extractID(project["id"])
+	app := env.CreateApplication(t, token, projectID, map[string]any{
+		"name":        "Webhook App",
+		"type":        "git",
+		"build_type":  "dockerfile",
+		"source_repo": "https://github.com/test/repo",
+	})
+	appID := extractID(app["id"])
+
+	secret := "my-webhook-secret"
+	branch := "develop"
+	resp := env.DoRequest(t, "PUT", fmt.Sprintf("/api/projects/%s/applications/%s/webhook", projectID, appID), map[string]any{
+		"webhook_secret":    secret,
+		"auto_deploy_branch": branch,
+	}, testutil.AuthHeader(token))
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	result := testutil.ReadJSON(t, resp)
+	assert.Equal(t, secret, result["webhook_secret"])
+	assert.Equal(t, branch, result["auto_deploy_branch"])
+}
+
+func TestWebhookPush_GitHub(t *testing.T) {
+	resetDB(t)
+	token := env.SetupAdmin(t, "admin@test.com", "password123")
+	project := env.CreateProject(t, token, "Test Project", "test-project")
+	projectID := extractID(project["id"])
+
+	// Create app with source_repo and webhook secret
+	app := env.CreateApplication(t, token, projectID, map[string]any{
+		"name":        "Webhook App",
+		"type":        "git",
+		"build_type":  "dockerfile",
+		"source_repo": "https://github.com/test/repo",
+	})
+	appID := extractID(app["id"])
+
+	secret := "test-secret-123"
+	env.DoRequest(t, "PUT", fmt.Sprintf("/api/projects/%s/applications/%s/webhook", projectID, appID), map[string]any{
+		"webhook_secret":     secret,
+		"auto_deploy_branch": "main",
+	}, testutil.AuthHeader(token)).Body.Close()
+
+	// Simulate GitHub push webhook
+	payload := map[string]any{
+		"ref": "refs/heads/main",
+		"after": "abc123def456",
+		"repository": map[string]any{
+			"clone_url": "https://github.com/test/repo.git",
+		},
+	}
+	body, _ := json.Marshal(payload)
+
+	// Compute HMAC signature
+	mac := hmac.New(sha256.New, []byte(secret))
+	mac.Write(body)
+	signature := "sha256=" + hex.EncodeToString(mac.Sum(nil))
+
+	resp := env.DoRequest(t, "POST", "/api/webhooks/push", payload, map[string]string{
+		"X-GitHub-Event":  "push",
+		"X-Hub-Signature-256": signature,
+	})
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	resp.Body.Close()
+
+	// Verify deploy task was enqueued
+	require.Len(t, env.Asynq.Tasks, 1)
+	assert.Equal(t, "deploy", env.Asynq.Tasks[0].TypeName)
+}
+
+func TestWebhookPush_BranchMismatch(t *testing.T) {
+	resetDB(t)
+	token := env.SetupAdmin(t, "admin@test.com", "password123")
+	project := env.CreateProject(t, token, "Test Project", "test-project")
+	projectID := extractID(project["id"])
+
+	app := env.CreateApplication(t, token, projectID, map[string]any{
+		"name":        "Webhook App",
+		"type":        "git",
+		"build_type":  "dockerfile",
+		"source_repo": "https://github.com/test/repo",
+	})
+	appID := extractID(app["id"])
+
+	secret := "test-secret-123"
+	env.DoRequest(t, "PUT", fmt.Sprintf("/api/projects/%s/applications/%s/webhook", projectID, appID), map[string]any{
+		"webhook_secret":     secret,
+		"auto_deploy_branch": "main",
+	}, testutil.AuthHeader(token)).Body.Close()
+
+	// Push to develop branch (mismatch)
+	payload := map[string]any{
+		"ref": "refs/heads/develop",
+		"after": "abc123def456",
+		"repository": map[string]any{
+			"clone_url": "https://github.com/test/repo.git",
+		},
+	}
+	body, _ := json.Marshal(payload)
+
+	mac := hmac.New(sha256.New, []byte(secret))
+	mac.Write(body)
+	signature := "sha256=" + hex.EncodeToString(mac.Sum(nil))
+
+	resp := env.DoRequest(t, "POST", "/api/webhooks/push", payload, map[string]string{
+		"X-GitHub-Event":  "push",
+		"X-Hub-Signature-256": signature,
+	})
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	resp.Body.Close()
+
+	// No deploy should be enqueued
+	assert.Len(t, env.Asynq.Tasks, 0)
+}
