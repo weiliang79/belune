@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useProjects } from "@/lib/hooks/use-projects";
-import { useServices } from "@/lib/hooks/use-services";
+import { useApplications } from "@/lib/hooks/use-applications";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { buttonVariants } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -12,13 +12,13 @@ export const Route = createFileRoute("/_app/projects/")({
   component: ProjectsPage,
 });
 
-function ProjectServiceCount({ projectId }: { projectId: string }) {
-  const { data: services } = useServices(projectId);
-  if (!services) return null;
-  const running = services.filter((s) => s.status === "running").length;
+function ProjectApplicationCount({ projectId }: { projectId: string }) {
+  const { data: applications } = useApplications(projectId);
+  if (!applications) return null;
+  const running = applications.filter((s) => s.status === "running").length;
   return (
     <p className="text-muted-foreground text-xs">
-      {running} / {services.length} applications running
+      {running} / {applications.length} applications running
     </p>
   );
 }
@@ -37,7 +37,7 @@ function ProjectsPage() {
         <div>
           <h1 className="text-2xl font-bold">Projects</h1>
           <p className="text-muted-foreground">
-            Manage your projects and services.
+            Manage your projects and applications.
           </p>
         </div>
         <Link to="/projects/new" className={buttonVariants()}>
@@ -70,7 +70,7 @@ function ProjectsPage() {
                   </div>
                 </CardHeader>
                 <CardContent>
-                  <ProjectServiceCount projectId={project.id} />
+                  <ProjectApplicationCount projectId={project.id} />
                   <p className="text-muted-foreground text-xs">
                     Created {formatDate(project.created_at)}
                   </p>

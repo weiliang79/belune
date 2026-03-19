@@ -19,8 +19,8 @@ import (
 )
 
 type buildPayload struct {
-	ServiceID    string `json:"service_id"`
-	DeploymentID string `json:"deployment_id"`
+	ApplicationID string `json:"application_id"`
+	DeploymentID  string `json:"deployment_id"`
 }
 
 func (h *TaskHandler) HandleBuildTask(ctx context.Context, t *asynq.Task) error {
@@ -29,9 +29,9 @@ func (h *TaskHandler) HandleBuildTask(ctx context.Context, t *asynq.Task) error 
 		return fmt.Errorf("unmarshal build payload: %w", err)
 	}
 
-	slog.Info("handling build task", "service_id", payload.ServiceID, "deployment_id", payload.DeploymentID)
+	slog.Info("handling build task", "application_id", payload.ApplicationID, "deployment_id", payload.DeploymentID)
 
-	serviceID := parseUUID(payload.ServiceID)
+	applicationID := parseUUID(payload.ApplicationID)
 	deploymentID := parseUUID(payload.DeploymentID)
 
 	// Update deployment status to building
@@ -40,22 +40,22 @@ func (h *TaskHandler) HandleBuildTask(ctx context.Context, t *asynq.Task) error 
 		Status: "building",
 	})
 
-	// Fetch service details with project slug
-	svcRow, err := h.Queries.GetServiceWithProjectSlug(ctx, serviceID)
+	// Fetch application details with project slug
+	appRow, err := h.Queries.GetApplicationWithProjectSlug(ctx, applicationID)
 	if err != nil {
-		h.failDeployment(ctx, deploymentID, fmt.Sprintf("fetch service: %v", err))
-		return fmt.Errorf("get service: %w", err)
+		h.failDeployment(ctx, deploymentID, fmt.Sprintf("fetch application: %v", err))
+		return fmt.Errorf("get application: %w", err)
 	}
-	svc := generated.Service{
-		ID: svcRow.ID, ProjectID: svcRow.ProjectID, Name: svcRow.Name,
-		Type: svcRow.Type, SourceRepo: svcRow.SourceRepo, DockerfilePath: svcRow.DockerfilePath,
-		BuildType: svcRow.BuildType, BuilderImage: svcRow.BuilderImage,
-		CustomBuildpacks: svcRow.CustomBuildpacks, Status: svcRow.Status,
+	app := generated.Application{
+		ID: appRow.ID, ProjectID: appRow.ProjectID, Name: appRow.Name,
+		Type: appRow.Type, SourceRepo: appRow.SourceRepo, DockerfilePath: appRow.DockerfilePath,
+		BuildType: appRow.BuildType, BuilderImage: appRow.BuilderImage,
+		CustomBuildpacks: appRow.CustomBuildpacks, Status: appRow.Status,
 	}
 
-	// Image-type services have nothing to build
-	if svc.Type == "image" {
-		slog.Info("skipping build for image-type service", "service_id", payload.ServiceID)
+	// Image-type applications have nothing to build
+	if app.Type == "image" {
+		slog.Info("skipping build for image-type application", "application_id", payload.ApplicationID)
 		h.Queries.UpdateDeploymentStatus(ctx, generated.UpdateDeploymentStatusParams{
 			ID:     deploymentID,
 			Status: "success",
@@ -71,8 +71,8 @@ func (h *TaskHandler) HandleBuildTask(ctx context.Context, t *asynq.Task) error 
 	}
 	defer os.RemoveAll(tmpDir)
 
-	slog.Info("cloning repository", "repo", svc.SourceRepo.String, "dest", tmpDir)
-	cloneResult, err := git.Clone(ctx, svc.SourceRepo.String, tmpDir, "")
+	slog.Info("cloning repository", "repo", app.SourceRepo.String, "dest", tmpDir)
+	cloneResult, err := git.Clone(ctx, app.SourceRepo.String, tmpDir, "")
 	if err != nil {
 		h.failDeployment(ctx, deploymentID, fmt.Sprintf("git clone: %v", err))
 		return fmt.Errorf("git clone: %w", err)
@@ -80,7 +80,7 @@ func (h *TaskHandler) HandleBuildTask(ctx context.Context, t *asynq.Task) error 
 	slog.Info("cloned repository", "commit", cloneResult.CommitSHA)
 
 	// Fetch and decrypt env vars for build-time use
-	envVars, err := h.Queries.ListEnvVarsByService(ctx, serviceID)
+	envVars, err := h.Queries.ListEnvVarsByApplication(ctx, applicationID)
 	if err != nil {
 		slog.Warn("failed to fetch env vars, continuing without them", "error", err)
 	}
@@ -97,11 +97,11 @@ func (h *TaskHandler) HandleBuildTask(ctx context.Context, t *asynq.Task) error 
 
 	// Parse custom buildpacks
 	var customBuildpacks []string
-	if len(svc.CustomBuildpacks) > 0 {
-		_ = json.Unmarshal(svc.CustomBuildpacks, &customBuildpacks)
+	if len(app.CustomBuildpacks) > 0 {
+		_ = json.Unmarshal(app.CustomBuildpacks, &customBuildpacks)
 	}
 
-	imageName := naming.ImageTag(svcRow.ProjectSlug, svcRow.Slug, payload.ServiceID, payload.DeploymentID)
+	imageName := naming.ImageTag(appRow.ProjectSlug, appRow.Slug, payload.ApplicationID, payload.DeploymentID)
 
 	// Set up build log streaming via Redis pub/sub
 	pub := buildlog.NewPublisher(h.RedisClient, payload.DeploymentID)
@@ -110,8 +110,8 @@ func (h *TaskHandler) HandleBuildTask(ctx context.Context, t *asynq.Task) error 
 	buildOpts := build.BuildOptions{
 		SourceDir:      tmpDir,
 		ImageTag:       imageName,
-		DockerfilePath: svc.DockerfilePath.String,
-		BuilderImage:   svc.BuilderImage.String,
+		DockerfilePath: app.DockerfilePath.String,
+		BuilderImage:   app.BuilderImage.String,
 		Buildpacks:     customBuildpacks,
 		Env:            env,
 		LogWriter:      logWriter,
@@ -141,7 +141,7 @@ func (h *TaskHandler) HandleBuildTask(ctx context.Context, t *asynq.Task) error 
 	})
 
 	slog.Info("build completed",
-		"service_id", payload.ServiceID,
+		"application_id", payload.ApplicationID,
 		"deployment_id", payload.DeploymentID,
 		"image", result.ImageTag,
 		"commit", cloneResult.CommitSHA,

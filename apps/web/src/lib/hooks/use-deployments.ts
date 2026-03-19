@@ -2,10 +2,10 @@ import { useQuery } from "@tanstack/react-query";
 import { queryKeys } from "./query-keys";
 import * as deploymentsApi from "@/lib/api/deployments";
 
-export function useDeployments(projectId: string, serviceId: string) {
+export function useDeployments(projectId: string, applicationId: string) {
   return useQuery({
-    queryKey: queryKeys.deployments.all(projectId, serviceId),
-    queryFn: () => deploymentsApi.listDeployments(projectId, serviceId),
+    queryKey: queryKeys.deployments.all(projectId, applicationId),
+    queryFn: () => deploymentsApi.listDeployments(projectId, applicationId),
     refetchInterval: (query) => {
       const hasActive = query.state.data?.some((d) =>
         ["pending", "building", "deploying"].includes(d.status),
@@ -17,12 +17,12 @@ export function useDeployments(projectId: string, serviceId: string) {
 
 export function useDeployment(
   projectId: string,
-  serviceId: string,
+  applicationId: string,
   deploymentId: string,
 ) {
   return useQuery({
-    queryKey: queryKeys.deployments.detail(projectId, serviceId, deploymentId),
+    queryKey: queryKeys.deployments.detail(projectId, applicationId, deploymentId),
     queryFn: () =>
-      deploymentsApi.getDeployment(projectId, serviceId, deploymentId),
+      deploymentsApi.getDeployment(projectId, applicationId, deploymentId),
   });
 }

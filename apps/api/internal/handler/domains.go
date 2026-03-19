@@ -14,14 +14,14 @@ import (
 )
 
 func (h *Handler) ListDomains(w http.ResponseWriter, r *http.Request) {
-	serviceID := chi.URLParam(r, "serviceId")
-	var serviceUUID pgtype.UUID
-	if err := serviceUUID.Scan(serviceID); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid service id")
+	applicationID := chi.URLParam(r, "applicationId")
+	var applicationUUID pgtype.UUID
+	if err := applicationUUID.Scan(applicationID); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid application id")
 		return
 	}
 
-	domains, err := h.queries.ListDomainsByService(r.Context(), serviceUUID)
+	domains, err := h.queries.ListDomainsByApplication(r.Context(), applicationUUID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to list domains")
 		return
@@ -36,10 +36,10 @@ type addDomainRequest struct {
 }
 
 func (h *Handler) AddDomain(w http.ResponseWriter, r *http.Request) {
-	serviceID := chi.URLParam(r, "serviceId")
-	var serviceUUID pgtype.UUID
-	if err := serviceUUID.Scan(serviceID); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid service id")
+	applicationID := chi.URLParam(r, "applicationId")
+	var applicationUUID pgtype.UUID
+	if err := applicationUUID.Scan(applicationID); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid application id")
 		return
 	}
 
@@ -56,7 +56,7 @@ func (h *Handler) AddDomain(w http.ResponseWriter, r *http.Request) {
 
 	// Insert domain record
 	domain, err := h.queries.CreateDomain(r.Context(), generated.CreateDomainParams{
-		ServiceID:  serviceUUID,
+		ApplicationID: applicationUUID,
 		Hostname:   req.Hostname,
 		SslEnabled: req.SSLEnabled,
 	})
@@ -66,12 +66,12 @@ func (h *Handler) AddDomain(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Add Caddy proxy route for this domain
-	row, err := h.queries.GetServiceWithProjectSlug(r.Context(), serviceUUID)
+	row, err := h.queries.GetApplicationWithProjectSlug(r.Context(), applicationUUID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to resolve project")
 		return
 	}
-	containerName := naming.ContainerName(row.ProjectSlug, row.Slug, serviceID)
+	containerName := naming.ContainerName(row.ProjectSlug, row.Slug, applicationID)
 	_ = h.proxy.AddRoute(r.Context(), proxy.RouteConfig{
 		Hostname:  req.Hostname,
 		TargetURL: fmt.Sprintf("http://%s:8080", containerName),

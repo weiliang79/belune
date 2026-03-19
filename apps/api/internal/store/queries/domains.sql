@@ -1,8 +1,8 @@
--- name: ListDomainsByService :many
-SELECT * FROM domains WHERE service_id = $1 ORDER BY created_at DESC;
+-- name: ListDomainsByApplication :many
+SELECT * FROM domains WHERE application_id = $1 ORDER BY created_at DESC;
 
 -- name: CreateDomain :one
-INSERT INTO domains (service_id, hostname, ssl_enabled)
+INSERT INTO domains (application_id, hostname, ssl_enabled)
 VALUES ($1, $2, $3)
 RETURNING *;
 

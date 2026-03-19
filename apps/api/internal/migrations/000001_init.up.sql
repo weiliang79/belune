@@ -19,8 +19,8 @@ CREATE TABLE projects (
 
 CREATE INDEX idx_projects_user_id ON projects(user_id);
 
--- Services
-CREATE TABLE services (
+-- Applications
+CREATE TABLE applications (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
     name VARCHAR(255) NOT NULL,
@@ -40,13 +40,13 @@ CREATE TABLE services (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_services_project_id ON services(project_id);
-CREATE UNIQUE INDEX idx_services_slug_per_project ON services(project_id, slug);
+CREATE INDEX idx_applications_project_id ON applications(project_id);
+CREATE UNIQUE INDEX idx_applications_slug_per_project ON applications(project_id, slug);
 
 -- Deployments
 CREATE TABLE deployments (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    service_id UUID NOT NULL REFERENCES services(id) ON DELETE CASCADE,
+    application_id UUID NOT NULL REFERENCES applications(id) ON DELETE CASCADE,
     status VARCHAR(50) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'building', 'deploying', 'success', 'failed')),
     triggered_by VARCHAR(50) NOT NULL CHECK (triggered_by IN ('push', 'manual', 'api')),
     commit_sha VARCHAR(40),
@@ -56,7 +56,7 @@ CREATE TABLE deployments (
     finished_at TIMESTAMPTZ
 );
 
-CREATE INDEX idx_deployments_service_id ON deployments(service_id);
+CREATE INDEX idx_deployments_application_id ON deployments(application_id);
 
 -- Databases
 CREATE TABLE databases (
@@ -77,7 +77,7 @@ CREATE INDEX idx_databases_project_id ON databases(project_id);
 -- Domains
 CREATE TABLE domains (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    service_id UUID NOT NULL REFERENCES services(id) ON DELETE CASCADE,
+    application_id UUID NOT NULL REFERENCES applications(id) ON DELETE CASCADE,
     hostname VARCHAR(255) NOT NULL UNIQUE,
     ssl_enabled BOOLEAN NOT NULL DEFAULT true,
     caddy_config_id VARCHAR(255),
@@ -85,19 +85,19 @@ CREATE TABLE domains (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_domains_service_id ON domains(service_id);
+CREATE INDEX idx_domains_application_id ON domains(application_id);
 CREATE UNIQUE INDEX idx_domains_hostname ON domains(hostname);
 
 -- Environment Variables
 CREATE TABLE env_vars (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    service_id UUID NOT NULL REFERENCES services(id) ON DELETE CASCADE,
+    application_id UUID NOT NULL REFERENCES applications(id) ON DELETE CASCADE,
     key VARCHAR(255) NOT NULL,
     value_encrypted BYTEA NOT NULL,
     is_secret BOOLEAN NOT NULL DEFAULT false,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    UNIQUE(service_id, key)
+    UNIQUE(application_id, key)
 );
 
-CREATE INDEX idx_env_vars_service_id ON env_vars(service_id);
+CREATE INDEX idx_env_vars_application_id ON env_vars(application_id);

@@ -8,11 +8,11 @@ import (
 )
 
 type metricsResponse struct {
-	Projects    int64          `json:"projects"`
-	Services    int64          `json:"services"`
-	Databases   int64          `json:"databases"`
-	Deployments int64          `json:"deployments"`
-	Containers  containerStats `json:"containers"`
+	Projects     int64          `json:"projects"`
+	Applications int64          `json:"applications"`
+	Databases    int64          `json:"databases"`
+	Deployments  int64          `json:"deployments"`
+	Containers   containerStats `json:"containers"`
 }
 
 type containerStats struct {
@@ -25,7 +25,7 @@ func (h *Handler) GetMetrics(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	projects, _ := h.queries.CountProjects(ctx)
-	services, _ := h.queries.CountServices(ctx)
+	applications, _ := h.queries.CountApplications(ctx)
 	databases, _ := h.queries.CountDatabases(ctx)
 	deployments, _ := h.queries.CountDeployments(ctx)
 
@@ -43,11 +43,11 @@ func (h *Handler) GetMetrics(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, metricsResponse{
-		Projects:    projects,
-		Services:    services,
-		Databases:   databases,
-		Deployments: deployments,
-		Containers:  stats,
+		Projects:     projects,
+		Applications: applications,
+		Databases:    databases,
+		Deployments:  deployments,
+		Containers:   stats,
 	})
 }
 

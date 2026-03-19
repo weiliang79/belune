@@ -24,7 +24,7 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService)
 		r.Get("/api/auth/setup", h.Setup)
 		r.Post("/api/auth/setup", h.Setup)
 
-		// Webhooks (unauthenticated — verified via HMAC/token per-service)
+		// Webhooks (unauthenticated — verified via HMAC/token per-application)
 		r.Post("/api/webhooks/push", h.HandleWebhookPush)
 	})
 
@@ -41,34 +41,34 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService)
 		r.Put("/api/projects/{projectId}", h.UpdateProject)
 		r.Delete("/api/projects/{projectId}", h.DeleteProject)
 
-		// Services
-		r.Get("/api/projects/{projectId}/services", h.ListServices)
-		r.Post("/api/projects/{projectId}/services", h.CreateService)
-		r.Get("/api/projects/{projectId}/services/{serviceId}", h.GetService)
-		r.Put("/api/projects/{projectId}/services/{serviceId}", h.UpdateService)
-		r.Delete("/api/projects/{projectId}/services/{serviceId}", h.DeleteService)
-		r.Put("/api/projects/{projectId}/services/{serviceId}/webhook", h.UpdateServiceWebhook)
-		r.Post("/api/projects/{projectId}/services/{serviceId}/deploy", h.DeployService)
-		r.Post("/api/projects/{projectId}/services/{serviceId}/stop", h.StopService)
-		r.Post("/api/projects/{projectId}/services/{serviceId}/start", h.StartService)
-		r.Post("/api/projects/{projectId}/services/{serviceId}/restart", h.RestartService)
+		// Applications
+		r.Get("/api/projects/{projectId}/applications", h.ListApplications)
+		r.Post("/api/projects/{projectId}/applications", h.CreateApplication)
+		r.Get("/api/projects/{projectId}/applications/{applicationId}", h.GetApplication)
+		r.Put("/api/projects/{projectId}/applications/{applicationId}", h.UpdateApplication)
+		r.Delete("/api/projects/{projectId}/applications/{applicationId}", h.DeleteApplication)
+		r.Put("/api/projects/{projectId}/applications/{applicationId}/webhook", h.UpdateApplicationWebhook)
+		r.Post("/api/projects/{projectId}/applications/{applicationId}/deploy", h.DeployApplication)
+		r.Post("/api/projects/{projectId}/applications/{applicationId}/stop", h.StopApplication)
+		r.Post("/api/projects/{projectId}/applications/{applicationId}/start", h.StartApplication)
+		r.Post("/api/projects/{projectId}/applications/{applicationId}/restart", h.RestartApplication)
 
 		// Deployments
-		r.Get("/api/projects/{projectId}/services/{serviceId}/deployments", h.ListDeployments)
-		r.Get("/api/projects/{projectId}/services/{serviceId}/deployments/{deploymentId}", h.GetDeployment)
-		r.Get("/api/projects/{projectId}/services/{serviceId}/deployments/{deploymentId}/build-logs", h.StreamBuildLogs)
+		r.Get("/api/projects/{projectId}/applications/{applicationId}/deployments", h.ListDeployments)
+		r.Get("/api/projects/{projectId}/applications/{applicationId}/deployments/{deploymentId}", h.GetDeployment)
+		r.Get("/api/projects/{projectId}/applications/{applicationId}/deployments/{deploymentId}/build-logs", h.StreamBuildLogs)
 
 		// Logs
-		r.Get("/api/projects/{projectId}/services/{serviceId}/logs", h.StreamLogs)
+		r.Get("/api/projects/{projectId}/applications/{applicationId}/logs", h.StreamLogs)
 
 		// Environment variables
-		r.Get("/api/projects/{projectId}/services/{serviceId}/env", h.ListEnvVars)
-		r.Put("/api/projects/{projectId}/services/{serviceId}/env", h.UpdateEnvVars)
+		r.Get("/api/projects/{projectId}/applications/{applicationId}/env", h.ListEnvVars)
+		r.Put("/api/projects/{projectId}/applications/{applicationId}/env", h.UpdateEnvVars)
 
 		// Domains
-		r.Get("/api/projects/{projectId}/services/{serviceId}/domains", h.ListDomains)
-		r.Post("/api/projects/{projectId}/services/{serviceId}/domains", h.AddDomain)
-		r.Delete("/api/projects/{projectId}/services/{serviceId}/domains/{domainId}", h.RemoveDomain)
+		r.Get("/api/projects/{projectId}/applications/{applicationId}/domains", h.ListDomains)
+		r.Post("/api/projects/{projectId}/applications/{applicationId}/domains", h.AddDomain)
+		r.Delete("/api/projects/{projectId}/applications/{applicationId}/domains/{domainId}", h.RemoveDomain)
 
 		// Databases
 		r.Get("/api/projects/{projectId}/databases", h.ListDatabases)
@@ -81,6 +81,6 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService)
 		r.Post("/api/cleanup", h.TriggerCleanup)
 
 		// Build (standalone build without deploy)
-		r.Post("/api/projects/{projectId}/services/{serviceId}/build", h.BuildService)
+		r.Post("/api/projects/{projectId}/applications/{applicationId}/build", h.BuildApplication)
 	})
 }

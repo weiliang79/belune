@@ -13,18 +13,18 @@ import (
 )
 
 func (h *Handler) StreamLogs(w http.ResponseWriter, r *http.Request) {
-	serviceID := chi.URLParam(r, "serviceId")
-	var serviceUUID pgtype.UUID
-	if err := serviceUUID.Scan(serviceID); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid service id")
+	applicationID := chi.URLParam(r, "applicationId")
+	var applicationUUID pgtype.UUID
+	if err := applicationUUID.Scan(applicationID); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid application id")
 		return
 	}
-	row, err := h.queries.GetServiceWithProjectSlug(r.Context(), serviceUUID)
+	row, err := h.queries.GetApplicationWithProjectSlug(r.Context(), applicationUUID)
 	if err != nil {
-		writeError(w, http.StatusNotFound, "service not found")
+		writeError(w, http.StatusNotFound, "application not found")
 		return
 	}
-	containerName := naming.ContainerName(row.ProjectSlug, row.Slug, serviceID)
+	containerName := naming.ContainerName(row.ProjectSlug, row.Slug, applicationID)
 
 	writer, err := sse.NewWriter(w)
 	if err != nil {

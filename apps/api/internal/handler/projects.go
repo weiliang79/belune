@@ -119,15 +119,15 @@ func (h *Handler) DeleteProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Stop and remove all service containers for this project
+	// Stop and remove all application containers for this project
 	project, _ := h.queries.GetProject(r.Context(), uuid)
-	services, err := h.queries.ListServicesByProject(r.Context(), uuid)
+	applications, err := h.queries.ListApplicationsByProject(r.Context(), uuid)
 	if err == nil {
-		for _, svc := range services {
-			svcID := fmt.Sprintf("%x-%x-%x-%x-%x", svc.ID.Bytes[0:4], svc.ID.Bytes[4:6], svc.ID.Bytes[6:8], svc.ID.Bytes[8:10], svc.ID.Bytes[10:16])
-			containerName := naming.ContainerName(project.Slug, svc.Slug, svcID)
-			intermediateContainerName := naming.IntermediateContainerName(project.Slug, svcID)
-			oldContainerName := naming.OldContainerName(svcID)
+		for _, app := range applications {
+			appID := fmt.Sprintf("%x-%x-%x-%x-%x", app.ID.Bytes[0:4], app.ID.Bytes[4:6], app.ID.Bytes[6:8], app.ID.Bytes[8:10], app.ID.Bytes[10:16])
+			containerName := naming.ContainerName(project.Slug, app.Slug, appID)
+			intermediateContainerName := naming.IntermediateContainerName(project.Slug, appID)
+			oldContainerName := naming.OldContainerName(appID)
 			_ = h.runtime.StopContainer(r.Context(), containerName)
 			_ = h.runtime.RemoveContainer(r.Context(), containerName)
 			_ = h.runtime.StopContainer(r.Context(), intermediateContainerName)

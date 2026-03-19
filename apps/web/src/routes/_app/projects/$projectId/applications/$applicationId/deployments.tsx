@@ -9,7 +9,7 @@ import { formatDate, formatDuration } from "@/lib/utils/format";
 import { useState, useEffect, useRef } from "react";
 
 export const Route = createFileRoute(
-  "/_app/projects/$projectId/services/$serviceId/deployments",
+  "/_app/projects/$projectId/applications/$applicationId/deployments",
 )({
   component: DeploymentsPage,
 });
@@ -27,7 +27,7 @@ const statusVariant: Record<
 
 function useBuildLogStream(
   projectId: string,
-  serviceId: string,
+  applicationId: string,
   deploymentId: string,
   isBuilding: boolean,
 ) {
@@ -37,7 +37,7 @@ function useBuildLogStream(
   useEffect(() => {
     if (!isBuilding) return;
 
-    const url = `/api/projects/${projectId}/services/${serviceId}/deployments/${deploymentId}/build-logs`;
+    const url = `/api/projects/${projectId}/applications/${applicationId}/deployments/${deploymentId}/build-logs`;
     const source = new EventSource(url, { withCredentials: true });
 
     source.onmessage = (event) => {
@@ -47,7 +47,7 @@ function useBuildLogStream(
     source.addEventListener("done", () => {
       source.close();
       queryClient.invalidateQueries({
-        queryKey: queryKeys.deployments.all(projectId, serviceId),
+        queryKey: queryKeys.deployments.all(projectId, applicationId),
       });
     });
 
@@ -61,7 +61,7 @@ function useBuildLogStream(
     return () => {
       source.close();
     };
-  }, [projectId, serviceId, deploymentId, isBuilding, queryClient]);
+  }, [projectId, applicationId, deploymentId, isBuilding, queryClient]);
 
   return lines;
 }
@@ -94,15 +94,15 @@ function BuildLogViewer({ lines }: { lines: string[] }) {
 function DeploymentCard({
   deployment: d,
   projectId,
-  serviceId,
+  applicationId,
 }: {
   deployment: Deployment;
   projectId: string;
-  serviceId: string;
+  applicationId: string;
 }) {
   const [expanded, setExpanded] = useState(false);
   const isBuilding = d.status === "building" || d.status === "pending";
-  const lines = useBuildLogStream(projectId, serviceId, d.id, isBuilding);
+  const lines = useBuildLogStream(projectId, applicationId, d.id, isBuilding);
 
   const duration =
     d.finished_at && d.started_at
@@ -154,8 +154,8 @@ function DeploymentCard({
 }
 
 function DeploymentsPage() {
-  const { projectId, serviceId } = Route.useParams();
-  const { data: deployments, isLoading } = useDeployments(projectId, serviceId);
+  const { projectId, applicationId } = Route.useParams();
+  const { data: deployments, isLoading } = useDeployments(projectId, applicationId);
 
   if (isLoading) {
     return <div className="text-muted-foreground">Loading deployments...</div>;
@@ -165,7 +165,7 @@ function DeploymentsPage() {
     return (
       <Card>
         <CardContent className="text-muted-foreground py-12 text-center">
-          No deployments yet. Deploy your service to see history here.
+          No deployments yet. Deploy your application to see history here.
         </CardContent>
       </Card>
     );
@@ -178,7 +178,7 @@ function DeploymentsPage() {
           key={d.id}
           deployment={d}
           projectId={projectId}
-          serviceId={serviceId}
+          applicationId={applicationId}
         />
       ))}
     </div>

@@ -13,7 +13,7 @@ export interface Project {
   updated_at: string;
 }
 
-export interface Service {
+export interface Application {
   id: string;
   project_id: string;
   name: string;
@@ -34,7 +34,7 @@ export interface Service {
 
 export interface Deployment {
   id: string;
-  service_id: string;
+  application_id: string;
   status: "pending" | "building" | "deploying" | "success" | "failed";
   triggered_by: "push" | "manual" | "api";
   commit_sha: string | null;
@@ -46,7 +46,7 @@ export interface Deployment {
 
 export interface Domain {
   id: string;
-  service_id: string;
+  application_id: string;
   hostname: string;
   ssl_enabled: boolean;
   verified_at: string | null;
@@ -62,7 +62,7 @@ export interface EnvVar {
 
 export interface MetricsOverview {
   projects: number;
-  services: number;
+  applications: number;
   databases: number;
   deployments: number;
   containers: {

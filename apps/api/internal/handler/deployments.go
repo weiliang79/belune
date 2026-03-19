@@ -8,14 +8,14 @@ import (
 )
 
 func (h *Handler) ListDeployments(w http.ResponseWriter, r *http.Request) {
-	serviceID := chi.URLParam(r, "serviceId")
-	var serviceUUID pgtype.UUID
-	if err := serviceUUID.Scan(serviceID); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid service id")
+	applicationID := chi.URLParam(r, "applicationId")
+	var applicationUUID pgtype.UUID
+	if err := applicationUUID.Scan(applicationID); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid application id")
 		return
 	}
 
-	deployments, err := h.queries.ListDeploymentsByService(r.Context(), serviceUUID)
+	deployments, err := h.queries.ListDeploymentsByApplication(r.Context(), applicationUUID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to list deployments")
 		return

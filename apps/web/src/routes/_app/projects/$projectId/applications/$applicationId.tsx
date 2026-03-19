@@ -5,12 +5,12 @@ import {
   useRouterState,
 } from "@tanstack/react-router";
 import {
-  useService,
-  useDeployService,
-  useStopService,
-  useStartService,
-  useRestartService,
-} from "@/lib/hooks/use-services";
+  useApplication,
+  useDeployApplication,
+  useStopApplication,
+  useStartApplication,
+  useRestartApplication,
+} from "@/lib/hooks/use-applications";
 import { useProject } from "@/lib/hooks/use-projects";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -18,19 +18,19 @@ import { AppBreadcrumb } from "@/lib/components/app-breadcrumb";
 import { StatusBadge } from "@/lib/components/status-badge";
 
 export const Route = createFileRoute(
-  "/_app/projects/$projectId/services/$serviceId",
+  "/_app/projects/$projectId/applications/$applicationId",
 )({
-  component: ServiceLayout,
+  component: ApplicationLayout,
 });
 
-function ServiceLayout() {
-  const { projectId, serviceId } = Route.useParams();
-  const { data: service, isLoading } = useService(projectId, serviceId);
+function ApplicationLayout() {
+  const { projectId, applicationId } = Route.useParams();
+  const { data: application, isLoading } = useApplication(projectId, applicationId);
   const { data: project } = useProject(projectId);
-  const deploy = useDeployService(projectId, serviceId);
-  const stop = useStopService(projectId, serviceId);
-  const start = useStartService(projectId, serviceId);
-  const restart = useRestartService(projectId, serviceId);
+  const deploy = useDeployApplication(projectId, applicationId);
+  const stop = useStopApplication(projectId, applicationId);
+  const start = useStartApplication(projectId, applicationId);
+  const restart = useRestartApplication(projectId, applicationId);
   const routerState = useRouterState();
   const currentPath = routerState.location.pathname;
 
@@ -38,11 +38,11 @@ function ServiceLayout() {
     return <div className="text-muted-foreground">Loading application...</div>;
   }
 
-  if (!service) {
+  if (!application) {
     return <div className="text-destructive">Application not found.</div>;
   }
 
-  const basePath = `/projects/${projectId}/services/${serviceId}`;
+  const basePath = `/projects/${projectId}/applications/${applicationId}`;
   const tabs = [
     { to: basePath, label: "Overview", exact: true },
     { to: `${basePath}/deployments`, label: "Deployments" },
@@ -61,17 +61,17 @@ function ServiceLayout() {
             label: project?.name ?? "Project",
             to: `/projects/${projectId}`,
           },
-          { label: service.name },
+          { label: application.name },
         ]}
       />
 
       <div className="flex items-center justify-between">
         <div>
           <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-bold">{service.name}</h1>
-            <StatusBadge status={service.status} />
+            <h1 className="text-2xl font-bold">{application.name}</h1>
+            <StatusBadge status={application.status} />
           </div>
-          <p className="text-muted-foreground text-sm">{service.slug}</p>
+          <p className="text-muted-foreground text-sm">{application.slug}</p>
         </div>
         <div className="flex gap-2">
           <Button
@@ -85,11 +85,11 @@ function ServiceLayout() {
             size="sm"
             variant="outline"
             onClick={() => restart.mutate()}
-            disabled={restart.isPending || service.status !== "running"}
+            disabled={restart.isPending || application.status !== "running"}
           >
             Restart
           </Button>
-          {service.status === "running" ? (
+          {application.status === "running" ? (
             <Button
               size="sm"
               variant="outline"
@@ -103,7 +103,7 @@ function ServiceLayout() {
               size="sm"
               variant="outline"
               onClick={() => start.mutate()}
-              disabled={start.isPending || service.status === "deploying" || service.status === "building"}
+              disabled={start.isPending || application.status === "deploying" || application.status === "building"}
             >
               {start.isPending ? "Starting..." : "Start"}
             </Button>

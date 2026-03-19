@@ -1,10 +1,10 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import {
-  useService,
-  useUpdateService,
-  useDeleteService,
+  useApplication,
+  useUpdateApplication,
+  useDeleteApplication,
   useUpdateWebhook,
-} from "@/lib/hooks/use-services";
+} from "@/lib/hooks/use-applications";
 import { useForm } from "@tanstack/react-form";
 import { z } from "zod";
 import { Button } from "@/components/ui/button";
@@ -26,33 +26,33 @@ import { Separator } from "@/components/ui/separator";
 import { useState, useCallback } from "react";
 
 export const Route = createFileRoute(
-  "/_app/projects/$projectId/services/$serviceId/settings",
+  "/_app/projects/$projectId/applications/$applicationId/settings",
 )({
-  component: ServiceSettingsPage,
+  component: ApplicationSettingsPage,
 });
 
-function ServiceSettingsPage() {
-  const { projectId, serviceId } = Route.useParams();
+function ApplicationSettingsPage() {
+  const { projectId, applicationId } = Route.useParams();
   const navigate = useNavigate();
-  const { data: service } = useService(projectId, serviceId);
-  const updateService = useUpdateService(projectId, serviceId);
-  const updateWebhook = useUpdateWebhook(projectId, serviceId);
-  const deleteService = useDeleteService(projectId);
+  const { data: application } = useApplication(projectId, applicationId);
+  const updateApplication = useUpdateApplication(projectId, applicationId);
+  const updateWebhook = useUpdateWebhook(projectId, applicationId);
+  const deleteApplication = useDeleteApplication(projectId);
   const [error, setError] = useState("");
   const [webhookError, setWebhookError] = useState("");
   const [webhookSuccess, setWebhookSuccess] = useState("");
 
   const form = useForm({
     defaultValues: {
-      name: service?.name ?? "",
-      source_repo: service?.source_repo ?? "",
-      source_image: service?.source_image ?? "",
-      dockerfile_path: service?.dockerfile_path ?? "",
+      name: application?.name ?? "",
+      source_repo: application?.source_repo ?? "",
+      source_image: application?.source_image ?? "",
+      dockerfile_path: application?.dockerfile_path ?? "",
     },
     onSubmit: async ({ value }) => {
       setError("");
       try {
-        await updateService.mutateAsync({
+        await updateApplication.mutateAsync({
           name: value.name || undefined,
           source_repo: value.source_repo || undefined,
           source_image: value.source_image || undefined,
@@ -66,8 +66,8 @@ function ServiceSettingsPage() {
 
   const webhookForm = useForm({
     defaultValues: {
-      webhook_secret: service?.webhook_secret ?? "",
-      auto_deploy_branch: service?.auto_deploy_branch ?? "main",
+      webhook_secret: application?.webhook_secret ?? "",
+      auto_deploy_branch: application?.auto_deploy_branch ?? "main",
     },
     onSubmit: async ({ value }) => {
       setWebhookError("");
@@ -91,13 +91,13 @@ function ServiceSettingsPage() {
     webhookForm.setFieldValue("webhook_secret", secret);
   }, [webhookForm]);
 
-  if (!service) return null;
+  if (!application) return null;
 
   return (
     <div className="space-y-6">
       <Card>
         <CardHeader>
-          <CardTitle>Service Settings</CardTitle>
+          <CardTitle>Application Settings</CardTitle>
         </CardHeader>
         <CardContent>
           <form
@@ -118,7 +118,7 @@ function ServiceSettingsPage() {
               validators={{ onChange: z.string().min(1, "Name is required") }}
               children={(field) => (
                 <div className="space-y-2">
-                  <Label>Service Name</Label>
+                  <Label>Application Name</Label>
                   <Input
                     value={field.state.value}
                     onBlur={field.handleBlur}
@@ -127,7 +127,7 @@ function ServiceSettingsPage() {
                 </div>
               )}
             />
-            {service.type === "image" && (
+            {application.type === "image" && (
               <form.Field
                 name="source_image"
                 children={(field) => (
@@ -142,7 +142,7 @@ function ServiceSettingsPage() {
                 )}
               />
             )}
-            {service.type === "git" && (
+            {application.type === "git" && (
               <>
                 <form.Field
                   name="source_repo"
@@ -157,7 +157,7 @@ function ServiceSettingsPage() {
                     </div>
                   )}
                 />
-                {(service.build_type_override ?? service.build_type) ===
+                {(application.build_type_override ?? application.build_type) ===
                   "dockerfile" && (
                   <form.Field
                     name="dockerfile_path"
@@ -187,7 +187,7 @@ function ServiceSettingsPage() {
         </CardContent>
       </Card>
 
-      {service.type === "git" && (
+      {application.type === "git" && (
         <>
           <Separator />
 
@@ -284,23 +284,23 @@ function ServiceSettingsPage() {
         <CardContent>
           <AlertDialog>
             <AlertDialogTrigger render={<Button variant="destructive" />}>
-              Delete Service
+              Delete Application
             </AlertDialogTrigger>
             <AlertDialogContent>
               <AlertDialogHeader>
-                <AlertDialogTitle>Delete {service.name}?</AlertDialogTitle>
+                <AlertDialogTitle>Delete {application.name}?</AlertDialogTitle>
                 <AlertDialogDescription>
                   This will stop the running container and permanently delete
-                  this service. This action cannot be undone.
+                  this application. This action cannot be undone.
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
                 <AlertDialogCancel>Cancel</AlertDialogCancel>
                 <AlertDialogAction
                   onClick={async () => {
-                    await deleteService.mutateAsync(serviceId);
+                    await deleteApplication.mutateAsync(applicationId);
                     navigate({
-                      to: "/projects/$projectId/services",
+                      to: "/projects/$projectId",
                       params: { projectId },
                     });
                   }}

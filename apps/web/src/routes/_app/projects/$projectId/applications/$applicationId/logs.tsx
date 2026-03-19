@@ -4,13 +4,13 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 
 export const Route = createFileRoute(
-  "/_app/projects/$projectId/services/$serviceId/logs",
+  "/_app/projects/$projectId/applications/$applicationId/logs",
 )({
   component: LogsPage,
 });
 
 function LogsPage() {
-  const { projectId, serviceId } = Route.useParams();
+  const { projectId, applicationId } = Route.useParams();
   const [logs, setLogs] = useState<string[]>([]);
   const [connected, setConnected] = useState(false);
   const [follow, setFollow] = useState(true);
@@ -18,7 +18,7 @@ function LogsPage() {
   const sourceRef = useRef<EventSource | null>(null);
 
   useEffect(() => {
-    const url = `/api/projects/${projectId}/services/${serviceId}/logs?follow=true`;
+    const url = `/api/projects/${projectId}/applications/${applicationId}/logs?follow=true`;
     const source = new EventSource(url);
     sourceRef.current = source;
 
@@ -34,7 +34,7 @@ function LogsPage() {
       source.close();
       sourceRef.current = null;
     };
-  }, [projectId, serviceId]);
+  }, [projectId, applicationId]);
 
   useEffect(() => {
     if (follow && scrollRef.current) {

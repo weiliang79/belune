@@ -12,16 +12,16 @@ import { Badge } from "@/components/ui/badge";
 import { useState } from "react";
 
 export const Route = createFileRoute(
-  "/_app/projects/$projectId/services/$serviceId/domains",
+  "/_app/projects/$projectId/applications/$applicationId/domains",
 )({
   component: DomainsPage,
 });
 
 function DomainsPage() {
-  const { projectId, serviceId } = Route.useParams();
-  const { data: domains, isLoading } = useDomains(projectId, serviceId);
-  const addDomain = useAddDomain(projectId, serviceId);
-  const removeDomain = useRemoveDomain(projectId, serviceId);
+  const { projectId, applicationId } = Route.useParams();
+  const { data: domains, isLoading } = useDomains(projectId, applicationId);
+  const addDomain = useAddDomain(projectId, applicationId);
+  const removeDomain = useRemoveDomain(projectId, applicationId);
   const [hostname, setHostname] = useState("");
   const [sslEnabled, setSslEnabled] = useState(true);
   const [error, setError] = useState("");

@@ -21,8 +21,8 @@ import (
 )
 
 type deployPayload struct {
-	ServiceID    string `json:"service_id"`
-	DeploymentID string `json:"deployment_id"`
+	ApplicationID string `json:"application_id"`
+	DeploymentID  string `json:"deployment_id"`
 }
 
 func (h *TaskHandler) HandleDeployTask(ctx context.Context, t *asynq.Task) error {
@@ -31,9 +31,9 @@ func (h *TaskHandler) HandleDeployTask(ctx context.Context, t *asynq.Task) error
 		return fmt.Errorf("unmarshal deploy payload: %w", err)
 	}
 
-	slog.Info("handling deploy task", "service_id", payload.ServiceID, "deployment_id", payload.DeploymentID)
+	slog.Info("handling deploy task", "application_id", payload.ApplicationID, "deployment_id", payload.DeploymentID)
 
-	serviceID := parseUUID(payload.ServiceID)
+	applicationID := parseUUID(payload.ApplicationID)
 	deploymentID := parseUUID(payload.DeploymentID)
 
 	// Update deployment status to deploying
@@ -42,26 +42,26 @@ func (h *TaskHandler) HandleDeployTask(ctx context.Context, t *asynq.Task) error
 		Status: "deploying",
 	})
 
-	// Fetch service details with project slug
-	svcRow, err := h.Queries.GetServiceWithProjectSlug(ctx, serviceID)
+	// Fetch application details with project slug
+	appRow, err := h.Queries.GetApplicationWithProjectSlug(ctx, applicationID)
 	if err != nil {
-		h.failDeployment(ctx, deploymentID, fmt.Sprintf("fetch service: %v", err))
-		return fmt.Errorf("get service: %w", err)
+		h.failDeployment(ctx, deploymentID, fmt.Sprintf("fetch application: %v", err))
+		return fmt.Errorf("get application: %w", err)
 	}
-	// Map row to a usable service reference
-	svc := generated.Service{
-		ID: svcRow.ID, ProjectID: svcRow.ProjectID, Name: svcRow.Name,
-		Type: svcRow.Type, SourceRepo: svcRow.SourceRepo, SourceImage: svcRow.SourceImage,
-		DockerfilePath: svcRow.DockerfilePath, BuildType: svcRow.BuildType,
-		BuilderImage: svcRow.BuilderImage, CustomBuildpacks: svcRow.CustomBuildpacks,
-		Status: svcRow.Status,
+	// Map row to a usable application reference
+	app := generated.Application{
+		ID: appRow.ID, ProjectID: appRow.ProjectID, Name: appRow.Name,
+		Type: appRow.Type, SourceRepo: appRow.SourceRepo, SourceImage: appRow.SourceImage,
+		DockerfilePath: appRow.DockerfilePath, BuildType: appRow.BuildType,
+		BuilderImage: appRow.BuilderImage, CustomBuildpacks: appRow.CustomBuildpacks,
+		Status: appRow.Status,
 	}
 
-	containerName := naming.ContainerName(svcRow.ProjectSlug, svcRow.Slug, payload.ServiceID)
+	containerName := naming.ContainerName(appRow.ProjectSlug, appRow.Slug, payload.ApplicationID)
 
 	// Stop and remove existing container if any (try all naming formats)
-	intermediateContainerName := naming.IntermediateContainerName(svcRow.ProjectSlug, payload.ServiceID)
-	oldContainerName := naming.OldContainerName(payload.ServiceID)
+	intermediateContainerName := naming.IntermediateContainerName(appRow.ProjectSlug, payload.ApplicationID)
+	oldContainerName := naming.OldContainerName(payload.ApplicationID)
 	_ = h.Runtime.StopContainer(ctx, oldContainerName)
 	_ = h.Runtime.RemoveContainer(ctx, oldContainerName)
 	_ = h.Runtime.StopContainer(ctx, intermediateContainerName)
@@ -73,7 +73,7 @@ func (h *TaskHandler) HandleDeployTask(ctx context.Context, t *asynq.Task) error
 	_ = h.Runtime.CreateNetwork(ctx, "paas-net")
 
 	// Fetch and decrypt env vars (needed for both build-time and runtime)
-	envVars, err := h.Queries.ListEnvVarsByService(ctx, serviceID)
+	envVars, err := h.Queries.ListEnvVarsByApplication(ctx, applicationID)
 	if err != nil {
 		slog.Warn("failed to fetch env vars, continuing without them", "error", err)
 	}
@@ -91,9 +91,9 @@ func (h *TaskHandler) HandleDeployTask(ctx context.Context, t *asynq.Task) error
 	var imageName string
 	var commitSHA string
 
-	switch svc.Type {
+	switch app.Type {
 	case "image":
-		imageName = svc.SourceImage.String
+		imageName = app.SourceImage.String
 		slog.Info("pulling image", "image", imageName)
 		if err := h.Runtime.PullImage(ctx, imageName); err != nil {
 			h.failDeployment(ctx, deploymentID, fmt.Sprintf("pull image: %v", err))
@@ -101,7 +101,7 @@ func (h *TaskHandler) HandleDeployTask(ctx context.Context, t *asynq.Task) error
 		}
 
 	case "git":
-		imageName = naming.ImageTag(svcRow.ProjectSlug, svcRow.Slug, payload.ServiceID, payload.DeploymentID)
+		imageName = naming.ImageTag(appRow.ProjectSlug, appRow.Slug, payload.ApplicationID, payload.DeploymentID)
 
 		// Clone the repository
 		tmpDir, err := os.MkdirTemp("", "paas-build-*")
@@ -111,8 +111,8 @@ func (h *TaskHandler) HandleDeployTask(ctx context.Context, t *asynq.Task) error
 		}
 		defer os.RemoveAll(tmpDir)
 
-		slog.Info("cloning repository", "repo", svc.SourceRepo.String, "dest", tmpDir)
-		cloneResult, err := git.Clone(ctx, svc.SourceRepo.String, tmpDir, "")
+		slog.Info("cloning repository", "repo", app.SourceRepo.String, "dest", tmpDir)
+		cloneResult, err := git.Clone(ctx, app.SourceRepo.String, tmpDir, "")
 		if err != nil {
 			h.failDeployment(ctx, deploymentID, fmt.Sprintf("git clone: %v", err))
 			return fmt.Errorf("git clone: %w", err)
@@ -120,10 +120,10 @@ func (h *TaskHandler) HandleDeployTask(ctx context.Context, t *asynq.Task) error
 		commitSHA = cloneResult.CommitSHA
 		slog.Info("cloned repository", "commit", commitSHA)
 
-		// Parse custom buildpacks from service config
+		// Parse custom buildpacks from application config
 		var customBuildpacks []string
-		if len(svc.CustomBuildpacks) > 0 {
-			_ = json.Unmarshal(svc.CustomBuildpacks, &customBuildpacks)
+		if len(app.CustomBuildpacks) > 0 {
+			_ = json.Unmarshal(app.CustomBuildpacks, &customBuildpacks)
 		}
 
 		// Set up build log streaming via Redis pub/sub
@@ -133,11 +133,11 @@ func (h *TaskHandler) HandleDeployTask(ctx context.Context, t *asynq.Task) error
 		buildOpts := build.BuildOptions{
 			SourceDir:      tmpDir,
 			ImageTag:       imageName,
-			DockerfilePath: svc.DockerfilePath.String,
-			BuilderImage:   svc.BuilderImage.String,
+			DockerfilePath: app.DockerfilePath.String,
+			BuilderImage:   app.BuilderImage.String,
 			Buildpacks:     customBuildpacks,
 			Env:            env,
-			BuildType:      svc.BuildType,
+			BuildType:      app.BuildType,
 			LogWriter:      logWriter,
 		}
 
@@ -168,8 +168,8 @@ func (h *TaskHandler) HandleDeployTask(ctx context.Context, t *asynq.Task) error
 		slog.Info("build completed", "image", imageName)
 
 	default:
-		h.failDeployment(ctx, deploymentID, fmt.Sprintf("unknown service type: %s", svc.Type))
-		return fmt.Errorf("unknown service type: %s", svc.Type)
+		h.failDeployment(ctx, deploymentID, fmt.Sprintf("unknown application type: %s", app.Type))
+		return fmt.Errorf("unknown application type: %s", app.Type)
 	}
 
 	// Create and start container
@@ -190,8 +190,8 @@ func (h *TaskHandler) HandleDeployTask(ctx context.Context, t *asynq.Task) error
 		return fmt.Errorf("start container: %w", err)
 	}
 
-	// Add proxy route if the service has domains
-	domains, err := h.Queries.ListDomainsByService(ctx, serviceID)
+	// Add proxy route if the application has domains
+	domains, err := h.Queries.ListDomainsByApplication(ctx, applicationID)
 	if err == nil {
 		for _, domain := range domains {
 			h.Proxy.AddRoute(ctx, proxy.RouteConfig{
@@ -208,14 +208,14 @@ func (h *TaskHandler) HandleDeployTask(ctx context.Context, t *asynq.Task) error
 		Status: "success",
 	})
 
-	// Update service status to running
-	h.Queries.UpdateServiceStatus(ctx, generated.UpdateServiceStatusParams{
-		ID:     serviceID,
+	// Update application status to running
+	h.Queries.UpdateApplicationStatus(ctx, generated.UpdateApplicationStatusParams{
+		ID:     applicationID,
 		Status: "running",
 	})
 
 	slog.Info("deploy completed",
-		"service_id", payload.ServiceID,
+		"application_id", payload.ApplicationID,
 		"deployment_id", payload.DeploymentID,
 		"container", containerID,
 		"commit", commitSHA,

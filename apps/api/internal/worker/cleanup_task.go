@@ -14,8 +14,8 @@ import (
 )
 
 type cleanupPayload struct {
-	ServiceID   string `json:"service_id,omitempty"`
-	RetainCount int    `json:"retain_count,omitempty"`
+	ApplicationID string `json:"application_id,omitempty"`
+	RetainCount   int    `json:"retain_count,omitempty"`
 }
 
 func (h *TaskHandler) HandleCleanupTask(ctx context.Context, t *asynq.Task) error {
@@ -28,46 +28,46 @@ func (h *TaskHandler) HandleCleanupTask(ctx context.Context, t *asynq.Task) erro
 		payload.RetainCount = 3
 	}
 
-	slog.Info("handling cleanup task", "retain_count", payload.RetainCount, "service_id", payload.ServiceID)
+	slog.Info("handling cleanup task", "retain_count", payload.RetainCount, "application_id", payload.ApplicationID)
 
-	var services []generated.Service
+	var applications []generated.Application
 	var err error
 
-	if payload.ServiceID != "" {
-		svc, err := h.Queries.GetService(ctx, parseUUID(payload.ServiceID))
+	if payload.ApplicationID != "" {
+		app, err := h.Queries.GetApplication(ctx, parseUUID(payload.ApplicationID))
 		if err != nil {
-			return fmt.Errorf("get service: %w", err)
+			return fmt.Errorf("get application: %w", err)
 		}
-		services = []generated.Service{svc}
+		applications = []generated.Application{app}
 	} else {
-		services, err = h.Queries.ListAllServices(ctx)
+		applications, err = h.Queries.ListAllApplications(ctx)
 		if err != nil {
-			return fmt.Errorf("list services: %w", err)
+			return fmt.Errorf("list applications: %w", err)
 		}
 	}
 
 	totalRemoved := 0
 
-	for _, svc := range services {
-		serviceIDStr := formatUUID(svc.ID)
-		if serviceIDStr == "" {
+	for _, app := range applications {
+		applicationIDStr := formatUUID(app.ID)
+		if applicationIDStr == "" {
 			continue
 		}
 
 		// Get project slug for image naming
-		project, err := h.Queries.GetProject(ctx, svc.ProjectID)
+		project, err := h.Queries.GetProject(ctx, app.ProjectID)
 		if err != nil {
-			slog.Warn("failed to get project for service", "service_id", serviceIDStr, "error", err)
+			slog.Warn("failed to get project for application", "application_id", applicationIDStr, "error", err)
 			continue
 		}
 
 		// Get deployments beyond the retain count
 		oldDeployments, err := h.Queries.ListOldDeployments(ctx, generated.ListOldDeploymentsParams{
-			ServiceID: svc.ID,
-			Offset:    int32(payload.RetainCount),
+			ApplicationID: app.ID,
+			Offset:        int32(payload.RetainCount),
 		})
 		if err != nil {
-			slog.Warn("failed to list old deployments", "service_id", serviceIDStr, "error", err)
+			slog.Warn("failed to list old deployments", "application_id", applicationIDStr, "error", err)
 			continue
 		}
 
@@ -75,9 +75,9 @@ func (h *TaskHandler) HandleCleanupTask(ctx context.Context, t *asynq.Task) erro
 			deploymentIDStr := formatUUID(dep.ID)
 
 			// Try to remove the build image (try both old and new naming)
-			if svc.Type == "git" && deploymentIDStr != "" {
-				imageName := naming.ImageTag(project.Slug, svc.Slug, serviceIDStr, deploymentIDStr)
-				oldImageName := fmt.Sprintf("paas-%s:%s", serviceIDStr[:8], deploymentIDStr[:8])
+			if app.Type == "git" && deploymentIDStr != "" {
+				imageName := naming.ImageTag(project.Slug, app.Slug, applicationIDStr, deploymentIDStr)
+				oldImageName := fmt.Sprintf("paas-%s:%s", applicationIDStr[:8], deploymentIDStr[:8])
 				if err := h.Runtime.RemoveImage(ctx, imageName); err != nil {
 					slog.Debug("could not remove image", "image", imageName, "error", err)
 				} else {
@@ -106,7 +106,7 @@ func (h *TaskHandler) HandleCleanupTask(ctx context.Context, t *asynq.Task) erro
 	}
 
 	slog.Info("cleanup completed",
-		"services_processed", len(services),
+		"applications_processed", len(applications),
 		"deployments_removed", totalRemoved,
 	)
 	return nil

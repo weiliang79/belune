@@ -7,31 +7,31 @@ export const queryKeys = {
     all: ["projects"] as const,
     detail: (id: string) => ["projects", id] as const,
   },
-  services: {
-    all: (projectId: string) => ["projects", projectId, "services"] as const,
-    detail: (projectId: string, serviceId: string) =>
-      ["projects", projectId, "services", serviceId] as const,
+  applications: {
+    all: (projectId: string) => ["projects", projectId, "applications"] as const,
+    detail: (projectId: string, applicationId: string) =>
+      ["projects", projectId, "applications", applicationId] as const,
   },
   deployments: {
-    all: (projectId: string, serviceId: string) =>
-      ["projects", projectId, "services", serviceId, "deployments"] as const,
-    detail: (projectId: string, serviceId: string, deploymentId: string) =>
+    all: (projectId: string, applicationId: string) =>
+      ["projects", projectId, "applications", applicationId, "deployments"] as const,
+    detail: (projectId: string, applicationId: string, deploymentId: string) =>
       [
         "projects",
         projectId,
-        "services",
-        serviceId,
+        "applications",
+        applicationId,
         "deployments",
         deploymentId,
       ] as const,
   },
   domains: {
-    all: (projectId: string, serviceId: string) =>
-      ["projects", projectId, "services", serviceId, "domains"] as const,
+    all: (projectId: string, applicationId: string) =>
+      ["projects", projectId, "applications", applicationId, "domains"] as const,
   },
   envvars: {
-    all: (projectId: string, serviceId: string) =>
-      ["projects", projectId, "services", serviceId, "env"] as const,
+    all: (projectId: string, applicationId: string) =>
+      ["projects", projectId, "applications", applicationId, "env"] as const,
   },
   metrics: ["metrics"] as const,
   databases: {

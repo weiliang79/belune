@@ -35,7 +35,7 @@ function DashboardPage() {
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-muted-foreground text-sm font-medium">
-              Services
+              Applications
             </CardTitle>
           </CardHeader>
           <CardContent>

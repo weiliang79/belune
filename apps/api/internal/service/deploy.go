@@ -38,24 +38,24 @@ func NewDeployService(
 
 // DeployTaskPayload is the JSON payload sent to the deploy worker.
 type DeployTaskPayload struct {
-	ServiceID    string `json:"service_id"`
-	DeploymentID string `json:"deployment_id"`
+	ApplicationID string `json:"application_id"`
+	DeploymentID  string `json:"deployment_id"`
 }
 
 // Deploy creates a deployment record and enqueues the deploy task.
-func (s *DeployService) Deploy(ctx context.Context, serviceID pgtype.UUID) (generated.Deployment, error) {
+func (s *DeployService) Deploy(ctx context.Context, applicationID pgtype.UUID) (generated.Deployment, error) {
 	deployment, err := s.queries.CreateDeployment(ctx, generated.CreateDeploymentParams{
-		ServiceID:   serviceID,
-		Status:      "pending",
-		TriggeredBy: "manual",
+		ApplicationID: applicationID,
+		Status:        "pending",
+		TriggeredBy:   "manual",
 	})
 	if err != nil {
 		return generated.Deployment{}, fmt.Errorf("create deployment: %w", err)
 	}
 
 	payload, err := json.Marshal(DeployTaskPayload{
-		ServiceID:    uuidToString(serviceID),
-		DeploymentID: uuidToString(deployment.ID),
+		ApplicationID: uuidToString(applicationID),
+		DeploymentID:  uuidToString(deployment.ID),
 	})
 	if err != nil {
 		return generated.Deployment{}, fmt.Errorf("marshal payload: %w", err)
@@ -67,40 +67,40 @@ func (s *DeployService) Deploy(ctx context.Context, serviceID pgtype.UUID) (gene
 		return generated.Deployment{}, fmt.Errorf("enqueue deploy task: %w", err)
 	}
 
-	slog.Info("deploy task enqueued", "service_id", uuidToString(serviceID), "deployment_id", uuidToString(deployment.ID))
+	slog.Info("deploy task enqueued", "application_id", uuidToString(applicationID), "deployment_id", uuidToString(deployment.ID))
 	return deployment, nil
 }
 
-// Stop stops a running service container.
-func (s *DeployService) Stop(ctx context.Context, serviceID pgtype.UUID) error {
-	row, err := s.queries.GetServiceWithProjectSlug(ctx, serviceID)
+// Stop stops a running application container.
+func (s *DeployService) Stop(ctx context.Context, applicationID pgtype.UUID) error {
+	row, err := s.queries.GetApplicationWithProjectSlug(ctx, applicationID)
 	if err != nil {
-		return fmt.Errorf("get service: %w", err)
+		return fmt.Errorf("get application: %w", err)
 	}
-	serviceIDStr := uuidToString(serviceID)
-	containerName := naming.ContainerName(row.ProjectSlug, row.Slug, serviceIDStr)
+	applicationIDStr := uuidToString(applicationID)
+	containerName := naming.ContainerName(row.ProjectSlug, row.Slug, applicationIDStr)
 	if err := s.runtime.StopContainer(ctx, containerName); err != nil {
 		return fmt.Errorf("stop container: %w", err)
 	}
-	_, err = s.queries.UpdateServiceStatus(ctx, generated.UpdateServiceStatusParams{
-		ID:     serviceID,
+	_, err = s.queries.UpdateApplicationStatus(ctx, generated.UpdateApplicationStatusParams{
+		ID:     applicationID,
 		Status: "stopped",
 	})
 	return err
 }
 
-// Restart stops and re-deploys a service.
-func (s *DeployService) Restart(ctx context.Context, serviceID pgtype.UUID) (generated.Deployment, error) {
-	row, err := s.queries.GetServiceWithProjectSlug(ctx, serviceID)
+// Restart stops and re-deploys an application.
+func (s *DeployService) Restart(ctx context.Context, applicationID pgtype.UUID) (generated.Deployment, error) {
+	row, err := s.queries.GetApplicationWithProjectSlug(ctx, applicationID)
 	if err != nil {
-		return generated.Deployment{}, fmt.Errorf("get service: %w", err)
+		return generated.Deployment{}, fmt.Errorf("get application: %w", err)
 	}
-	serviceIDStr := uuidToString(serviceID)
-	containerName := naming.ContainerName(row.ProjectSlug, row.Slug, serviceIDStr)
+	applicationIDStr := uuidToString(applicationID)
+	containerName := naming.ContainerName(row.ProjectSlug, row.Slug, applicationIDStr)
 	_ = s.runtime.StopContainer(ctx, containerName)
 	_ = s.runtime.RemoveContainer(ctx, containerName)
 
-	return s.Deploy(ctx, serviceID)
+	return s.Deploy(ctx, applicationID)
 }
 
 func uuidToString(u pgtype.UUID) string {

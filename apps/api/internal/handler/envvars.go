@@ -19,14 +19,14 @@ type envVarResponse struct {
 }
 
 func (h *Handler) ListEnvVars(w http.ResponseWriter, r *http.Request) {
-	serviceID := chi.URLParam(r, "serviceId")
-	var serviceUUID pgtype.UUID
-	if err := serviceUUID.Scan(serviceID); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid service id")
+	applicationID := chi.URLParam(r, "applicationId")
+	var applicationUUID pgtype.UUID
+	if err := applicationUUID.Scan(applicationID); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid application id")
 		return
 	}
 
-	envVars, err := h.queries.ListEnvVarsByService(r.Context(), serviceUUID)
+	envVars, err := h.queries.ListEnvVarsByApplication(r.Context(), applicationUUID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to list env vars")
 		return
@@ -67,10 +67,10 @@ type envVarInput struct {
 }
 
 func (h *Handler) UpdateEnvVars(w http.ResponseWriter, r *http.Request) {
-	serviceID := chi.URLParam(r, "serviceId")
-	var serviceUUID pgtype.UUID
-	if err := serviceUUID.Scan(serviceID); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid service id")
+	applicationID := chi.URLParam(r, "applicationId")
+	var applicationUUID pgtype.UUID
+	if err := applicationUUID.Scan(applicationID); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid application id")
 		return
 	}
 
@@ -92,7 +92,7 @@ func (h *Handler) UpdateEnvVars(w http.ResponseWriter, r *http.Request) {
 		}
 
 		_, err = h.queries.UpsertEnvVar(r.Context(), generated.UpsertEnvVarParams{
-			ServiceID:      serviceUUID,
+			ApplicationID: applicationUUID,
 			Key:            v.Key,
 			ValueEncrypted: encrypted,
 			IsSecret:       v.IsSecret,

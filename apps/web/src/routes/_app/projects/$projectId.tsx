@@ -28,7 +28,7 @@ function ProjectLayout() {
 
   // Hide project chrome when viewing a service or database detail page
   const isChildDetail =
-    currentPath.includes("/services/") || currentPath.includes("/databases/");
+    currentPath.includes("/applications/") || currentPath.includes("/databases/");
 
   if (isChildDetail) {
     return <Outlet />;

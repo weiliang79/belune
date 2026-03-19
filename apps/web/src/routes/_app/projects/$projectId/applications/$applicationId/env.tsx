@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useState, useEffect } from "react";
 
 export const Route = createFileRoute(
-  "/_app/projects/$projectId/services/$serviceId/env",
+  "/_app/projects/$projectId/applications/$applicationId/env",
 )({
   component: EnvVarsPage,
 });
@@ -18,9 +18,9 @@ interface EnvRow {
 }
 
 function EnvVarsPage() {
-  const { projectId, serviceId } = Route.useParams();
-  const { data: envVars, isLoading } = useEnvVars(projectId, serviceId);
-  const upsert = useUpsertEnvVars(projectId, serviceId);
+  const { projectId, applicationId } = Route.useParams();
+  const { data: envVars, isLoading } = useEnvVars(projectId, applicationId);
+  const upsert = useUpsertEnvVars(projectId, applicationId);
   const [rows, setRows] = useState<EnvRow[]>([]);
   const [error, setError] = useState("");
 

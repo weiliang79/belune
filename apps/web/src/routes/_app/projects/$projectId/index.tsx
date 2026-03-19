@@ -19,7 +19,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { useServices, useCreateService } from "@/lib/hooks/use-services";
+import { useApplications, useCreateApplication } from "@/lib/hooks/use-applications";
 import { useDatabases, useCreateDatabase } from "@/lib/hooks/use-databases";
 import { StatusBadge } from "@/lib/components/status-badge";
 import {
@@ -59,11 +59,11 @@ const DEFAULT_USERS: Record<string, string> = {
 function ProjectOverview() {
   const { projectId } = Route.useParams();
   const navigate = useNavigate();
-  const { data: services, isLoading: servicesLoading } =
-    useServices(projectId);
+  const { data: applications, isLoading: applicationsLoading } =
+    useApplications(projectId);
   const { data: databases, isLoading: databasesLoading } =
     useDatabases(projectId);
-  const createService = useCreateService(projectId);
+  const createApplication = useCreateApplication(projectId);
   const createDb = useCreateDatabase(projectId);
 
   // App dialog state
@@ -71,7 +71,7 @@ function ProjectOverview() {
   const [appName, setAppName] = useState("");
   const [appSlug, setAppSlug] = useState("");
   const [appSlugManual, setAppSlugManual] = useState(false);
-  const [serviceType, setServiceType] = useState<"image" | "git">("image");
+  const [appType, setAppType] = useState<"image" | "git">("image");
   const [sourceImage, setSourceImage] = useState("");
   const [sourceRepo, setSourceRepo] = useState("");
   const [dockerfilePath, setDockerfilePath] = useState("Dockerfile");
@@ -96,20 +96,20 @@ function ProjectOverview() {
       setAppError("Application name is required");
       return;
     }
-    if (serviceType === "image" && !sourceImage.trim()) {
+    if (appType === "image" && !sourceImage.trim()) {
       setAppError("Image name is required");
       return;
     }
-    if (serviceType === "git" && !sourceRepo.trim()) {
+    if (appType === "git" && !sourceRepo.trim()) {
       setAppError("Repository URL is required");
       return;
     }
     try {
-      const service = await createService.mutateAsync({
+      const application = await createApplication.mutateAsync({
         name: appName.trim(),
         slug: appSlug || undefined,
-        type: serviceType,
-        ...(serviceType === "image"
+        type: appType,
+        ...(appType === "image"
           ? { source_image: sourceImage, build_type: "image" }
           : {
               source_repo: sourceRepo,
@@ -125,11 +125,11 @@ function ProjectOverview() {
       setSourceRepo("");
       setDockerfilePath("Dockerfile");
       setBuildType("dockerfile");
-      setServiceType("image");
+      setAppType("image");
       setAppError("");
       navigate({
-        to: "/projects/$projectId/services/$serviceId",
-        params: { projectId, serviceId: service.id },
+        to: "/projects/$projectId/applications/$applicationId",
+        params: { projectId, applicationId: application.id },
       });
     } catch (e) {
       setAppError(
@@ -173,13 +173,13 @@ function ProjectOverview() {
     );
   };
 
-  if (servicesLoading || databasesLoading) {
+  if (applicationsLoading || databasesLoading) {
     return <div className="text-muted-foreground">Loading resources...</div>;
   }
 
-  const hasServices = services && services.length > 0;
+  const hasApplications = applications && applications.length > 0;
   const hasDatabases = databases && databases.length > 0;
-  const isEmpty = !hasServices && !hasDatabases;
+  const isEmpty = !hasApplications && !hasDatabases;
 
   return (
     <div className="space-y-8">
@@ -257,23 +257,23 @@ function ProjectOverview() {
               <div className="flex gap-2">
                 <Button
                   type="button"
-                  variant={serviceType === "image" ? "default" : "outline"}
+                  variant={appType === "image" ? "default" : "outline"}
                   size="sm"
-                  onClick={() => setServiceType("image")}
+                  onClick={() => setAppType("image")}
                 >
                   Docker Image
                 </Button>
                 <Button
                   type="button"
-                  variant={serviceType === "git" ? "default" : "outline"}
+                  variant={appType === "git" ? "default" : "outline"}
                   size="sm"
-                  onClick={() => setServiceType("git")}
+                  onClick={() => setAppType("git")}
                 >
                   Git Repository
                 </Button>
               </div>
             </div>
-            {serviceType === "image" ? (
+            {appType === "image" ? (
               <div className="space-y-2">
                 <Label htmlFor="source-image">Docker Image</Label>
                 <Input
@@ -327,9 +327,9 @@ function ProjectOverview() {
           <DialogFooter>
             <Button
               onClick={handleCreateApp}
-              disabled={createService.isPending}
+              disabled={createApplication.isPending}
             >
-              {createService.isPending && (
+              {createApplication.isPending && (
                 <Loader2 className="mr-1 h-4 w-4 animate-spin" />
               )}
               Create Application
@@ -488,23 +488,23 @@ function ProjectOverview() {
         </Card>
       ) : (
         <div className="grid gap-3 sm:grid-cols-2">
-          {services?.map((service) => (
+          {applications?.map((application) => (
             <Link
-              key={service.id}
-              to="/projects/$projectId/services/$serviceId"
-              params={{ projectId, serviceId: service.id }}
+              key={application.id}
+              to="/projects/$projectId/applications/$applicationId"
+              params={{ projectId, applicationId: application.id }}
             >
               <Card className="hover:bg-muted/50 cursor-pointer transition-colors">
                 <CardHeader className="pb-2">
                   <div className="flex items-start justify-between">
-                    <CardTitle className="text-base">{service.name}</CardTitle>
-                    <StatusBadge status={service.status} />
+                    <CardTitle className="text-base">{application.name}</CardTitle>
+                    <StatusBadge status={application.status} />
                   </div>
                 </CardHeader>
                 <CardContent>
                   <div className="text-muted-foreground flex gap-2 text-xs">
-                    <Badge variant="outline">{service.type}</Badge>
-                    <Badge variant="outline">{service.build_type}</Badge>
+                    <Badge variant="outline">{application.type}</Badge>
+                    <Badge variant="outline">{application.build_type}</Badge>
                   </div>
                 </CardContent>
               </Card>
