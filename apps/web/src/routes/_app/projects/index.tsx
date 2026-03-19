@@ -1,11 +1,21 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useProjects } from "@/lib/hooks/use-projects";
 import { useApplications } from "@/lib/hooks/use-applications";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { buttonVariants } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { formatDate } from "@/lib/utils/format";
 import { AppBreadcrumb } from "@/lib/components/app-breadcrumb";
+import { FolderOpenIcon } from "lucide-react";
+import { useDatabases } from "@/lib/hooks/use-databases";
+import { cn } from "@/lib/utils";
+import { Separator } from "@/components/ui/separator";
 
 export const Route = createFileRoute("/_app/projects/")({
   component: ProjectsPage,
@@ -13,12 +23,24 @@ export const Route = createFileRoute("/_app/projects/")({
 
 function ProjectApplicationCount({ projectId }: { projectId: string }) {
   const { data: applications } = useApplications(projectId);
-  if (!applications) return null;
-  const running = applications.filter((s) => s.status === "running").length;
+  const { data: databases } = useDatabases(projectId);
+  if (!applications || !databases) return null;
+  const total = applications.length + databases.length;
+  const running =
+    applications.filter((s) => s.status === "running").length +
+    databases.filter((s) => s.status === "running").length;
+
+  function getStatusColor() {
+    if (total === 0) return "bg-gray-500";
+    if (running === total) return "bg-green-500";
+    if (running === 0) return "bg-red-500";
+    return "bg-yellow-500";
+  }
   return (
-    <p className="text-muted-foreground text-xs">
-      {running} / {applications.length} applications running
-    </p>
+    <Badge variant="outline">
+      <span className={cn("size-2 rounded-full", getStatusColor())} />
+      {running} / {applications.length + databases.length} Apps
+    </Badge>
   );
 }
 
@@ -44,6 +66,8 @@ function ProjectsPage() {
         </Link>
       </div>
 
+      <Separator />
+
       {!projects || projects.length === 0 ? (
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-12">
@@ -64,12 +88,21 @@ function ProjectsPage() {
               <Card className="hover:bg-muted/50 cursor-pointer transition-colors">
                 <CardHeader className="pb-2">
                   <div className="flex items-start justify-between">
-                    <CardTitle className="text-base">{project.name}</CardTitle>
-                    <Badge variant="secondary">{project.slug}</Badge>
+                    <div className="flex items-start gap-2">
+                      <FolderOpenIcon className="text-muted-foreground size-4" />
+                      <div className="flex flex-col">
+                        <CardTitle className="text-base leading-none">
+                          {project.name}
+                        </CardTitle>
+                        <CardDescription className="text-sm">
+                          {project.slug}
+                        </CardDescription>
+                      </div>
+                    </div>
+                    <ProjectApplicationCount projectId={project.id} />
                   </div>
                 </CardHeader>
                 <CardContent>
-                  <ProjectApplicationCount projectId={project.id} />
                   <p className="text-muted-foreground text-xs">
                     Created {formatDate(project.created_at)}
                   </p>
