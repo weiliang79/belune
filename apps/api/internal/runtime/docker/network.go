@@ -4,12 +4,12 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/docker/docker/api/types"
+	networktypes "github.com/docker/docker/api/types/network"
 )
 
 func (c *Client) CreateNetwork(ctx context.Context, name string) error {
 	// Check if network already exists
-	networks, err := c.cli.NetworkList(ctx, types.NetworkListOptions{})
+	networks, err := c.cli.NetworkList(ctx, networktypes.ListOptions{})
 	if err != nil {
 		return fmt.Errorf("list networks: %w", err)
 	}
@@ -19,7 +19,7 @@ func (c *Client) CreateNetwork(ctx context.Context, name string) error {
 		}
 	}
 
-	_, err = c.cli.NetworkCreate(ctx, name, types.NetworkCreate{
+	_, err = c.cli.NetworkCreate(ctx, name, networktypes.CreateOptions{
 		Driver: "bridge",
 		Labels: map[string]string{
 			labelManagedBy: labelValue,

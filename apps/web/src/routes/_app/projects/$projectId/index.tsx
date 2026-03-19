@@ -30,8 +30,10 @@ import {
   useCreateApplication,
 } from "@/lib/hooks/use-applications";
 import { useDatabases, useCreateDatabase } from "@/lib/hooks/use-databases";
+import { useFeatures } from "@/lib/hooks/use-features";
 import { StatusBadge } from "@/lib/components/status-badge";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   Plus,
   Database as DatabaseIcon,
@@ -40,6 +42,7 @@ import {
   ChevronDown,
   ChevronUp,
   AppWindowIcon,
+  TriangleAlert,
 } from "lucide-react";
 
 export const Route = createFileRoute("/_app/projects/$projectId/")({
@@ -76,6 +79,7 @@ function ProjectOverview() {
     useDatabases(projectId);
   const createApplication = useCreateApplication(projectId);
   const createDb = useCreateDatabase(projectId);
+  const { data: features } = useFeatures();
 
   // App dialog state
   const [appDialogOpen, setAppDialogOpen] = useState(false);
@@ -320,6 +324,16 @@ function ProjectOverview() {
                     </ToggleGroupItem>
                     <ToggleGroupItem value="railpack">Railpack</ToggleGroupItem>
                   </ToggleGroup>
+                  {buildType === "railpack" &&
+                    features?.buildkit_available === false && (
+                      <Alert variant="warning">
+                        <TriangleAlert />
+                        <AlertTitle>Warning</AlertTitle>
+                        <AlertDescription>
+                          BuildKit is not reachable. Railpack builds will fail.
+                        </AlertDescription>
+                      </Alert>
+                    )}
                 </div>
                 {buildType === "dockerfile" && (
                   <div className="space-y-2">
@@ -538,7 +552,9 @@ function ProjectOverview() {
                 </CardHeader>
                 <CardContent>
                   <div className="text-muted-foreground flex gap-2 text-xs">
-                    <Badge variant="outline" className="capitalize">{application.type}</Badge>
+                    <Badge variant="outline" className="capitalize">
+                      {application.type}
+                    </Badge>
                     {application.type === "image" ? (
                       <Badge variant="outline">
                         {application.source_image}

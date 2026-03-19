@@ -7,7 +7,7 @@ import (
 )
 
 // Detect returns the best builder for the given source directory.
-// Priority: Dockerfile → CNB Buildpacks → Nixpacks
+// Priority: Dockerfile → CNB Buildpacks → Railpack
 func Detect(ctx context.Context, sourceDir string, builders []Builder) Builder {
 	// Check for Dockerfile first
 	dockerfilePath := filepath.Join(sourceDir, "Dockerfile")

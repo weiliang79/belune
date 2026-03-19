@@ -36,6 +36,7 @@ export const queryKeys = {
   users: {
     all: ["users"] as const,
   },
+  features: ["features"] as const,
   metrics: ["metrics"] as const,
   databases: {
     all: (projectId: string) =>

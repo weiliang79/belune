@@ -12,10 +12,11 @@ import (
 
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/filters"
+	imagetypes "github.com/docker/docker/api/types/image"
 )
 
 func (c *Client) PullImage(ctx context.Context, image string) error {
-	reader, err := c.cli.ImagePull(ctx, image, types.ImagePullOptions{})
+	reader, err := c.cli.ImagePull(ctx, image, imagetypes.PullOptions{})
 	if err != nil {
 		return fmt.Errorf("pull image %s: %w", image, err)
 	}
@@ -57,7 +58,7 @@ func (c *Client) BuildImage(ctx context.Context, contextDir, dockerfile, tag str
 }
 
 func (c *Client) RemoveImage(ctx context.Context, img string) error {
-	_, err := c.cli.ImageRemove(ctx, img, types.ImageRemoveOptions{PruneChildren: true})
+	_, err := c.cli.ImageRemove(ctx, img, imagetypes.RemoveOptions{PruneChildren: true})
 	if err != nil {
 		return fmt.Errorf("remove image %s: %w", img, err)
 	}

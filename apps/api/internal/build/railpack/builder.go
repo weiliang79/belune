@@ -5,9 +5,12 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
+	"net/url"
 	"os"
 	"os/exec"
 	"strings"
+	"time"
 
 	"github.com/ungweiliang/selfhost-paas/internal/build"
 )
@@ -35,7 +38,32 @@ func (b *Builder) CanBuild(ctx context.Context, sourceDir string) bool {
 	return true
 }
 
+// CheckBuildKit verifies that the BuildKit daemon is reachable via TCP.
+func CheckBuildKit() error {
+	host := buildkitHost()
+	u, err := url.Parse(host)
+	if err != nil {
+		return fmt.Errorf("invalid BUILDKIT_HOST %q: %w", host, err)
+	}
+
+	addr := u.Host
+	if addr == "" {
+		addr = u.Path
+	}
+
+	conn, err := net.DialTimeout(u.Scheme, addr, 3*time.Second)
+	if err != nil {
+		return fmt.Errorf("BuildKit daemon is not reachable at %s — ensure BuildKit is running (see infra/docker-compose.yml): %w", host, err)
+	}
+	conn.Close()
+	return nil
+}
+
 func (b *Builder) Build(ctx context.Context, opts build.BuildOptions) (*build.BuildResult, error) {
+	if err := CheckBuildKit(); err != nil {
+		return nil, err
+	}
+
 	args := []string{
 		"build", opts.SourceDir,
 		"--name", opts.ImageTag,

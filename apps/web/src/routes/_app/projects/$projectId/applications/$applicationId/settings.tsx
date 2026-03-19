@@ -22,8 +22,11 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Separator } from "@/components/ui/separator";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { useFeatures } from "@/lib/hooks/use-features";
+import { TriangleAlert } from "lucide-react";
 import { useState, useCallback } from "react";
 
 export const Route = createFileRoute(
@@ -39,6 +42,7 @@ function ApplicationSettingsPage() {
   const updateApplication = useUpdateApplication(projectId, applicationId);
   const updateWebhook = useUpdateWebhook(projectId, applicationId);
   const deleteApplication = useDeleteApplication(projectId);
+  const { data: features } = useFeatures();
   const [error, setError] = useState("");
   const [webhookError, setWebhookError] = useState("");
   const [webhookSuccess, setWebhookSuccess] = useState("");
@@ -158,6 +162,14 @@ function ApplicationSettingsPage() {
                         <ToggleGroupItem value="buildpacks">Buildpacks</ToggleGroupItem>
                         <ToggleGroupItem value="railpack">Railpack</ToggleGroupItem>
                       </ToggleGroup>
+                      {effectiveValue === "railpack" && features?.buildkit_available === false && (
+                        <Alert variant="destructive">
+                          <TriangleAlert />
+                          <AlertDescription>
+                            BuildKit is not reachable. Railpack builds will fail.
+                          </AlertDescription>
+                        </Alert>
+                      )}
                     </div>
                   );
                 }}

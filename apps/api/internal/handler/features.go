@@ -1,0 +1,15 @@
+package handler
+
+import (
+	"net/http"
+
+	"github.com/ungweiliang/selfhost-paas/internal/build/railpack"
+)
+
+func (h *Handler) GetFeatures(w http.ResponseWriter, r *http.Request) {
+	buildkitAvailable := railpack.CheckBuildKit() == nil
+
+	writeJSON(w, http.StatusOK, map[string]bool{
+		"buildkit_available": buildkitAvailable,
+	})
+}

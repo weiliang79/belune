@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { SettingsNav } from "@/lib/components/settings-nav";
 import { useMetrics, useTriggerCleanup } from "@/lib/hooks/use-metrics";
+import { useFeatures } from "@/lib/hooks/use-features";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_app/settings/server")({
@@ -12,6 +13,7 @@ export const Route = createFileRoute("/_app/settings/server")({
 
 function ServerSettingsPage() {
   const { data: metrics, isLoading } = useMetrics();
+  const { data: features } = useFeatures();
   const cleanup = useTriggerCleanup();
 
   const handleCleanup = () => {
@@ -49,32 +51,65 @@ function ServerSettingsPage() {
         <>
           <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
             <StatCard title="Projects" value={metrics.projects} />
-            <StatCard title="Services" value={metrics.services} />
+            <StatCard title="Applications" value={metrics.applications} />
             <StatCard title="Databases" value={metrics.databases} />
             <StatCard title="Deployments" value={metrics.deployments} />
           </div>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Containers</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-center gap-4">
-                <div className="flex items-center gap-2">
-                  <Badge variant="default">{metrics.containers.running}</Badge>
-                  <span className="text-muted-foreground text-sm">Running</span>
+          <div className="grid grid-cols-2 gap-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>Containers</CardTitle>
+              </CardHeader>
+              <CardContent className="h-full flex flex-col justify-center">
+                <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-2">
+                    <Badge variant="default">
+                      {metrics.containers.running}
+                    </Badge>
+                    <span className="text-muted-foreground text-sm">
+                      Running
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Badge variant="secondary">
+                      {metrics.containers.stopped}
+                    </Badge>
+                    <span className="text-muted-foreground text-sm">
+                      Stopped
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Badge variant="outline">{metrics.containers.total}</Badge>
+                    <span className="text-muted-foreground text-sm">Total</span>
+                  </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <Badge variant="secondary">{metrics.containers.stopped}</Badge>
-                  <span className="text-muted-foreground text-sm">Stopped</span>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Services</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium">BuildKit</p>
+                    <p className="text-muted-foreground text-sm">
+                      Required for Railpack builds.
+                    </p>
+                  </div>
+                  <Badge
+                    variant={
+                      features?.buildkit_available ? "default" : "destructive"
+                    }
+                  >
+                    {features?.buildkit_available ? "Connected" : "Unreachable"}
+                  </Badge>
                 </div>
-                <div className="flex items-center gap-2">
-                  <Badge variant="outline">{metrics.containers.total}</Badge>
-                  <span className="text-muted-foreground text-sm">Total</span>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+          </div>
 
           <Card>
             <CardHeader>

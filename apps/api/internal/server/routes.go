@@ -24,6 +24,9 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService)
 		r.Get("/api/auth/setup", h.Setup)
 		r.Post("/api/auth/setup", h.Setup)
 
+		// Feature flags / system status
+		r.Get("/api/features", h.GetFeatures)
+
 		// Webhooks (unauthenticated — verified via HMAC/token per-application)
 		r.Post("/api/webhooks/push", h.HandleWebhookPush)
 	})
