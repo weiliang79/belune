@@ -19,6 +19,12 @@ func (h *Handler) StreamLogs(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid application id")
 		return
 	}
+
+	if !h.canAccessApplication(r, applicationUUID) {
+		writeError(w, http.StatusForbidden, "access denied")
+		return
+	}
+
 	row, err := h.queries.GetApplicationWithProjectSlug(r.Context(), applicationUUID)
 	if err != nil {
 		writeError(w, http.StatusNotFound, "application not found")

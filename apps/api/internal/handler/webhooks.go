@@ -141,6 +141,11 @@ func (h *Handler) UpdateApplicationWebhook(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
+	if !h.canAccessApplication(r, applicationUUID) {
+		writeError(w, http.StatusForbidden, "access denied")
+		return
+	}
+
 	var req updateWebhookRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request body")

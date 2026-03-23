@@ -21,6 +21,11 @@ func (h *Handler) ListDomains(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if !h.canAccessApplication(r, applicationUUID) {
+		writeError(w, http.StatusForbidden, "access denied")
+		return
+	}
+
 	domains, err := h.queries.ListDomainsByApplication(r.Context(), applicationUUID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to list domains")
@@ -40,6 +45,11 @@ func (h *Handler) AddDomain(w http.ResponseWriter, r *http.Request) {
 	var applicationUUID pgtype.UUID
 	if err := applicationUUID.Scan(applicationID); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid application id")
+		return
+	}
+
+	if !h.canAccessApplication(r, applicationUUID) {
+		writeError(w, http.StatusForbidden, "access denied")
 		return
 	}
 
@@ -86,6 +96,11 @@ func (h *Handler) RemoveDomain(w http.ResponseWriter, r *http.Request) {
 	var domainUUID pgtype.UUID
 	if err := domainUUID.Scan(domainID); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid domain id")
+		return
+	}
+
+	if !h.canAccessDomain(r, domainUUID) {
+		writeError(w, http.StatusForbidden, "access denied")
 		return
 	}
 

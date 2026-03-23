@@ -63,6 +63,11 @@ func (h *Handler) CreateDatabase(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if !h.canAccessProject(r, projectUUID) {
+		writeError(w, http.StatusForbidden, "access denied")
+		return
+	}
+
 	var req createDatabaseRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request body")
@@ -207,6 +212,11 @@ func (h *Handler) ListDatabases(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if !h.canAccessProject(r, projectUUID) {
+		writeError(w, http.StatusForbidden, "access denied")
+		return
+	}
+
 	databases, err := h.queries.ListDatabasesByProject(r.Context(), projectUUID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to list databases")
@@ -221,6 +231,11 @@ func (h *Handler) GetDatabase(w http.ResponseWriter, r *http.Request) {
 	var uuid pgtype.UUID
 	if err := uuid.Scan(id); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid database id")
+		return
+	}
+
+	if !h.canAccessDatabase(r, uuid) {
+		writeError(w, http.StatusForbidden, "access denied")
 		return
 	}
 
@@ -252,6 +267,11 @@ func (h *Handler) DeleteDatabase(w http.ResponseWriter, r *http.Request) {
 	var dbUUID pgtype.UUID
 	if err := dbUUID.Scan(databaseID); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid database id")
+		return
+	}
+
+	if !h.canAccessDatabase(r, dbUUID) {
+		writeError(w, http.StatusForbidden, "access denied")
 		return
 	}
 

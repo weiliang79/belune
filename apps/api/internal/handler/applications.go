@@ -31,6 +31,11 @@ func (h *Handler) CreateApplication(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if !h.canAccessProject(r, projectUUID) {
+		writeError(w, http.StatusForbidden, "access denied")
+		return
+	}
+
 	var req createApplicationRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request body")
@@ -90,6 +95,11 @@ func (h *Handler) GetApplication(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if !h.canAccessApplication(r, uuid) {
+		writeError(w, http.StatusForbidden, "access denied")
+		return
+	}
+
 	app, err := h.queries.GetApplication(r.Context(), uuid)
 	if err != nil {
 		writeError(w, http.StatusNotFound, "application not found")
@@ -104,6 +114,11 @@ func (h *Handler) ListApplications(w http.ResponseWriter, r *http.Request) {
 	var projectUUID pgtype.UUID
 	if err := projectUUID.Scan(projectID); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid project id")
+		return
+	}
+
+	if !h.canAccessProject(r, projectUUID) {
+		writeError(w, http.StatusForbidden, "access denied")
 		return
 	}
 
@@ -126,6 +141,11 @@ func (h *Handler) DeployApplication(w http.ResponseWriter, r *http.Request) {
 	var applicationUUID pgtype.UUID
 	if err := applicationUUID.Scan(applicationID); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid application id")
+		return
+	}
+
+	if !h.canAccessApplication(r, applicationUUID) {
+		writeError(w, http.StatusForbidden, "access denied")
 		return
 	}
 
@@ -170,6 +190,11 @@ func (h *Handler) StopApplication(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if !h.canAccessApplication(r, applicationUUID) {
+		writeError(w, http.StatusForbidden, "access denied")
+		return
+	}
+
 	row, err := h.queries.GetApplicationWithProjectSlug(r.Context(), applicationUUID)
 	if err != nil {
 		writeError(w, http.StatusNotFound, "application not found")
@@ -202,6 +227,11 @@ func (h *Handler) StartApplication(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if !h.canAccessApplication(r, applicationUUID) {
+		writeError(w, http.StatusForbidden, "access denied")
+		return
+	}
+
 	row, err := h.queries.GetApplicationWithProjectSlug(r.Context(), applicationUUID)
 	if err != nil {
 		writeError(w, http.StatusNotFound, "application not found")
@@ -231,6 +261,11 @@ func (h *Handler) RestartApplication(w http.ResponseWriter, r *http.Request) {
 	var applicationUUID pgtype.UUID
 	if err := applicationUUID.Scan(applicationID); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid application id")
+		return
+	}
+
+	if !h.canAccessApplication(r, applicationUUID) {
+		writeError(w, http.StatusForbidden, "access denied")
 		return
 	}
 
@@ -280,6 +315,11 @@ func (h *Handler) UpdateApplication(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if !h.canAccessApplication(r, applicationUUID) {
+		writeError(w, http.StatusForbidden, "access denied")
+		return
+	}
+
 	// Get current application to preserve unchanged fields
 	current, err := h.queries.GetApplication(r.Context(), applicationUUID)
 	if err != nil {
@@ -325,6 +365,11 @@ func (h *Handler) DeleteApplication(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if !h.canAccessApplication(r, applicationUUID) {
+		writeError(w, http.StatusForbidden, "access denied")
+		return
+	}
+
 	// Stop and remove the container (try all naming formats for compatibility)
 	row, _ := h.queries.GetApplicationWithProjectSlug(r.Context(), applicationUUID)
 	containerName := naming.ContainerName(row.ProjectSlug, row.Slug, applicationID)
@@ -350,6 +395,11 @@ func (h *Handler) BuildApplication(w http.ResponseWriter, r *http.Request) {
 	var applicationUUID pgtype.UUID
 	if err := applicationUUID.Scan(applicationID); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid application id")
+		return
+	}
+
+	if !h.canAccessApplication(r, applicationUUID) {
+		writeError(w, http.StatusForbidden, "access denied")
 		return
 	}
 

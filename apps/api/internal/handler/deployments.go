@@ -15,6 +15,11 @@ func (h *Handler) ListDeployments(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if !h.canAccessApplication(r, applicationUUID) {
+		writeError(w, http.StatusForbidden, "access denied")
+		return
+	}
+
 	deployments, err := h.queries.ListDeploymentsByApplication(r.Context(), applicationUUID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to list deployments")
@@ -25,6 +30,18 @@ func (h *Handler) ListDeployments(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) GetDeployment(w http.ResponseWriter, r *http.Request) {
+	applicationID := chi.URLParam(r, "applicationId")
+	var applicationUUID pgtype.UUID
+	if err := applicationUUID.Scan(applicationID); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid application id")
+		return
+	}
+
+	if !h.canAccessApplication(r, applicationUUID) {
+		writeError(w, http.StatusForbidden, "access denied")
+		return
+	}
+
 	id := chi.URLParam(r, "deploymentId")
 	var uuid pgtype.UUID
 	if err := uuid.Scan(id); err != nil {

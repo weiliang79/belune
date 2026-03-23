@@ -47,6 +47,7 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		Value:    result.Token,
 		Path:     "/",
 		HttpOnly: true,
+		Secure:   h.cfg.SecureCookies,
 		SameSite: http.SameSiteLaxMode,
 		MaxAge:   int(24 * time.Hour / time.Second),
 	})
@@ -60,6 +61,7 @@ func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
 		Value:    "",
 		Path:     "/",
 		HttpOnly: true,
+		Secure:   h.cfg.SecureCookies,
 		SameSite: http.SameSiteLaxMode,
 		MaxAge:   -1,
 	})

@@ -26,6 +26,11 @@ func (h *Handler) ListEnvVars(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if !h.canAccessApplication(r, applicationUUID) {
+		writeError(w, http.StatusForbidden, "access denied")
+		return
+	}
+
 	envVars, err := h.queries.ListEnvVarsByApplication(r.Context(), applicationUUID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to list env vars")
@@ -71,6 +76,11 @@ func (h *Handler) UpdateEnvVars(w http.ResponseWriter, r *http.Request) {
 	var applicationUUID pgtype.UUID
 	if err := applicationUUID.Scan(applicationID); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid application id")
+		return
+	}
+
+	if !h.canAccessApplication(r, applicationUUID) {
+		writeError(w, http.StatusForbidden, "access denied")
 		return
 	}
 

@@ -13,6 +13,18 @@ import (
 )
 
 func (h *Handler) StreamBuildLogs(w http.ResponseWriter, r *http.Request) {
+	applicationID := chi.URLParam(r, "applicationId")
+	var applicationUUID pgtype.UUID
+	if err := applicationUUID.Scan(applicationID); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid application id")
+		return
+	}
+
+	if !h.canAccessApplication(r, applicationUUID) {
+		writeError(w, http.StatusForbidden, "access denied")
+		return
+	}
+
 	deploymentIDStr := chi.URLParam(r, "deploymentId")
 
 	var deploymentID pgtype.UUID

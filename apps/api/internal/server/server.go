@@ -50,8 +50,9 @@ func (s *Server) setupRouter() chi.Router {
 	r.Use(chiMiddleware.RealIP)
 	r.Use(middleware.Logger)
 	r.Use(chiMiddleware.Recoverer)
+	r.Use(middleware.BodyLimit(1 << 20)) // 1MB max body size
 	r.Use(cors.Handler(cors.Options{
-		AllowedOrigins:   []string{"http://localhost:5173", "http://localhost:8080"},
+		AllowedOrigins:   s.cfg.CORSOrigins,
 		AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
 		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type"},
 		AllowCredentials: true,

@@ -2,8 +2,10 @@ package server
 
 import (
 	"net/http"
+	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/httprate"
 
 	"github.com/ungweiliang/selfhost-paas/internal/handler"
 	"github.com/ungweiliang/selfhost-paas/internal/server/middleware"
@@ -19,7 +21,12 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService)
 
 	// Public routes
 	r.Group(func(r chi.Router) {
-		r.Post("/api/auth/login", h.Login)
+		// Login rate limit: 5 req/min per IP
+		r.Group(func(r chi.Router) {
+			r.Use(httprate.LimitByIP(5, time.Minute))
+			r.Post("/api/auth/login", h.Login)
+		})
+
 		r.Post("/api/auth/logout", h.Logout)
 		r.Get("/api/auth/setup", h.Setup)
 		r.Post("/api/auth/setup", h.Setup)
@@ -27,13 +34,17 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService)
 		// Feature flags / system status
 		r.Get("/api/features", h.GetFeatures)
 
-		// Webhooks (unauthenticated — verified via HMAC/token per-application)
-		r.Post("/api/webhooks/push", h.HandleWebhookPush)
+		// Webhooks: 30 req/min per IP
+		r.Group(func(r chi.Router) {
+			r.Use(httprate.LimitByIP(30, time.Minute))
+			r.Post("/api/webhooks/push", h.HandleWebhookPush)
+		})
 	})
 
 	// Protected routes
 	r.Group(func(r chi.Router) {
 		r.Use(middleware.Auth(auth))
+		r.Use(httprate.LimitByIP(100, time.Minute))
 
 		r.Get("/api/auth/me", h.Me)
 		r.Put("/api/auth/password", h.ChangeOwnPassword)
