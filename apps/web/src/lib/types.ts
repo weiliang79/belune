@@ -73,6 +73,29 @@ export interface MetricsOverview {
   };
 }
 
+export interface HostMetricPoint {
+  cpu_percent: number | null;
+  memory_used: number | null;
+  memory_total: number | null;
+  disk_used: number | null;
+  disk_total: number | null;
+  recorded_at: string;
+}
+
+export interface AppMetricPoint {
+  cpu_percent: number | null;
+  memory_usage: number | null;
+  memory_limit: number | null;
+  network_rx_bytes: number | null;
+  network_tx_bytes: number | null;
+  recorded_at: string;
+}
+
+export interface SettingEntry {
+  key: string;
+  value: string;
+}
+
 export interface Database {
   id: string;
   project_id: string;

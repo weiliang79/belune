@@ -27,6 +27,7 @@ import { Route as AppProjectsProjectIdDatabasesDatabaseIdRouteImport } from './r
 import { Route as AppProjectsProjectIdApplicationsApplicationIdRouteImport } from './routes/_app/projects/$projectId/applications/$applicationId'
 import { Route as AppProjectsProjectIdApplicationsApplicationIdIndexRouteImport } from './routes/_app/projects/$projectId/applications/$applicationId/index'
 import { Route as AppProjectsProjectIdApplicationsApplicationIdSettingsRouteImport } from './routes/_app/projects/$projectId/applications/$applicationId/settings'
+import { Route as AppProjectsProjectIdApplicationsApplicationIdMetricsRouteImport } from './routes/_app/projects/$projectId/applications/$applicationId/metrics'
 import { Route as AppProjectsProjectIdApplicationsApplicationIdLogsRouteImport } from './routes/_app/projects/$projectId/applications/$applicationId/logs'
 import { Route as AppProjectsProjectIdApplicationsApplicationIdEnvRouteImport } from './routes/_app/projects/$projectId/applications/$applicationId/env'
 import { Route as AppProjectsProjectIdApplicationsApplicationIdDomainsRouteImport } from './routes/_app/projects/$projectId/applications/$applicationId/domains'
@@ -127,6 +128,12 @@ const AppProjectsProjectIdApplicationsApplicationIdSettingsRoute =
     path: '/settings',
     getParentRoute: () => AppProjectsProjectIdApplicationsApplicationIdRoute,
   } as any)
+const AppProjectsProjectIdApplicationsApplicationIdMetricsRoute =
+  AppProjectsProjectIdApplicationsApplicationIdMetricsRouteImport.update({
+    id: '/metrics',
+    path: '/metrics',
+    getParentRoute: () => AppProjectsProjectIdApplicationsApplicationIdRoute,
+  } as any)
 const AppProjectsProjectIdApplicationsApplicationIdLogsRoute =
   AppProjectsProjectIdApplicationsApplicationIdLogsRouteImport.update({
     id: '/logs',
@@ -172,6 +179,7 @@ export interface FileRoutesByFullPath {
   '/projects/$projectId/applications/$applicationId/domains': typeof AppProjectsProjectIdApplicationsApplicationIdDomainsRoute
   '/projects/$projectId/applications/$applicationId/env': typeof AppProjectsProjectIdApplicationsApplicationIdEnvRoute
   '/projects/$projectId/applications/$applicationId/logs': typeof AppProjectsProjectIdApplicationsApplicationIdLogsRoute
+  '/projects/$projectId/applications/$applicationId/metrics': typeof AppProjectsProjectIdApplicationsApplicationIdMetricsRoute
   '/projects/$projectId/applications/$applicationId/settings': typeof AppProjectsProjectIdApplicationsApplicationIdSettingsRoute
   '/projects/$projectId/applications/$applicationId/': typeof AppProjectsProjectIdApplicationsApplicationIdIndexRoute
 }
@@ -193,6 +201,7 @@ export interface FileRoutesByTo {
   '/projects/$projectId/applications/$applicationId/domains': typeof AppProjectsProjectIdApplicationsApplicationIdDomainsRoute
   '/projects/$projectId/applications/$applicationId/env': typeof AppProjectsProjectIdApplicationsApplicationIdEnvRoute
   '/projects/$projectId/applications/$applicationId/logs': typeof AppProjectsProjectIdApplicationsApplicationIdLogsRoute
+  '/projects/$projectId/applications/$applicationId/metrics': typeof AppProjectsProjectIdApplicationsApplicationIdMetricsRoute
   '/projects/$projectId/applications/$applicationId/settings': typeof AppProjectsProjectIdApplicationsApplicationIdSettingsRoute
   '/projects/$projectId/applications/$applicationId': typeof AppProjectsProjectIdApplicationsApplicationIdIndexRoute
 }
@@ -218,6 +227,7 @@ export interface FileRoutesById {
   '/_app/projects/$projectId/applications/$applicationId/domains': typeof AppProjectsProjectIdApplicationsApplicationIdDomainsRoute
   '/_app/projects/$projectId/applications/$applicationId/env': typeof AppProjectsProjectIdApplicationsApplicationIdEnvRoute
   '/_app/projects/$projectId/applications/$applicationId/logs': typeof AppProjectsProjectIdApplicationsApplicationIdLogsRoute
+  '/_app/projects/$projectId/applications/$applicationId/metrics': typeof AppProjectsProjectIdApplicationsApplicationIdMetricsRoute
   '/_app/projects/$projectId/applications/$applicationId/settings': typeof AppProjectsProjectIdApplicationsApplicationIdSettingsRoute
   '/_app/projects/$projectId/applications/$applicationId/': typeof AppProjectsProjectIdApplicationsApplicationIdIndexRoute
 }
@@ -243,6 +253,7 @@ export interface FileRouteTypes {
     | '/projects/$projectId/applications/$applicationId/domains'
     | '/projects/$projectId/applications/$applicationId/env'
     | '/projects/$projectId/applications/$applicationId/logs'
+    | '/projects/$projectId/applications/$applicationId/metrics'
     | '/projects/$projectId/applications/$applicationId/settings'
     | '/projects/$projectId/applications/$applicationId/'
   fileRoutesByTo: FileRoutesByTo
@@ -264,6 +275,7 @@ export interface FileRouteTypes {
     | '/projects/$projectId/applications/$applicationId/domains'
     | '/projects/$projectId/applications/$applicationId/env'
     | '/projects/$projectId/applications/$applicationId/logs'
+    | '/projects/$projectId/applications/$applicationId/metrics'
     | '/projects/$projectId/applications/$applicationId/settings'
     | '/projects/$projectId/applications/$applicationId'
   id:
@@ -288,6 +300,7 @@ export interface FileRouteTypes {
     | '/_app/projects/$projectId/applications/$applicationId/domains'
     | '/_app/projects/$projectId/applications/$applicationId/env'
     | '/_app/projects/$projectId/applications/$applicationId/logs'
+    | '/_app/projects/$projectId/applications/$applicationId/metrics'
     | '/_app/projects/$projectId/applications/$applicationId/settings'
     | '/_app/projects/$projectId/applications/$applicationId/'
   fileRoutesById: FileRoutesById
@@ -427,6 +440,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppProjectsProjectIdApplicationsApplicationIdSettingsRouteImport
       parentRoute: typeof AppProjectsProjectIdApplicationsApplicationIdRoute
     }
+    '/_app/projects/$projectId/applications/$applicationId/metrics': {
+      id: '/_app/projects/$projectId/applications/$applicationId/metrics'
+      path: '/metrics'
+      fullPath: '/projects/$projectId/applications/$applicationId/metrics'
+      preLoaderRoute: typeof AppProjectsProjectIdApplicationsApplicationIdMetricsRouteImport
+      parentRoute: typeof AppProjectsProjectIdApplicationsApplicationIdRoute
+    }
     '/_app/projects/$projectId/applications/$applicationId/logs': {
       id: '/_app/projects/$projectId/applications/$applicationId/logs'
       path: '/logs'
@@ -463,6 +483,7 @@ interface AppProjectsProjectIdApplicationsApplicationIdRouteChildren {
   AppProjectsProjectIdApplicationsApplicationIdDomainsRoute: typeof AppProjectsProjectIdApplicationsApplicationIdDomainsRoute
   AppProjectsProjectIdApplicationsApplicationIdEnvRoute: typeof AppProjectsProjectIdApplicationsApplicationIdEnvRoute
   AppProjectsProjectIdApplicationsApplicationIdLogsRoute: typeof AppProjectsProjectIdApplicationsApplicationIdLogsRoute
+  AppProjectsProjectIdApplicationsApplicationIdMetricsRoute: typeof AppProjectsProjectIdApplicationsApplicationIdMetricsRoute
   AppProjectsProjectIdApplicationsApplicationIdSettingsRoute: typeof AppProjectsProjectIdApplicationsApplicationIdSettingsRoute
   AppProjectsProjectIdApplicationsApplicationIdIndexRoute: typeof AppProjectsProjectIdApplicationsApplicationIdIndexRoute
 }
@@ -477,6 +498,8 @@ const AppProjectsProjectIdApplicationsApplicationIdRouteChildren: AppProjectsPro
       AppProjectsProjectIdApplicationsApplicationIdEnvRoute,
     AppProjectsProjectIdApplicationsApplicationIdLogsRoute:
       AppProjectsProjectIdApplicationsApplicationIdLogsRoute,
+    AppProjectsProjectIdApplicationsApplicationIdMetricsRoute:
+      AppProjectsProjectIdApplicationsApplicationIdMetricsRoute,
     AppProjectsProjectIdApplicationsApplicationIdSettingsRoute:
       AppProjectsProjectIdApplicationsApplicationIdSettingsRoute,
     AppProjectsProjectIdApplicationsApplicationIdIndexRoute:

@@ -17,3 +17,23 @@ export function useTriggerCleanup() {
     onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.metrics }),
   });
 }
+
+export function useHostHistoricalMetrics(range: string) {
+  return useQuery({
+    queryKey: queryKeys.hostMetrics(range),
+    queryFn: () => metricsApi.getHostHistoricalMetrics(range),
+    refetchInterval: 60_000,
+  });
+}
+
+export function useApplicationMetrics(
+  projectId: string,
+  applicationId: string,
+  range: string,
+) {
+  return useQuery({
+    queryKey: queryKeys.appMetrics(projectId, applicationId, range),
+    queryFn: () => metricsApi.getApplicationMetrics(projectId, applicationId, range),
+    refetchInterval: 60_000,
+  });
+}

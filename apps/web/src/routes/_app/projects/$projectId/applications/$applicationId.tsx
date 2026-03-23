@@ -46,6 +46,7 @@ function ApplicationLayout() {
   const tabs = [
     { to: basePath, label: "Overview", exact: true },
     { to: `${basePath}/deployments`, label: "Deployments" },
+    { to: `${basePath}/metrics`, label: "Metrics" },
     { to: `${basePath}/logs`, label: "Logs" },
     { to: `${basePath}/env`, label: "Env Vars" },
     { to: `${basePath}/domains`, label: "Domains" },
