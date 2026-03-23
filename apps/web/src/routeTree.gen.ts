@@ -22,6 +22,7 @@ import { Route as AppProjectsNewRouteImport } from './routes/_app/projects/new'
 import { Route as AppProjectsProjectIdRouteImport } from './routes/_app/projects/$projectId'
 import { Route as AppProjectsProjectIdIndexRouteImport } from './routes/_app/projects/$projectId/index'
 import { Route as AppProjectsProjectIdSettingsRouteImport } from './routes/_app/projects/$projectId/settings'
+import { Route as AppProjectsProjectIdEnvRouteImport } from './routes/_app/projects/$projectId/env'
 import { Route as AppProjectsProjectIdDatabasesDatabaseIdRouteImport } from './routes/_app/projects/$projectId/databases/$databaseId'
 import { Route as AppProjectsProjectIdApplicationsApplicationIdRouteImport } from './routes/_app/projects/$projectId/applications/$applicationId'
 import { Route as AppProjectsProjectIdApplicationsApplicationIdIndexRouteImport } from './routes/_app/projects/$projectId/applications/$applicationId/index'
@@ -97,6 +98,11 @@ const AppProjectsProjectIdSettingsRoute =
     path: '/settings',
     getParentRoute: () => AppProjectsProjectIdRoute,
   } as any)
+const AppProjectsProjectIdEnvRoute = AppProjectsProjectIdEnvRouteImport.update({
+  id: '/env',
+  path: '/env',
+  getParentRoute: () => AppProjectsProjectIdRoute,
+} as any)
 const AppProjectsProjectIdDatabasesDatabaseIdRoute =
   AppProjectsProjectIdDatabasesDatabaseIdRouteImport.update({
     id: '/databases/$databaseId',
@@ -157,6 +163,7 @@ export interface FileRoutesByFullPath {
   '/settings/team': typeof AppSettingsTeamRoute
   '/projects/': typeof AppProjectsIndexRoute
   '/settings/': typeof AppSettingsIndexRoute
+  '/projects/$projectId/env': typeof AppProjectsProjectIdEnvRoute
   '/projects/$projectId/settings': typeof AppProjectsProjectIdSettingsRoute
   '/projects/$projectId/': typeof AppProjectsProjectIdIndexRoute
   '/projects/$projectId/applications/$applicationId': typeof AppProjectsProjectIdApplicationsApplicationIdRouteWithChildren
@@ -178,6 +185,7 @@ export interface FileRoutesByTo {
   '/settings/team': typeof AppSettingsTeamRoute
   '/projects': typeof AppProjectsIndexRoute
   '/settings': typeof AppSettingsIndexRoute
+  '/projects/$projectId/env': typeof AppProjectsProjectIdEnvRoute
   '/projects/$projectId/settings': typeof AppProjectsProjectIdSettingsRoute
   '/projects/$projectId': typeof AppProjectsProjectIdIndexRoute
   '/projects/$projectId/databases/$databaseId': typeof AppProjectsProjectIdDatabasesDatabaseIdRoute
@@ -201,6 +209,7 @@ export interface FileRoutesById {
   '/_app/settings/team': typeof AppSettingsTeamRoute
   '/_app/projects/': typeof AppProjectsIndexRoute
   '/_app/settings/': typeof AppSettingsIndexRoute
+  '/_app/projects/$projectId/env': typeof AppProjectsProjectIdEnvRoute
   '/_app/projects/$projectId/settings': typeof AppProjectsProjectIdSettingsRoute
   '/_app/projects/$projectId/': typeof AppProjectsProjectIdIndexRoute
   '/_app/projects/$projectId/applications/$applicationId': typeof AppProjectsProjectIdApplicationsApplicationIdRouteWithChildren
@@ -225,6 +234,7 @@ export interface FileRouteTypes {
     | '/settings/team'
     | '/projects/'
     | '/settings/'
+    | '/projects/$projectId/env'
     | '/projects/$projectId/settings'
     | '/projects/$projectId/'
     | '/projects/$projectId/applications/$applicationId'
@@ -246,6 +256,7 @@ export interface FileRouteTypes {
     | '/settings/team'
     | '/projects'
     | '/settings'
+    | '/projects/$projectId/env'
     | '/projects/$projectId/settings'
     | '/projects/$projectId'
     | '/projects/$projectId/databases/$databaseId'
@@ -268,6 +279,7 @@ export interface FileRouteTypes {
     | '/_app/settings/team'
     | '/_app/projects/'
     | '/_app/settings/'
+    | '/_app/projects/$projectId/env'
     | '/_app/projects/$projectId/settings'
     | '/_app/projects/$projectId/'
     | '/_app/projects/$projectId/applications/$applicationId'
@@ -380,6 +392,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppProjectsProjectIdSettingsRouteImport
       parentRoute: typeof AppProjectsProjectIdRoute
     }
+    '/_app/projects/$projectId/env': {
+      id: '/_app/projects/$projectId/env'
+      path: '/env'
+      fullPath: '/projects/$projectId/env'
+      preLoaderRoute: typeof AppProjectsProjectIdEnvRouteImport
+      parentRoute: typeof AppProjectsProjectIdRoute
+    }
     '/_app/projects/$projectId/databases/$databaseId': {
       id: '/_app/projects/$projectId/databases/$databaseId'
       path: '/databases/$databaseId'
@@ -470,6 +489,7 @@ const AppProjectsProjectIdApplicationsApplicationIdRouteWithChildren =
   )
 
 interface AppProjectsProjectIdRouteChildren {
+  AppProjectsProjectIdEnvRoute: typeof AppProjectsProjectIdEnvRoute
   AppProjectsProjectIdSettingsRoute: typeof AppProjectsProjectIdSettingsRoute
   AppProjectsProjectIdIndexRoute: typeof AppProjectsProjectIdIndexRoute
   AppProjectsProjectIdApplicationsApplicationIdRoute: typeof AppProjectsProjectIdApplicationsApplicationIdRouteWithChildren
@@ -477,6 +497,7 @@ interface AppProjectsProjectIdRouteChildren {
 }
 
 const AppProjectsProjectIdRouteChildren: AppProjectsProjectIdRouteChildren = {
+  AppProjectsProjectIdEnvRoute: AppProjectsProjectIdEnvRoute,
   AppProjectsProjectIdSettingsRoute: AppProjectsProjectIdSettingsRoute,
   AppProjectsProjectIdIndexRoute: AppProjectsProjectIdIndexRoute,
   AppProjectsProjectIdApplicationsApplicationIdRoute:

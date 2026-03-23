@@ -36,6 +36,7 @@ function ProjectLayout() {
 
   const tabs = [
     { to: `/projects/${projectId}`, label: "Applications" },
+    { to: `/projects/${projectId}/env`, label: "Environment" },
     { to: `/projects/${projectId}/settings`, label: "Settings" },
   ];
 
@@ -57,7 +58,8 @@ function ProjectLayout() {
         {tabs.map((tab) => {
           const isActive =
             tab.to === `/projects/${projectId}`
-              ? !currentPath.startsWith(`/projects/${projectId}/settings`)
+              ? !currentPath.startsWith(`/projects/${projectId}/settings`) &&
+                !currentPath.startsWith(`/projects/${projectId}/env`)
               : currentPath.startsWith(tab.to);
           return (
             <Link

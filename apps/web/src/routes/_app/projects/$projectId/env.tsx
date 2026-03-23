@@ -1,16 +1,15 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEnvVars, useUpsertEnvVars } from "@/lib/hooks/use-envvars";
-import { useProjectEnvVars } from "@/lib/hooks/use-project-envvars";
+import {
+  useProjectEnvVars,
+  useUpsertProjectEnvVars,
+} from "@/lib/hooks/use-project-envvars";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect } from "react";
 
-export const Route = createFileRoute(
-  "/_app/projects/$projectId/applications/$applicationId/env",
-)({
-  component: EnvVarsPage,
+export const Route = createFileRoute("/_app/projects/$projectId/env")({
+  component: ProjectEnvVarsPage,
 });
 
 interface EnvRow {
@@ -19,33 +18,12 @@ interface EnvRow {
   is_secret: boolean;
 }
 
-function EnvVarsPage() {
-  const { projectId, applicationId } = Route.useParams();
-  const { data: envVars, isLoading } = useEnvVars(projectId, applicationId);
-  const { data: projectEnvVars } = useProjectEnvVars(projectId);
-  const upsert = useUpsertEnvVars(projectId, applicationId);
+function ProjectEnvVarsPage() {
+  const { projectId } = Route.useParams();
+  const { data: envVars, isLoading } = useProjectEnvVars(projectId);
+  const upsert = useUpsertProjectEnvVars(projectId);
   const [rows, setRows] = useState<EnvRow[]>([]);
   const [error, setError] = useState("");
-
-  // Keys that this application overrides from the project level
-  const appKeys = useMemo(() => new Set(rows.map((r) => r.key)), [rows]);
-
-  // Project-level vars not overridden by app vars
-  const inheritedVars = useMemo(
-    () => (projectEnvVars ?? []).filter((v) => !appKeys.has(v.key)),
-    [projectEnvVars, appKeys],
-  );
-
-  // Project-level keys that ARE overridden by app vars
-  const overriddenKeys = useMemo(
-    () =>
-      new Set(
-        (projectEnvVars ?? [])
-          .filter((v) => appKeys.has(v.key))
-          .map((v) => v.key),
-      ),
-    [projectEnvVars, appKeys],
-  );
 
   useEffect(() => {
     if (envVars) {
@@ -98,7 +76,14 @@ function EnvVarsPage() {
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
-            <CardTitle>Environment Variables</CardTitle>
+            <div>
+              <CardTitle>Project Environment Variables</CardTitle>
+              <p className="text-muted-foreground mt-1 text-sm">
+                These variables are inherited by all applications in this
+                project. Application-level variables with the same key will
+                override these.
+              </p>
+            </div>
             <Button size="sm" variant="outline" onClick={addRow}>
               Add Variable
             </Button>
@@ -113,7 +98,8 @@ function EnvVarsPage() {
           <div className="space-y-2">
             {rows.length === 0 ? (
               <p className="text-muted-foreground py-8 text-center text-sm">
-                No environment variables. Click "Add Variable" to add one.
+                No project environment variables. Click "Add Variable" to add
+                one.
               </p>
             ) : (
               rows.map((row, i) => (
@@ -141,11 +127,6 @@ function EnvVarsPage() {
                     />
                     Secret
                   </label>
-                  {overriddenKeys.has(row.key) && (
-                    <Badge variant="secondary" className="text-xs whitespace-nowrap">
-                      Overrides project
-                    </Badge>
-                  )}
                   <Button
                     size="sm"
                     variant="ghost"
@@ -167,48 +148,6 @@ function EnvVarsPage() {
           )}
         </CardContent>
       </Card>
-
-      {inheritedVars.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">
-              Inherited from Project
-            </CardTitle>
-            <p className="text-muted-foreground text-sm">
-              These variables are set at the project level. Add a variable with
-              the same key above to override.
-            </p>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-2">
-              {inheritedVars.map((v) => (
-                <div
-                  key={v.id}
-                  className="flex items-center gap-2 opacity-60"
-                >
-                  <Input
-                    className="font-mono text-xs"
-                    value={v.key}
-                    disabled
-                  />
-                  <Input
-                    className="font-mono text-xs"
-                    type="password"
-                    value={v.is_secret ? "••••••••" : v.value}
-                    disabled
-                  />
-                  <Badge
-                    variant="outline"
-                    className="text-xs whitespace-nowrap"
-                  >
-                    Inherited
-                  </Badge>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
     </div>
   );
 }
