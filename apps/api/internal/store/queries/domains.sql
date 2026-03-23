@@ -11,3 +11,9 @@ SELECT * FROM domains WHERE id = $1;
 
 -- name: DeleteDomain :exec
 DELETE FROM domains WHERE id = $1;
+
+-- name: GetDomainOwnerUserID :one
+SELECT p.user_id FROM domains d
+JOIN applications a ON a.id = d.application_id
+JOIN projects p ON p.id = a.project_id
+WHERE d.id = $1;

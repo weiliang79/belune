@@ -64,6 +64,7 @@ CREATE TABLE databases (
     project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
     type VARCHAR(50) NOT NULL CHECK (type IN ('postgres', 'mysql', 'redis', 'mongo')),
     name VARCHAR(255) NOT NULL,
+    slug VARCHAR(255) NOT NULL,
     version VARCHAR(50) NOT NULL,
     status VARCHAR(50) NOT NULL DEFAULT 'creating',
     internal_host VARCHAR(255),
@@ -73,6 +74,7 @@ CREATE TABLE databases (
 );
 
 CREATE INDEX idx_databases_project_id ON databases(project_id);
+CREATE UNIQUE INDEX idx_databases_slug_per_project ON databases(project_id, slug);
 
 -- Domains
 CREATE TABLE domains (
@@ -88,7 +90,7 @@ CREATE TABLE domains (
 CREATE INDEX idx_domains_application_id ON domains(application_id);
 CREATE UNIQUE INDEX idx_domains_hostname ON domains(hostname);
 
--- Environment Variables
+-- Environment Variables (Application-level)
 CREATE TABLE env_vars (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     application_id UUID NOT NULL REFERENCES applications(id) ON DELETE CASCADE,
@@ -101,3 +103,47 @@ CREATE TABLE env_vars (
 );
 
 CREATE INDEX idx_env_vars_application_id ON env_vars(application_id);
+
+-- Environment Variables (Project-level)
+CREATE TABLE project_env_vars (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    key VARCHAR(255) NOT NULL,
+    value_encrypted BYTEA NOT NULL,
+    is_secret BOOLEAN NOT NULL DEFAULT false,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE(project_id, key)
+);
+
+CREATE INDEX idx_project_env_vars_project_id ON project_env_vars(project_id);
+
+-- Metric Snapshots
+CREATE TABLE metric_snapshots (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    application_id UUID REFERENCES applications(id) ON DELETE CASCADE,
+    granularity TEXT NOT NULL CHECK (granularity IN ('1m', '5m', '1h')),
+    host_cpu_percent DOUBLE PRECISION,
+    host_memory_used BIGINT,
+    host_memory_total BIGINT,
+    host_disk_used BIGINT,
+    host_disk_total BIGINT,
+    cpu_percent DOUBLE PRECISION,
+    memory_usage BIGINT,
+    memory_limit BIGINT,
+    network_rx_bytes BIGINT,
+    network_tx_bytes BIGINT,
+    recorded_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_metric_snapshots_app_time ON metric_snapshots(application_id, recorded_at);
+CREATE INDEX idx_metric_snapshots_granularity ON metric_snapshots(granularity, recorded_at);
+
+-- System Settings
+CREATE TABLE settings (
+    key VARCHAR(255) PRIMARY KEY,
+    value TEXT NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+INSERT INTO settings (key, value) VALUES ('metrics_retention_days', '30');

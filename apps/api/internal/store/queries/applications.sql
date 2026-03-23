@@ -46,3 +46,8 @@ UPDATE applications SET slug = $2 WHERE id = $1;
 
 -- name: CountApplications :one
 SELECT count(*) FROM applications;
+
+-- name: GetApplicationOwnerUserID :one
+SELECT p.user_id FROM applications a
+JOIN projects p ON p.id = a.project_id
+WHERE a.id = $1;

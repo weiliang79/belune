@@ -1,7 +1,10 @@
+DROP TABLE IF EXISTS settings;
+DROP TABLE IF EXISTS metric_snapshots;
+DROP TABLE IF EXISTS project_env_vars;
 DROP TABLE IF EXISTS env_vars;
 DROP TABLE IF EXISTS domains;
 DROP TABLE IF EXISTS databases;
 DROP TABLE IF EXISTS deployments;
-DROP TABLE IF EXISTS services;
+DROP TABLE IF EXISTS applications;
 DROP TABLE IF EXISTS projects;
 DROP TABLE IF EXISTS users;

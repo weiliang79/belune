@@ -23,3 +23,8 @@ UPDATE databases SET slug = $2 WHERE id = $1;
 
 -- name: CountDatabases :one
 SELECT count(*) FROM databases;
+
+-- name: GetDatabaseOwnerUserID :one
+SELECT p.user_id FROM databases d
+JOIN projects p ON p.id = d.project_id
+WHERE d.id = $1;
