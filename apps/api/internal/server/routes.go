@@ -97,6 +97,10 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService)
 		r.Post("/api/projects/{projectId}/applications/{applicationId}/domains", h.AddDomain)
 		r.Delete("/api/projects/{projectId}/applications/{applicationId}/domains/{domainId}", h.RemoveDomain)
 
+		// Project environment variables
+		r.Get("/api/projects/{projectId}/env", h.ListProjectEnvVars)
+		r.Put("/api/projects/{projectId}/env", h.UpdateProjectEnvVars)
+
 		// Databases
 		r.Get("/api/projects/{projectId}/databases", h.ListDatabases)
 		r.Post("/api/projects/{projectId}/databases", h.CreateDatabase)

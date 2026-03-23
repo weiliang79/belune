@@ -72,14 +72,27 @@ func (h *TaskHandler) HandleDeployTask(ctx context.Context, t *asynq.Task) error
 	// Ensure the paas network exists
 	_ = h.Runtime.CreateNetwork(ctx, "paas-net")
 
-	// Fetch and decrypt env vars (needed for both build-time and runtime)
-	envVars, err := h.Queries.ListEnvVarsByApplication(ctx, applicationID)
+	// Fetch and decrypt env vars: project-level first (base), then app-level (override)
+	env := make(map[string]string)
+
+	projectEnvVars, err := h.Queries.ListProjectEnvVars(ctx, app.ProjectID)
 	if err != nil {
-		slog.Warn("failed to fetch env vars, continuing without them", "error", err)
+		slog.Warn("failed to fetch project env vars, continuing without them", "error", err)
+	}
+	for _, ev := range projectEnvVars {
+		decrypted, err := crypto.Decrypt(ev.ValueEncrypted, h.EncryptionKey)
+		if err != nil {
+			slog.Warn("failed to decrypt project env var, skipping", "key", ev.Key, "error", err)
+			continue
+		}
+		env[ev.Key] = string(decrypted)
 	}
 
-	env := make(map[string]string)
-	for _, ev := range envVars {
+	appEnvVars, err := h.Queries.ListEnvVarsByApplication(ctx, applicationID)
+	if err != nil {
+		slog.Warn("failed to fetch app env vars, continuing without them", "error", err)
+	}
+	for _, ev := range appEnvVars {
 		decrypted, err := crypto.Decrypt(ev.ValueEncrypted, h.EncryptionKey)
 		if err != nil {
 			slog.Warn("failed to decrypt env var, skipping", "key", ev.Key, "error", err)
