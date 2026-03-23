@@ -2,6 +2,7 @@ package docker
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 
@@ -141,4 +142,40 @@ func (c *Client) ListContainers(ctx context.Context) ([]runtime.ContainerInfo, e
 	}
 
 	return result, nil
+}
+
+func (c *Client) ContainerStats(ctx context.Context, containerID string) (*runtime.ContainerResourceStats, error) {
+	resp, err := c.cli.ContainerStats(ctx, containerID, false)
+	if err != nil {
+		return nil, fmt.Errorf("container stats: %w", err)
+	}
+	defer resp.Body.Close()
+
+	var stats container.StatsResponse
+	if err := json.NewDecoder(resp.Body).Decode(&stats); err != nil {
+		return nil, fmt.Errorf("decode stats: %w", err)
+	}
+
+	// Calculate CPU percentage
+	var cpuPercent float64
+	cpuDelta := float64(stats.CPUStats.CPUUsage.TotalUsage - stats.PreCPUStats.CPUUsage.TotalUsage)
+	systemDelta := float64(stats.CPUStats.SystemUsage - stats.PreCPUStats.SystemUsage)
+	if systemDelta > 0 && cpuDelta > 0 {
+		cpuPercent = (cpuDelta / systemDelta) * float64(stats.CPUStats.OnlineCPUs) * 100.0
+	}
+
+	// Calculate network rx/tx
+	var rxBytes, txBytes int64
+	for _, netStats := range stats.Networks {
+		rxBytes += int64(netStats.RxBytes)
+		txBytes += int64(netStats.TxBytes)
+	}
+
+	return &runtime.ContainerResourceStats{
+		CPUPercent:     cpuPercent,
+		MemoryUsage:    int64(stats.MemoryStats.Usage),
+		MemoryLimit:    int64(stats.MemoryStats.Limit),
+		NetworkRxBytes: rxBytes,
+		NetworkTxBytes: txBytes,
+	}, nil
 }

@@ -51,6 +51,8 @@ func (w *Worker) Start() error {
 	mux.HandleFunc(TypeBuild, w.handler.HandleBuildTask)
 	mux.HandleFunc(TypeCleanup, w.handler.HandleCleanupTask)
 	mux.HandleFunc(TypeProvisionDB, w.handler.HandleProvisionDBTask)
+	mux.HandleFunc(TypeCollectMetrics, w.handler.HandleCollectMetricsTask)
+	mux.HandleFunc(TypeDownsampleMetrics, w.handler.HandleDownsampleMetricsTask)
 
 	slog.Info("starting worker server")
 	return w.server.Start(mux)
@@ -69,7 +71,19 @@ func (w *Worker) StartScheduler() (*asynq.Scheduler, error) {
 		return nil, err
 	}
 
-	slog.Info("starting cleanup scheduler (every 24h)")
+	// Schedule metrics collection every 1 minute
+	metricsTask := asynq.NewTask(TypeCollectMetrics, nil)
+	if _, err := scheduler.Register("@every 1m", metricsTask, asynq.Queue("default")); err != nil {
+		return nil, err
+	}
+
+	// Schedule metrics downsample every 1 hour
+	downsampleTask := asynq.NewTask(TypeDownsampleMetrics, nil)
+	if _, err := scheduler.Register("@every 1h", downsampleTask, asynq.Queue("low")); err != nil {
+		return nil, err
+	}
+
+	slog.Info("starting scheduler (cleanup: 24h, metrics: 1m, downsample: 1h)")
 	if err := scheduler.Start(); err != nil {
 		return nil, err
 	}

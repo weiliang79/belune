@@ -107,11 +107,17 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService)
 		r.Get("/api/projects/{projectId}/databases/{databaseId}", h.GetDatabase)
 		r.Delete("/api/projects/{projectId}/databases/{databaseId}", h.DeleteDatabase)
 
-		// Metrics & Cleanup (admin-only)
+		// Application historical metrics
+		r.Get("/api/projects/{projectId}/applications/{applicationId}/metrics", h.GetApplicationHistoricalMetrics)
+
+		// Metrics, Settings & Cleanup (admin-only)
 		r.Group(func(r chi.Router) {
 			r.Use(middleware.RequireRole("admin"))
 			r.Get("/api/metrics", h.GetMetrics)
+			r.Get("/api/metrics/host", h.GetHostHistoricalMetrics)
 			r.Post("/api/cleanup", h.TriggerCleanup)
+			r.Get("/api/settings", h.ListSettings)
+			r.Put("/api/settings", h.UpdateSettings)
 		})
 
 		// Build (standalone build without deploy)

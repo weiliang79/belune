@@ -25,6 +25,15 @@ type ContainerInfo struct {
 	Labels map[string]string
 }
 
+// ContainerResourceStats holds resource usage stats for a single container.
+type ContainerResourceStats struct {
+	CPUPercent     float64
+	MemoryUsage    int64
+	MemoryLimit    int64
+	NetworkRxBytes int64
+	NetworkTxBytes int64
+}
+
 // ContainerRuntime abstracts container operations.
 type ContainerRuntime interface {
 	CreateContainer(ctx context.Context, cfg ContainerConfig) (string, error)
@@ -42,4 +51,5 @@ type ContainerRuntime interface {
 	RemoveImage(ctx context.Context, image string) error
 	PruneImages(ctx context.Context) error
 	PruneVolumes(ctx context.Context) error
+	ContainerStats(ctx context.Context, containerID string) (*ContainerResourceStats, error)
 }

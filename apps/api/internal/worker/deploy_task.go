@@ -192,6 +192,9 @@ func (h *TaskHandler) HandleDeployTask(ctx context.Context, t *asynq.Task) error
 		Env:     env,
 		Ports:   map[string]string{},
 		Network: "paas-net",
+		Labels: map[string]string{
+			"application-id": payload.ApplicationID,
+		},
 	})
 	if err != nil {
 		h.failDeployment(ctx, deploymentID, fmt.Sprintf("create container: %v", err))
