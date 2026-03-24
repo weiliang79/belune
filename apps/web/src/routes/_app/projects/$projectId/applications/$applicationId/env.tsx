@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
@@ -14,6 +15,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { toast } from "sonner";
 import { useState, useEffect, useMemo } from "react";
 import { parseEnvContent } from "@/lib/utils/parse-env";
 
@@ -35,7 +37,6 @@ function EnvVarsPage() {
   const { data: projectEnvVars } = useProjectEnvVars(projectId);
   const upsert = useUpsertEnvVars(projectId, applicationId);
   const [rows, setRows] = useState<EnvRow[]>([]);
-  const [error, setError] = useState("");
   const [importOpen, setImportOpen] = useState(false);
   const [importText, setImportText] = useState("");
 
@@ -106,21 +107,37 @@ function EnvVarsPage() {
     setRows(updated);
   };
 
-  const handleSave = async () => {
-    setError("");
+  const handleSave = () => {
     const validRows = rows.filter((r) => r.key.trim());
-    try {
-      await upsert.mutateAsync(validRows);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to save");
+    const envKeyRegex = /^[A-Za-z_][A-Za-z0-9_]*$/;
+    const invalidRow = validRows.find((r) => !envKeyRegex.test(r.key));
+    if (invalidRow) {
+      toast.error(`Invalid variable name: ${invalidRow.key}`);
+      return;
     }
+    toast.promise(upsert.mutateAsync(validRows), {
+      loading: "Saving variables...",
+      success: "Environment variables saved",
+      error: (err) => err.message,
+    });
   };
 
   if (isLoading) {
     return (
-      <div className="text-muted-foreground">
-        Loading environment variables...
-      </div>
+      <Card>
+        <CardHeader>
+          <Skeleton className="h-6 w-48" />
+        </CardHeader>
+        <CardContent className="space-y-2">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="flex items-center gap-2">
+              <Skeleton className="h-9 flex-1" />
+              <Skeleton className="h-9 flex-1" />
+              <Skeleton className="h-5 w-14" />
+            </div>
+          ))}
+        </CardContent>
+      </Card>
     );
   }
 
@@ -145,11 +162,6 @@ function EnvVarsPage() {
           </div>
         </CardHeader>
         <CardContent>
-          {error && (
-            <div className="bg-destructive/10 text-destructive mb-4 rounded-md px-3 py-2 text-sm">
-              {error}
-            </div>
-          )}
           <div className="space-y-2">
             {rows.length === 0 ? (
               <p className="text-muted-foreground py-8 text-center text-sm">

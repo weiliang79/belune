@@ -26,8 +26,9 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Separator } from "@/components/ui/separator";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { useFeatures } from "@/lib/hooks/use-features";
+import { toast } from "sonner";
 import { TriangleAlert } from "lucide-react";
-import { useState, useCallback } from "react";
+import { useCallback } from "react";
 
 export const Route = createFileRoute(
   "/_app/projects/$projectId/applications/$applicationId/settings",
@@ -43,9 +44,6 @@ function ApplicationSettingsPage() {
   const updateWebhook = useUpdateWebhook(projectId, applicationId);
   const deleteApplication = useDeleteApplication(projectId);
   const { data: features } = useFeatures();
-  const [error, setError] = useState("");
-  const [webhookError, setWebhookError] = useState("");
-  const [webhookSuccess, setWebhookSuccess] = useState("");
 
   const form = useForm({
     defaultValues: {
@@ -56,18 +54,20 @@ function ApplicationSettingsPage() {
       build_type_override: application?.build_type_override ?? "",
     },
     onSubmit: async ({ value }) => {
-      setError("");
-      try {
-        await updateApplication.mutateAsync({
+      toast.promise(
+        updateApplication.mutateAsync({
           name: value.name || undefined,
           source_repo: value.source_repo || undefined,
           source_image: value.source_image || undefined,
           dockerfile_path: value.dockerfile_path || undefined,
           build_type_override: value.build_type_override || undefined,
-        });
-      } catch (e) {
-        setError(e instanceof Error ? e.message : "Update failed");
-      }
+        }),
+        {
+          loading: "Saving...",
+          success: "Settings saved",
+          error: (err) => err.message,
+        },
+      );
     },
   });
 
@@ -77,17 +77,17 @@ function ApplicationSettingsPage() {
       auto_deploy_branch: application?.auto_deploy_branch ?? "main",
     },
     onSubmit: async ({ value }) => {
-      setWebhookError("");
-      setWebhookSuccess("");
-      try {
-        await updateWebhook.mutateAsync({
+      toast.promise(
+        updateWebhook.mutateAsync({
           webhook_secret: value.webhook_secret,
           auto_deploy_branch: value.auto_deploy_branch || "main",
-        });
-        setWebhookSuccess("Webhook settings saved.");
-      } catch (e) {
-        setWebhookError(e instanceof Error ? e.message : "Update failed");
-      }
+        }),
+        {
+          loading: "Saving...",
+          success: "Webhook settings saved",
+          error: (err) => err.message,
+        },
+      );
     },
   });
 
@@ -115,11 +115,6 @@ function ApplicationSettingsPage() {
             }}
             className="space-y-4"
           >
-            {error && (
-              <div className="bg-destructive/10 text-destructive rounded-md px-3 py-2 text-sm">
-                {error}
-              </div>
-            )}
             <form.Field
               name="name"
               validators={{ onChange: z.string().min(1, "Name is required") }}
@@ -194,6 +189,12 @@ function ApplicationSettingsPage() {
               <>
                 <form.Field
                   name="source_repo"
+                  validators={{
+                    onChange: z.string().refine(
+                      (v) => !v || v.startsWith("https://") || v.startsWith("git@"),
+                      "URL must start with https:// or git@",
+                    ),
+                  }}
                   children={(field) => (
                     <div className="space-y-2">
                       <Label>Repository URL</Label>
@@ -202,6 +203,13 @@ function ApplicationSettingsPage() {
                         onBlur={field.handleBlur}
                         onChange={(e) => field.handleChange(e.target.value)}
                       />
+                      {field.state.meta.errors.length > 0 && (
+                        <p className="text-destructive text-sm">
+                          {typeof field.state.meta.errors[0] === "string"
+                            ? field.state.meta.errors[0]
+                            : field.state.meta.errors[0]?.message}
+                        </p>
+                      )}
                     </div>
                   )}
                 />
@@ -259,16 +267,6 @@ function ApplicationSettingsPage() {
                 }}
                 className="space-y-4"
               >
-                {webhookError && (
-                  <div className="bg-destructive/10 text-destructive rounded-md px-3 py-2 text-sm">
-                    {webhookError}
-                  </div>
-                )}
-                {webhookSuccess && (
-                  <div className="bg-green-500/10 text-green-700 dark:text-green-400 rounded-md px-3 py-2 text-sm">
-                    {webhookSuccess}
-                  </div>
-                )}
                 <webhookForm.Field
                   name="webhook_secret"
                   children={(field) => (
@@ -345,12 +343,20 @@ function ApplicationSettingsPage() {
               <AlertDialogFooter>
                 <AlertDialogCancel>Cancel</AlertDialogCancel>
                 <AlertDialogAction
-                  onClick={async () => {
-                    await deleteApplication.mutateAsync(applicationId);
-                    navigate({
-                      to: "/projects/$projectId",
-                      params: { projectId },
-                    });
+                  onClick={() => {
+                    toast.promise(
+                      deleteApplication.mutateAsync(applicationId).then(() => {
+                        navigate({
+                          to: "/projects/$projectId",
+                          params: { projectId },
+                        });
+                      }),
+                      {
+                        loading: "Deleting application...",
+                        success: "Application deleted",
+                        error: (err) => err.message,
+                      },
+                    );
                   }}
                 >
                   Delete

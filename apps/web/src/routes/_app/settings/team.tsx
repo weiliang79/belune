@@ -165,13 +165,11 @@ function UserRow({
 
   const handleRoleChange = (newRole: string) => {
     if (newRole === user.role) return;
-    updateRole.mutate(
-      { userId: user.id, role: newRole },
-      {
-        onSuccess: () => toast.success(`Role updated to ${newRole}`),
-        onError: (err) => toast.error(err.message),
-      },
-    );
+    toast.promise(updateRole.mutateAsync({ userId: user.id, role: newRole }), {
+      loading: "Updating role...",
+      success: `Role updated to ${newRole}`,
+      error: (err) => err.message,
+    });
   };
 
   return (
@@ -238,33 +236,31 @@ function CreateUserDialog({
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [role, setRole] = useState("member");
-  const [error, setError] = useState("");
   const createUser = useCreateUser();
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    setError("");
 
     if (!email || !password) {
-      setError("Email and password are required");
+      toast.error("Email and password are required");
       return;
     }
     if (password.length < 8) {
-      setError("Password must be at least 8 characters");
+      toast.error("Password must be at least 8 characters");
       return;
     }
 
-    createUser.mutate(
-      { email, password, role },
+    toast.promise(
+      createUser.mutateAsync({ email, password, role }).then(() => {
+        setEmail("");
+        setPassword("");
+        setRole("member");
+        onOpenChange(false);
+      }),
       {
-        onSuccess: () => {
-          toast.success("User created");
-          setEmail("");
-          setPassword("");
-          setRole("member");
-          onOpenChange(false);
-        },
-        onError: (err) => setError(err.message),
+        loading: "Creating user...",
+        success: "User created",
+        error: (err) => err.message,
       },
     );
   };
@@ -279,11 +275,6 @@ function CreateUserDialog({
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
-          {error && (
-            <div className="rounded border border-red-200 bg-red-50 p-3 text-sm text-red-600">
-              {error}
-            </div>
-          )}
           <div className="space-y-2">
             <Label htmlFor="email">Email</Label>
             <Input
@@ -348,27 +339,25 @@ function ResetPasswordDialog({
   onOpenChange: (open: boolean) => void;
 }) {
   const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
   const resetPassword = useResetUserPassword();
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    setError("");
 
     if (password.length < 8) {
-      setError("Password must be at least 8 characters");
+      toast.error("Password must be at least 8 characters");
       return;
     }
 
-    resetPassword.mutate(
-      { userId, password },
+    toast.promise(
+      resetPassword.mutateAsync({ userId, password }).then(() => {
+        setPassword("");
+        onOpenChange(false);
+      }),
       {
-        onSuccess: () => {
-          toast.success(`Password reset for ${email}`);
-          setPassword("");
-          onOpenChange(false);
-        },
-        onError: (err) => setError(err.message),
+        loading: "Resetting password...",
+        success: `Password reset for ${email}`,
+        error: (err) => err.message,
       },
     );
   };
@@ -383,11 +372,6 @@ function ResetPasswordDialog({
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
-          {error && (
-            <div className="rounded border border-red-200 bg-red-50 p-3 text-sm text-red-600">
-              {error}
-            </div>
-          )}
           <div className="space-y-2">
             <Label htmlFor="new-password">New Password</Label>
             <Input
@@ -423,13 +407,16 @@ function DeleteUserDialog({
   const deleteUserMutation = useDeleteUser();
 
   const handleDelete = () => {
-    deleteUserMutation.mutate(userId, {
-      onSuccess: () => {
-        toast.success(`User ${email} deleted`);
+    toast.promise(
+      deleteUserMutation.mutateAsync(userId).then(() => {
         onOpenChange(false);
+      }),
+      {
+        loading: "Deleting user...",
+        success: `User ${email} deleted`,
+        error: (err) => err.message,
       },
-      onError: (err) => toast.error(err.message),
-    });
+    );
   };
 
   return (

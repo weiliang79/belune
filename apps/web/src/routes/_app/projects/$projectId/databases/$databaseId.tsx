@@ -21,10 +21,12 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import { toast } from "sonner";
 import { useDatabase, useDeleteDatabase } from "@/lib/hooks/use-databases";
 import { useProject } from "@/lib/hooks/use-projects";
 import { copyToClipboard } from "@/lib/utils/clipboard";
 import { Copy, Check, Loader2, Trash2 } from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
 import { AppBreadcrumb } from "@/lib/components/app-breadcrumb";
 import { StatusBadge } from "@/lib/components/status-badge";
 
@@ -70,22 +72,40 @@ function DatabaseDetailPage() {
 
   if (isLoading || !db) {
     return (
-      <div className="text-muted-foreground flex items-center gap-2">
-        <Loader2 className="h-4 w-4 animate-spin" />
-        Loading database...
+      <div className="space-y-6">
+        <Skeleton className="h-4 w-64" />
+        <div>
+          <Skeleton className="h-7 w-48" />
+          <Skeleton className="mt-1 h-4 w-24" />
+        </div>
+        <Card>
+          <CardHeader>
+            <Skeleton className="h-6 w-40" />
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {[1, 2, 3].map((i) => (
+              <Skeleton key={i} className="h-5 w-full" />
+            ))}
+          </CardContent>
+        </Card>
       </div>
     );
   }
 
   const handleDelete = () => {
-    deleteDb.mutate(databaseId, {
-      onSuccess: () => {
+    toast.promise(
+      deleteDb.mutateAsync(databaseId).then(() => {
         navigate({
           to: "/projects/$projectId",
           params: { projectId },
         });
+      }),
+      {
+        loading: "Deleting database...",
+        success: "Database deleted",
+        error: (err) => err.message,
       },
-    });
+    );
   };
 
   return (

@@ -52,36 +52,34 @@ function ChangePasswordCard() {
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [error, setError] = useState("");
   const changePassword = useChangeOwnPassword();
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    setError("");
 
     if (!currentPassword || !newPassword) {
-      setError("All fields are required");
+      toast.error("All fields are required");
       return;
     }
     if (newPassword.length < 8) {
-      setError("New password must be at least 8 characters");
+      toast.error("New password must be at least 8 characters");
       return;
     }
     if (newPassword !== confirmPassword) {
-      setError("New passwords do not match");
+      toast.error("New passwords do not match");
       return;
     }
 
-    changePassword.mutate(
-      { current_password: currentPassword, new_password: newPassword },
+    toast.promise(
+      changePassword.mutateAsync({ current_password: currentPassword, new_password: newPassword }).then(() => {
+        setCurrentPassword("");
+        setNewPassword("");
+        setConfirmPassword("");
+      }),
       {
-        onSuccess: () => {
-          toast.success("Password updated");
-          setCurrentPassword("");
-          setNewPassword("");
-          setConfirmPassword("");
-        },
-        onError: (err) => setError(err.message),
+        loading: "Updating password...",
+        success: "Password updated",
+        error: (err) => err.message,
       },
     );
   };
@@ -93,11 +91,6 @@ function ChangePasswordCard() {
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-4">
-          {error && (
-            <div className="rounded border border-red-200 bg-red-50 p-3 text-sm text-red-600">
-              {error}
-            </div>
-          )}
           <div className="space-y-2">
             <Label htmlFor="current-password">Current Password</Label>
             <Input

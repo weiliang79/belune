@@ -39,19 +39,17 @@ function ProjectSettings() {
   const { data: project } = useProject(projectId);
   const updateProject = useUpdateProject(projectId);
   const deleteProject = useDeleteProject();
-  const [error, setError] = useState("");
 
   const form = useForm({
     defaultValues: {
       name: project?.name ?? "",
     },
     onSubmit: async ({ value }) => {
-      setError("");
-      try {
-        await updateProject.mutateAsync(value);
-      } catch (e) {
-        setError(e instanceof Error ? e.message : "Update failed");
-      }
+      toast.promise(updateProject.mutateAsync(value), {
+        loading: "Saving...",
+        success: "Project updated",
+        error: (err) => err.message,
+      });
     },
   });
 
@@ -96,11 +94,6 @@ function ProjectSettings() {
             }}
             className="space-y-4"
           >
-            {error && (
-              <div className="bg-destructive/10 text-destructive rounded-md px-3 py-2 text-sm">
-                {error}
-              </div>
-            )}
             <form.Field
               name="name"
               validators={{ onChange: z.string().min(1, "Name is required") }}
@@ -153,9 +146,17 @@ function ProjectSettings() {
               <AlertDialogFooter>
                 <AlertDialogCancel>Cancel</AlertDialogCancel>
                 <AlertDialogAction
-                  onClick={async () => {
-                    await deleteProject.mutateAsync(projectId);
-                    navigate({ to: "/projects" });
+                  onClick={() => {
+                    toast.promise(
+                      deleteProject.mutateAsync(projectId).then(() => {
+                        navigate({ to: "/projects" });
+                      }),
+                      {
+                        loading: "Deleting project...",
+                        success: "Project deleted",
+                        error: (err) => err.message,
+                      },
+                    );
                   }}
                 >
                   Delete
@@ -188,9 +189,10 @@ function TransferOwnerCard({
 
   const handleTransfer = () => {
     if (selectedUserId === currentOwnerId) return;
-    transferProject.mutate(selectedUserId, {
-      onSuccess: () => toast.success("Project ownership transferred"),
-      onError: (err) => toast.error(err.message),
+    toast.promise(transferProject.mutateAsync(selectedUserId), {
+      loading: "Transferring ownership...",
+      success: "Project ownership transferred",
+      error: (err) => err.message,
     });
   };
 

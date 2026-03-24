@@ -57,22 +57,23 @@ function ServerSettingsPage() {
   const currentRetention = settings?.find((s) => s.key === "metrics_retention_days")?.value ?? "30";
 
   const handleCleanup = () => {
-    cleanup.mutate(undefined, {
-      onSuccess: () => toast.success("Cleanup task queued"),
-      onError: () => toast.error("Failed to trigger cleanup"),
+    toast.promise(cleanup.mutateAsync(undefined), {
+      loading: "Running cleanup...",
+      success: "Cleanup task queued",
+      error: "Failed to trigger cleanup",
     });
   };
 
   const handleSaveRetention = () => {
     const days = retentionDays || currentRetention;
-    updateSettings.mutate(
-      [{ key: "metrics_retention_days", value: days }],
+    toast.promise(
+      updateSettings.mutateAsync([{ key: "metrics_retention_days", value: days }]).then(() => {
+        setRetentionDays("");
+      }),
       {
-        onSuccess: () => {
-          toast.success("Retention setting saved");
-          setRetentionDays("");
-        },
-        onError: () => toast.error("Failed to save retention setting"),
+        loading: "Saving...",
+        success: "Retention setting saved",
+        error: "Failed to save retention setting",
       },
     );
   };

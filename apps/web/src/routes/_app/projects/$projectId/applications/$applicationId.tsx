@@ -12,8 +12,21 @@ import {
   useRestartApplication,
 } from "@/lib/hooks/use-applications";
 import { useProject } from "@/lib/hooks/use-projects";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { cn } from "@/lib/utils";
+import { Skeleton } from "@/components/ui/skeleton";
 import { AppBreadcrumb } from "@/lib/components/app-breadcrumb";
 import { StatusBadge } from "@/lib/components/status-badge";
 
@@ -35,7 +48,20 @@ function ApplicationLayout() {
   const currentPath = routerState.location.pathname;
 
   if (isLoading) {
-    return <div className="text-muted-foreground">Loading application...</div>;
+    return (
+      <div className="space-y-6">
+        <Skeleton className="h-4 w-64" />
+        <div className="flex items-center gap-3">
+          <Skeleton className="h-8 w-48" />
+          <Skeleton className="h-6 w-16 rounded-full" />
+        </div>
+        <div className="flex gap-1 border-b">
+          {[1, 2, 3, 4, 5].map((i) => (
+            <Skeleton key={i} className="h-9 w-20" />
+          ))}
+        </div>
+      </div>
+    );
   }
 
   if (!application) {
@@ -77,7 +103,13 @@ function ApplicationLayout() {
         <div className="flex gap-2">
           <Button
             size="sm"
-            onClick={() => deploy.mutate()}
+            onClick={() => {
+              toast.promise(deploy.mutateAsync(), {
+                loading: "Deploying...",
+                success: "Deployment started",
+                error: (err) => err.message,
+              });
+            }}
             disabled={deploy.isPending}
           >
             {deploy.isPending ? "Deploying..." : "Deploy"}
@@ -85,25 +117,67 @@ function ApplicationLayout() {
           <Button
             size="sm"
             variant="outline"
-            onClick={() => restart.mutate()}
+            onClick={() => {
+              toast.promise(restart.mutateAsync(), {
+                loading: "Restarting...",
+                success: "Application restarted",
+                error: (err) => err.message,
+              });
+            }}
             disabled={restart.isPending || application.status !== "running"}
           >
             Restart
           </Button>
           {application.status === "running" ? (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => stop.mutate()}
-              disabled={stop.isPending}
-            >
-              {stop.isPending ? "Stopping..." : "Stop"}
-            </Button>
+            <AlertDialog>
+              <AlertDialogTrigger
+                render={
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={stop.isPending}
+                  />
+                }
+              >
+                {stop.isPending ? "Stopping..." : "Stop"}
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>
+                    Stop {application.name}?
+                  </AlertDialogTitle>
+                  <AlertDialogDescription>
+                    This will stop the running container. You can start it
+                    again later.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction
+                    onClick={() => {
+                      toast.promise(stop.mutateAsync(), {
+                        loading: "Stopping...",
+                        success: "Application stopped",
+                        error: (err) => err.message,
+                      });
+                    }}
+                  >
+                    Stop
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
           ) : (
             <Button
               size="sm"
               variant="outline"
-              onClick={() => start.mutate()}
+              onClick={() => {
+                toast.promise(start.mutateAsync(), {
+                  loading: "Starting...",
+                  success: "Application started",
+                  error: (err) => err.message,
+                });
+              }}
               disabled={start.isPending || application.status === "deploying" || application.status === "building"}
             >
               {start.isPending ? "Starting..." : "Start"}

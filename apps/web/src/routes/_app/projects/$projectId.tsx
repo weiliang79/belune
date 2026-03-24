@@ -6,6 +6,7 @@ import {
 } from "@tanstack/react-router";
 import { useProject } from "@/lib/hooks/use-projects";
 import { cn } from "@/lib/utils";
+import { Skeleton } from "@/components/ui/skeleton";
 import { AppBreadcrumb } from "@/lib/components/app-breadcrumb";
 
 export const Route = createFileRoute("/_app/projects/$projectId")({
@@ -19,7 +20,17 @@ function ProjectLayout() {
   const currentPath = routerState.location.pathname;
 
   if (isLoading) {
-    return <div className="text-muted-foreground">Loading project...</div>;
+    return (
+      <div className="space-y-6">
+        <Skeleton className="h-8 w-48" />
+        <Skeleton className="h-4 w-32" />
+        <div className="flex gap-1 border-b">
+          {[1, 2, 3].map((i) => (
+            <Skeleton key={i} className="h-9 w-24" />
+          ))}
+        </div>
+      </div>
+    );
   }
 
   if (!project) {

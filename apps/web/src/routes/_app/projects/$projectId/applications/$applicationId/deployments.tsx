@@ -3,6 +3,7 @@ import { useDeployments } from "@/lib/hooks/use-deployments";
 import { useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/lib/hooks/query-keys";
 import { Card, CardContent } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import type { Deployment } from "@/lib/types";
 import { formatDate, formatDuration } from "@/lib/utils/format";
@@ -158,7 +159,23 @@ function DeploymentsPage() {
   const { data: deployments, isLoading } = useDeployments(projectId, applicationId);
 
   if (isLoading) {
-    return <div className="text-muted-foreground">Loading deployments...</div>;
+    return (
+      <div className="space-y-3">
+        {[1, 2, 3].map((i) => (
+          <Card key={i}>
+            <CardContent className="py-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <Skeleton className="h-5 w-16 rounded-full" />
+                  <Skeleton className="h-4 w-20" />
+                </div>
+                <Skeleton className="h-4 w-32" />
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+    );
   }
 
   if (!deployments || deployments.length === 0) {

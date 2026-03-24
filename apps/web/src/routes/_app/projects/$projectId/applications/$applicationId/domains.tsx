@@ -4,11 +4,24 @@ import {
   useAddDomain,
   useRemoveDomain,
 } from "@/lib/hooks/use-domains";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useState } from "react";
 
 export const Route = createFileRoute(
@@ -24,24 +37,46 @@ function DomainsPage() {
   const removeDomain = useRemoveDomain(projectId, applicationId);
   const [hostname, setHostname] = useState("");
   const [sslEnabled, setSslEnabled] = useState(true);
-  const [error, setError] = useState("");
 
-  const handleAdd = async () => {
-    if (!hostname.trim()) return;
-    setError("");
-    try {
-      await addDomain.mutateAsync({
-        hostname: hostname.trim(),
-        ssl_enabled: sslEnabled,
-      });
-      setHostname("");
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to add domain");
+  const handleAdd = () => {
+    const trimmed = hostname.trim();
+    if (!trimmed) return;
+    if (!/^([a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$/.test(trimmed)) {
+      toast.error("Invalid hostname format");
+      return;
     }
+    toast.promise(
+      addDomain.mutateAsync({
+        hostname: trimmed,
+        ssl_enabled: sslEnabled,
+      }).then(() => {
+        setHostname("");
+      }),
+      {
+        loading: "Adding domain...",
+        success: "Domain added",
+        error: (err) => err.message,
+      },
+    );
   };
 
   if (isLoading) {
-    return <div className="text-muted-foreground">Loading domains...</div>;
+    return (
+      <div className="space-y-4">
+        <Card>
+          <CardHeader><Skeleton className="h-6 w-32" /></CardHeader>
+          <CardContent><Skeleton className="h-10 w-full" /></CardContent>
+        </Card>
+        <Card>
+          <CardHeader><Skeleton className="h-6 w-24" /></CardHeader>
+          <CardContent className="space-y-2">
+            {[1, 2].map((i) => (
+              <Skeleton key={i} className="h-12 w-full" />
+            ))}
+          </CardContent>
+        </Card>
+      </div>
+    );
   }
 
   return (
@@ -51,11 +86,6 @@ function DomainsPage() {
           <CardTitle>Add Domain</CardTitle>
         </CardHeader>
         <CardContent>
-          {error && (
-            <div className="bg-destructive/10 text-destructive mb-3 rounded-md px-3 py-2 text-sm">
-              {error}
-            </div>
-          )}
           <div className="flex items-end gap-3">
             <div className="flex-1 space-y-2">
               <Label htmlFor="hostname">Hostname</Label>
@@ -106,15 +136,47 @@ function DomainsPage() {
                       <Badge variant="default">Verified</Badge>
                     )}
                   </div>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="text-destructive"
-                    onClick={() => removeDomain.mutate(domain.id)}
-                    disabled={removeDomain.isPending}
-                  >
-                    Remove
-                  </Button>
+                  <AlertDialog>
+                    <AlertDialogTrigger
+                      render={
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="text-destructive"
+                        />
+                      }
+                    >
+                      Remove
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>
+                          Remove {domain.hostname}?
+                        </AlertDialogTitle>
+                        <AlertDialogDescription>
+                          This will remove the domain from this application.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction
+                          onClick={() => {
+                            toast.promise(
+                              removeDomain.mutateAsync(domain.id),
+                              {
+                                loading: "Removing domain...",
+                                success: "Domain removed",
+                                error: (err) => err.message,
+                              },
+                            );
+                          }}
+                          className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                        >
+                          Remove
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
                 </div>
               ))}
             </div>

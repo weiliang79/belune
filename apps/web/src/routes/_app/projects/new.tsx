@@ -1,12 +1,12 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useForm } from "@tanstack/react-form";
 import { z } from "zod";
+import { toast } from "sonner";
 import { useCreateProject } from "@/lib/hooks/use-projects";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
-import { useState } from "react";
 
 export const Route = createFileRoute("/_app/projects/new")({
   component: NewProjectPage,
@@ -22,24 +22,26 @@ function slugify(text: string) {
 function NewProjectPage() {
   const navigate = useNavigate();
   const createProject = useCreateProject();
-  const [error, setError] = useState("");
 
   const form = useForm({
     defaultValues: { name: "", slug: "" },
     onSubmit: async ({ value }) => {
-      setError("");
-      try {
-        const project = await createProject.mutateAsync({
+      toast.promise(
+        createProject.mutateAsync({
           name: value.name,
           slug: value.slug,
-        });
-        navigate({
-          to: "/projects/$projectId",
-          params: { projectId: project.id },
-        });
-      } catch (e) {
-        setError(e instanceof Error ? e.message : "Failed to create project");
-      }
+        }).then((project) => {
+          navigate({
+            to: "/projects/$projectId",
+            params: { projectId: project.id },
+          });
+        }),
+        {
+          loading: "Creating project...",
+          success: "Project created",
+          error: (err) => err.message,
+        },
+      );
     },
   });
 
@@ -62,11 +64,6 @@ function NewProjectPage() {
             }}
             className="space-y-4"
           >
-            {error && (
-              <div className="bg-destructive/10 text-destructive rounded-md px-3 py-2 text-sm">
-                {error}
-              </div>
-            )}
             <form.Field
               name="name"
               validators={{ onChange: z.string().min(1, "Name is required") }}

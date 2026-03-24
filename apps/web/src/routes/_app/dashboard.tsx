@@ -2,6 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useProjects } from "@/lib/hooks/use-projects";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { buttonVariants } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/_app/dashboard")({
@@ -27,7 +28,7 @@ function DashboardPage() {
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold">
-              {isLoading ? "..." : (projects?.length ?? 0)}
+              {isLoading ? <Skeleton className="h-9 w-8" /> : (projects?.length ?? 0)}
             </div>
           </CardContent>
         </Card>
