@@ -3,6 +3,7 @@ package handler
 import (
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -82,11 +83,13 @@ func (h *Handler) AddDomain(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	containerName := naming.ContainerName(row.ProjectSlug, row.Slug, applicationID)
-	_ = h.proxy.AddRoute(r.Context(), proxy.RouteConfig{
+	if err := h.proxy.AddRoute(r.Context(), proxy.RouteConfig{
 		Hostname:  req.Hostname,
 		TargetURL: fmt.Sprintf("http://%s:8080", containerName),
 		TLS:       req.SSLEnabled,
-	})
+	}); err != nil {
+		slog.Error("failed to add proxy route for domain", "hostname", req.Hostname, "container", containerName, "error", err)
+	}
 
 	writeJSON(w, http.StatusCreated, domain)
 }
@@ -112,7 +115,9 @@ func (h *Handler) RemoveDomain(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Remove Caddy proxy route
-	_ = h.proxy.RemoveRoute(r.Context(), domain.Hostname)
+	if err := h.proxy.RemoveRoute(r.Context(), domain.Hostname); err != nil {
+		slog.Warn("could not remove proxy route for domain", "hostname", domain.Hostname, "error", err)
+	}
 
 	// Delete from database
 	if err := h.queries.DeleteDomain(r.Context(), domainUUID); err != nil {

@@ -62,15 +62,19 @@ func (h *TaskHandler) HandleDeployTask(ctx context.Context, t *asynq.Task) error
 	// Stop and remove existing container if any (try all naming formats)
 	intermediateContainerName := naming.IntermediateContainerName(appRow.ProjectSlug, payload.ApplicationID)
 	oldContainerName := naming.OldContainerName(payload.ApplicationID)
-	_ = h.Runtime.StopContainer(ctx, oldContainerName)
-	_ = h.Runtime.RemoveContainer(ctx, oldContainerName)
-	_ = h.Runtime.StopContainer(ctx, intermediateContainerName)
-	_ = h.Runtime.RemoveContainer(ctx, intermediateContainerName)
-	_ = h.Runtime.StopContainer(ctx, containerName)
-	_ = h.Runtime.RemoveContainer(ctx, containerName)
+	for _, name := range []string{oldContainerName, intermediateContainerName, containerName} {
+		if err := h.Runtime.StopContainer(ctx, name); err != nil {
+			slog.Debug("could not stop container before deploy (may not exist)", "container", name, "error", err)
+		}
+		if err := h.Runtime.RemoveContainer(ctx, name); err != nil {
+			slog.Debug("could not remove container before deploy (may not exist)", "container", name, "error", err)
+		}
+	}
 
-	// Ensure the paas network exists
-	_ = h.Runtime.CreateNetwork(ctx, "paas-net")
+	// Ensure the paas network exists (idempotent)
+	if err := h.Runtime.CreateNetwork(ctx, "paas-net"); err != nil {
+		slog.Debug("could not create paas-net (may already exist)", "error", err)
+	}
 
 	// Fetch and decrypt env vars: project-level first (base), then app-level (override)
 	env := make(map[string]string)
@@ -136,7 +140,9 @@ func (h *TaskHandler) HandleDeployTask(ctx context.Context, t *asynq.Task) error
 		// Parse custom buildpacks from application config
 		var customBuildpacks []string
 		if len(app.CustomBuildpacks) > 0 {
-			_ = json.Unmarshal(app.CustomBuildpacks, &customBuildpacks)
+			if err := json.Unmarshal(app.CustomBuildpacks, &customBuildpacks); err != nil {
+				slog.Debug("could not parse custom buildpacks, using defaults", "app_id", payload.ApplicationID, "error", err)
+			}
 		}
 
 		// Set up build log streaming via Redis pub/sub

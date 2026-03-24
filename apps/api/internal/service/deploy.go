@@ -97,8 +97,12 @@ func (s *DeployService) Restart(ctx context.Context, applicationID pgtype.UUID) 
 	}
 	applicationIDStr := uuidToString(applicationID)
 	containerName := naming.ContainerName(row.ProjectSlug, row.Slug, applicationIDStr)
-	_ = s.runtime.StopContainer(ctx, containerName)
-	_ = s.runtime.RemoveContainer(ctx, containerName)
+	if err := s.runtime.StopContainer(ctx, containerName); err != nil {
+		slog.Warn("could not stop container before restart", "container", containerName, "error", err)
+	}
+	if err := s.runtime.RemoveContainer(ctx, containerName); err != nil {
+		slog.Warn("could not remove container before restart", "container", containerName, "error", err)
+	}
 
 	return s.Deploy(ctx, applicationID)
 }

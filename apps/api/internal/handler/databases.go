@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -187,10 +188,12 @@ func (h *Handler) CreateDatabase(w http.ResponseWriter, r *http.Request) {
 	dbIDStr := fmt.Sprintf("%x-%x-%x-%x-%x",
 		db.ID.Bytes[0:4], db.ID.Bytes[4:6], db.ID.Bytes[6:8], db.ID.Bytes[8:10], db.ID.Bytes[10:16])
 	finalSlug := fmt.Sprintf("%s-%s-%s", project.Slug, baseSlug, dbIDStr[:8])
-	_ = h.queries.UpdateDatabaseSlug(r.Context(), generated.UpdateDatabaseSlugParams{
+	if err := h.queries.UpdateDatabaseSlug(r.Context(), generated.UpdateDatabaseSlugParams{
 		ID:   db.ID,
 		Slug: finalSlug,
-	})
+	}); err != nil {
+		slog.Error("failed to update database slug", "db_id", db.ID, "slug", finalSlug, "error", err)
+	}
 	db.Slug = finalSlug
 
 	// Enqueue provision task
@@ -283,9 +286,15 @@ func (h *Handler) DeleteDatabase(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Stop and remove container + volume
-	_ = h.runtime.StopContainer(r.Context(), db.Slug)
-	_ = h.runtime.RemoveContainer(r.Context(), db.Slug)
-	_ = h.runtime.RemoveVolume(r.Context(), db.Slug+"-vol")
+	if err := h.runtime.StopContainer(r.Context(), db.Slug); err != nil {
+		slog.Warn("could not stop container during db deletion", "container", db.Slug, "error", err)
+	}
+	if err := h.runtime.RemoveContainer(r.Context(), db.Slug); err != nil {
+		slog.Warn("could not remove container during db deletion", "container", db.Slug, "error", err)
+	}
+	if err := h.runtime.RemoveVolume(r.Context(), db.Slug+"-vol"); err != nil {
+		slog.Warn("could not remove volume during db deletion", "volume", db.Slug+"-vol", "error", err)
+	}
 
 	if err := h.queries.DeleteDatabase(r.Context(), dbUUID); err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to delete database")

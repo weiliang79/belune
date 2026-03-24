@@ -98,7 +98,9 @@ func (h *TaskHandler) HandleBuildTask(ctx context.Context, t *asynq.Task) error 
 	// Parse custom buildpacks
 	var customBuildpacks []string
 	if len(app.CustomBuildpacks) > 0 {
-		_ = json.Unmarshal(app.CustomBuildpacks, &customBuildpacks)
+		if err := json.Unmarshal(app.CustomBuildpacks, &customBuildpacks); err != nil {
+			slog.Debug("could not parse custom buildpacks, using defaults", "app_id", payload.ApplicationID, "error", err)
+		}
 	}
 
 	imageName := naming.ImageTag(appRow.ProjectSlug, appRow.Slug, payload.ApplicationID, payload.DeploymentID)

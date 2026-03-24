@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/json"
+	"log/slog"
 	"net/http"
 
 	"github.com/hibiken/asynq"
@@ -24,10 +25,22 @@ type containerStats struct {
 func (h *Handler) GetMetrics(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	projects, _ := h.queries.CountProjects(ctx)
-	applications, _ := h.queries.CountApplications(ctx)
-	databases, _ := h.queries.CountDatabases(ctx)
-	deployments, _ := h.queries.CountDeployments(ctx)
+	projects, err := h.queries.CountProjects(ctx)
+	if err != nil {
+		slog.Error("failed to count projects", "error", err)
+	}
+	applications, err := h.queries.CountApplications(ctx)
+	if err != nil {
+		slog.Error("failed to count applications", "error", err)
+	}
+	databases, err := h.queries.CountDatabases(ctx)
+	if err != nil {
+		slog.Error("failed to count databases", "error", err)
+	}
+	deployments, err := h.queries.CountDeployments(ctx)
+	if err != nil {
+		slog.Error("failed to count deployments", "error", err)
+	}
 
 	var stats containerStats
 	containers, err := h.runtime.ListContainers(ctx)

@@ -3,6 +3,7 @@ package handler
 import (
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -163,7 +164,10 @@ func (h *Handler) DeleteProject(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Stop and remove all application containers for this project
-	project, _ := h.queries.GetProject(r.Context(), uuid)
+	project, err := h.queries.GetProject(r.Context(), uuid)
+	if err != nil {
+		slog.Error("failed to fetch project for container cleanup", "project_id", uuid, "error", err)
+	}
 	applications, err := h.queries.ListApplicationsByProject(r.Context(), uuid)
 	if err == nil {
 		for _, app := range applications {
@@ -171,12 +175,14 @@ func (h *Handler) DeleteProject(w http.ResponseWriter, r *http.Request) {
 			containerName := naming.ContainerName(project.Slug, app.Slug, appID)
 			intermediateContainerName := naming.IntermediateContainerName(project.Slug, appID)
 			oldContainerName := naming.OldContainerName(appID)
-			_ = h.runtime.StopContainer(r.Context(), containerName)
-			_ = h.runtime.RemoveContainer(r.Context(), containerName)
-			_ = h.runtime.StopContainer(r.Context(), intermediateContainerName)
-			_ = h.runtime.RemoveContainer(r.Context(), intermediateContainerName)
-			_ = h.runtime.StopContainer(r.Context(), oldContainerName)
-			_ = h.runtime.RemoveContainer(r.Context(), oldContainerName)
+			for _, name := range []string{containerName, intermediateContainerName, oldContainerName} {
+				if err := h.runtime.StopContainer(r.Context(), name); err != nil {
+					slog.Warn("could not stop container during project deletion", "container", name, "error", err)
+				}
+				if err := h.runtime.RemoveContainer(r.Context(), name); err != nil {
+					slog.Warn("could not remove container during project deletion", "container", name, "error", err)
+				}
+			}
 		}
 	}
 

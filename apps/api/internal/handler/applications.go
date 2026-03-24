@@ -3,6 +3,7 @@ package handler
 import (
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -78,10 +79,12 @@ func (h *Handler) CreateApplication(w http.ResponseWriter, r *http.Request) {
 	appID := fmt.Sprintf("%x-%x-%x-%x-%x",
 		app.ID.Bytes[0:4], app.ID.Bytes[4:6], app.ID.Bytes[6:8], app.ID.Bytes[8:10], app.ID.Bytes[10:16])
 	finalSlug := fmt.Sprintf("%s-%s-%s", project.Slug, baseSlug, appID[:8])
-	_ = h.queries.UpdateApplicationSlug(r.Context(), generated.UpdateApplicationSlugParams{
+	if err := h.queries.UpdateApplicationSlug(r.Context(), generated.UpdateApplicationSlugParams{
 		ID:   app.ID,
 		Slug: finalSlug,
-	})
+	}); err != nil {
+		slog.Error("failed to update application slug", "app_id", app.ID, "slug", finalSlug, "error", err)
+	}
 	app.Slug = finalSlug
 
 	writeJSON(w, http.StatusCreated, app)
@@ -371,16 +374,21 @@ func (h *Handler) DeleteApplication(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Stop and remove the container (try all naming formats for compatibility)
-	row, _ := h.queries.GetApplicationWithProjectSlug(r.Context(), applicationUUID)
+	row, err := h.queries.GetApplicationWithProjectSlug(r.Context(), applicationUUID)
+	if err != nil {
+		slog.Warn("failed to fetch application for container cleanup", "application_id", applicationID, "error", err)
+	}
 	containerName := naming.ContainerName(row.ProjectSlug, row.Slug, applicationID)
 	intermediateContainerName := naming.IntermediateContainerName(row.ProjectSlug, applicationID)
 	oldContainerName := naming.OldContainerName(applicationID)
-	_ = h.runtime.StopContainer(r.Context(), containerName)
-	_ = h.runtime.RemoveContainer(r.Context(), containerName)
-	_ = h.runtime.StopContainer(r.Context(), intermediateContainerName)
-	_ = h.runtime.RemoveContainer(r.Context(), intermediateContainerName)
-	_ = h.runtime.StopContainer(r.Context(), oldContainerName)
-	_ = h.runtime.RemoveContainer(r.Context(), oldContainerName)
+	for _, name := range []string{containerName, intermediateContainerName, oldContainerName} {
+		if err := h.runtime.StopContainer(r.Context(), name); err != nil {
+			slog.Warn("could not stop container during app deletion", "container", name, "error", err)
+		}
+		if err := h.runtime.RemoveContainer(r.Context(), name); err != nil {
+			slog.Warn("could not remove container during app deletion", "container", name, "error", err)
+		}
+	}
 
 	if err := h.queries.DeleteApplication(r.Context(), applicationUUID); err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to delete application")

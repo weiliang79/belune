@@ -21,7 +21,9 @@ type cleanupPayload struct {
 func (h *TaskHandler) HandleCleanupTask(ctx context.Context, t *asynq.Task) error {
 	var payload cleanupPayload
 	if len(t.Payload()) > 0 {
-		_ = json.Unmarshal(t.Payload(), &payload)
+		if err := json.Unmarshal(t.Payload(), &payload); err != nil {
+			slog.Debug("could not parse cleanup payload, using defaults", "error", err)
+		}
 	}
 
 	if payload.RetainCount <= 0 {

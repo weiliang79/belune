@@ -97,8 +97,10 @@ func (h *TaskHandler) HandleProvisionDBTask(ctx context.Context, t *asynq.Task) 
 		return fmt.Errorf("unsupported database type: %s", db.Type)
 	}
 
-	// Ensure the paas network exists
-	_ = h.Runtime.CreateNetwork(ctx, "paas-net")
+	// Ensure the paas network exists (idempotent)
+	if err := h.Runtime.CreateNetwork(ctx, "paas-net"); err != nil {
+		slog.Debug("could not create paas-net (may already exist)", "error", err)
+	}
 
 	// Pull the image
 	slog.Info("pulling database image", "image", image)
