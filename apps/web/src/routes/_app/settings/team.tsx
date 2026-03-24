@@ -185,23 +185,27 @@ function UserRow({
         )}
       </TableCell>
       <TableCell>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild disabled={isSelf}>
-            <button className="cursor-pointer">
-              <Badge variant={user.role === "admin" ? "default" : "secondary"}>
-                {user.role}
-              </Badge>
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent>
-            <DropdownMenuItem onClick={() => handleRoleChange("admin")}>
-              Admin
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => handleRoleChange("member")}>
-              Member
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        {isSelf ? (
+          <Badge variant={user.role === "admin" ? "default" : "secondary"}>
+            {user.role}
+          </Badge>
+        ) : (
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              render={<Badge variant={user.role === "admin" ? "default" : "secondary"} className="cursor-pointer" />}
+            >
+              {user.role}
+            </DropdownMenuTrigger>
+            <DropdownMenuContent>
+              <DropdownMenuItem onClick={() => handleRoleChange("admin")}>
+                Admin
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handleRoleChange("member")}>
+                Member
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
       </TableCell>
       <TableCell className="text-muted-foreground text-sm">
         {user.created_at

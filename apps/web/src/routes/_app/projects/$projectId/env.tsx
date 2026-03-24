@@ -5,8 +5,18 @@ import {
 } from "@/lib/hooks/use-project-envvars";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { useState, useEffect } from "react";
+import { parseEnvContent } from "@/lib/utils/parse-env";
 
 export const Route = createFileRoute("/_app/projects/$projectId/env")({
   component: ProjectEnvVarsPage,
@@ -24,6 +34,8 @@ function ProjectEnvVarsPage() {
   const upsert = useUpsertProjectEnvVars(projectId);
   const [rows, setRows] = useState<EnvRow[]>([]);
   const [error, setError] = useState("");
+  const [importOpen, setImportOpen] = useState(false);
+  const [importText, setImportText] = useState("");
 
   useEffect(() => {
     if (envVars) {
@@ -39,6 +51,25 @@ function ProjectEnvVarsPage() {
 
   const addRow = () =>
     setRows([...rows, { key: "", value: "", is_secret: false }]);
+
+  const handleImport = () => {
+    const parsed = parseEnvContent(importText);
+    if (parsed.length === 0) return;
+    setRows((prev) => {
+      const updated = [...prev];
+      for (const { key, value } of parsed) {
+        const existing = updated.findIndex((r) => r.key === key);
+        if (existing !== -1) {
+          updated[existing] = { ...updated[existing], value };
+        } else {
+          updated.push({ key, value, is_secret: false });
+        }
+      }
+      return updated;
+    });
+    setImportText("");
+    setImportOpen(false);
+  };
 
   const removeRow = (index: number) =>
     setRows(rows.filter((_, i) => i !== index));
@@ -84,9 +115,18 @@ function ProjectEnvVarsPage() {
                 override these.
               </p>
             </div>
-            <Button size="sm" variant="outline" onClick={addRow}>
-              Add Variable
-            </Button>
+            <div className="flex gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setImportOpen(true)}
+              >
+                Paste .env
+              </Button>
+              <Button size="sm" variant="outline" onClick={addRow}>
+                Add Variable
+              </Button>
+            </div>
           </div>
         </CardHeader>
         <CardContent>
@@ -148,6 +188,32 @@ function ProjectEnvVarsPage() {
           )}
         </CardContent>
       </Card>
+
+      <Dialog open={importOpen} onOpenChange={setImportOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Import .env</DialogTitle>
+            <DialogDescription>
+              Paste your .env file content below. Existing variables with
+              matching keys will be updated.
+            </DialogDescription>
+          </DialogHeader>
+          <Textarea
+            className="min-h-50 font-mono text-xs"
+            placeholder={"# Paste your .env content\nKEY=value\nANOTHER_KEY=another_value"}
+            value={importText}
+            onChange={(e) => setImportText(e.target.value)}
+          />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setImportOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleImport} disabled={!importText.trim()}>
+              Import
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
