@@ -214,13 +214,11 @@ function DatabaseDetailPage() {
             </div>
             <AlertDialog>
               <AlertDialogTrigger
-                render={
-                  <Button variant="destructive" size="sm">
-                    <Trash2 className="mr-1 h-4 w-4" />
-                    Delete
-                  </Button>
-                }
-              />
+                render={<Button variant="destructive" size="sm" />}
+              >
+                <Trash2 className="mr-1 size-4" />
+                Delete
+              </AlertDialogTrigger>
               <AlertDialogContent>
                 <AlertDialogHeader>
                   <AlertDialogTitle>Delete database?</AlertDialogTitle>

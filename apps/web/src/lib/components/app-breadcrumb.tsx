@@ -25,7 +25,7 @@ export function AppBreadcrumb({ items }: { items: BreadcrumbSegment[] }) {
               {isLast || !item.to ? (
                 <BreadcrumbPage>{item.label}</BreadcrumbPage>
               ) : (
-                <BreadcrumbLink render={<Link to={item.to as any} />}>
+                <BreadcrumbLink render={<Link to={item.to} />}>
                   {item.label}
                 </BreadcrumbLink>
               )}
