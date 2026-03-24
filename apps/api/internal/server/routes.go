@@ -12,7 +12,7 @@ import (
 	"github.com/ungweiliang/selfhost-paas/internal/service"
 )
 
-func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService) {
+func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService, disableRateLimit bool) {
 	// Health check
 	r.Get("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -23,7 +23,9 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService)
 	r.Group(func(r chi.Router) {
 		// Login rate limit: 5 req/min per IP
 		r.Group(func(r chi.Router) {
-			r.Use(httprate.LimitByIP(5, time.Minute))
+			if !disableRateLimit {
+				r.Use(httprate.LimitByIP(5, time.Minute))
+			}
 			r.Post("/api/auth/login", h.Login)
 		})
 
@@ -36,7 +38,9 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService)
 
 		// Webhooks: 30 req/min per IP
 		r.Group(func(r chi.Router) {
-			r.Use(httprate.LimitByIP(30, time.Minute))
+			if !disableRateLimit {
+				r.Use(httprate.LimitByIP(30, time.Minute))
+			}
 			r.Post("/api/webhooks/push", h.HandleWebhookPush)
 		})
 	})
@@ -44,7 +48,9 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService)
 	// Protected routes
 	r.Group(func(r chi.Router) {
 		r.Use(middleware.Auth(auth))
-		r.Use(httprate.LimitByIP(100, time.Minute))
+		if !disableRateLimit {
+			r.Use(httprate.LimitByIP(100, time.Minute))
+		}
 
 		r.Get("/api/auth/me", h.Me)
 		r.Put("/api/auth/password", h.ChangeOwnPassword)

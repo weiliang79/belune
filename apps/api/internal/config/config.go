@@ -8,14 +8,15 @@ import (
 )
 
 type Config struct {
-	Port           int
-	DatabaseURL    string
-	RedisURL       string
-	JWTSecret      string
-	EncryptionKey  string
-	CaddyAdminURL  string
-	CORSOrigins    []string
-	SecureCookies  bool
+	Port                int
+	DatabaseURL         string
+	RedisURL            string
+	JWTSecret           string
+	EncryptionKey       string
+	CaddyAdminURL       string
+	CORSOrigins         []string
+	SecureCookies       bool
+	DisableRateLimiting bool // set true in tests to avoid per-IP counter accumulation
 }
 
 func Load() (*Config, error) {

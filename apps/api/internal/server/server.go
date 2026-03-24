@@ -60,7 +60,7 @@ func (s *Server) setupRouter() chi.Router {
 	}))
 
 	// Register routes
-	registerRoutes(r, s.handler, s.auth)
+	registerRoutes(r, s.handler, s.auth, s.cfg.DisableRateLimiting)
 
 	return r
 }

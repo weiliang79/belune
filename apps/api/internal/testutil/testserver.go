@@ -31,10 +31,11 @@ type TestEnv struct {
 // Called from TestMain so does not take *testing.T.
 func SetupTestServer(pool *pgxpool.Pool, queries *generated.Queries) *TestEnv {
 	cfg := &config.Config{
-		Port:          8080,
-		JWTSecret:     TestJWTSecret,
-		EncryptionKey: TestEncryptionKey,
-		CaddyAdminURL: "http://localhost:2019",
+		Port:                8080,
+		JWTSecret:           TestJWTSecret,
+		EncryptionKey:       TestEncryptionKey,
+		CaddyAdminURL:       "http://localhost:2019",
+		DisableRateLimiting: true,
 	}
 
 	mockRuntime := &MockContainerRuntime{}
