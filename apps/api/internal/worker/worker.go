@@ -1,8 +1,10 @@
 package worker
 
 import (
+	"context"
 	"encoding/json"
 	"log/slog"
+	"time"
 
 	"github.com/hibiken/asynq"
 	"github.com/redis/go-redis/v9"
@@ -51,7 +53,7 @@ func (w *Worker) Start() error {
 	mux.HandleFunc(TypeBuild, w.handler.HandleBuildTask)
 	mux.HandleFunc(TypeCleanup, w.handler.HandleCleanupTask)
 	mux.HandleFunc(TypeProvisionDB, w.handler.HandleProvisionDBTask)
-	mux.HandleFunc(TypeCollectMetrics, w.handler.HandleCollectMetricsTask)
+	mux.HandleFunc(TypeDownsampleMetrics1s, w.handler.HandleDownsampleMetrics1sTask)
 	mux.HandleFunc(TypeDownsampleMetrics, w.handler.HandleDownsampleMetricsTask)
 
 	slog.Info("starting worker server")
@@ -71,19 +73,19 @@ func (w *Worker) StartScheduler() (*asynq.Scheduler, error) {
 		return nil, err
 	}
 
-	// Schedule metrics collection every 1 minute
-	metricsTask := asynq.NewTask(TypeCollectMetrics, nil)
-	if _, err := scheduler.Register("@every 1m", metricsTask, asynq.Queue("default")); err != nil {
+	// Schedule 1s→1m downsample every 5 minutes
+	downsample1sTask := asynq.NewTask(TypeDownsampleMetrics1s, nil)
+	if _, err := scheduler.Register("@every 5m", downsample1sTask, asynq.Queue("low")); err != nil {
 		return nil, err
 	}
 
-	// Schedule metrics downsample every 1 hour
+	// Schedule 1m→5m→1h downsample every 1 hour
 	downsampleTask := asynq.NewTask(TypeDownsampleMetrics, nil)
 	if _, err := scheduler.Register("@every 1h", downsampleTask, asynq.Queue("low")); err != nil {
 		return nil, err
 	}
 
-	slog.Info("starting scheduler (cleanup: 24h, metrics: 1m, downsample: 1h)")
+	slog.Info("starting scheduler (cleanup: 24h, downsample-1s: 5m, downsample: 1h)")
 	if err := scheduler.Start(); err != nil {
 		return nil, err
 	}
@@ -93,4 +95,21 @@ func (w *Worker) StartScheduler() (*asynq.Scheduler, error) {
 
 func (w *Worker) Stop() {
 	w.server.Stop()
+}
+
+// StartMetricsTicker runs metrics collection on a precise 1-second ticker,
+// bypassing the Redis-backed scheduler to avoid jitter and double-firing.
+func (w *Worker) StartMetricsTicker(ctx context.Context) {
+	ticker := time.NewTicker(time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			if err := w.handler.HandleCollectMetricsTask(ctx, nil); err != nil {
+				slog.Error("metrics ticker: collection failed", "error", err)
+			}
+		}
+	}
 }

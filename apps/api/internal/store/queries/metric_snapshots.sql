@@ -34,6 +34,28 @@ ORDER BY recorded_at ASC;
 DELETE FROM metric_snapshots
 WHERE granularity = $1 AND recorded_at < $2;
 
+-- name: DownsampleMetrics1m :exec
+INSERT INTO metric_snapshots (
+    application_id, granularity,
+    host_cpu_percent, host_memory_used, host_memory_total,
+    host_disk_used, host_disk_total,
+    cpu_percent, memory_usage, memory_limit,
+    network_rx_bytes, network_tx_bytes,
+    recorded_at
+)
+SELECT
+    s.application_id, '1m',
+    AVG(s.host_cpu_percent), AVG(s.host_memory_used), MAX(s.host_memory_total),
+    AVG(s.host_disk_used), MAX(s.host_disk_total),
+    AVG(s.cpu_percent), AVG(s.memory_usage), MAX(s.memory_limit),
+    AVG(s.network_rx_bytes), AVG(s.network_tx_bytes),
+    date_trunc('minute', s.recorded_at)
+FROM metric_snapshots s
+WHERE s.granularity = '1s'
+  AND s.recorded_at < $1
+  AND s.recorded_at >= $2
+GROUP BY s.application_id, date_trunc('minute', s.recorded_at);
+
 -- name: DownsampleMetrics5m :exec
 INSERT INTO metric_snapshots (
     application_id, granularity,

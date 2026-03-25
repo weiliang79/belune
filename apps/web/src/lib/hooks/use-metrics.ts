@@ -1,6 +1,10 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useRef, useState } from "react";
 import { queryKeys } from "./query-keys";
 import * as metricsApi from "@/lib/api/metrics";
+import type { HostMetricPoint, AppMetricPoint } from "@/lib/types";
+
+const STREAM_WINDOW_MS = 30 * 60 * 1000; // 30 minutes
 
 export function useMetrics() {
   return useQuery({
@@ -18,11 +22,12 @@ export function useTriggerCleanup() {
   });
 }
 
-export function useHostHistoricalMetrics(range: string) {
+export function useHostHistoricalMetrics(range: string, enabled = true) {
   return useQuery({
     queryKey: queryKeys.hostMetrics(range),
     queryFn: () => metricsApi.getHostHistoricalMetrics(range),
     refetchInterval: 60_000,
+    enabled,
   });
 }
 
@@ -30,10 +35,81 @@ export function useApplicationMetrics(
   projectId: string,
   applicationId: string,
   range: string,
+  enabled = true,
 ) {
   return useQuery({
     queryKey: queryKeys.appMetrics(projectId, applicationId, range),
     queryFn: () => metricsApi.getApplicationMetrics(projectId, applicationId, range),
     refetchInterval: 60_000,
+    enabled,
   });
+}
+
+export function useHostMetricsStream(enabled: boolean) {
+  const [data, setData] = useState<HostMetricPoint[]>([]);
+  const [connected, setConnected] = useState(false);
+  const sourceRef = useRef<EventSource | null>(null);
+
+  useEffect(() => {
+    if (!enabled) return;
+
+    const source = new EventSource("/api/metrics/host/stream");
+    sourceRef.current = source;
+
+    source.onopen = () => setConnected(true);
+    source.onmessage = (event) => {
+      const point: HostMetricPoint = JSON.parse(event.data);
+      setData((prev) => {
+        const cutoff = new Date(Date.now() - STREAM_WINDOW_MS).toISOString();
+        return [...prev, point].filter((p) => p.recorded_at >= cutoff);
+      });
+    };
+    source.onerror = () => setConnected(false);
+
+    return () => {
+      source.close();
+      sourceRef.current = null;
+      setData([]);
+      setConnected(false);
+    };
+  }, [enabled]);
+
+  return { data, connected };
+}
+
+export function useAppMetricsStream(
+  projectId: string,
+  applicationId: string,
+  enabled: boolean,
+) {
+  const [data, setData] = useState<AppMetricPoint[]>([]);
+  const [connected, setConnected] = useState(false);
+  const sourceRef = useRef<EventSource | null>(null);
+
+  useEffect(() => {
+    if (!enabled) return;
+
+    const url = `/api/projects/${projectId}/applications/${applicationId}/metrics/stream`;
+    const source = new EventSource(url);
+    sourceRef.current = source;
+
+    source.onopen = () => setConnected(true);
+    source.onmessage = (event) => {
+      const point: AppMetricPoint = JSON.parse(event.data);
+      setData((prev) => {
+        const cutoff = new Date(Date.now() - STREAM_WINDOW_MS).toISOString();
+        return [...prev, point].filter((p) => p.recorded_at >= cutoff);
+      });
+    };
+    source.onerror = () => setConnected(false);
+
+    return () => {
+      source.close();
+      sourceRef.current = null;
+      setData([]);
+      setConnected(false);
+    };
+  }, [enabled, projectId, applicationId]);
+
+  return { data, connected };
 }

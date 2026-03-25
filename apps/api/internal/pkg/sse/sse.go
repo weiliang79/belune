@@ -37,6 +37,17 @@ func (s *Writer) SendEvent(event, data string) error {
 	return nil
 }
 
+// SendComment writes an SSE comment, which keeps the connection alive and
+// forces proxies to flush headers without triggering a client-side event.
+func (s *Writer) SendComment(text string) error {
+	_, err := fmt.Fprintf(s.w, ": %s\n\n", text)
+	if err != nil {
+		return err
+	}
+	s.flusher.Flush()
+	return nil
+}
+
 // SendData writes an SSE data-only message.
 func (s *Writer) SendData(data string) error {
 	_, err := fmt.Fprintf(s.w, "data: %s\n\n", data)

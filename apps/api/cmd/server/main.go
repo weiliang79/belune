@@ -99,6 +99,11 @@ func main() {
 	}()
 	defer w.Stop()
 
+	// Metrics collection on a precise 1s ticker (not via asynq scheduler)
+	metricsCtx, cancelMetrics := context.WithCancel(context.Background())
+	defer cancelMetrics()
+	go w.StartMetricsTicker(metricsCtx)
+
 	// Cleanup scheduler (runs every 24h)
 	scheduler, err := w.StartScheduler()
 	if err != nil {

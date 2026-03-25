@@ -12,6 +12,31 @@ import (
 	"github.com/ungweiliang/selfhost-paas/internal/store/generated"
 )
 
+// HandleDownsampleMetrics1sTask aggregates 1s→1m for data older than 1h,
+// then deletes the raw 1s rows. Runs every 5 minutes.
+func (h *TaskHandler) HandleDownsampleMetrics1sTask(ctx context.Context, t *asynq.Task) error {
+	now := time.Now()
+	cutoff1h := now.Add(-1 * time.Hour)
+	cutoff2h := now.Add(-2 * time.Hour) // only process a rolling 1h window to avoid re-processing
+
+	if err := h.Queries.DownsampleMetrics1m(ctx, generated.DownsampleMetrics1mParams{
+		RecordedAt:   pgtype.Timestamptz{Time: cutoff1h, Valid: true},
+		RecordedAt_2: pgtype.Timestamptz{Time: cutoff2h, Valid: true},
+	}); err != nil {
+		slog.Error("failed to downsample 1s→1m", "error", err)
+	}
+
+	if err := h.Queries.DeleteOldMetricSnapshots(ctx, generated.DeleteOldMetricSnapshotsParams{
+		Granularity: "1s",
+		RecordedAt:  pgtype.Timestamptz{Time: cutoff1h, Valid: true},
+	}); err != nil {
+		slog.Error("failed to delete old 1s data", "error", err)
+	}
+
+	slog.Info("1s metrics downsample completed")
+	return nil
+}
+
 // HandleDownsampleMetricsTask aggregates 1m→5m (>24h) and 5m→1h (>7d),
 // then prunes data older than the configured retention period.
 func (h *TaskHandler) HandleDownsampleMetricsTask(ctx context.Context, t *asynq.Task) error {

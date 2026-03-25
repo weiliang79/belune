@@ -3,6 +3,7 @@ package worker
 import (
 	"context"
 	"log/slog"
+	"sync"
 	"time"
 
 	"github.com/hibiken/asynq"
@@ -49,7 +50,7 @@ func (h *TaskHandler) HandleCollectMetricsTask(ctx context.Context, t *asynq.Tas
 
 	// Insert host-level snapshot (no application_id)
 	if err := h.Queries.InsertMetricSnapshot(ctx, generated.InsertMetricSnapshotParams{
-		Granularity:     "1m",
+		Granularity:     "1s",
 		HostCpuPercent:  pgtype.Float8{Float64: hostCPU, Valid: true},
 		HostMemoryUsed:  pgtype.Int8{Int64: hostMemUsed, Valid: true},
 		HostMemoryTotal: pgtype.Int8{Int64: hostMemTotal, Valid: true},
@@ -67,6 +68,7 @@ func (h *TaskHandler) HandleCollectMetricsTask(ctx context.Context, t *asynq.Tas
 		return nil
 	}
 
+	var wg sync.WaitGroup
 	for _, ctr := range containers {
 		if ctr.Status != "running" {
 			continue
@@ -82,25 +84,31 @@ func (h *TaskHandler) HandleCollectMetricsTask(ctx context.Context, t *asynq.Tas
 			continue
 		}
 
-		stats, err := h.Runtime.ContainerStats(ctx, ctr.ID)
-		if err != nil {
-			slog.Warn("failed to collect container stats", "container", ctr.Name, "error", err)
-			continue
-		}
+		wg.Add(1)
+		go func(ctrID, ctrName string, appID pgtype.UUID) {
+			defer wg.Done()
 
-		if err := h.Queries.InsertMetricSnapshot(ctx, generated.InsertMetricSnapshotParams{
-			ApplicationID:  appUUID,
-			Granularity:    "1m",
-			CpuPercent:     pgtype.Float8{Float64: stats.CPUPercent, Valid: true},
-			MemoryUsage:    pgtype.Int8{Int64: stats.MemoryUsage, Valid: true},
-			MemoryLimit:    pgtype.Int8{Int64: stats.MemoryLimit, Valid: true},
-			NetworkRxBytes: pgtype.Int8{Int64: stats.NetworkRxBytes, Valid: true},
-			NetworkTxBytes: pgtype.Int8{Int64: stats.NetworkTxBytes, Valid: true},
-			RecordedAt:     recordedAt,
-		}); err != nil {
-			slog.Error("failed to insert container metric snapshot", "container", ctr.Name, "error", err)
-		}
+			stats, err := h.Runtime.ContainerStats(ctx, ctrID)
+			if err != nil {
+				slog.Warn("failed to collect container stats", "container", ctrName, "error", err)
+				return
+			}
+
+			if err := h.Queries.InsertMetricSnapshot(ctx, generated.InsertMetricSnapshotParams{
+				ApplicationID:  appID,
+				Granularity:    "1s",
+				CpuPercent:     pgtype.Float8{Float64: stats.CPUPercent, Valid: true},
+				MemoryUsage:    pgtype.Int8{Int64: stats.MemoryUsage, Valid: true},
+				MemoryLimit:    pgtype.Int8{Int64: stats.MemoryLimit, Valid: true},
+				NetworkRxBytes: pgtype.Int8{Int64: stats.NetworkRxBytes, Valid: true},
+				NetworkTxBytes: pgtype.Int8{Int64: stats.NetworkTxBytes, Valid: true},
+				RecordedAt:     recordedAt,
+			}); err != nil {
+				slog.Error("failed to insert container metric snapshot", "container", ctrName, "error", err)
+			}
+		}(ctr.ID, ctr.Name, appUUID)
 	}
+	wg.Wait()
 
 	slog.Info("metrics collection completed", "containers_checked", len(containers))
 	return nil

@@ -33,7 +33,9 @@ func parseRange(rangeParam string) (granularity string, since time.Time) {
 	now := time.Now()
 	switch rangeParam {
 	case "1h":
-		return "1m", now.Add(-1 * time.Hour)
+		return "1s", now.Add(-1 * time.Hour)
+	case "3h":
+		return "1m", now.Add(-3 * time.Hour)
 	case "24h":
 		return "1m", now.Add(-24 * time.Hour)
 	case "7d":

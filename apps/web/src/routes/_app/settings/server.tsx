@@ -8,32 +8,29 @@ import {
   useMetrics,
   useTriggerCleanup,
   useHostHistoricalMetrics,
+  useHostMetricsStream,
 } from "@/lib/hooks/use-metrics";
 import { useSettings, useUpdateSettings } from "@/lib/hooks/use-settings";
 import { useFeatures } from "@/lib/hooks/use-features";
 import { toast } from "sonner";
-import { useState } from "react";
-import {
-  ResponsiveContainer,
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  Tooltip,
-  CartesianGrid,
-} from "recharts";
+import { useState, useMemo } from "react";
 import type { HostMetricPoint } from "@/lib/types";
+import { UPlotAreaChart } from "@/components/ui/uplot-area-chart";
 
 export const Route = createFileRoute("/_app/settings/server")({
   component: ServerSettingsPage,
 });
 
-const RANGE_OPTIONS = ["1h", "24h", "7d", "30d"] as const;
-
 function formatTime(iso: string, range: string) {
   const d = new Date(iso);
-  if (range === "1h" || range === "24h") return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-  return d.toLocaleDateString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+  if (range === "1h" || range === "3h" || range === "24h")
+    return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  return d.toLocaleDateString([], {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 function formatBytes(bytes: number | null) {
@@ -48,13 +45,47 @@ function ServerSettingsPage() {
   const { data: metrics, isLoading } = useMetrics();
   const { data: features } = useFeatures();
   const cleanup = useTriggerCleanup();
-  const [hostRange, setHostRange] = useState<string>("1h");
-  const { data: hostMetrics } = useHostHistoricalMetrics(hostRange);
+  const { data: historicalData } = useHostHistoricalMetrics("1h");
+  const { data: streamData, connected: streamConnected } =
+    useHostMetricsStream(true);
+  const hostMetrics = useMemo(() => {
+    const ONE_SECOND = 1_000;
+    const THIRTY_MIN = 30 * 60 * 1_000;
+    // eslint-disable-next-line react-hooks/purity
+    const now = Date.now();
+    const start = Math.floor((now - THIRTY_MIN) / ONE_SECOND) * ONE_SECOND;
+
+    // Both sources are 1s granularity — merge into a single 1s lookup
+    const dataMap = new Map<number, HostMetricPoint>();
+    for (const point of [...(historicalData ?? []), ...(streamData ?? [])]) {
+      const t =
+        Math.floor(new Date(point.recorded_at).getTime() / ONE_SECOND) *
+        ONE_SECOND;
+      dataMap.set(t, point);
+    }
+
+    // Generate 1h grid at 1s resolution, defaulting missing slots to 0
+    const grid: HostMetricPoint[] = [];
+    for (let t = start; t <= now; t += ONE_SECOND) {
+      grid.push(
+        dataMap.get(t) ?? {
+          recorded_at: new Date(t).toISOString(),
+          cpu_percent: 0,
+          memory_used: 0,
+          memory_total: 0,
+          disk_used: 0,
+          disk_total: 0,
+        },
+      );
+    }
+    return grid;
+  }, [historicalData, streamData]);
   const { data: settings } = useSettings();
   const updateSettings = useUpdateSettings();
   const [retentionDays, setRetentionDays] = useState<string>("");
 
-  const currentRetention = settings?.find((s) => s.key === "metrics_retention_days")?.value ?? "30";
+  const currentRetention =
+    settings?.find((s) => s.key === "metrics_retention_days")?.value ?? "30";
 
   const handleCleanup = () => {
     toast.promise(cleanup.mutateAsync(undefined), {
@@ -67,9 +98,11 @@ function ServerSettingsPage() {
   const handleSaveRetention = () => {
     const days = retentionDays || currentRetention;
     toast.promise(
-      updateSettings.mutateAsync([{ key: "metrics_retention_days", value: days }]).then(() => {
-        setRetentionDays("");
-      }),
+      updateSettings
+        .mutateAsync([{ key: "metrics_retention_days", value: days }])
+        .then(() => {
+          setRetentionDays("");
+        }),
       {
         loading: "Saving...",
         success: "Retention setting saved",
@@ -116,7 +149,7 @@ function ServerSettingsPage() {
               <CardHeader>
                 <CardTitle>Containers</CardTitle>
               </CardHeader>
-              <CardContent className="h-full flex flex-col justify-center">
+              <CardContent className="flex h-full flex-col justify-center">
                 <div className="flex items-center gap-4">
                   <div className="flex items-center gap-2">
                     <Badge variant="default">
@@ -168,30 +201,22 @@ function ServerSettingsPage() {
 
           <Card>
             <CardHeader>
-              <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
                 <CardTitle>Host Metrics</CardTitle>
-                <div className="flex gap-1">
-                  {RANGE_OPTIONS.map((r) => (
-                    <Button
-                      key={r}
-                      size="sm"
-                      variant={hostRange === r ? "default" : "outline"}
-                      onClick={() => setHostRange(r)}
-                    >
-                      {r}
-                    </Button>
-                  ))}
-                </div>
+                <Badge variant={streamConnected ? "default" : "secondary"}>
+                  {streamConnected ? "LIVE" : "Connecting..."}
+                </Badge>
               </div>
             </CardHeader>
             <CardContent>
               {hostMetrics && hostMetrics.length > 0 ? (
-                <div className="space-y-6">
+                <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
                   <HostChart
                     title="CPU Usage (%)"
                     data={hostMetrics}
                     dataKey="cpu_percent"
-                    range={hostRange}
+                    range="1h"
+                    color="hsl(221, 83%, 53%)"
                     formatter={(v: number) => `${v.toFixed(1)}%`}
                     domain={[0, 100]}
                   />
@@ -199,20 +224,26 @@ function ServerSettingsPage() {
                     title="Memory Usage"
                     data={hostMetrics}
                     dataKey="memory_used"
-                    range={hostRange}
+                    range="1h"
+                    color="hsl(262, 83%, 58%)"
                     formatter={(v: number) => formatBytes(v)}
                   />
                   <HostChart
                     title="Disk Usage"
                     data={hostMetrics}
                     dataKey="disk_used"
-                    range={hostRange}
+                    range="1h"
+                    color="hsl(142, 71%, 45%)"
                     formatter={(v: number) => formatBytes(v)}
+                    domain={[
+                      0,
+                      Math.max(...hostMetrics.map((m) => m.disk_total ?? 0)),
+                    ]}
                   />
                 </div>
               ) : (
                 <p className="text-muted-foreground py-8 text-center text-sm">
-                  No metrics data available yet. Data is collected every minute.
+                  No metrics data available yet. Data is collected every second.
                 </p>
               )}
             </CardContent>
@@ -248,8 +279,8 @@ function ServerSettingsPage() {
                 </span>
               </div>
               <p className="text-muted-foreground mt-2 text-xs">
-                1-minute data is kept for 24h, downsampled to 5-minute for 7
-                days, then hourly until the retention limit.
+                1-second data is kept for 1h, rolled up to 1-minute for 24h,
+                5-minute for 7 days, then hourly until the retention limit.
               </p>
             </CardContent>
           </Card>
@@ -301,6 +332,7 @@ function HostChart({
   data,
   dataKey,
   range,
+  color,
   formatter,
   domain,
 }: {
@@ -308,41 +340,24 @@ function HostChart({
   data: HostMetricPoint[];
   dataKey: string;
   range: string;
+  color: string;
   formatter: (value: number) => string;
   domain?: [number, number];
 }) {
   return (
     <div>
-      <p className="text-sm font-medium mb-2">{title}</p>
-      <ResponsiveContainer width="100%" height={200}>
-        <LineChart data={data}>
-          <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
-          <XAxis
-            dataKey="recorded_at"
-            tickFormatter={(v) => formatTime(v, range)}
-            className="text-xs"
-            tick={{ fontSize: 11 }}
-          />
-          <YAxis
-            tickFormatter={formatter}
-            className="text-xs"
-            tick={{ fontSize: 11 }}
-            domain={domain}
-            width={70}
-          />
-          <Tooltip
-            labelFormatter={(v) => new Date(v as string).toLocaleString()}
-            formatter={(value) => [formatter(Number(value)), title]}
-          />
-          <Line
-            type="monotone"
-            dataKey={dataKey}
-            stroke="hsl(var(--primary))"
-            strokeWidth={1.5}
-            dot={false}
-          />
-        </LineChart>
-      </ResponsiveContainer>
+      <p className="mb-2 text-sm font-medium">{title}</p>
+      <UPlotAreaChart
+        timestamps={data.map((p) => new Date(p.recorded_at).getTime())}
+        values={data.map(
+          (p) => p[dataKey as keyof HostMetricPoint] as number | null,
+        )}
+        color={color}
+        yFormatter={formatter}
+        xFormatter={(ts) => formatTime(new Date(ts).toISOString(), range)}
+        yDomain={domain}
+        height={200}
+      />
     </div>
   );
 }
