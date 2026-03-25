@@ -6,6 +6,7 @@ export function useDatabases(projectId: string) {
   return useQuery({
     queryKey: queryKeys.databases.all(projectId),
     queryFn: () => databasesApi.listDatabases(projectId),
+    refetchInterval: 5000,
   });
 }
 
