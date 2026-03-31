@@ -1,7 +1,8 @@
 services:
   paas:
+    image: ${PAAS_IMAGE:-ghcr.io/ungweiliang/selfhost-paas:latest}
     build:
-      context: ../apps/api
+      context: ..
       dockerfile: Dockerfile
     ports:
       - "8080:8080"

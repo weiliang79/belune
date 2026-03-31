@@ -16,6 +16,7 @@ import (
 	"github.com/ungweiliang/selfhost-paas/internal/server/middleware"
 	"github.com/ungweiliang/selfhost-paas/internal/service"
 	"github.com/ungweiliang/selfhost-paas/internal/store/generated"
+	"github.com/ungweiliang/selfhost-paas/web"
 )
 
 type Server struct {
@@ -72,8 +73,13 @@ func (s *Server) setupRouter() chi.Router {
 		MaxAge:           300,
 	}))
 
-	// Register routes
+	// Register API + health routes
 	registerRoutes(r, s.handler, s.auth, s.cfg.DisableRateLimiting)
+
+	// Catch-all: serve the embedded SPA for any unmatched path
+	if spaHandler := web.Handler(); spaHandler != nil {
+		r.Handle("/*", spaHandler)
+	}
 
 	return r
 }

@@ -35,11 +35,12 @@ tasks:
   # ─── Build ─────────────────────────────────────────────────────
 
   build:web:
-    desc: Build React static output
+    desc: Build React static output and copy assets into the Go embed directory
     dir: '{{.WEB_DIR}}'
     cmds:
       - npm run build
-      - cp -r build/* ../api/frontend/
+      - rm -rf ../api/web/dist/*
+      - cp -r build/. ../api/web/dist/
 
   build:api:
     desc: Build Go binary with embedded frontend
