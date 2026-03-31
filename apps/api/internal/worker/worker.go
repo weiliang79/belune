@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/hibiken/asynq"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 
 	"github.com/ungweiliang/selfhost-paas/internal/build"
@@ -20,6 +21,7 @@ import (
 type TaskHandler struct {
 	Runtime       runtime.ContainerRuntime
 	Proxy         proxy.ProxyManager
+	DB            *pgxpool.Pool
 	Queries       *generated.Queries
 	Chain         *build.Chain
 	EncryptionKey string

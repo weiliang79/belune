@@ -92,6 +92,7 @@ func main() {
 	taskHandler := &worker.TaskHandler{
 		Runtime:       dockerClient,
 		Proxy:         caddyClient,
+		DB:            db,
 		Queries:       queries,
 		Chain:         buildChain,
 		EncryptionKey: cfg.EncryptionKey,

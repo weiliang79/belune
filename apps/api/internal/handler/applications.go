@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/ungweiliang/selfhost-paas/internal/naming"
+	"github.com/ungweiliang/selfhost-paas/internal/store"
 	"github.com/ungweiliang/selfhost-paas/internal/store/generated"
 )
 
@@ -61,32 +62,39 @@ func (h *Handler) CreateApplication(w http.ResponseWriter, r *http.Request) {
 		baseSlug = naming.Slugify(req.Slug)
 	}
 
-	app, err := h.queries.CreateApplication(r.Context(), generated.CreateApplicationParams{
-		ProjectID:      projectUUID,
-		Name:           req.Name,
-		Slug:           baseSlug,
-		Type:           req.Type,
-		SourceRepo:     pgtype.Text{String: req.SourceRepo, Valid: req.SourceRepo != ""},
-		SourceImage:    pgtype.Text{String: req.SourceImage, Valid: req.SourceImage != ""},
-		DockerfilePath: pgtype.Text{String: req.DockerfilePath, Valid: req.DockerfilePath != ""},
-		BuildType:      req.BuildType,
-	})
-	if err != nil {
+	var app generated.Application
+	if err := store.WithTx(r.Context(), h.db, func(q *generated.Queries) error {
+		var err error
+		app, err = q.CreateApplication(r.Context(), generated.CreateApplicationParams{
+			ProjectID:      projectUUID,
+			Name:           req.Name,
+			Slug:           baseSlug,
+			Type:           req.Type,
+			SourceRepo:     pgtype.Text{String: req.SourceRepo, Valid: req.SourceRepo != ""},
+			SourceImage:    pgtype.Text{String: req.SourceImage, Valid: req.SourceImage != ""},
+			DockerfilePath: pgtype.Text{String: req.DockerfilePath, Valid: req.DockerfilePath != ""},
+			BuildType:      req.BuildType,
+		})
+		if err != nil {
+			return err
+		}
+		// Construct final slug: {projectSlug}-{baseSlug}-{shortId}
+		appIDStr := fmt.Sprintf("%x-%x-%x-%x-%x",
+			app.ID.Bytes[0:4], app.ID.Bytes[4:6], app.ID.Bytes[6:8], app.ID.Bytes[8:10], app.ID.Bytes[10:16])
+		finalSlug := fmt.Sprintf("%s-%s-%s", project.Slug, baseSlug, appIDStr[:8])
+		if err := q.UpdateApplicationSlug(r.Context(), generated.UpdateApplicationSlugParams{
+			ID:   app.ID,
+			Slug: finalSlug,
+		}); err != nil {
+			return err
+		}
+		app.Slug = finalSlug
+		return nil
+	}); err != nil {
+		slog.Error("failed to create application", "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to create application")
 		return
 	}
-
-	// Construct final slug: {projectSlug}-{baseSlug}-{shortId}
-	appID := fmt.Sprintf("%x-%x-%x-%x-%x",
-		app.ID.Bytes[0:4], app.ID.Bytes[4:6], app.ID.Bytes[6:8], app.ID.Bytes[8:10], app.ID.Bytes[10:16])
-	finalSlug := fmt.Sprintf("%s-%s-%s", project.Slug, baseSlug, appID[:8])
-	if err := h.queries.UpdateApplicationSlug(r.Context(), generated.UpdateApplicationSlugParams{
-		ID:   app.ID,
-		Slug: finalSlug,
-	}); err != nil {
-		slog.Error("failed to update application slug", "app_id", app.ID, "slug", finalSlug, "error", err)
-	}
-	app.Slug = finalSlug
 
 	writeJSON(w, http.StatusCreated, app)
 }

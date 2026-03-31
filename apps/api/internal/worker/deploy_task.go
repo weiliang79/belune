@@ -18,6 +18,7 @@ import (
 	"github.com/ungweiliang/selfhost-paas/internal/pkg/crypto"
 	"github.com/ungweiliang/selfhost-paas/internal/proxy"
 	"github.com/ungweiliang/selfhost-paas/internal/runtime"
+	"github.com/ungweiliang/selfhost-paas/internal/store"
 	"github.com/ungweiliang/selfhost-paas/internal/store/generated"
 )
 
@@ -230,17 +231,20 @@ func (h *TaskHandler) HandleDeployTask(ctx context.Context, t *asynq.Task) error
 		}
 	}
 
-	// Mark deployment as success, include commit SHA if available
-	h.Queries.UpdateDeploymentStatus(ctx, generated.UpdateDeploymentStatusParams{
-		ID:     deploymentID,
-		Status: "success",
-	})
-
-	// Update application status to running
-	h.Queries.UpdateApplicationStatus(ctx, generated.UpdateApplicationStatusParams{
-		ID:     applicationID,
-		Status: "running",
-	})
+	// Mark deployment as success and application as running — both or neither
+	if err := store.WithTx(ctx, h.DB, func(q *generated.Queries) error {
+		q.UpdateDeploymentStatus(ctx, generated.UpdateDeploymentStatusParams{
+			ID:     deploymentID,
+			Status: "success",
+		})
+		q.UpdateApplicationStatus(ctx, generated.UpdateApplicationStatusParams{
+			ID:     applicationID,
+			Status: "running",
+		})
+		return nil
+	}); err != nil {
+		slog.Error("failed to commit deploy success status", "application_id", payload.ApplicationID, "error", err)
+	}
 
 	slog.Info("deploy completed",
 		"application_id", payload.ApplicationID,

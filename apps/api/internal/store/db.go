@@ -10,6 +10,8 @@ import (
 	_ "github.com/golang-migrate/migrate/v4/database/pgx/v5"
 	"github.com/golang-migrate/migrate/v4/source/iofs"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/ungweiliang/selfhost-paas/internal/store/generated"
 )
 
 // Connect creates a new PostgreSQL connection pool.
@@ -50,6 +52,19 @@ func RunMigrations(databaseURL string, migrationFS embed.FS) error {
 	version, dirty, _ := m.Version()
 	slog.Info("database migrations applied", "version", version, "dirty", dirty)
 	return nil
+}
+
+// WithTx runs fn inside a transaction. Commits on success, rolls back on error.
+func WithTx(ctx context.Context, pool *pgxpool.Pool, fn func(q *generated.Queries) error) error {
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin transaction: %w", err)
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck
+	if err := fn(generated.New(tx)); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
 }
 
 // stripScheme removes the "postgres://" or "postgresql://" scheme prefix

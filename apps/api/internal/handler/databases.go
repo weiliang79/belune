@@ -14,6 +14,7 @@ import (
 
 	"github.com/ungweiliang/selfhost-paas/internal/naming"
 	"github.com/ungweiliang/selfhost-paas/internal/pkg/crypto"
+	"github.com/ungweiliang/selfhost-paas/internal/store"
 	"github.com/ungweiliang/selfhost-paas/internal/store/generated"
 )
 
@@ -168,35 +169,44 @@ func (h *Handler) CreateDatabase(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	db, err := h.queries.CreateDatabase(r.Context(), generated.CreateDatabaseParams{
-		ProjectID:            projectUUID,
-		Type:                 req.Type,
-		Name:                 req.Name,
-		Slug:                 baseSlug,
-		Version:              req.Version,
-		Status:               "creating",
-		InternalHost:         pgtype.Text{},
-		InternalPort:         pgtype.Int4{},
-		CredentialsEncrypted: encrypted,
-	})
-	if err != nil {
+	var db generated.Database
+	if err := store.WithTx(r.Context(), h.db, func(q *generated.Queries) error {
+		var err error
+		db, err = q.CreateDatabase(r.Context(), generated.CreateDatabaseParams{
+			ProjectID:            projectUUID,
+			Type:                 req.Type,
+			Name:                 req.Name,
+			Slug:                 baseSlug,
+			Version:              req.Version,
+			Status:               "creating",
+			InternalHost:         pgtype.Text{},
+			InternalPort:         pgtype.Int4{},
+			CredentialsEncrypted: encrypted,
+		})
+		if err != nil {
+			return err
+		}
+		// Construct final slug: {projectSlug}-{baseSlug}-{shortId}
+		dbIDStr := fmt.Sprintf("%x-%x-%x-%x-%x",
+			db.ID.Bytes[0:4], db.ID.Bytes[4:6], db.ID.Bytes[6:8], db.ID.Bytes[8:10], db.ID.Bytes[10:16])
+		finalSlug := fmt.Sprintf("%s-%s-%s", project.Slug, baseSlug, dbIDStr[:8])
+		if err := q.UpdateDatabaseSlug(r.Context(), generated.UpdateDatabaseSlugParams{
+			ID:   db.ID,
+			Slug: finalSlug,
+		}); err != nil {
+			return err
+		}
+		db.Slug = finalSlug
+		return nil
+	}); err != nil {
+		slog.Error("failed to create database", "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to create database")
 		return
 	}
 
-	// Construct final slug: {projectSlug}-{baseSlug}-{shortId}
+	// Enqueue provision task
 	dbIDStr := fmt.Sprintf("%x-%x-%x-%x-%x",
 		db.ID.Bytes[0:4], db.ID.Bytes[4:6], db.ID.Bytes[6:8], db.ID.Bytes[8:10], db.ID.Bytes[10:16])
-	finalSlug := fmt.Sprintf("%s-%s-%s", project.Slug, baseSlug, dbIDStr[:8])
-	if err := h.queries.UpdateDatabaseSlug(r.Context(), generated.UpdateDatabaseSlugParams{
-		ID:   db.ID,
-		Slug: finalSlug,
-	}); err != nil {
-		slog.Error("failed to update database slug", "db_id", db.ID, "slug", finalSlug, "error", err)
-	}
-	db.Slug = finalSlug
-
-	// Enqueue provision task
 	payload, _ := json.Marshal(provisionDBPayload{DatabaseID: dbIDStr})
 	task := asynq.NewTask("provision_db", payload)
 	if _, err := h.asynq.Enqueue(task, asynq.Queue("critical")); err != nil {
