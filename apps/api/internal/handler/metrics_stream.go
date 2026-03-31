@@ -2,18 +2,19 @@ package handler
 
 import (
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/ungweiliang/selfhost-paas/internal/naming"
 	"github.com/ungweiliang/selfhost-paas/internal/pkg/sse"
-	"github.com/ungweiliang/selfhost-paas/internal/store/generated"
 )
 
 // StreamHostMetrics streams live host metric points via SSE.
-// Bootstraps the last 60 seconds of 1s data, then pushes new points as they arrive.
+// Subscribes to Redis pub/sub channel published by the metrics ticker.
 // GET /api/metrics/host/stream
 func (h *Handler) StreamHostMetrics(w http.ResponseWriter, r *http.Request) {
 	writer, err := sse.NewWriter(w)
@@ -24,42 +25,15 @@ func (h *Handler) StreamHostMetrics(w http.ResponseWriter, r *http.Request) {
 
 	ctx := r.Context()
 
-	// Send a ping comment immediately so the proxy flushes the response headers
-	// and the browser fires onopen, even when there is no data yet.
 	if err := writer.SendComment("ping"); err != nil {
 		return
 	}
 
-	since := time.Now().Add(-60 * time.Second)
-	lastSeen := since
+	// Subscribe to the Redis pub/sub channel for live host metrics
+	pubsub := h.rdb.Subscribe(ctx, "host:metrics:live")
+	defer pubsub.Close()
+	ch := pubsub.Channel()
 
-	// Bootstrap: send the last 60 seconds of existing data
-	rows, err := h.queries.GetHostMetrics(ctx, generated.GetHostMetricsParams{
-		Granularity: "1s",
-		RecordedAt:  pgtype.Timestamptz{Time: since, Valid: true},
-	})
-	if err == nil {
-		for _, row := range rows {
-			point := hostMetricPoint{
-				CPUPercent:  ptrFloat8(row.HostCpuPercent),
-				MemoryUsed:  ptrInt8(row.HostMemoryUsed),
-				MemoryTotal: ptrInt8(row.HostMemoryTotal),
-				DiskUsed:    ptrInt8(row.HostDiskUsed),
-				DiskTotal:   ptrInt8(row.HostDiskTotal),
-				RecordedAt:  row.RecordedAt.Time.Format(time.RFC3339),
-			}
-			data, _ := json.Marshal(point)
-			if err := writer.SendData(string(data)); err != nil {
-				return
-			}
-			if row.RecordedAt.Time.After(lastSeen) {
-				lastSeen = row.RecordedAt.Time
-			}
-		}
-	}
-
-	ticker := time.NewTicker(time.Second)
-	defer ticker.Stop()
 	heartbeat := time.NewTicker(30 * time.Second)
 	defer heartbeat.Stop()
 
@@ -71,38 +45,16 @@ func (h *Handler) StreamHostMetrics(w http.ResponseWriter, r *http.Request) {
 			if err := writer.SendComment("ping"); err != nil {
 				return
 			}
-		case <-ticker.C:
-			rows, err := h.queries.GetHostMetrics(ctx, generated.GetHostMetricsParams{
-				Granularity: "1s",
-				RecordedAt:  pgtype.Timestamptz{Time: lastSeen, Valid: true},
-			})
-			if err != nil {
-				continue
-			}
-			for _, row := range rows {
-				if !row.RecordedAt.Time.After(lastSeen) {
-					continue
-				}
-				point := hostMetricPoint{
-					CPUPercent:  ptrFloat8(row.HostCpuPercent),
-					MemoryUsed:  ptrInt8(row.HostMemoryUsed),
-					MemoryTotal: ptrInt8(row.HostMemoryTotal),
-					DiskUsed:    ptrInt8(row.HostDiskUsed),
-					DiskTotal:   ptrInt8(row.HostDiskTotal),
-					RecordedAt:  row.RecordedAt.Time.Format(time.RFC3339),
-				}
-				data, _ := json.Marshal(point)
-				if err := writer.SendData(string(data)); err != nil {
-					return
-				}
-				lastSeen = row.RecordedAt.Time
+		case msg := <-ch:
+			if err := writer.SendData(msg.Payload); err != nil {
+				return
 			}
 		}
 	}
 }
 
-// StreamApplicationMetrics streams live application metric points via SSE.
-// Bootstraps the last 60 seconds of 1s data, then pushes new points as they arrive.
+// StreamApplicationMetrics streams live container metrics for a single application via SSE.
+// Queries Docker stats API on-demand every 2 seconds — no database storage.
 // GET /api/projects/{projectId}/applications/{applicationId}/metrics/stream
 func (h *Handler) StreamApplicationMetrics(w http.ResponseWriter, r *http.Request) {
 	applicationID := chi.URLParam(r, "applicationId")
@@ -117,50 +69,27 @@ func (h *Handler) StreamApplicationMetrics(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	writer, err := sse.NewWriter(w)
+	// Look up container name from application record
+	appRow, err := h.queries.GetApplicationWithProjectSlug(r.Context(), appUUID)
 	if err != nil {
+		writeError(w, http.StatusNotFound, "application not found")
+		return
+	}
+	containerName := naming.ContainerName(appRow.ProjectSlug, appRow.Slug, applicationID)
+
+	writer, sseErr := sse.NewWriter(w)
+	if sseErr != nil {
 		writeError(w, http.StatusInternalServerError, "streaming not supported")
 		return
 	}
 
 	ctx := r.Context()
 
-	// Send a ping comment immediately so the proxy flushes the response headers
-	// and the browser fires onopen, even when there is no data yet.
 	if err := writer.SendComment("ping"); err != nil {
 		return
 	}
 
-	since := time.Now().Add(-60 * time.Second)
-	lastSeen := since
-
-	// Bootstrap: send the last 60 seconds of existing data
-	rows, err := h.queries.GetApplicationMetrics(ctx, generated.GetApplicationMetricsParams{
-		ApplicationID: appUUID,
-		Granularity:   "1s",
-		RecordedAt:    pgtype.Timestamptz{Time: since, Valid: true},
-	})
-	if err == nil {
-		for _, row := range rows {
-			point := appMetricPoint{
-				CPUPercent:     ptrFloat8(row.CpuPercent),
-				MemoryUsage:    ptrInt8(row.MemoryUsage),
-				MemoryLimit:    ptrInt8(row.MemoryLimit),
-				NetworkRxBytes: ptrInt8(row.NetworkRxBytes),
-				NetworkTxBytes: ptrInt8(row.NetworkTxBytes),
-				RecordedAt:     row.RecordedAt.Time.Format(time.RFC3339),
-			}
-			data, _ := json.Marshal(point)
-			if err := writer.SendData(string(data)); err != nil {
-				return
-			}
-			if row.RecordedAt.Time.After(lastSeen) {
-				lastSeen = row.RecordedAt.Time
-			}
-		}
-	}
-
-	ticker := time.NewTicker(time.Second)
+	ticker := time.NewTicker(2 * time.Second)
 	defer ticker.Stop()
 	heartbeat := time.NewTicker(30 * time.Second)
 	defer heartbeat.Stop()
@@ -174,31 +103,23 @@ func (h *Handler) StreamApplicationMetrics(w http.ResponseWriter, r *http.Reques
 				return
 			}
 		case <-ticker.C:
-			rows, err := h.queries.GetApplicationMetrics(ctx, generated.GetApplicationMetricsParams{
-				ApplicationID: appUUID,
-				Granularity:   "1s",
-				RecordedAt:    pgtype.Timestamptz{Time: lastSeen, Valid: true},
-			})
+			stats, err := h.runtime.ContainerStats(ctx, containerName)
 			if err != nil {
+				slog.Debug("failed to collect container stats for stream", "container", containerName, "error", err)
 				continue
 			}
-			for _, row := range rows {
-				if !row.RecordedAt.Time.After(lastSeen) {
-					continue
-				}
-				point := appMetricPoint{
-					CPUPercent:     ptrFloat8(row.CpuPercent),
-					MemoryUsage:    ptrInt8(row.MemoryUsage),
-					MemoryLimit:    ptrInt8(row.MemoryLimit),
-					NetworkRxBytes: ptrInt8(row.NetworkRxBytes),
-					NetworkTxBytes: ptrInt8(row.NetworkTxBytes),
-					RecordedAt:     row.RecordedAt.Time.Format(time.RFC3339),
-				}
-				data, _ := json.Marshal(point)
-				if err := writer.SendData(string(data)); err != nil {
-					return
-				}
-				lastSeen = row.RecordedAt.Time
+
+			point := appMetricPoint{
+				CPUPercent:     &stats.CPUPercent,
+				MemoryUsage:    &stats.MemoryUsage,
+				MemoryLimit:    &stats.MemoryLimit,
+				NetworkRxBytes: &stats.NetworkRxBytes,
+				NetworkTxBytes: &stats.NetworkTxBytes,
+				RecordedAt:     time.Now().Format(time.RFC3339),
+			}
+			data, _ := json.Marshal(point)
+			if err := writer.SendData(string(data)); err != nil {
+				return
 			}
 		}
 	}

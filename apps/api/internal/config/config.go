@@ -17,6 +17,11 @@ type Config struct {
 	CORSOrigins         []string
 	SecureCookies       bool
 	DisableRateLimiting bool // set true in tests to avoid per-IP counter accumulation
+
+	// Timeouts
+	BuildTimeoutMinutes     int // max duration for build operations (default 30)
+	TaskTimeoutMinutes      int // max duration for asynq tasks (default 45)
+	ImagePullTimeoutMinutes int // max duration for image pull operations (default 10)
 }
 
 func Load() (*Config, error) {
@@ -29,6 +34,10 @@ func Load() (*Config, error) {
 		CaddyAdminURL:  getEnv("CADDY_ADMIN_URL", "http://localhost:2019"),
 		CORSOrigins:    getEnvList("CORS_ORIGINS", []string{"http://localhost:5173"}),
 		SecureCookies:  getEnvBool("SECURE_COOKIES", false),
+
+		BuildTimeoutMinutes:     getEnvInt("BUILD_TIMEOUT_MINUTES", 30),
+		TaskTimeoutMinutes:      getEnvInt("TASK_TIMEOUT_MINUTES", 45),
+		ImagePullTimeoutMinutes: getEnvInt("IMAGE_PULL_TIMEOUT_MINUTES", 10),
 	}
 
 	if cfg.JWTSecret == "" {

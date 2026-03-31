@@ -31,20 +31,6 @@ export function useHostHistoricalMetrics(range: string, enabled = true) {
   });
 }
 
-export function useApplicationMetrics(
-  projectId: string,
-  applicationId: string,
-  range: string,
-  enabled = true,
-) {
-  return useQuery({
-    queryKey: queryKeys.appMetrics(projectId, applicationId, range),
-    queryFn: () => metricsApi.getApplicationMetrics(projectId, applicationId, range),
-    refetchInterval: 60_000,
-    enabled,
-  });
-}
-
 export function useHostMetricsStream(enabled: boolean) {
   const [data, setData] = useState<HostMetricPoint[]>([]);
   const [connected, setConnected] = useState(false);

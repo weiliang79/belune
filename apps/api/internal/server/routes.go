@@ -113,8 +113,7 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService,
 		r.Get("/api/projects/{projectId}/databases/{databaseId}", h.GetDatabase)
 		r.Delete("/api/projects/{projectId}/databases/{databaseId}", h.DeleteDatabase)
 
-		// Application historical metrics + live stream
-		r.Get("/api/projects/{projectId}/applications/{applicationId}/metrics", h.GetApplicationHistoricalMetrics)
+		// Application live metrics stream (no historical — container metrics are on-demand only)
 		r.Get("/api/projects/{projectId}/applications/{applicationId}/metrics/stream", h.StreamApplicationMetrics)
 
 		// Metrics, Settings & Cleanup (admin-only)

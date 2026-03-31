@@ -2,11 +2,11 @@ package worker
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"log/slog"
-	"sync"
 	"time"
 
-	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/shirou/gopsutil/v4/cpu"
 	"github.com/shirou/gopsutil/v4/disk"
@@ -15,101 +15,112 @@ import (
 	"github.com/ungweiliang/selfhost-paas/internal/store/generated"
 )
 
-// HandleCollectMetricsTask collects host stats (gopsutil) and per-container stats (Docker API),
-// then inserts 1m granularity snapshots into the database.
-func (h *TaskHandler) HandleCollectMetricsTask(ctx context.Context, t *asynq.Task) error {
-	now := time.Now()
-	recordedAt := pgtype.Timestamptz{Time: now, Valid: true}
+// hostMetricPoint is published to Redis and sent via SSE.
+type hostMetricPoint struct {
+	CPUPercent  float64 `json:"cpu_percent"`
+	MemoryUsed  int64   `json:"memory_used"`
+	MemoryTotal int64   `json:"memory_total"`
+	DiskUsed    int64   `json:"disk_used"`
+	DiskTotal   int64   `json:"disk_total"`
+	RecordedAt  string  `json:"recorded_at"`
+}
 
-	// Collect host stats
+// collectHostStats gathers host CPU, memory, and disk usage via gopsutil.
+func collectHostStats(ctx context.Context) hostMetricPoint {
+	now := time.Now()
+	point := hostMetricPoint{
+		RecordedAt: now.Format(time.RFC3339),
+	}
+
 	cpuPercents, err := cpu.PercentWithContext(ctx, 0, false)
-	var hostCPU float64
 	if err == nil && len(cpuPercents) > 0 {
-		hostCPU = cpuPercents[0]
+		point.CPUPercent = cpuPercents[0]
 	} else if err != nil {
 		slog.Warn("failed to collect host CPU", "error", err)
 	}
 
 	memInfo, err := mem.VirtualMemoryWithContext(ctx)
-	var hostMemUsed, hostMemTotal int64
 	if err == nil {
-		hostMemUsed = int64(memInfo.Used)
-		hostMemTotal = int64(memInfo.Total)
+		point.MemoryUsed = int64(memInfo.Used)
+		point.MemoryTotal = int64(memInfo.Total)
 	} else {
 		slog.Warn("failed to collect host memory", "error", err)
 	}
 
 	diskInfo, err := disk.UsageWithContext(ctx, "/")
-	var hostDiskUsed, hostDiskTotal int64
 	if err == nil {
-		hostDiskUsed = int64(diskInfo.Used)
-		hostDiskTotal = int64(diskInfo.Total)
+		point.DiskUsed = int64(diskInfo.Used)
+		point.DiskTotal = int64(diskInfo.Total)
 	} else {
 		slog.Warn("failed to collect host disk", "error", err)
 	}
 
-	// Insert host-level snapshot (no application_id)
-	if err := h.Queries.InsertMetricSnapshot(ctx, generated.InsertMetricSnapshotParams{
-		Granularity:     "1s",
-		HostCpuPercent:  pgtype.Float8{Float64: hostCPU, Valid: true},
-		HostMemoryUsed:  pgtype.Int8{Int64: hostMemUsed, Valid: true},
-		HostMemoryTotal: pgtype.Int8{Int64: hostMemTotal, Valid: true},
-		HostDiskUsed:    pgtype.Int8{Int64: hostDiskUsed, Valid: true},
-		HostDiskTotal:   pgtype.Int8{Int64: hostDiskTotal, Valid: true},
-		RecordedAt:      recordedAt,
+	return point
+}
+
+// persistHostMetric inserts a host metric row into the database.
+func (h *TaskHandler) persistHostMetric(ctx context.Context, point hostMetricPoint) {
+	recordedAt, _ := time.Parse(time.RFC3339, point.RecordedAt)
+	if err := h.Queries.InsertHostMetric(ctx, generated.InsertHostMetricParams{
+		CpuPercent:  point.CPUPercent,
+		MemoryUsed:  point.MemoryUsed,
+		MemoryTotal: point.MemoryTotal,
+		DiskUsed:    point.DiskUsed,
+		DiskTotal:   point.DiskTotal,
+		RecordedAt:  pgtype.Timestamptz{Time: recordedAt, Valid: true},
 	}); err != nil {
-		slog.Error("failed to insert host metric snapshot", "error", err)
+		slog.Error("failed to insert host metric", "error", err)
+	}
+}
+
+// HandleRetentionCleanup deletes host metrics older than the configured retention period.
+func (h *TaskHandler) HandleRetentionCleanup(ctx context.Context) {
+	retentionDays := 14
+	setting, err := h.Queries.GetSetting(ctx, "metrics_retention_days")
+	if err == nil {
+		var days int
+		if _, scanErr := fmt.Sscanf(setting.Value, "%d", &days); scanErr == nil && days > 0 {
+			retentionDays = days
+		}
 	}
 
-	// Collect per-container stats
-	containers, err := h.Runtime.ListContainers(ctx)
-	if err != nil {
-		slog.Error("failed to list containers for metrics", "error", err)
-		return nil
+	cutoff := time.Now().AddDate(0, 0, -retentionDays)
+	if err := h.Queries.DeleteOldHostMetrics(ctx, pgtype.Timestamptz{Time: cutoff, Valid: true}); err != nil {
+		slog.Error("failed to delete old host metrics", "error", err)
+	} else {
+		slog.Info("metrics retention cleanup completed", "retention_days", retentionDays)
 	}
+}
 
-	var wg sync.WaitGroup
-	for _, ctr := range containers {
-		if ctr.Status != "running" {
-			continue
-		}
+// StartMetricsTicker collects host metrics every 2 seconds, publishes to Redis
+// for live SSE consumers, and persists to DB every 60 seconds.
+func (w *Worker) StartMetricsTicker(ctx context.Context) {
+	ticker := time.NewTicker(2 * time.Second)
+	defer ticker.Stop()
 
-		appIDStr, ok := ctr.Labels["application-id"]
-		if !ok {
-			continue
-		}
+	var tickCount int
+	const persistEvery = 30 // 30 ticks * 2s = 60s
 
-		var appUUID pgtype.UUID
-		if err := appUUID.Scan(appIDStr); err != nil {
-			continue
-		}
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			tickCount++
+			point := collectHostStats(ctx)
 
-		wg.Add(1)
-		go func(ctrID, ctrName string, appID pgtype.UUID) {
-			defer wg.Done()
-
-			stats, err := h.Runtime.ContainerStats(ctx, ctrID)
-			if err != nil {
-				slog.Warn("failed to collect container stats", "container", ctrName, "error", err)
-				return
+			// Publish to Redis for live SSE consumers
+			data, err := json.Marshal(point)
+			if err == nil {
+				if pubErr := w.handler.RedisClient.Publish(ctx, "host:metrics:live", data).Err(); pubErr != nil {
+					slog.Debug("failed to publish host metrics to Redis", "error", pubErr)
+				}
 			}
 
-			if err := h.Queries.InsertMetricSnapshot(ctx, generated.InsertMetricSnapshotParams{
-				ApplicationID:  appID,
-				Granularity:    "1s",
-				CpuPercent:     pgtype.Float8{Float64: stats.CPUPercent, Valid: true},
-				MemoryUsage:    pgtype.Int8{Int64: stats.MemoryUsage, Valid: true},
-				MemoryLimit:    pgtype.Int8{Int64: stats.MemoryLimit, Valid: true},
-				NetworkRxBytes: pgtype.Int8{Int64: stats.NetworkRxBytes, Valid: true},
-				NetworkTxBytes: pgtype.Int8{Int64: stats.NetworkTxBytes, Valid: true},
-				RecordedAt:     recordedAt,
-			}); err != nil {
-				slog.Error("failed to insert container metric snapshot", "container", ctrName, "error", err)
+			// Persist to DB every 60 seconds
+			if tickCount%persistEvery == 0 {
+				w.handler.persistHostMetric(ctx, point)
 			}
-		}(ctr.ID, ctr.Name, appUUID)
+		}
 	}
-	wg.Wait()
-
-	slog.Info("metrics collection completed", "containers_checked", len(containers))
-	return nil
 }

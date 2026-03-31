@@ -2,8 +2,13 @@ package store
 
 import (
 	"context"
+	"embed"
 	"fmt"
+	"log/slog"
 
+	"github.com/golang-migrate/migrate/v4"
+	_ "github.com/golang-migrate/migrate/v4/database/pgx/v5"
+	"github.com/golang-migrate/migrate/v4/source/iofs"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -24,4 +29,36 @@ func Connect(databaseURL string) (*pgxpool.Pool, error) {
 	}
 
 	return pool, nil
+}
+
+// RunMigrations runs all embedded SQL migrations against the database.
+func RunMigrations(databaseURL string, migrationFS embed.FS) error {
+	src, err := iofs.New(migrationFS, ".")
+	if err != nil {
+		return fmt.Errorf("create migration source: %w", err)
+	}
+
+	m, err := migrate.NewWithSourceInstance("iofs", src, "pgx5://"+stripScheme(databaseURL))
+	if err != nil {
+		return fmt.Errorf("create migrate instance: %w", err)
+	}
+
+	if err := m.Up(); err != nil && err != migrate.ErrNoChange {
+		return fmt.Errorf("run migrations: %w", err)
+	}
+
+	version, dirty, _ := m.Version()
+	slog.Info("database migrations applied", "version", version, "dirty", dirty)
+	return nil
+}
+
+// stripScheme removes the "postgres://" or "postgresql://" scheme prefix
+// so we can prepend "pgx5://" for the golang-migrate pgx driver.
+func stripScheme(url string) string {
+	for _, prefix := range []string{"postgresql://", "postgres://"} {
+		if len(url) > len(prefix) && url[:len(prefix)] == prefix {
+			return url[len(prefix):]
+		}
+	}
+	return url
 }

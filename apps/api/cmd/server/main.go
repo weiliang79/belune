@@ -19,6 +19,7 @@ import (
 	"github.com/ungweiliang/selfhost-paas/internal/build/image"
 	"github.com/ungweiliang/selfhost-paas/internal/build/railpack"
 	"github.com/ungweiliang/selfhost-paas/internal/config"
+	"github.com/ungweiliang/selfhost-paas/internal/migrations"
 	"github.com/ungweiliang/selfhost-paas/internal/proxy/caddy"
 	"github.com/ungweiliang/selfhost-paas/internal/runtime/docker"
 	"github.com/ungweiliang/selfhost-paas/internal/server"
@@ -41,6 +42,12 @@ func main() {
 		os.Exit(1)
 	}
 	defer db.Close()
+
+	// Run database migrations
+	if err := store.RunMigrations(cfg.DatabaseURL, migrations.Files); err != nil {
+		slog.Error("failed to run database migrations", "error", err)
+		os.Exit(1)
+	}
 
 	queries := generated.New(db)
 
@@ -89,6 +96,7 @@ func main() {
 		Chain:         buildChain,
 		EncryptionKey: cfg.EncryptionKey,
 		RedisClient:   rdb,
+		Config:        cfg,
 	}
 
 	w := worker.New(redisOpt, taskHandler)

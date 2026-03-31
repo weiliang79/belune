@@ -80,7 +80,7 @@ export function UPlotAreaChart({
     return {
       width,
       height,
-      cursor: { sync: { key: undefined } },
+      cursor: { show: true },
       padding: [8, 0, 0, 0],
       series: [
         {},

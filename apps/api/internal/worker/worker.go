@@ -10,6 +10,7 @@ import (
 	"github.com/redis/go-redis/v9"
 
 	"github.com/ungweiliang/selfhost-paas/internal/build"
+	"github.com/ungweiliang/selfhost-paas/internal/config"
 	"github.com/ungweiliang/selfhost-paas/internal/proxy"
 	"github.com/ungweiliang/selfhost-paas/internal/runtime"
 	"github.com/ungweiliang/selfhost-paas/internal/store/generated"
@@ -23,6 +24,7 @@ type TaskHandler struct {
 	Chain         *build.Chain
 	EncryptionKey string
 	RedisClient   *redis.Client
+	Config        *config.Config
 }
 
 type Worker struct {
@@ -41,6 +43,20 @@ func New(redisOpt asynq.RedisConnOpt, handler *TaskHandler) *Worker {
 				"default":  3,
 				"low":      1,
 			},
+			RetryDelayFunc: func(n int, e error, t *asynq.Task) time.Duration {
+				// Exponential backoff: 30s, 2m, 4.5m
+				return time.Duration(n*n) * 30 * time.Second
+			},
+			ErrorHandler: asynq.ErrorHandlerFunc(func(ctx context.Context, task *asynq.Task, err error) {
+				retried, _ := asynq.GetRetryCount(ctx)
+				maxRetry, _ := asynq.GetMaxRetry(ctx)
+				slog.Error("task failed",
+					"type", task.Type(),
+					"retry", retried,
+					"max_retry", maxRetry,
+					"error", err,
+				)
+			}),
 		},
 	)
 
@@ -53,8 +69,10 @@ func (w *Worker) Start() error {
 	mux.HandleFunc(TypeBuild, w.handler.HandleBuildTask)
 	mux.HandleFunc(TypeCleanup, w.handler.HandleCleanupTask)
 	mux.HandleFunc(TypeProvisionDB, w.handler.HandleProvisionDBTask)
-	mux.HandleFunc(TypeDownsampleMetrics1s, w.handler.HandleDownsampleMetrics1sTask)
-	mux.HandleFunc(TypeDownsampleMetrics, w.handler.HandleDownsampleMetricsTask)
+	mux.HandleFunc(TypeRetentionCleanup, func(ctx context.Context, t *asynq.Task) error {
+		w.handler.HandleRetentionCleanup(ctx)
+		return nil
+	})
 
 	slog.Info("starting worker server")
 	return w.server.Start(mux)
@@ -73,19 +91,13 @@ func (w *Worker) StartScheduler() (*asynq.Scheduler, error) {
 		return nil, err
 	}
 
-	// Schedule 1s→1m downsample every 5 minutes
-	downsample1sTask := asynq.NewTask(TypeDownsampleMetrics1s, nil)
-	if _, err := scheduler.Register("@every 5m", downsample1sTask, asynq.Queue("low")); err != nil {
+	// Schedule metrics retention cleanup daily
+	retentionTask := asynq.NewTask(TypeRetentionCleanup, nil)
+	if _, err := scheduler.Register("@every 24h", retentionTask, asynq.Queue("low")); err != nil {
 		return nil, err
 	}
 
-	// Schedule 1m→5m→1h downsample every 1 hour
-	downsampleTask := asynq.NewTask(TypeDownsampleMetrics, nil)
-	if _, err := scheduler.Register("@every 1h", downsampleTask, asynq.Queue("low")); err != nil {
-		return nil, err
-	}
-
-	slog.Info("starting scheduler (cleanup: 24h, downsample-1s: 5m, downsample: 1h)")
+	slog.Info("starting scheduler (cleanup: 24h, retention: 24h)")
 	if err := scheduler.Start(); err != nil {
 		return nil, err
 	}
@@ -95,21 +107,4 @@ func (w *Worker) StartScheduler() (*asynq.Scheduler, error) {
 
 func (w *Worker) Stop() {
 	w.server.Stop()
-}
-
-// StartMetricsTicker runs metrics collection on a precise 1-second ticker,
-// bypassing the Redis-backed scheduler to avoid jitter and double-firing.
-func (w *Worker) StartMetricsTicker(ctx context.Context) {
-	ticker := time.NewTicker(time.Second)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			if err := w.handler.HandleCollectMetricsTask(ctx, nil); err != nil {
-				slog.Error("metrics ticker: collection failed", "error", err)
-			}
-		}
-	}
 }

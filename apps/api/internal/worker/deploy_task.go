@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"time"
 
 	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -46,7 +47,7 @@ func (h *TaskHandler) HandleDeployTask(ctx context.Context, t *asynq.Task) error
 	appRow, err := h.Queries.GetApplicationWithProjectSlug(ctx, applicationID)
 	if err != nil {
 		h.failDeployment(ctx, deploymentID, fmt.Sprintf("fetch application: %v", err))
-		return fmt.Errorf("get application: %w", err)
+		return fmt.Errorf("get application (permanent): %w: %w", err, asynq.SkipRetry)
 	}
 	// Map row to a usable application reference
 	app := generated.Application{
@@ -112,7 +113,9 @@ func (h *TaskHandler) HandleDeployTask(ctx context.Context, t *asynq.Task) error
 	case "image":
 		imageName = app.SourceImage.String
 		slog.Info("pulling image", "image", imageName)
-		if err := h.Runtime.PullImage(ctx, imageName); err != nil {
+		pullCtx, pullCancel := context.WithTimeout(ctx, time.Duration(h.Config.ImagePullTimeoutMinutes)*time.Minute)
+		defer pullCancel()
+		if err := h.Runtime.PullImage(pullCtx, imageName); err != nil {
 			h.failDeployment(ctx, deploymentID, fmt.Sprintf("pull image: %v", err))
 			return fmt.Errorf("pull image: %w", err)
 		}
@@ -128,8 +131,11 @@ func (h *TaskHandler) HandleDeployTask(ctx context.Context, t *asynq.Task) error
 		}
 		defer os.RemoveAll(tmpDir)
 
+		buildCtx, buildCancel := context.WithTimeout(ctx, time.Duration(h.Config.BuildTimeoutMinutes)*time.Minute)
+		defer buildCancel()
+
 		slog.Info("cloning repository", "repo", app.SourceRepo.String, "dest", tmpDir)
-		cloneResult, err := git.Clone(ctx, app.SourceRepo.String, tmpDir, "")
+		cloneResult, err := git.Clone(buildCtx, app.SourceRepo.String, tmpDir, "")
 		if err != nil {
 			h.failDeployment(ctx, deploymentID, fmt.Sprintf("git clone: %v", err))
 			return fmt.Errorf("git clone: %w", err)
@@ -147,7 +153,7 @@ func (h *TaskHandler) HandleDeployTask(ctx context.Context, t *asynq.Task) error
 
 		// Set up build log streaming via Redis pub/sub
 		pub := buildlog.NewPublisher(h.RedisClient, payload.DeploymentID)
-		logWriter := buildlog.NewLineWriter(pub, ctx)
+		logWriter := buildlog.NewLineWriter(pub, buildCtx)
 
 		buildOpts := build.BuildOptions{
 			SourceDir:      tmpDir,
@@ -167,7 +173,7 @@ func (h *TaskHandler) HandleDeployTask(ctx context.Context, t *asynq.Task) error
 		})
 
 		slog.Info("building image", "tag", imageName)
-		result, err := h.Chain.Build(ctx, buildOpts)
+		result, err := h.Chain.Build(buildCtx, buildOpts)
 		logWriter.Flush()
 		pub.Close(ctx)
 		if err != nil {
@@ -188,7 +194,7 @@ func (h *TaskHandler) HandleDeployTask(ctx context.Context, t *asynq.Task) error
 
 	default:
 		h.failDeployment(ctx, deploymentID, fmt.Sprintf("unknown application type: %s", app.Type))
-		return fmt.Errorf("unknown application type: %s", app.Type)
+		return fmt.Errorf("unknown application type %s (permanent): %w", app.Type, asynq.SkipRetry)
 	}
 
 	// Create and start container
@@ -246,12 +252,24 @@ func (h *TaskHandler) HandleDeployTask(ctx context.Context, t *asynq.Task) error
 }
 
 func (h *TaskHandler) failDeployment(ctx context.Context, deploymentID pgtype.UUID, errMsg string) {
-	slog.Error("deployment failed", "deployment_id", fmt.Sprintf("%v", deploymentID), "error", errMsg)
-	h.Queries.UpdateDeploymentStatus(ctx, generated.UpdateDeploymentStatusParams{
-		ID:           deploymentID,
-		Status:       "failed",
-		ErrorMessage: pgtype.Text{String: errMsg, Valid: true},
-	})
+	retried, _ := asynq.GetRetryCount(ctx)
+	maxRetry, _ := asynq.GetMaxRetry(ctx)
+
+	slog.Error("deployment failed",
+		"deployment_id", fmt.Sprintf("%v", deploymentID),
+		"error", errMsg,
+		"retry", retried,
+		"max_retry", maxRetry,
+	)
+
+	// Only mark as permanently failed after all retries are exhausted
+	if retried >= maxRetry {
+		h.Queries.UpdateDeploymentStatus(ctx, generated.UpdateDeploymentStatusParams{
+			ID:           deploymentID,
+			Status:       "failed",
+			ErrorMessage: pgtype.Text{String: errMsg, Valid: true},
+		})
+	}
 }
 
 func parseUUID(s string) pgtype.UUID {

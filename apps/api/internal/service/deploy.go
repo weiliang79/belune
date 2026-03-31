@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -16,10 +17,11 @@ import (
 )
 
 type DeployService struct {
-	runtime runtime.ContainerRuntime
-	proxy   proxy.ProxyManager
-	queries *generated.Queries
-	asynq   *asynq.Client
+	runtime      runtime.ContainerRuntime
+	proxy        proxy.ProxyManager
+	queries      *generated.Queries
+	asynq        *asynq.Client
+	taskTimeout  time.Duration
 }
 
 func NewDeployService(
@@ -27,12 +29,14 @@ func NewDeployService(
 	pm proxy.ProxyManager,
 	queries *generated.Queries,
 	asynqClient *asynq.Client,
+	taskTimeoutMinutes int,
 ) *DeployService {
 	return &DeployService{
-		runtime: rt,
-		proxy:   pm,
-		queries: queries,
-		asynq:   asynqClient,
+		runtime:     rt,
+		proxy:       pm,
+		queries:     queries,
+		asynq:       asynqClient,
+		taskTimeout: time.Duration(taskTimeoutMinutes) * time.Minute,
 	}
 }
 
@@ -62,7 +66,7 @@ func (s *DeployService) Deploy(ctx context.Context, applicationID pgtype.UUID) (
 	}
 
 	task := asynq.NewTask("deploy", payload)
-	_, err = s.asynq.Enqueue(task, asynq.Queue("critical"))
+	_, err = s.asynq.Enqueue(task, asynq.Queue("critical"), asynq.Timeout(s.taskTimeout), asynq.MaxRetry(3))
 	if err != nil {
 		return generated.Deployment{}, fmt.Errorf("enqueue deploy task: %w", err)
 	}

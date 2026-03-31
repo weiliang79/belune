@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/hibiken/asynq"
@@ -111,7 +112,7 @@ func (h *Handler) HandleWebhookPush(w http.ResponseWriter, r *http.Request) {
 		})
 
 		task := asynq.NewTask("deploy", taskPayload)
-		if _, err := h.asynq.Enqueue(task, asynq.Queue("critical")); err != nil {
+		if _, err := h.asynq.Enqueue(task, asynq.Queue("critical"), asynq.Timeout(time.Duration(h.cfg.TaskTimeoutMinutes)*time.Minute), asynq.MaxRetry(3)); err != nil {
 			slog.Error("webhook: failed to enqueue deploy", "application", app.Name, "error", err)
 			continue
 		}

@@ -118,26 +118,18 @@ CREATE TABLE project_env_vars (
 
 CREATE INDEX idx_project_env_vars_project_id ON project_env_vars(project_id);
 
--- Metric Snapshots
-CREATE TABLE metric_snapshots (
+-- Host Metrics (stored every 60s, container metrics are live-only via Docker stats API)
+CREATE TABLE host_metrics (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    application_id UUID REFERENCES applications(id) ON DELETE CASCADE,
-    granularity TEXT NOT NULL CHECK (granularity IN ('1m', '5m', '1h')),
-    host_cpu_percent DOUBLE PRECISION,
-    host_memory_used BIGINT,
-    host_memory_total BIGINT,
-    host_disk_used BIGINT,
-    host_disk_total BIGINT,
-    cpu_percent DOUBLE PRECISION,
-    memory_usage BIGINT,
-    memory_limit BIGINT,
-    network_rx_bytes BIGINT,
-    network_tx_bytes BIGINT,
+    cpu_percent DOUBLE PRECISION NOT NULL,
+    memory_used BIGINT NOT NULL,
+    memory_total BIGINT NOT NULL,
+    disk_used BIGINT NOT NULL,
+    disk_total BIGINT NOT NULL,
     recorded_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_metric_snapshots_app_time ON metric_snapshots(application_id, recorded_at);
-CREATE INDEX idx_metric_snapshots_granularity ON metric_snapshots(granularity, recorded_at);
+CREATE INDEX idx_host_metrics_recorded_at ON host_metrics(recorded_at);
 
 -- System Settings
 CREATE TABLE settings (
@@ -146,4 +138,4 @@ CREATE TABLE settings (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-INSERT INTO settings (key, value) VALUES ('metrics_retention_days', '30');
+INSERT INTO settings (key, value) VALUES ('metrics_retention_days', '14');

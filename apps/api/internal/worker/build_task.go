@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"time"
 
 	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -44,7 +45,7 @@ func (h *TaskHandler) HandleBuildTask(ctx context.Context, t *asynq.Task) error 
 	appRow, err := h.Queries.GetApplicationWithProjectSlug(ctx, applicationID)
 	if err != nil {
 		h.failDeployment(ctx, deploymentID, fmt.Sprintf("fetch application: %v", err))
-		return fmt.Errorf("get application: %w", err)
+		return fmt.Errorf("get application (permanent): %w: %w", err, asynq.SkipRetry)
 	}
 	app := generated.Application{
 		ID: appRow.ID, ProjectID: appRow.ProjectID, Name: appRow.Name,
@@ -71,8 +72,11 @@ func (h *TaskHandler) HandleBuildTask(ctx context.Context, t *asynq.Task) error 
 	}
 	defer os.RemoveAll(tmpDir)
 
+	buildCtx, buildCancel := context.WithTimeout(ctx, time.Duration(h.Config.BuildTimeoutMinutes)*time.Minute)
+	defer buildCancel()
+
 	slog.Info("cloning repository", "repo", app.SourceRepo.String, "dest", tmpDir)
-	cloneResult, err := git.Clone(ctx, app.SourceRepo.String, tmpDir, "")
+	cloneResult, err := git.Clone(buildCtx, app.SourceRepo.String, tmpDir, "")
 	if err != nil {
 		h.failDeployment(ctx, deploymentID, fmt.Sprintf("git clone: %v", err))
 		return fmt.Errorf("git clone: %w", err)
@@ -107,7 +111,7 @@ func (h *TaskHandler) HandleBuildTask(ctx context.Context, t *asynq.Task) error 
 
 	// Set up build log streaming via Redis pub/sub
 	pub := buildlog.NewPublisher(h.RedisClient, payload.DeploymentID)
-	logWriter := buildlog.NewLineWriter(pub, ctx)
+	logWriter := buildlog.NewLineWriter(pub, buildCtx)
 
 	buildOpts := build.BuildOptions{
 		SourceDir:      tmpDir,
@@ -120,7 +124,7 @@ func (h *TaskHandler) HandleBuildTask(ctx context.Context, t *asynq.Task) error 
 	}
 
 	slog.Info("building image", "tag", imageName)
-	result, err := h.Chain.Build(ctx, buildOpts)
+	result, err := h.Chain.Build(buildCtx, buildOpts)
 	logWriter.Flush()
 	pub.Close(ctx)
 	if err != nil {

@@ -43,8 +43,6 @@ export const queryKeys = {
   features: ["features"] as const,
   metrics: ["metrics"] as const,
   hostMetrics: (range: string) => ["metrics", "host", range] as const,
-  appMetrics: (projectId: string, applicationId: string, range: string) =>
-    ["metrics", "app", projectId, applicationId, range] as const,
   settings: ["settings"] as const,
   databases: {
     all: (projectId: string) =>

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/hibiken/asynq"
@@ -177,7 +178,7 @@ func (h *Handler) DeployApplication(w http.ResponseWriter, r *http.Request) {
 	})
 
 	task := asynq.NewTask("deploy", payload)
-	if _, err := h.asynq.Enqueue(task, asynq.Queue("critical")); err != nil {
+	if _, err := h.asynq.Enqueue(task, asynq.Queue("critical"), asynq.Timeout(time.Duration(h.cfg.TaskTimeoutMinutes)*time.Minute), asynq.MaxRetry(3)); err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to enqueue deploy task")
 		return
 	}
@@ -436,7 +437,7 @@ func (h *Handler) BuildApplication(w http.ResponseWriter, r *http.Request) {
 	})
 
 	task := asynq.NewTask("build", payload)
-	if _, err := h.asynq.Enqueue(task, asynq.Queue("default")); err != nil {
+	if _, err := h.asynq.Enqueue(task, asynq.Queue("default"), asynq.Timeout(time.Duration(h.cfg.TaskTimeoutMinutes)*time.Minute), asynq.MaxRetry(3)); err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to enqueue build task")
 		return
 	}
