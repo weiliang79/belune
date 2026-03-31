@@ -2,9 +2,13 @@ package handler_test
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/json"
 	"net/http"
 	"os"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -147,4 +151,32 @@ func TestChangePassword(t *testing.T) {
 	}, testutil.AuthHeader(newToken))
 	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
 	resp.Body.Close()
+}
+
+func TestJWTExpiryHoursConfigured(t *testing.T) {
+	resetDB(t)
+	// Test server is configured with JWTExpiryHours=0 (defaults to 24 in service, but config field is 0 here)
+	// We verify the token exp is roughly now + 24 hours (within a 60s window).
+	token := env.SetupAdmin(t, "admin@test.com", "password123")
+	require.NotEmpty(t, token)
+
+	// Decode JWT payload (second segment, base64url-encoded JSON)
+	parts := strings.Split(token, ".")
+	require.Len(t, parts, 3, "JWT must have 3 parts")
+
+	payload, err := base64.RawURLEncoding.DecodeString(parts[1])
+	require.NoError(t, err)
+
+	var claims map[string]any
+	require.NoError(t, json.Unmarshal(payload, &claims))
+
+	exp, ok := claims["exp"].(float64)
+	require.True(t, ok, "exp claim must be present")
+
+	expTime := time.Unix(int64(exp), 0)
+	expectedExpiry := time.Now().Add(24 * time.Hour)
+
+	// Allow ±60s tolerance for test execution time
+	assert.WithinDuration(t, expectedExpiry, expTime, 60*time.Second,
+		"token expiry should be approximately 24 hours from now")
 }

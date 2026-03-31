@@ -114,26 +114,28 @@ type EnqueuedTask struct {
 
 // MockTaskEnqueuer implements handler.TaskEnqueuer for testing.
 type MockTaskEnqueuer struct {
-	mu    sync.Mutex
-	Tasks []EnqueuedTask
+	mu          sync.Mutex
+	Tasks       []EnqueuedTask
+	EnqueueErr  error // when set, Enqueue returns this error
+	EnqueueOnce bool  // when true, EnqueueErr is cleared after first use
 }
 
 func (m *MockTaskEnqueuer) Enqueue(task *asynq.Task, opts ...asynq.Option) (*asynq.TaskInfo, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
+	if m.EnqueueErr != nil {
+		err := m.EnqueueErr
+		if m.EnqueueOnce {
+			m.EnqueueErr = nil
+		}
+		return nil, err
+	}
+
 	et := EnqueuedTask{
 		TypeName: task.Type(),
 		Payload:  task.Payload(),
 	}
-
-	// Extract queue name from options
-	for _, opt := range opts {
-		// asynq.Queue returns an Option; we can't easily inspect it,
-		// so we just record the task type and payload
-		_ = opt
-	}
-
 	m.Tasks = append(m.Tasks, et)
 	return &asynq.TaskInfo{}, nil
 }
