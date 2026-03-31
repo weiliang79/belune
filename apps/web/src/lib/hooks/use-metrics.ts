@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { queryKeys } from "./query-keys";
+import { useSSEWithReconnect } from "./use-sse";
 import * as metricsApi from "@/lib/api/metrics";
 import type { HostMetricPoint, AppMetricPoint } from "@/lib/types";
 
@@ -33,31 +34,20 @@ export function useHostHistoricalMetrics(range: string, enabled = true) {
 
 export function useHostMetricsStream(enabled: boolean) {
   const [data, setData] = useState<HostMetricPoint[]>([]);
-  const [connected, setConnected] = useState(false);
-  const sourceRef = useRef<EventSource | null>(null);
+
+  const handleMessage = useCallback((raw: string) => {
+    const point: HostMetricPoint = JSON.parse(raw);
+    setData((prev) => {
+      const cutoff = new Date(Date.now() - STREAM_WINDOW_MS).toISOString();
+      return [...prev, point].filter((p) => p.recorded_at >= cutoff);
+    });
+  }, []);
+
+  const url = enabled ? "/api/metrics/host/stream" : null;
+  const { connected } = useSSEWithReconnect(url, handleMessage);
 
   useEffect(() => {
-    if (!enabled) return;
-
-    const source = new EventSource("/api/metrics/host/stream");
-    sourceRef.current = source;
-
-    source.onopen = () => setConnected(true);
-    source.onmessage = (event) => {
-      const point: HostMetricPoint = JSON.parse(event.data);
-      setData((prev) => {
-        const cutoff = new Date(Date.now() - STREAM_WINDOW_MS).toISOString();
-        return [...prev, point].filter((p) => p.recorded_at >= cutoff);
-      });
-    };
-    source.onerror = () => setConnected(false);
-
-    return () => {
-      source.close();
-      sourceRef.current = null;
-      setData([]);
-      setConnected(false);
-    };
+    if (!enabled) setData([]);
   }, [enabled]);
 
   return { data, connected };
@@ -69,33 +59,23 @@ export function useAppMetricsStream(
   enabled: boolean,
 ) {
   const [data, setData] = useState<AppMetricPoint[]>([]);
-  const [connected, setConnected] = useState(false);
-  const sourceRef = useRef<EventSource | null>(null);
+
+  const handleMessage = useCallback((raw: string) => {
+    const point: AppMetricPoint = JSON.parse(raw);
+    setData((prev) => {
+      const cutoff = new Date(Date.now() - STREAM_WINDOW_MS).toISOString();
+      return [...prev, point].filter((p) => p.recorded_at >= cutoff);
+    });
+  }, []);
+
+  const url = enabled
+    ? `/api/projects/${projectId}/applications/${applicationId}/metrics/stream`
+    : null;
+  const { connected } = useSSEWithReconnect(url, handleMessage);
 
   useEffect(() => {
-    if (!enabled) return;
-
-    const url = `/api/projects/${projectId}/applications/${applicationId}/metrics/stream`;
-    const source = new EventSource(url);
-    sourceRef.current = source;
-
-    source.onopen = () => setConnected(true);
-    source.onmessage = (event) => {
-      const point: AppMetricPoint = JSON.parse(event.data);
-      setData((prev) => {
-        const cutoff = new Date(Date.now() - STREAM_WINDOW_MS).toISOString();
-        return [...prev, point].filter((p) => p.recorded_at >= cutoff);
-      });
-    };
-    source.onerror = () => setConnected(false);
-
-    return () => {
-      source.close();
-      sourceRef.current = null;
-      setData([]);
-      setConnected(false);
-    };
-  }, [enabled, projectId, applicationId]);
+    if (!enabled) setData([]);
+  }, [enabled]);
 
   return { data, connected };
 }

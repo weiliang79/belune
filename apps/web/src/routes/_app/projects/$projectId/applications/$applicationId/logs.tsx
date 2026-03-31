@@ -1,7 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { useSSEWithReconnect } from "@/lib/hooks/use-sse";
 
 export const Route = createFileRoute(
   "/_app/projects/$projectId/applications/$applicationId/logs",
@@ -12,29 +13,15 @@ export const Route = createFileRoute(
 function LogsPage() {
   const { projectId, applicationId } = Route.useParams();
   const [logs, setLogs] = useState<string[]>([]);
-  const [connected, setConnected] = useState(false);
   const [follow, setFollow] = useState(true);
   const scrollRef = useRef<HTMLPreElement>(null);
-  const sourceRef = useRef<EventSource | null>(null);
 
-  useEffect(() => {
-    const url = `/api/projects/${projectId}/applications/${applicationId}/logs?follow=true`;
-    const source = new EventSource(url);
-    sourceRef.current = source;
+  const handleMessage = useCallback((data: string) => {
+    setLogs((prev) => [...prev, data]);
+  }, []);
 
-    source.onopen = () => setConnected(true);
-    source.onmessage = (event) => {
-      setLogs((prev) => [...prev, event.data]);
-    };
-    source.onerror = () => {
-      setConnected(false);
-    };
-
-    return () => {
-      source.close();
-      sourceRef.current = null;
-    };
-  }, [projectId, applicationId]);
+  const url = `/api/projects/${projectId}/applications/${applicationId}/logs?follow=true`;
+  const { connected } = useSSEWithReconnect(url, handleMessage);
 
   useEffect(() => {
     if (follow && scrollRef.current) {

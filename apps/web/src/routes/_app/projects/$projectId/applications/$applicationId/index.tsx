@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useApplication } from "@/lib/hooks/use-applications";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
 import { formatDate } from "@/lib/utils/format";
 import { StatusBadge } from "@/lib/components/status-badge";
 
@@ -15,7 +16,24 @@ function ApplicationOverview() {
   const { projectId, applicationId } = Route.useParams();
   const { data: application } = useApplication(projectId, applicationId);
 
-  if (!application) return null;
+  if (!application) {
+    return (
+      <div className="grid gap-4 sm:grid-cols-2">
+        {[1, 2].map((i) => (
+          <Card key={i}>
+            <CardHeader>
+              <Skeleton className="h-5 w-36" />
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <Skeleton className="h-4 w-full" />
+              <Skeleton className="h-4 w-4/5" />
+              <Skeleton className="h-4 w-3/5" />
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+    );
+  }
 
   return (
     <div className="grid gap-4 sm:grid-cols-2">
