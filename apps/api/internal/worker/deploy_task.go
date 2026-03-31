@@ -73,9 +73,14 @@ func (h *TaskHandler) HandleDeployTask(ctx context.Context, t *asynq.Task) error
 		}
 	}
 
-	// Ensure the paas network exists (idempotent)
-	if err := h.Runtime.CreateNetwork(ctx, "paas-net"); err != nil {
-		slog.Debug("could not create paas-net (may already exist)", "error", err)
+	// Ensure project-scoped network exists (idempotent)
+	projectNetwork := naming.ProjectNetworkName(appRow.ProjectSlug)
+	if err := h.Runtime.CreateNetwork(ctx, projectNetwork); err != nil {
+		slog.Debug("could not create project network (may already exist)", "network", projectNetwork, "error", err)
+	}
+	// Ensure shared infra network exists (used by Caddy to reach containers)
+	if err := h.Runtime.CreateNetwork(ctx, "paas-infra"); err != nil {
+		slog.Debug("could not create paas-infra network (may already exist)", "error", err)
 	}
 
 	// Fetch and decrypt env vars: project-level first (base), then app-level (override)
@@ -200,14 +205,14 @@ func (h *TaskHandler) HandleDeployTask(ctx context.Context, t *asynq.Task) error
 
 	// Create and start container
 	containerID, err := h.Runtime.CreateContainer(ctx, runtime.ContainerConfig{
-		Name:    containerName,
-		Image:   imageName,
-		Env:     env,
-		Ports:   map[string]string{},
-		Network: "paas-net",
-		Labels: map[string]string{
-			"application-id": payload.ApplicationID,
-		},
+		Name:        containerName,
+		Image:       imageName,
+		Env:         env,
+		Ports:       map[string]string{},
+		Network:     naming.ProjectNetworkName(appRow.ProjectSlug),
+		Labels:      map[string]string{"application-id": payload.ApplicationID},
+		CPULimit:    app.CpuLimit,
+		MemoryLimit: app.MemoryLimit,
 	})
 	if err != nil {
 		h.failDeployment(ctx, deploymentID, fmt.Sprintf("create container: %v", err))
@@ -217,6 +222,11 @@ func (h *TaskHandler) HandleDeployTask(ctx context.Context, t *asynq.Task) error
 	if err := h.Runtime.StartContainer(ctx, containerID); err != nil {
 		h.failDeployment(ctx, deploymentID, fmt.Sprintf("start container: %v", err))
 		return fmt.Errorf("start container: %w", err)
+	}
+
+	// Connect to shared infra network so Caddy can reach the container
+	if err := h.Runtime.ConnectContainerToNetwork(ctx, containerID, "paas-infra"); err != nil {
+		slog.Warn("could not connect container to paas-infra network", "container", containerID, "error", err)
 	}
 
 	// Add proxy route if the application has domains

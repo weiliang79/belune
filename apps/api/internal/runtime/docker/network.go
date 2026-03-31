@@ -35,3 +35,10 @@ func (c *Client) CreateNetwork(ctx context.Context, name string) error {
 func (c *Client) RemoveNetwork(ctx context.Context, name string) error {
 	return c.cli.NetworkRemove(ctx, name)
 }
+
+func (c *Client) ConnectContainerToNetwork(ctx context.Context, containerID, networkName string) error {
+	if err := c.cli.NetworkConnect(ctx, networkName, containerID, nil); err != nil {
+		return fmt.Errorf("connect container %s to network %s: %w", containerID, networkName, err)
+	}
+	return nil
+}

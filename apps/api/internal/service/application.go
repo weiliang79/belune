@@ -35,6 +35,8 @@ type CreateApplicationParams struct {
 	SourceImage    string
 	DockerfilePath string
 	BuildType      string
+	CPULimit       float64
+	MemoryLimit    int64
 }
 
 // Create inserts the application record and sets its final slug atomically.
@@ -51,6 +53,8 @@ func (s *ApplicationService) Create(ctx context.Context, p CreateApplicationPara
 			SourceImage:    pgtype.Text{String: p.SourceImage, Valid: p.SourceImage != ""},
 			DockerfilePath: pgtype.Text{String: p.DockerfilePath, Valid: p.DockerfilePath != ""},
 			BuildType:      p.BuildType,
+			CpuLimit:       p.CPULimit,
+			MemoryLimit:    p.MemoryLimit,
 		})
 		if err != nil {
 			return err
@@ -69,26 +73,41 @@ func (s *ApplicationService) Create(ctx context.Context, p CreateApplicationPara
 	return app, err
 }
 
+// UpdateApplicationParams holds parameters for updating an application.
+type UpdateApplicationParams struct {
+	Name              string
+	SourceRepo        string
+	SourceImage       string
+	DockerfilePath    string
+	BuildTypeOverride string
+	BuilderImage      string
+	CPULimit          float64
+	MemoryLimit       int64
+}
+
 // Update applies field changes to an application.
 func (s *ApplicationService) Update(
 	ctx context.Context,
 	appID pgtype.UUID,
 	current generated.Application,
-	name, sourceRepo, sourceImage, dockerfilePath, buildTypeOverride, builderImage string,
+	p UpdateApplicationParams,
 ) (generated.Application, error) {
+	name := p.Name
 	if name == "" {
 		name = current.Name
 	}
 	return s.queries.UpdateApplication(ctx, generated.UpdateApplicationParams{
 		ID:                appID,
 		Name:              name,
-		SourceRepo:        pgtype.Text{String: sourceRepo, Valid: sourceRepo != ""},
-		SourceImage:       pgtype.Text{String: sourceImage, Valid: sourceImage != ""},
-		DockerfilePath:    pgtype.Text{String: dockerfilePath, Valid: dockerfilePath != ""},
-		BuildTypeOverride: pgtype.Text{String: buildTypeOverride, Valid: buildTypeOverride != ""},
-		BuilderImage:      pgtype.Text{String: builderImage, Valid: builderImage != ""},
+		SourceRepo:        pgtype.Text{String: p.SourceRepo, Valid: p.SourceRepo != ""},
+		SourceImage:       pgtype.Text{String: p.SourceImage, Valid: p.SourceImage != ""},
+		DockerfilePath:    pgtype.Text{String: p.DockerfilePath, Valid: p.DockerfilePath != ""},
+		BuildTypeOverride: pgtype.Text{String: p.BuildTypeOverride, Valid: p.BuildTypeOverride != ""},
+		BuilderImage:      pgtype.Text{String: p.BuilderImage, Valid: p.BuilderImage != ""},
 		CustomBuildpacks:  current.CustomBuildpacks,
 		Status:            current.Status,
+		CpuLimit:          p.CPULimit,
+		MemoryLimit:       p.MemoryLimit,
 	})
 }
 

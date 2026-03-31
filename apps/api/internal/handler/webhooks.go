@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -112,8 +113,17 @@ func (h *Handler) HandleWebhookPush(w http.ResponseWriter, r *http.Request) {
 		})
 
 		task := asynq.NewTask("deploy", taskPayload)
-		if _, err := h.asynq.Enqueue(task, asynq.Queue("critical"), asynq.Timeout(time.Duration(h.cfg.TaskTimeoutMinutes)*time.Minute), asynq.MaxRetry(3)); err != nil {
-			slog.Error("webhook: failed to enqueue deploy", "application", app.Name, "error", err)
+		if _, enqErr := h.asynq.Enqueue(task,
+			asynq.Queue("critical"),
+			asynq.Timeout(time.Duration(h.cfg.TaskTimeoutMinutes)*time.Minute),
+			asynq.MaxRetry(3),
+			asynq.TaskID("deploy:"+applicationID),
+		); enqErr != nil {
+			if !errors.Is(enqErr, asynq.ErrTaskIDConflict) {
+				slog.Error("webhook: failed to enqueue deploy", "application", app.Name, "error", enqErr)
+			} else {
+				slog.Debug("webhook: deploy already in progress, skipping", "application", app.Name)
+			}
 			continue
 		}
 

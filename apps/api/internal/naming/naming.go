@@ -35,3 +35,8 @@ func OldContainerName(applicationID string) string {
 func ImageTag(projectSlug, appSlug, applicationID, deploymentID string) string {
 	return fmt.Sprintf("%s-%s-%s:%s", projectSlug, appSlug, applicationID[:8], deploymentID[:8])
 }
+
+// ProjectNetworkName returns the Docker network name scoped to a project: "paas-{projectSlug}"
+func ProjectNetworkName(projectSlug string) string {
+	return fmt.Sprintf("paas-%s", projectSlug)
+}

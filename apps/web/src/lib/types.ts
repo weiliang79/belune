@@ -26,6 +26,8 @@ export interface Application {
   build_type: "dockerfile" | "buildpacks" | "railpack" | "image";
   build_type_override: string | null;
   builder_image: string | null;
+  cpu_limit: number;
+  memory_limit: number;
   status: string;
   webhook_secret: string | null;
   auto_deploy_branch: string | null;

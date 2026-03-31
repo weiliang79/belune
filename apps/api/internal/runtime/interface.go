@@ -6,14 +6,16 @@ import (
 )
 
 type ContainerConfig struct {
-	Name    string
-	Image   string
-	Env     map[string]string
-	Ports   map[string]string // host:container
-	Volumes map[string]string // host:container
-	Network string
-	Cmd     []string
-	Labels  map[string]string
+	Name        string
+	Image       string
+	Env         map[string]string
+	Ports       map[string]string // host:container
+	Volumes     map[string]string // host:container
+	Network     string
+	Cmd         []string
+	Labels      map[string]string
+	CPULimit    float64 // CPU cores (0 = unlimited, e.g. 0.5 = half a core)
+	MemoryLimit int64   // bytes (0 = unlimited, e.g. 536870912 = 512 MB)
 }
 
 type ContainerInfo struct {
@@ -46,6 +48,7 @@ type ContainerRuntime interface {
 	BuildImage(ctx context.Context, contextDir, dockerfile, tag string) error
 	CreateNetwork(ctx context.Context, name string) error
 	RemoveNetwork(ctx context.Context, name string) error
+	ConnectContainerToNetwork(ctx context.Context, containerID, networkName string) error
 	CreateVolume(ctx context.Context, name string) error
 	RemoveVolume(ctx context.Context, name string) error
 	RemoveImage(ctx context.Context, image string) error

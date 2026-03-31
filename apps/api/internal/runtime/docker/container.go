@@ -48,6 +48,15 @@ func (c *Client) CreateContainer(ctx context.Context, cfg runtime.ContainerConfi
 		labels[k] = v
 	}
 
+	// Apply optional resource limits
+	resources := container.Resources{}
+	if cfg.CPULimit > 0 {
+		resources.NanoCPUs = int64(cfg.CPULimit * 1e9)
+	}
+	if cfg.MemoryLimit > 0 {
+		resources.Memory = cfg.MemoryLimit
+	}
+
 	resp, err := c.cli.ContainerCreate(ctx,
 		&container.Config{
 			Image:        cfg.Image,
@@ -60,6 +69,7 @@ func (c *Client) CreateContainer(ctx context.Context, cfg runtime.ContainerConfi
 			PortBindings:  portBindings,
 			Binds:         binds,
 			RestartPolicy: container.RestartPolicy{Name: "unless-stopped"},
+			Resources:     resources,
 		},
 		&network.NetworkingConfig{
 			EndpointsConfig: func() map[string]*network.EndpointSettings {

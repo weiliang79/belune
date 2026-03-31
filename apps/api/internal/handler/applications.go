@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"time"
@@ -16,13 +17,15 @@ import (
 )
 
 type createApplicationRequest struct {
-	Name           string `json:"name"`
-	Slug           string `json:"slug"`            // optional, auto-generated from name if empty
-	Type           string `json:"type"`            // "git" or "image"
-	SourceRepo     string `json:"source_repo"`     // for git type
-	SourceImage    string `json:"source_image"`    // for image type
-	DockerfilePath string `json:"dockerfile_path"` // optional
-	BuildType      string `json:"build_type"`      // dockerfile, buildpacks, railpack, image
+	Name           string  `json:"name"`
+	Slug           string  `json:"slug"`            // optional, auto-generated from name if empty
+	Type           string  `json:"type"`            // "git" or "image"
+	SourceRepo     string  `json:"source_repo"`     // for git type
+	SourceImage    string  `json:"source_image"`    // for image type
+	DockerfilePath string  `json:"dockerfile_path"` // optional
+	BuildType      string  `json:"build_type"`      // dockerfile, buildpacks, railpack, image
+	CPULimit       float64 `json:"cpu_limit"`       // CPU cores (0 = unlimited)
+	MemoryLimit    int64   `json:"memory_limit"`    // bytes (0 = unlimited)
 }
 
 func (h *Handler) CreateApplication(w http.ResponseWriter, r *http.Request) {
@@ -71,6 +74,8 @@ func (h *Handler) CreateApplication(w http.ResponseWriter, r *http.Request) {
 		SourceImage:    req.SourceImage,
 		DockerfilePath: req.DockerfilePath,
 		BuildType:      req.BuildType,
+		CPULimit:       req.CPULimit,
+		MemoryLimit:    req.MemoryLimit,
 	})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to create application")
@@ -167,7 +172,17 @@ func (h *Handler) DeployApplication(w http.ResponseWriter, r *http.Request) {
 	})
 
 	task := asynq.NewTask("deploy", payload)
-	if _, err := h.asynq.Enqueue(task, asynq.Queue("critical"), asynq.Timeout(time.Duration(h.cfg.TaskTimeoutMinutes)*time.Minute), asynq.MaxRetry(3)); err != nil {
+	_, err = h.asynq.Enqueue(task,
+		asynq.Queue("critical"),
+		asynq.Timeout(time.Duration(h.cfg.TaskTimeoutMinutes)*time.Minute),
+		asynq.MaxRetry(3),
+		asynq.TaskID("deploy:"+applicationID),
+	)
+	if err != nil {
+		if errors.Is(err, asynq.ErrTaskIDConflict) {
+			writeError(w, http.StatusConflict, "a deployment is already in progress for this application")
+			return
+		}
 		writeError(w, http.StatusInternalServerError, "failed to enqueue deploy task")
 		return
 	}
@@ -292,12 +307,14 @@ func (h *Handler) RestartApplication(w http.ResponseWriter, r *http.Request) {
 }
 
 type updateApplicationRequest struct {
-	Name              string `json:"name"`
-	SourceRepo        string `json:"source_repo"`
-	SourceImage       string `json:"source_image"`
-	DockerfilePath    string `json:"dockerfile_path"`
-	BuildTypeOverride string `json:"build_type_override"`
-	BuilderImage      string `json:"builder_image"`
+	Name              string  `json:"name"`
+	SourceRepo        string  `json:"source_repo"`
+	SourceImage       string  `json:"source_image"`
+	DockerfilePath    string  `json:"dockerfile_path"`
+	BuildTypeOverride string  `json:"build_type_override"`
+	BuilderImage      string  `json:"builder_image"`
+	CPULimit          float64 `json:"cpu_limit"`
+	MemoryLimit       int64   `json:"memory_limit"`
 }
 
 func (h *Handler) UpdateApplication(w http.ResponseWriter, r *http.Request) {
@@ -326,8 +343,16 @@ func (h *Handler) UpdateApplication(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	app, err := h.appService.Update(r.Context(), applicationUUID, current,
-		req.Name, req.SourceRepo, req.SourceImage, req.DockerfilePath, req.BuildTypeOverride, req.BuilderImage)
+	app, err := h.appService.Update(r.Context(), applicationUUID, current, service.UpdateApplicationParams{
+		Name:              req.Name,
+		SourceRepo:        req.SourceRepo,
+		SourceImage:       req.SourceImage,
+		DockerfilePath:    req.DockerfilePath,
+		BuildTypeOverride: req.BuildTypeOverride,
+		BuilderImage:      req.BuilderImage,
+		CPULimit:          req.CPULimit,
+		MemoryLimit:       req.MemoryLimit,
+	})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to update application")
 		return
@@ -401,7 +426,17 @@ func (h *Handler) BuildApplication(w http.ResponseWriter, r *http.Request) {
 	})
 
 	task := asynq.NewTask("build", payload)
-	if _, err := h.asynq.Enqueue(task, asynq.Queue("default"), asynq.Timeout(time.Duration(h.cfg.TaskTimeoutMinutes)*time.Minute), asynq.MaxRetry(3)); err != nil {
+	_, err = h.asynq.Enqueue(task,
+		asynq.Queue("default"),
+		asynq.Timeout(time.Duration(h.cfg.TaskTimeoutMinutes)*time.Minute),
+		asynq.MaxRetry(3),
+		asynq.TaskID("deploy:"+applicationID),
+	)
+	if err != nil {
+		if errors.Is(err, asynq.ErrTaskIDConflict) {
+			writeError(w, http.StatusConflict, "a deployment is already in progress for this application")
+			return
+		}
 		writeError(w, http.StatusInternalServerError, "failed to enqueue build task")
 		return
 	}

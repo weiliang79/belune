@@ -33,6 +33,8 @@ CREATE TABLE applications (
     build_type_override VARCHAR(50) CHECK (build_type_override IN ('dockerfile', 'buildpacks', 'railpack', 'image')),
     builder_image VARCHAR(500),
     custom_buildpacks JSONB DEFAULT '[]',
+    cpu_limit DOUBLE PRECISION NOT NULL DEFAULT 0,
+    memory_limit BIGINT NOT NULL DEFAULT 0,
     webhook_secret VARCHAR(255),
     auto_deploy_branch VARCHAR(255) DEFAULT 'main',
     status VARCHAR(50) NOT NULL DEFAULT 'inactive',

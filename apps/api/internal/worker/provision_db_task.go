@@ -9,6 +9,7 @@ import (
 	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/ungweiliang/selfhost-paas/internal/naming"
 	"github.com/ungweiliang/selfhost-paas/internal/pkg/crypto"
 	"github.com/ungweiliang/selfhost-paas/internal/runtime"
 	"github.com/ungweiliang/selfhost-paas/internal/store/generated"
@@ -97,9 +98,17 @@ func (h *TaskHandler) HandleProvisionDBTask(ctx context.Context, t *asynq.Task) 
 		return fmt.Errorf("unsupported database type: %s", db.Type)
 	}
 
-	// Ensure the paas network exists (idempotent)
-	if err := h.Runtime.CreateNetwork(ctx, "paas-net"); err != nil {
-		slog.Debug("could not create paas-net (may already exist)", "error", err)
+	// Ensure project-scoped network exists for DB–app communication (idempotent)
+	project, err := h.Queries.GetProject(ctx, db.ProjectID)
+	if err != nil {
+		slog.Warn("failed to get project for network setup, using paas-infra fallback", "error", err)
+	}
+	projectNetwork := "paas-infra"
+	if project.Slug != "" {
+		projectNetwork = naming.ProjectNetworkName(project.Slug)
+		if netErr := h.Runtime.CreateNetwork(ctx, projectNetwork); netErr != nil {
+			slog.Debug("could not create project network (may already exist)", "network", projectNetwork, "error", netErr)
+		}
 	}
 
 	// Pull the image
@@ -115,7 +124,7 @@ func (h *TaskHandler) HandleProvisionDBTask(ctx context.Context, t *asynq.Task) 
 		return fmt.Errorf("create volume: %w", err)
 	}
 
-	// Create the container
+	// Create the container on the project network so apps can connect
 	containerID, err := h.Runtime.CreateContainer(ctx, runtime.ContainerConfig{
 		Name:    containerName,
 		Image:   image,
@@ -123,7 +132,7 @@ func (h *TaskHandler) HandleProvisionDBTask(ctx context.Context, t *asynq.Task) 
 		Cmd:     cmd,
 		Ports:   map[string]string{},
 		Volumes: map[string]string{volumeName: dataDir},
-		Network: "paas-net",
+		Network: projectNetwork,
 	})
 	if err != nil {
 		h.failDatabase(ctx, dbID, fmt.Sprintf("create container: %v", err))

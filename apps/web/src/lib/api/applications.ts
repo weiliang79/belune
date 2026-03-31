@@ -34,6 +34,8 @@ export function updateApplication(
     dockerfile_path?: string;
     build_type_override?: string;
     builder_image?: string;
+    cpu_limit?: number;
+    memory_limit?: number;
   },
 ) {
   return api.put<Application>(`/projects/${projectId}/applications/${applicationId}`, data);
