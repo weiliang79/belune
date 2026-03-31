@@ -14,19 +14,21 @@ import (
 	"github.com/ungweiliang/selfhost-paas/internal/config"
 	"github.com/ungweiliang/selfhost-paas/internal/proxy"
 	"github.com/ungweiliang/selfhost-paas/internal/runtime"
+	"github.com/ungweiliang/selfhost-paas/internal/service"
 	"github.com/ungweiliang/selfhost-paas/internal/store/generated"
 )
 
 // TaskHandler holds dependencies needed by async task handlers.
 type TaskHandler struct {
-	Runtime       runtime.ContainerRuntime
-	Proxy         proxy.ProxyManager
-	DB            *pgxpool.Pool
-	Queries       *generated.Queries
-	Chain         *build.Chain
-	EncryptionKey string
-	RedisClient   *redis.Client
-	Config        *config.Config
+	Runtime        runtime.ContainerRuntime
+	Proxy          proxy.ProxyManager
+	DB             *pgxpool.Pool
+	Queries        *generated.Queries
+	Chain          *build.Chain
+	EncryptionKey  string
+	RedisClient    *redis.Client
+	Config         *config.Config
+	MetricsService *service.MetricsService
 }
 
 type Worker struct {

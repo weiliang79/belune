@@ -288,25 +288,7 @@ func (h *Handler) DeleteDatabase(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Fetch database to get slug for container name
-	db, err := h.queries.GetDatabase(r.Context(), dbUUID)
-	if err != nil {
-		writeError(w, http.StatusNotFound, "database not found")
-		return
-	}
-
-	// Stop and remove container + volume
-	if err := h.runtime.StopContainer(r.Context(), db.Slug); err != nil {
-		slog.Warn("could not stop container during db deletion", "container", db.Slug, "error", err)
-	}
-	if err := h.runtime.RemoveContainer(r.Context(), db.Slug); err != nil {
-		slog.Warn("could not remove container during db deletion", "container", db.Slug, "error", err)
-	}
-	if err := h.runtime.RemoveVolume(r.Context(), db.Slug+"-vol"); err != nil {
-		slog.Warn("could not remove volume during db deletion", "volume", db.Slug+"-vol", "error", err)
-	}
-
-	if err := h.queries.DeleteDatabase(r.Context(), dbUUID); err != nil {
+	if err := h.dbService.Delete(r.Context(), dbUUID); err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to delete database")
 		return
 	}

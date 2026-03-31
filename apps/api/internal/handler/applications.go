@@ -3,7 +3,6 @@ package handler
 import (
 	"encoding/json"
 	"fmt"
-	"log/slog"
 	"net/http"
 	"time"
 
@@ -12,7 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/ungweiliang/selfhost-paas/internal/naming"
-	"github.com/ungweiliang/selfhost-paas/internal/store"
+	"github.com/ungweiliang/selfhost-paas/internal/service"
 	"github.com/ungweiliang/selfhost-paas/internal/store/generated"
 )
 
@@ -62,36 +61,18 @@ func (h *Handler) CreateApplication(w http.ResponseWriter, r *http.Request) {
 		baseSlug = naming.Slugify(req.Slug)
 	}
 
-	var app generated.Application
-	if err := store.WithTx(r.Context(), h.db, func(q *generated.Queries) error {
-		var err error
-		app, err = q.CreateApplication(r.Context(), generated.CreateApplicationParams{
-			ProjectID:      projectUUID,
-			Name:           req.Name,
-			Slug:           baseSlug,
-			Type:           req.Type,
-			SourceRepo:     pgtype.Text{String: req.SourceRepo, Valid: req.SourceRepo != ""},
-			SourceImage:    pgtype.Text{String: req.SourceImage, Valid: req.SourceImage != ""},
-			DockerfilePath: pgtype.Text{String: req.DockerfilePath, Valid: req.DockerfilePath != ""},
-			BuildType:      req.BuildType,
-		})
-		if err != nil {
-			return err
-		}
-		// Construct final slug: {projectSlug}-{baseSlug}-{shortId}
-		appIDStr := fmt.Sprintf("%x-%x-%x-%x-%x",
-			app.ID.Bytes[0:4], app.ID.Bytes[4:6], app.ID.Bytes[6:8], app.ID.Bytes[8:10], app.ID.Bytes[10:16])
-		finalSlug := fmt.Sprintf("%s-%s-%s", project.Slug, baseSlug, appIDStr[:8])
-		if err := q.UpdateApplicationSlug(r.Context(), generated.UpdateApplicationSlugParams{
-			ID:   app.ID,
-			Slug: finalSlug,
-		}); err != nil {
-			return err
-		}
-		app.Slug = finalSlug
-		return nil
-	}); err != nil {
-		slog.Error("failed to create application", "error", err)
+	app, err := h.appService.Create(r.Context(), service.CreateApplicationParams{
+		ProjectID:      projectUUID,
+		ProjectSlug:    project.Slug,
+		Name:           req.Name,
+		BaseSlug:       baseSlug,
+		Type:           req.Type,
+		SourceRepo:     req.SourceRepo,
+		SourceImage:    req.SourceImage,
+		DockerfilePath: req.DockerfilePath,
+		BuildType:      req.BuildType,
+	})
+	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to create application")
 		return
 	}
@@ -345,22 +326,8 @@ func (h *Handler) UpdateApplication(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	name := current.Name
-	if req.Name != "" {
-		name = req.Name
-	}
-
-	app, err := h.queries.UpdateApplication(r.Context(), generated.UpdateApplicationParams{
-		ID:                applicationUUID,
-		Name:              name,
-		SourceRepo:        pgtype.Text{String: req.SourceRepo, Valid: req.SourceRepo != ""},
-		SourceImage:       pgtype.Text{String: req.SourceImage, Valid: req.SourceImage != ""},
-		DockerfilePath:    pgtype.Text{String: req.DockerfilePath, Valid: req.DockerfilePath != ""},
-		BuildTypeOverride: pgtype.Text{String: req.BuildTypeOverride, Valid: req.BuildTypeOverride != ""},
-		BuilderImage:      pgtype.Text{String: req.BuilderImage, Valid: req.BuilderImage != ""},
-		CustomBuildpacks:  current.CustomBuildpacks,
-		Status:            current.Status,
-	})
+	app, err := h.appService.Update(r.Context(), applicationUUID, current,
+		req.Name, req.SourceRepo, req.SourceImage, req.DockerfilePath, req.BuildTypeOverride, req.BuilderImage)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to update application")
 		return
@@ -382,24 +349,13 @@ func (h *Handler) DeleteApplication(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Stop and remove the container (try all naming formats for compatibility)
 	row, err := h.queries.GetApplicationWithProjectSlug(r.Context(), applicationUUID)
 	if err != nil {
-		slog.Warn("failed to fetch application for container cleanup", "application_id", applicationID, "error", err)
-	}
-	containerName := naming.ContainerName(row.ProjectSlug, row.Slug, applicationID)
-	intermediateContainerName := naming.IntermediateContainerName(row.ProjectSlug, applicationID)
-	oldContainerName := naming.OldContainerName(applicationID)
-	for _, name := range []string{containerName, intermediateContainerName, oldContainerName} {
-		if err := h.runtime.StopContainer(r.Context(), name); err != nil {
-			slog.Warn("could not stop container during app deletion", "container", name, "error", err)
-		}
-		if err := h.runtime.RemoveContainer(r.Context(), name); err != nil {
-			slog.Warn("could not remove container during app deletion", "container", name, "error", err)
-		}
+		writeError(w, http.StatusNotFound, "application not found")
+		return
 	}
 
-	if err := h.queries.DeleteApplication(r.Context(), applicationUUID); err != nil {
+	if err := h.appService.Delete(r.Context(), applicationUUID, row.ProjectSlug, row.Slug); err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to delete application")
 		return
 	}

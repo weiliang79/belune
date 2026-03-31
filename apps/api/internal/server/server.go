@@ -26,12 +26,15 @@ type Server struct {
 
 func New(cfg *config.Config, db *pgxpool.Pool, queries *generated.Queries, asynqClient handler.TaskEnqueuer, rt runtime.ContainerRuntime, pm proxy.ProxyManager, rdb *redis.Client) *Server {
 	auth := service.NewAuthService(queries, cfg.JWTSecret)
+	appSvc := service.NewApplicationService(db, queries, rt)
+	projSvc := service.NewProjectService(queries, rt)
+	dbSvc := service.NewDatabaseService(queries, rt)
 
 	s := &Server{
 		cfg:     cfg,
 		db:      db,
 		auth:    auth,
-		handler: handler.New(cfg, db, queries, asynqClient, rt, pm, auth, rdb),
+		handler: handler.New(cfg, db, queries, asynqClient, rt, pm, auth, rdb, appSvc, projSvc, dbSvc),
 	}
 
 	s.router = s.setupRouter()

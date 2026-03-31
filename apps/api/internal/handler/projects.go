@@ -2,14 +2,11 @@ package handler
 
 import (
 	"encoding/json"
-	"fmt"
-	"log/slog"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
-	"github.com/ungweiliang/selfhost-paas/internal/naming"
 	"github.com/ungweiliang/selfhost-paas/internal/server/middleware"
 	"github.com/ungweiliang/selfhost-paas/internal/store/generated"
 )
@@ -163,30 +160,7 @@ func (h *Handler) DeleteProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Stop and remove all application containers for this project
-	project, err := h.queries.GetProject(r.Context(), uuid)
-	if err != nil {
-		slog.Error("failed to fetch project for container cleanup", "project_id", uuid, "error", err)
-	}
-	applications, err := h.queries.ListApplicationsByProject(r.Context(), uuid)
-	if err == nil {
-		for _, app := range applications {
-			appID := fmt.Sprintf("%x-%x-%x-%x-%x", app.ID.Bytes[0:4], app.ID.Bytes[4:6], app.ID.Bytes[6:8], app.ID.Bytes[8:10], app.ID.Bytes[10:16])
-			containerName := naming.ContainerName(project.Slug, app.Slug, appID)
-			intermediateContainerName := naming.IntermediateContainerName(project.Slug, appID)
-			oldContainerName := naming.OldContainerName(appID)
-			for _, name := range []string{containerName, intermediateContainerName, oldContainerName} {
-				if err := h.runtime.StopContainer(r.Context(), name); err != nil {
-					slog.Warn("could not stop container during project deletion", "container", name, "error", err)
-				}
-				if err := h.runtime.RemoveContainer(r.Context(), name); err != nil {
-					slog.Warn("could not remove container during project deletion", "container", name, "error", err)
-				}
-			}
-		}
-	}
-
-	if err := h.queries.DeleteProject(r.Context(), uuid); err != nil {
+	if err := h.projService.Delete(r.Context(), uuid); err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to delete project")
 		return
 	}

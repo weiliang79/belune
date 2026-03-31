@@ -21,26 +21,44 @@ type TaskEnqueuer interface {
 }
 
 type Handler struct {
-	cfg     *config.Config
-	db      *pgxpool.Pool
-	queries *generated.Queries
-	asynq   TaskEnqueuer
-	runtime runtime.ContainerRuntime
-	proxy   proxy.ProxyManager
-	auth    *service.AuthService
-	rdb     *redis.Client
+	cfg         *config.Config
+	db          *pgxpool.Pool
+	queries     *generated.Queries
+	asynq       TaskEnqueuer
+	runtime     runtime.ContainerRuntime
+	proxy       proxy.ProxyManager
+	auth        *service.AuthService
+	rdb         *redis.Client
+	appService  *service.ApplicationService
+	projService *service.ProjectService
+	dbService   *service.DatabaseService
 }
 
-func New(cfg *config.Config, db *pgxpool.Pool, queries *generated.Queries, asynqClient TaskEnqueuer, rt runtime.ContainerRuntime, pm proxy.ProxyManager, auth *service.AuthService, rdb *redis.Client) *Handler {
+func New(
+	cfg *config.Config,
+	db *pgxpool.Pool,
+	queries *generated.Queries,
+	asynqClient TaskEnqueuer,
+	rt runtime.ContainerRuntime,
+	pm proxy.ProxyManager,
+	auth *service.AuthService,
+	rdb *redis.Client,
+	appSvc *service.ApplicationService,
+	projSvc *service.ProjectService,
+	dbSvc *service.DatabaseService,
+) *Handler {
 	return &Handler{
-		cfg:     cfg,
-		db:      db,
-		queries: queries,
-		asynq:   asynqClient,
-		runtime: rt,
-		proxy:   pm,
-		auth:    auth,
-		rdb:     rdb,
+		cfg:         cfg,
+		db:          db,
+		queries:     queries,
+		asynq:       asynqClient,
+		runtime:     rt,
+		proxy:       pm,
+		auth:        auth,
+		rdb:         rdb,
+		appService:  appSvc,
+		projService: projSvc,
+		dbService:   dbSvc,
 	}
 }
 

@@ -23,6 +23,7 @@ import (
 	"github.com/ungweiliang/selfhost-paas/internal/proxy/caddy"
 	"github.com/ungweiliang/selfhost-paas/internal/runtime/docker"
 	"github.com/ungweiliang/selfhost-paas/internal/server"
+	"github.com/ungweiliang/selfhost-paas/internal/service"
 	"github.com/ungweiliang/selfhost-paas/internal/store"
 	"github.com/ungweiliang/selfhost-paas/internal/store/generated"
 	"github.com/ungweiliang/selfhost-paas/internal/worker"
@@ -88,16 +89,20 @@ func main() {
 		image.New(dockerClient),
 	)
 
+	// Services
+	metricsSvc := service.NewMetricsService(queries, rdb)
+
 	// Worker for background tasks
 	taskHandler := &worker.TaskHandler{
-		Runtime:       dockerClient,
-		Proxy:         caddyClient,
-		DB:            db,
-		Queries:       queries,
-		Chain:         buildChain,
-		EncryptionKey: cfg.EncryptionKey,
-		RedisClient:   rdb,
-		Config:        cfg,
+		Runtime:        dockerClient,
+		Proxy:          caddyClient,
+		DB:             db,
+		Queries:        queries,
+		Chain:          buildChain,
+		EncryptionKey:  cfg.EncryptionKey,
+		RedisClient:    rdb,
+		Config:         cfg,
+		MetricsService: metricsSvc,
 	}
 
 	w := worker.New(redisOpt, taskHandler)
