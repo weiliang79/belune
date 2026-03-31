@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"os"
 	"time"
 
@@ -57,7 +58,9 @@ func (h *TaskHandler) HandleDeployTask(ctx context.Context, t *asynq.Task) error
 		DockerfilePath: appRow.DockerfilePath, BuildType: appRow.BuildType,
 		BuilderImage: appRow.BuilderImage, CustomBuildpacks: appRow.CustomBuildpacks,
 		Status: appRow.Status,
+		CpuLimit: appRow.CpuLimit, MemoryLimit: appRow.MemoryLimit,
 		GitCredentialsEncrypted: appRow.GitCredentialsEncrypted,
+		HealthCheckPath:         appRow.HealthCheckPath,
 	}
 
 	containerName := naming.ContainerName(appRow.ProjectSlug, appRow.Slug, payload.ApplicationID)
@@ -217,14 +220,15 @@ func (h *TaskHandler) HandleDeployTask(ctx context.Context, t *asynq.Task) error
 
 	// Create and start container
 	containerID, err := h.Runtime.CreateContainer(ctx, runtime.ContainerConfig{
-		Name:        containerName,
-		Image:       imageName,
-		Env:         env,
-		Ports:       map[string]string{},
-		Network:     naming.ProjectNetworkName(appRow.ProjectSlug),
-		Labels:      map[string]string{"application-id": payload.ApplicationID},
-		CPULimit:    app.CpuLimit,
-		MemoryLimit: app.MemoryLimit,
+		Name:            containerName,
+		Image:           imageName,
+		Env:             env,
+		Ports:           map[string]string{},
+		Network:         naming.ProjectNetworkName(appRow.ProjectSlug),
+		Labels:          map[string]string{"application-id": payload.ApplicationID},
+		CPULimit:        app.CpuLimit,
+		MemoryLimit:     app.MemoryLimit,
+		HealthCheckPath: app.HealthCheckPath.String,
 	})
 	if err != nil {
 		h.failDeployment(ctx, deploymentID, fmt.Sprintf("create container: %v", err))
@@ -239,6 +243,17 @@ func (h *TaskHandler) HandleDeployTask(ctx context.Context, t *asynq.Task) error
 	// Connect to shared infra network so Caddy can reach the container
 	if err := h.Runtime.ConnectContainerToNetwork(ctx, containerID, "paas-infra"); err != nil {
 		slog.Warn("could not connect container to paas-infra network", "container", containerID, "error", err)
+	}
+
+	// Health check polling: poll the container's health endpoint until healthy or timeout
+	if app.HealthCheckPath.Valid && app.HealthCheckPath.String != "" {
+		healthURL := fmt.Sprintf("http://%s:8080%s", containerName, app.HealthCheckPath.String)
+		slog.Info("waiting for container health check", "url", healthURL)
+		if err := pollHealthCheck(ctx, healthURL, 60*time.Second); err != nil {
+			h.failDeployment(ctx, deploymentID, fmt.Sprintf("health check failed: %v", err))
+			return fmt.Errorf("health check: %w", err)
+		}
+		slog.Info("container health check passed", "container", containerName)
 	}
 
 	// Add proxy route if the application has domains
@@ -302,4 +317,25 @@ func parseUUID(s string) pgtype.UUID {
 	var u pgtype.UUID
 	u.Scan(s)
 	return u
+}
+
+// pollHealthCheck repeatedly GETs url until a 2xx response is received or deadline expires.
+func pollHealthCheck(ctx context.Context, url string, timeout time.Duration) error {
+	deadline := time.Now().Add(timeout)
+	client := &http.Client{Timeout: 5 * time.Second}
+	for time.Now().Before(deadline) {
+		resp, err := client.Get(url) //nolint:noctx
+		if err == nil {
+			resp.Body.Close()
+			if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+				return nil
+			}
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(2 * time.Second):
+		}
+	}
+	return fmt.Errorf("health check at %s did not return 2xx within %s", url, timeout)
 }

@@ -17,16 +17,17 @@ import (
 )
 
 type createApplicationRequest struct {
-	Name           string  `json:"name"`
-	Slug           string  `json:"slug"`            // optional, auto-generated from name if empty
-	Type           string  `json:"type"`            // "git" or "image"
-	SourceRepo     string  `json:"source_repo"`     // for git type
-	SourceImage    string  `json:"source_image"`    // for image type
-	DockerfilePath string  `json:"dockerfile_path"` // optional
-	BuildType      string  `json:"build_type"`      // dockerfile, buildpacks, railpack, image
-	CPULimit       float64 `json:"cpu_limit"`       // CPU cores (0 = unlimited)
-	MemoryLimit    int64   `json:"memory_limit"`    // bytes (0 = unlimited)
-	GitToken       string  `json:"git_token"`       // PAT for private repos; encrypted server-side
+	Name            string  `json:"name"`
+	Slug            string  `json:"slug"`             // optional, auto-generated from name if empty
+	Type            string  `json:"type"`             // "git" or "image"
+	SourceRepo      string  `json:"source_repo"`      // for git type
+	SourceImage     string  `json:"source_image"`     // for image type
+	DockerfilePath  string  `json:"dockerfile_path"`  // optional
+	BuildType       string  `json:"build_type"`       // dockerfile, buildpacks, railpack, image
+	CPULimit        float64 `json:"cpu_limit"`        // CPU cores (0 = unlimited)
+	MemoryLimit     int64   `json:"memory_limit"`     // bytes (0 = unlimited)
+	GitToken        string  `json:"git_token"`        // PAT for private repos; encrypted server-side
+	HealthCheckPath string  `json:"health_check_path"` // HTTP path to poll after deploy (e.g. /healthz)
 }
 
 func (h *Handler) CreateApplication(w http.ResponseWriter, r *http.Request) {
@@ -75,9 +76,10 @@ func (h *Handler) CreateApplication(w http.ResponseWriter, r *http.Request) {
 		SourceImage:    req.SourceImage,
 		DockerfilePath: req.DockerfilePath,
 		BuildType:      req.BuildType,
-		CPULimit:       req.CPULimit,
-		MemoryLimit:    req.MemoryLimit,
-		GitToken:       req.GitToken,
+		CPULimit:        req.CPULimit,
+		MemoryLimit:     req.MemoryLimit,
+		GitToken:        req.GitToken,
+		HealthCheckPath: req.HealthCheckPath,
 	})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to create application")
@@ -317,7 +319,8 @@ type updateApplicationRequest struct {
 	BuilderImage      string  `json:"builder_image"`
 	CPULimit          float64 `json:"cpu_limit"`
 	MemoryLimit       int64   `json:"memory_limit"`
-	GitToken          string  `json:"git_token"` // PAT for private repos; encrypted server-side; empty = preserve existing
+	GitToken          string  `json:"git_token"`          // PAT for private repos; encrypted server-side; empty = preserve existing
+	HealthCheckPath   string  `json:"health_check_path"`  // HTTP path to poll after deploy; empty = clear
 }
 
 func (h *Handler) UpdateApplication(w http.ResponseWriter, r *http.Request) {
@@ -356,6 +359,7 @@ func (h *Handler) UpdateApplication(w http.ResponseWriter, r *http.Request) {
 		CPULimit:          req.CPULimit,
 		MemoryLimit:       req.MemoryLimit,
 		GitToken:          req.GitToken,
+		HealthCheckPath:   req.HealthCheckPath,
 	})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to update application")

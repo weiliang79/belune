@@ -17,8 +17,9 @@ type Config struct {
 	CaddyAdminURL       string
 	CORSOrigins         []string
 	SecureCookies       bool
-	TLS                 bool // when true, send HSTS headers
-	DisableRateLimiting bool // set true in tests to avoid per-IP counter accumulation
+	TLS                 bool   // when true, send HSTS headers
+	LogLevel            string // debug, info, warn, error (default: info)
+	DisableRateLimiting bool   // set true in tests to avoid per-IP counter accumulation
 
 	// Timeouts
 	BuildTimeoutMinutes     int // max duration for build operations (default 30)
@@ -37,7 +38,8 @@ func Load() (*Config, error) {
 		CaddyAdminURL:  getEnv("CADDY_ADMIN_URL", "http://localhost:2019"),
 		CORSOrigins:    getEnvList("CORS_ORIGINS", []string{"http://localhost:5173"}),
 		SecureCookies:  getEnvBool("SECURE_COOKIES", false),
-		TLS:            getEnvBool("TLS_ENABLED", false),
+		TLS:      getEnvBool("TLS_ENABLED", false),
+		LogLevel: getEnv("LOG_LEVEL", "info"),
 
 		BuildTimeoutMinutes:     getEnvInt("BUILD_TIMEOUT_MINUTES", 30),
 		TaskTimeoutMinutes:      getEnvInt("TASK_TIMEOUT_MINUTES", 45),

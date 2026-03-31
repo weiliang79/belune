@@ -56,6 +56,7 @@ function ApplicationSettingsPage() {
       cpu_limit: application?.cpu_limit ?? 0,
       memory_limit_mb: application ? Math.round(application.memory_limit / (1024 * 1024)) : 0,
       git_token: "",
+      health_check_path: application?.health_check_path ?? "",
     },
     onSubmit: async ({ value }) => {
       toast.promise(
@@ -68,6 +69,7 @@ function ApplicationSettingsPage() {
           cpu_limit: value.cpu_limit,
           memory_limit: value.memory_limit_mb > 0 ? value.memory_limit_mb * 1024 * 1024 : 0,
           git_token: value.git_token || undefined,
+          health_check_path: value.health_check_path,
         }),
         {
           loading: "Saving...",
@@ -315,6 +317,24 @@ function ApplicationSettingsPage() {
                 )}
               />
             </div>
+            <form.Field
+              name="health_check_path"
+              children={(field) => (
+                <div className="space-y-2">
+                  <Label>Health Check Path</Label>
+                  <Input
+                    value={field.state.value}
+                    onBlur={field.handleBlur}
+                    onChange={(e) => field.handleChange(e.target.value)}
+                    placeholder="/healthz"
+                    className="font-mono"
+                  />
+                  <p className="text-muted-foreground text-xs">
+                    HTTP path polled after deploy to confirm readiness (e.g. /healthz). Leave empty to skip.
+                  </p>
+                </div>
+              )}
+            />
             <form.Subscribe
               selector={(s) => s.isSubmitting}
               children={(isSubmitting) => (

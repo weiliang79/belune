@@ -28,18 +28,19 @@ func NewApplicationService(db *pgxpool.Pool, queries *generated.Queries, rt runt
 
 // CreateApplicationParams holds the parameters for creating an application.
 type CreateApplicationParams struct {
-	ProjectID      pgtype.UUID
-	ProjectSlug    string
-	Name           string
-	BaseSlug       string
-	Type           string
-	SourceRepo     string
-	SourceImage    string
-	DockerfilePath string
-	BuildType      string
-	CPULimit       float64
-	MemoryLimit    int64
-	GitToken       string // plaintext PAT; encrypted before storage
+	ProjectID       pgtype.UUID
+	ProjectSlug     string
+	Name            string
+	BaseSlug        string
+	Type            string
+	SourceRepo      string
+	SourceImage     string
+	DockerfilePath  string
+	BuildType       string
+	CPULimit        float64
+	MemoryLimit     int64
+	GitToken        string // plaintext PAT; encrypted before storage
+	HealthCheckPath string // HTTP path to poll after deploy (e.g. /healthz)
 }
 
 // Create inserts the application record and sets its final slug atomically.
@@ -75,6 +76,7 @@ func (s *ApplicationService) Create(ctx context.Context, p CreateApplicationPara
 			MemoryLimit:             p.MemoryLimit,
 			WebhookSecret:           pgtype.Text{String: webhookSecret, Valid: true},
 			GitCredentialsEncrypted: gitCreds,
+			HealthCheckPath:         pgtype.Text{String: p.HealthCheckPath, Valid: p.HealthCheckPath != ""},
 		})
 		if err != nil {
 			return err
@@ -104,6 +106,7 @@ type UpdateApplicationParams struct {
 	CPULimit          float64
 	MemoryLimit       int64
 	GitToken          string // plaintext PAT; encrypted before storage; empty = no change
+	HealthCheckPath   string // empty = clear existing
 }
 
 // Update applies field changes to an application.
@@ -141,6 +144,7 @@ func (s *ApplicationService) Update(
 		CpuLimit:                p.CPULimit,
 		MemoryLimit:             p.MemoryLimit,
 		GitCredentialsEncrypted: gitCreds,
+		HealthCheckPath:         pgtype.Text{String: p.HealthCheckPath, Valid: p.HealthCheckPath != ""},
 	})
 }
 

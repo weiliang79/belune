@@ -4,9 +4,12 @@ import (
 	"log/slog"
 	"net/http"
 	"time"
+
+	chiMiddleware "github.com/go-chi/chi/v5/middleware"
 )
 
-// Logger logs each HTTP request with method, path, status, and duration.
+// Logger logs each HTTP request with method, path, status, duration, and request ID.
+// It relies on Chi's RequestID middleware having run first.
 func Logger(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
@@ -19,6 +22,7 @@ func Logger(next http.Handler) http.Handler {
 			"path", r.URL.Path,
 			"status", ww.statusCode,
 			"duration", time.Since(start).String(),
+			"request_id", chiMiddleware.GetReqID(r.Context()),
 		)
 	})
 }

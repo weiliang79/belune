@@ -36,6 +36,13 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Configure structured JSON logging with configurable level
+	var logLevel slog.Level
+	if err := logLevel.UnmarshalText([]byte(cfg.LogLevel)); err != nil {
+		logLevel = slog.LevelInfo
+	}
+	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: logLevel})))
+
 	// Database
 	db, err := store.Connect(cfg.DatabaseURL)
 	if err != nil {

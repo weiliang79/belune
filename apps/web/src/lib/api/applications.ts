@@ -37,6 +37,7 @@ export function updateApplication(
     cpu_limit?: number;
     memory_limit?: number;
     git_token?: string;
+    health_check_path?: string;
   },
 ) {
   return api.put<Application>(`/projects/${projectId}/applications/${applicationId}`, data);

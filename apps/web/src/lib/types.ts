@@ -31,6 +31,7 @@ export interface Application {
   status: string;
   webhook_secret: string | null;
   auto_deploy_branch: string | null;
+  health_check_path: string | null;
   created_at: string;
   updated_at: string;
 }

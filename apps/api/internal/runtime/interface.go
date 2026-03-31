@@ -14,8 +14,9 @@ type ContainerConfig struct {
 	Network     string
 	Cmd         []string
 	Labels      map[string]string
-	CPULimit    float64 // CPU cores (0 = unlimited, e.g. 0.5 = half a core)
-	MemoryLimit int64   // bytes (0 = unlimited, e.g. 536870912 = 512 MB)
+	CPULimit        float64 // CPU cores (0 = unlimited, e.g. 0.5 = half a core)
+	MemoryLimit     int64   // bytes (0 = unlimited, e.g. 536870912 = 512 MB)
+	HealthCheckPath string  // HTTP path for health polling after deploy (e.g. /healthz); empty = skip
 }
 
 type ContainerInfo struct {
