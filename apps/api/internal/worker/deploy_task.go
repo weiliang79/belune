@@ -57,6 +57,7 @@ func (h *TaskHandler) HandleDeployTask(ctx context.Context, t *asynq.Task) error
 		DockerfilePath: appRow.DockerfilePath, BuildType: appRow.BuildType,
 		BuilderImage: appRow.BuilderImage, CustomBuildpacks: appRow.CustomBuildpacks,
 		Status: appRow.Status,
+		GitCredentialsEncrypted: appRow.GitCredentialsEncrypted,
 	}
 
 	containerName := naming.ContainerName(appRow.ProjectSlug, appRow.Slug, payload.ApplicationID)
@@ -140,8 +141,19 @@ func (h *TaskHandler) HandleDeployTask(ctx context.Context, t *asynq.Task) error
 		buildCtx, buildCancel := context.WithTimeout(ctx, time.Duration(h.Config.BuildTimeoutMinutes)*time.Minute)
 		defer buildCancel()
 
+		// Decrypt git token if present (for private repositories)
+		var gitToken string
+		if len(app.GitCredentialsEncrypted) > 0 {
+			tokenBytes, decErr := crypto.Decrypt(app.GitCredentialsEncrypted, h.EncryptionKey)
+			if decErr != nil {
+				slog.Warn("failed to decrypt git credentials, cloning without token", "error", decErr)
+			} else {
+				gitToken = string(tokenBytes)
+			}
+		}
+
 		slog.Info("cloning repository", "repo", app.SourceRepo.String, "dest", tmpDir)
-		cloneResult, err := git.Clone(buildCtx, app.SourceRepo.String, tmpDir, "")
+		cloneResult, err := git.Clone(buildCtx, app.SourceRepo.String, tmpDir, "", gitToken)
 		if err != nil {
 			h.failDeployment(ctx, deploymentID, fmt.Sprintf("git clone: %v", err))
 			return fmt.Errorf("git clone: %w", err)

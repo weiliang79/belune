@@ -54,6 +54,7 @@ function ApplicationSettingsPage() {
       build_type_override: application?.build_type_override ?? "",
       cpu_limit: application?.cpu_limit ?? 0,
       memory_limit_mb: application ? Math.round(application.memory_limit / (1024 * 1024)) : 0,
+      git_token: "",
     },
     onSubmit: async ({ value }) => {
       toast.promise(
@@ -65,6 +66,7 @@ function ApplicationSettingsPage() {
           build_type_override: value.build_type_override || undefined,
           cpu_limit: value.cpu_limit,
           memory_limit: value.memory_limit_mb > 0 ? value.memory_limit_mb * 1024 * 1024 : 0,
+          git_token: value.git_token || undefined,
         }),
         {
           loading: "Saving...",
@@ -214,6 +216,25 @@ function ApplicationSettingsPage() {
                             : field.state.meta.errors[0]?.message}
                         </p>
                       )}
+                    </div>
+                  )}
+                />
+                <form.Field
+                  name="git_token"
+                  children={(field) => (
+                    <div className="space-y-2">
+                      <Label>Private Token (PAT)</Label>
+                      <Input
+                        type="password"
+                        value={field.state.value}
+                        onBlur={field.handleBlur}
+                        onChange={(e) => field.handleChange(e.target.value)}
+                        placeholder="Leave empty to keep existing token"
+                        className="font-mono"
+                      />
+                      <p className="text-muted-foreground text-xs">
+                        Personal access token for private repositories. Stored encrypted. Leave blank to preserve the current token.
+                      </p>
                     </div>
                   )}
                 />

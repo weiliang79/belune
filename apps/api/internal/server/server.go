@@ -1,6 +1,8 @@
 package server
 
 import (
+	"net/http"
+
 	"github.com/go-chi/chi/v5"
 	chiMiddleware "github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
@@ -25,8 +27,8 @@ type Server struct {
 }
 
 func New(cfg *config.Config, db *pgxpool.Pool, queries *generated.Queries, asynqClient handler.TaskEnqueuer, rt runtime.ContainerRuntime, pm proxy.ProxyManager, rdb *redis.Client) *Server {
-	auth := service.NewAuthService(queries, cfg.JWTSecret)
-	appSvc := service.NewApplicationService(db, queries, rt)
+	auth := service.NewAuthService(queries, cfg.JWTSecret, cfg.JWTExpiryHours)
+	appSvc := service.NewApplicationService(db, queries, rt, cfg.EncryptionKey)
 	projSvc := service.NewProjectService(queries, rt)
 	dbSvc := service.NewDatabaseService(queries, rt)
 
@@ -54,6 +56,14 @@ func (s *Server) setupRouter() chi.Router {
 	r.Use(middleware.Logger)
 	r.Use(chiMiddleware.Recoverer)
 	r.Use(middleware.BodyLimit(1 << 20)) // 1MB max body size
+	if s.cfg.TLS {
+		r.Use(func(next http.Handler) http.Handler {
+			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+				next.ServeHTTP(w, r)
+			})
+		})
+	}
 	r.Use(cors.Handler(cors.Options{
 		AllowedOrigins:   s.cfg.CORSOrigins,
 		AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},

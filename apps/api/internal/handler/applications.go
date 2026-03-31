@@ -26,6 +26,7 @@ type createApplicationRequest struct {
 	BuildType      string  `json:"build_type"`      // dockerfile, buildpacks, railpack, image
 	CPULimit       float64 `json:"cpu_limit"`       // CPU cores (0 = unlimited)
 	MemoryLimit    int64   `json:"memory_limit"`    // bytes (0 = unlimited)
+	GitToken       string  `json:"git_token"`       // PAT for private repos; encrypted server-side
 }
 
 func (h *Handler) CreateApplication(w http.ResponseWriter, r *http.Request) {
@@ -76,6 +77,7 @@ func (h *Handler) CreateApplication(w http.ResponseWriter, r *http.Request) {
 		BuildType:      req.BuildType,
 		CPULimit:       req.CPULimit,
 		MemoryLimit:    req.MemoryLimit,
+		GitToken:       req.GitToken,
 	})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to create application")
@@ -315,6 +317,7 @@ type updateApplicationRequest struct {
 	BuilderImage      string  `json:"builder_image"`
 	CPULimit          float64 `json:"cpu_limit"`
 	MemoryLimit       int64   `json:"memory_limit"`
+	GitToken          string  `json:"git_token"` // PAT for private repos; encrypted server-side; empty = preserve existing
 }
 
 func (h *Handler) UpdateApplication(w http.ResponseWriter, r *http.Request) {
@@ -352,6 +355,7 @@ func (h *Handler) UpdateApplication(w http.ResponseWriter, r *http.Request) {
 		BuilderImage:      req.BuilderImage,
 		CPULimit:          req.CPULimit,
 		MemoryLimit:       req.MemoryLimit,
+		GitToken:          req.GitToken,
 	})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to update application")

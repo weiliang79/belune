@@ -9,6 +9,15 @@ import (
 	"io"
 )
 
+// GenerateWebhookSecret generates a cryptographically random 32-byte hex string.
+func GenerateWebhookSecret() (string, error) {
+	b := make([]byte, 32)
+	if _, err := io.ReadFull(rand.Reader, b); err != nil {
+		return "", fmt.Errorf("generate secret: %w", err)
+	}
+	return hex.EncodeToString(b), nil
+}
+
 // Encrypt encrypts plaintext using AES-256-GCM with the given hex-encoded key.
 func Encrypt(plaintext []byte, keyHex string) ([]byte, error) {
 	key, err := hex.DecodeString(keyHex)

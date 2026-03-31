@@ -13,12 +13,19 @@ type CloneResult struct {
 }
 
 // Clone clones a git repository to the specified directory.
-func Clone(ctx context.Context, repoURL, destDir, branch string) (*CloneResult, error) {
+// If token is non-empty and repoURL is an HTTPS URL, the token is embedded
+// as the username for authentication (e.g. GitHub PAT, GitLab token).
+func Clone(ctx context.Context, repoURL, destDir, branch, token string) (*CloneResult, error) {
+	cloneURL := repoURL
+	if token != "" && strings.HasPrefix(repoURL, "https://") {
+		cloneURL = strings.Replace(repoURL, "https://", "https://"+token+"@", 1)
+	}
+
 	args := []string{"clone", "--depth", "1"}
 	if branch != "" {
 		args = append(args, "--branch", branch)
 	}
-	args = append(args, repoURL, destDir)
+	args = append(args, cloneURL, destDir)
 
 	cmd := exec.CommandContext(ctx, "git", args...)
 	output, err := cmd.CombinedOutput()

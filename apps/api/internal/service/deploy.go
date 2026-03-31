@@ -66,7 +66,12 @@ func (s *DeployService) Deploy(ctx context.Context, applicationID pgtype.UUID) (
 	}
 
 	task := asynq.NewTask("deploy", payload)
-	_, err = s.asynq.Enqueue(task, asynq.Queue("critical"), asynq.Timeout(s.taskTimeout), asynq.MaxRetry(3))
+	_, err = s.asynq.Enqueue(task,
+		asynq.Queue("critical"),
+		asynq.Timeout(s.taskTimeout),
+		asynq.MaxRetry(3),
+		asynq.TaskID("deploy:"+uuidToString(applicationID)),
+	)
 	if err != nil {
 		return generated.Deployment{}, fmt.Errorf("enqueue deploy task: %w", err)
 	}

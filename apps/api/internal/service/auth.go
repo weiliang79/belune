@@ -20,8 +20,9 @@ var (
 )
 
 type AuthService struct {
-	queries   *generated.Queries
-	jwtSecret []byte
+	queries        *generated.Queries
+	jwtSecret      []byte
+	jwtExpiryHours int
 }
 
 type AuthClaims struct {
@@ -42,10 +43,14 @@ type AuthUserResult struct {
 	Role  string      `json:"role"`
 }
 
-func NewAuthService(queries *generated.Queries, jwtSecret string) *AuthService {
+func NewAuthService(queries *generated.Queries, jwtSecret string, jwtExpiryHours int) *AuthService {
+	if jwtExpiryHours <= 0 {
+		jwtExpiryHours = 24
+	}
 	return &AuthService{
-		queries:   queries,
-		jwtSecret: []byte(jwtSecret),
+		queries:        queries,
+		jwtSecret:      []byte(jwtSecret),
+		jwtExpiryHours: jwtExpiryHours,
 	}
 }
 
@@ -135,7 +140,7 @@ func (s *AuthService) generateToken(user generated.User) (string, error) {
 		Email:  user.Email,
 		Role:   user.Role,
 		RegisteredClaims: jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(time.Now().Add(24 * time.Hour)),
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Duration(s.jwtExpiryHours) * time.Hour)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
 			Subject:   userIDStr,
 		},

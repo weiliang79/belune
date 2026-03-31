@@ -12,10 +12,12 @@ type Config struct {
 	DatabaseURL         string
 	RedisURL            string
 	JWTSecret           string
+	JWTExpiryHours      int
 	EncryptionKey       string
 	CaddyAdminURL       string
 	CORSOrigins         []string
 	SecureCookies       bool
+	TLS                 bool // when true, send HSTS headers
 	DisableRateLimiting bool // set true in tests to avoid per-IP counter accumulation
 
 	// Timeouts
@@ -30,10 +32,12 @@ func Load() (*Config, error) {
 		DatabaseURL:    getEnv("DATABASE_URL", "postgres://paas:paas@localhost:5432/paas?sslmode=disable"),
 		RedisURL:       getEnv("REDIS_URL", "redis://localhost:6379"),
 		JWTSecret:      getEnv("JWT_SECRET", ""),
+		JWTExpiryHours: getEnvInt("JWT_EXPIRY_HOURS", 24),
 		EncryptionKey:  getEnv("ENCRYPTION_KEY", ""),
 		CaddyAdminURL:  getEnv("CADDY_ADMIN_URL", "http://localhost:2019"),
 		CORSOrigins:    getEnvList("CORS_ORIGINS", []string{"http://localhost:5173"}),
 		SecureCookies:  getEnvBool("SECURE_COOKIES", false),
+		TLS:            getEnvBool("TLS_ENABLED", false),
 
 		BuildTimeoutMinutes:     getEnvInt("BUILD_TIMEOUT_MINUTES", 30),
 		TaskTimeoutMinutes:      getEnvInt("TASK_TIMEOUT_MINUTES", 45),

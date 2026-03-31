@@ -9,19 +9,21 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/ungweiliang/selfhost-paas/internal/naming"
+	"github.com/ungweiliang/selfhost-paas/internal/pkg/crypto"
 	"github.com/ungweiliang/selfhost-paas/internal/runtime"
 	"github.com/ungweiliang/selfhost-paas/internal/store"
 	"github.com/ungweiliang/selfhost-paas/internal/store/generated"
 )
 
 type ApplicationService struct {
-	db      *pgxpool.Pool
-	queries *generated.Queries
-	runtime runtime.ContainerRuntime
+	db            *pgxpool.Pool
+	queries       *generated.Queries
+	runtime       runtime.ContainerRuntime
+	encryptionKey string
 }
 
-func NewApplicationService(db *pgxpool.Pool, queries *generated.Queries, rt runtime.ContainerRuntime) *ApplicationService {
-	return &ApplicationService{db: db, queries: queries, runtime: rt}
+func NewApplicationService(db *pgxpool.Pool, queries *generated.Queries, rt runtime.ContainerRuntime, encryptionKey string) *ApplicationService {
+	return &ApplicationService{db: db, queries: queries, runtime: rt, encryptionKey: encryptionKey}
 }
 
 // CreateApplicationParams holds the parameters for creating an application.
@@ -37,24 +39,42 @@ type CreateApplicationParams struct {
 	BuildType      string
 	CPULimit       float64
 	MemoryLimit    int64
+	GitToken       string // plaintext PAT; encrypted before storage
 }
 
 // Create inserts the application record and sets its final slug atomically.
+// A webhook secret is auto-generated. If GitToken is set, it is encrypted before storage.
 func (s *ApplicationService) Create(ctx context.Context, p CreateApplicationParams) (generated.Application, error) {
+	webhookSecret, err := crypto.GenerateWebhookSecret()
+	if err != nil {
+		return generated.Application{}, fmt.Errorf("generate webhook secret: %w", err)
+	}
+
+	var gitCreds []byte
+	if p.GitToken != "" {
+		encrypted, err := crypto.Encrypt([]byte(p.GitToken), s.encryptionKey)
+		if err != nil {
+			return generated.Application{}, fmt.Errorf("encrypt git token: %w", err)
+		}
+		gitCreds = encrypted
+	}
+
 	var app generated.Application
-	err := store.WithTx(ctx, s.db, func(q *generated.Queries) error {
+	err = store.WithTx(ctx, s.db, func(q *generated.Queries) error {
 		var err error
 		app, err = q.CreateApplication(ctx, generated.CreateApplicationParams{
-			ProjectID:      p.ProjectID,
-			Name:           p.Name,
-			Slug:           p.BaseSlug,
-			Type:           p.Type,
-			SourceRepo:     pgtype.Text{String: p.SourceRepo, Valid: p.SourceRepo != ""},
-			SourceImage:    pgtype.Text{String: p.SourceImage, Valid: p.SourceImage != ""},
-			DockerfilePath: pgtype.Text{String: p.DockerfilePath, Valid: p.DockerfilePath != ""},
-			BuildType:      p.BuildType,
-			CpuLimit:       p.CPULimit,
-			MemoryLimit:    p.MemoryLimit,
+			ProjectID:               p.ProjectID,
+			Name:                    p.Name,
+			Slug:                    p.BaseSlug,
+			Type:                    p.Type,
+			SourceRepo:              pgtype.Text{String: p.SourceRepo, Valid: p.SourceRepo != ""},
+			SourceImage:             pgtype.Text{String: p.SourceImage, Valid: p.SourceImage != ""},
+			DockerfilePath:          pgtype.Text{String: p.DockerfilePath, Valid: p.DockerfilePath != ""},
+			BuildType:               p.BuildType,
+			CpuLimit:                p.CPULimit,
+			MemoryLimit:             p.MemoryLimit,
+			WebhookSecret:           pgtype.Text{String: webhookSecret, Valid: true},
+			GitCredentialsEncrypted: gitCreds,
 		})
 		if err != nil {
 			return err
@@ -83,9 +103,11 @@ type UpdateApplicationParams struct {
 	BuilderImage      string
 	CPULimit          float64
 	MemoryLimit       int64
+	GitToken          string // plaintext PAT; encrypted before storage; empty = no change
 }
 
 // Update applies field changes to an application.
+// If GitToken is non-empty, it replaces the stored credentials; if empty, existing credentials are preserved.
 func (s *ApplicationService) Update(
 	ctx context.Context,
 	appID pgtype.UUID,
@@ -96,18 +118,29 @@ func (s *ApplicationService) Update(
 	if name == "" {
 		name = current.Name
 	}
+
+	gitCreds := current.GitCredentialsEncrypted
+	if p.GitToken != "" {
+		encrypted, err := crypto.Encrypt([]byte(p.GitToken), s.encryptionKey)
+		if err != nil {
+			return generated.Application{}, fmt.Errorf("encrypt git token: %w", err)
+		}
+		gitCreds = encrypted
+	}
+
 	return s.queries.UpdateApplication(ctx, generated.UpdateApplicationParams{
-		ID:                appID,
-		Name:              name,
-		SourceRepo:        pgtype.Text{String: p.SourceRepo, Valid: p.SourceRepo != ""},
-		SourceImage:       pgtype.Text{String: p.SourceImage, Valid: p.SourceImage != ""},
-		DockerfilePath:    pgtype.Text{String: p.DockerfilePath, Valid: p.DockerfilePath != ""},
-		BuildTypeOverride: pgtype.Text{String: p.BuildTypeOverride, Valid: p.BuildTypeOverride != ""},
-		BuilderImage:      pgtype.Text{String: p.BuilderImage, Valid: p.BuilderImage != ""},
-		CustomBuildpacks:  current.CustomBuildpacks,
-		Status:            current.Status,
-		CpuLimit:          p.CPULimit,
-		MemoryLimit:       p.MemoryLimit,
+		ID:                      appID,
+		Name:                    name,
+		SourceRepo:              pgtype.Text{String: p.SourceRepo, Valid: p.SourceRepo != ""},
+		SourceImage:             pgtype.Text{String: p.SourceImage, Valid: p.SourceImage != ""},
+		DockerfilePath:          pgtype.Text{String: p.DockerfilePath, Valid: p.DockerfilePath != ""},
+		BuildTypeOverride:       pgtype.Text{String: p.BuildTypeOverride, Valid: p.BuildTypeOverride != ""},
+		BuilderImage:            pgtype.Text{String: p.BuilderImage, Valid: p.BuilderImage != ""},
+		CustomBuildpacks:        current.CustomBuildpacks,
+		Status:                  current.Status,
+		CpuLimit:                p.CPULimit,
+		MemoryLimit:             p.MemoryLimit,
+		GitCredentialsEncrypted: gitCreds,
 	})
 }
 
