@@ -16,3 +16,14 @@ export function getDeployment(
     `/projects/${projectId}/applications/${applicationId}/deployments/${deploymentId}`,
   );
 }
+
+export function rollbackDeployment(
+  projectId: string,
+  applicationId: string,
+  deploymentId: string,
+) {
+  return api.post<Deployment>(
+    `/projects/${projectId}/applications/${applicationId}/rollback`,
+    { deployment_id: deploymentId },
+  );
+}

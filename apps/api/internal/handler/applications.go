@@ -136,8 +136,9 @@ func (h *Handler) ListApplications(w http.ResponseWriter, r *http.Request) {
 }
 
 type deployPayload struct {
-	ApplicationID string `json:"application_id"`
-	DeploymentID  string `json:"deployment_id"`
+	ApplicationID    string `json:"application_id"`
+	DeploymentID     string `json:"deployment_id"`
+	RollbackImageTag string `json:"rollback_image_tag,omitempty"`
 }
 
 func (h *Handler) DeployApplication(w http.ResponseWriter, r *http.Request) {

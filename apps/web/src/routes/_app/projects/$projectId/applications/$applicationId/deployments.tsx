@@ -1,10 +1,22 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useDeployments } from "@/lib/hooks/use-deployments";
+import { useDeployments, useRollbackDeployment } from "@/lib/hooks/use-deployments";
 import { useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/lib/hooks/query-keys";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import type { Deployment } from "@/lib/types";
 import { formatDate, formatDuration } from "@/lib/utils/format";
 import { useState, useEffect, useRef } from "react";
@@ -92,6 +104,59 @@ function BuildLogViewer({ lines }: { lines: string[] }) {
   );
 }
 
+function RollbackButton({
+  deployment,
+  projectId,
+  applicationId,
+}: {
+  deployment: Deployment;
+  projectId: string;
+  applicationId: string;
+}) {
+  const { mutate: rollback, isPending } = useRollbackDeployment(projectId, applicationId);
+
+  return (
+    <AlertDialog>
+      <AlertDialogTrigger asChild>
+        <Button
+          size="sm"
+          variant="outline"
+          disabled={isPending}
+          onClick={(e) => e.stopPropagation()}
+        >
+          {isPending ? "Rolling back..." : "Rollback"}
+        </Button>
+      </AlertDialogTrigger>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Rollback to this deployment?</AlertDialogTitle>
+          <AlertDialogDescription>
+            This will redeploy the image from{" "}
+            <strong>{formatDate(deployment.started_at)}</strong>
+            {deployment.commit_sha && (
+              <> (commit <code>{deployment.commit_sha.slice(0, 7)}</code>)</>
+            )}
+            . A new deployment will be created with the stored image tag.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel onClick={(e) => e.stopPropagation()}>
+            Cancel
+          </AlertDialogCancel>
+          <AlertDialogAction
+            onClick={(e) => {
+              e.stopPropagation();
+              rollback(deployment.id);
+            }}
+          >
+            Rollback
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}
+
 function DeploymentCard({
   deployment: d,
   projectId,
@@ -104,6 +169,7 @@ function DeploymentCard({
   const [expanded, setExpanded] = useState(false);
   const isBuilding = d.status === "building" || d.status === "pending";
   const lines = useBuildLogStream(projectId, applicationId, d.id, isBuilding);
+  const canRollback = d.status === "success" && !!d.image_tag;
 
   const duration =
     d.finished_at && d.started_at
@@ -133,9 +199,18 @@ function DeploymentCard({
               </span>
             )}
           </div>
-          <div className="text-muted-foreground flex items-center gap-3 text-xs">
-            {duration && <span>{duration}</span>}
-            <span>{formatDate(d.started_at)}</span>
+          <div className="flex items-center gap-3">
+            {canRollback && (
+              <RollbackButton
+                deployment={d}
+                projectId={projectId}
+                applicationId={applicationId}
+              />
+            )}
+            <div className="text-muted-foreground flex items-center gap-3 text-xs">
+              {duration && <span>{duration}</span>}
+              <span>{formatDate(d.started_at)}</span>
+            </div>
           </div>
         </div>
         {expanded && isBuilding && <BuildLogViewer lines={lines} />}

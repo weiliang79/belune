@@ -25,8 +25,9 @@ import (
 )
 
 type deployPayload struct {
-	ApplicationID string `json:"application_id"`
-	DeploymentID  string `json:"deployment_id"`
+	ApplicationID    string `json:"application_id"`
+	DeploymentID     string `json:"deployment_id"`
+	RollbackImageTag string `json:"rollback_image_tag,omitempty"` // non-empty = skip build, redeploy this image
 }
 
 func (h *TaskHandler) HandleDeployTask(ctx context.Context, t *asynq.Task) error {
@@ -114,6 +115,15 @@ func (h *TaskHandler) HandleDeployTask(ctx context.Context, t *asynq.Task) error
 	var imageName string
 	var commitSHA string
 
+	if payload.RollbackImageTag != "" {
+		// Rollback: skip build entirely, redeploy a previously stored image.
+		imageName = payload.RollbackImageTag
+		slog.Info("rolling back to image", "image", imageName, "application_id", payload.ApplicationID)
+		h.Queries.UpdateDeploymentStatus(ctx, generated.UpdateDeploymentStatusParams{
+			ID:     deploymentID,
+			Status: status.DeploymentDeploying,
+		})
+	} else {
 	switch app.Type {
 	case "image":
 		// Image apps skip build — go straight to deploying
@@ -223,6 +233,13 @@ func (h *TaskHandler) HandleDeployTask(ctx context.Context, t *asynq.Task) error
 		h.failDeployment(ctx, deploymentID, fmt.Sprintf("unknown application type: %s", app.Type))
 		return fmt.Errorf("unknown application type %s (permanent): %w", app.Type, asynq.SkipRetry)
 	}
+	} // end else (non-rollback)
+
+	// Store the image tag for future rollback support.
+	h.Queries.UpdateDeploymentImageTag(ctx, generated.UpdateDeploymentImageTagParams{
+		ID:       deploymentID,
+		ImageTag: pgtype.Text{String: imageName, Valid: true},
+	})
 
 	// Create and start container
 	containerID, err := h.Runtime.CreateContainer(ctx, runtime.ContainerConfig{

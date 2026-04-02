@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "./query-keys";
 import * as deploymentsApi from "@/lib/api/deployments";
 
@@ -24,5 +24,18 @@ export function useDeployment(
     queryKey: queryKeys.deployments.detail(projectId, applicationId, deploymentId),
     queryFn: () =>
       deploymentsApi.getDeployment(projectId, applicationId, deploymentId),
+  });
+}
+
+export function useRollbackDeployment(projectId: string, applicationId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (deploymentId: string) =>
+      deploymentsApi.rollbackDeployment(projectId, applicationId, deploymentId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.deployments.all(projectId, applicationId),
+      });
+    },
   });
 }
