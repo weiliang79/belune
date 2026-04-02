@@ -38,9 +38,12 @@ type AuthResult struct {
 }
 
 type AuthUserResult struct {
-	ID    pgtype.UUID `json:"id"`
-	Email string      `json:"email"`
-	Role  string      `json:"role"`
+	ID        pgtype.UUID `json:"id"`
+	Email     string      `json:"email"`
+	Role      string      `json:"role"`
+	Username  string      `json:"username"`
+	FirstName string      `json:"first_name"`
+	LastName  string      `json:"last_name"`
 }
 
 func NewAuthService(queries *generated.Queries, jwtSecret string, jwtExpiryHours int) *AuthService {
@@ -54,7 +57,7 @@ func NewAuthService(queries *generated.Queries, jwtSecret string, jwtExpiryHours
 	}
 }
 
-func (s *AuthService) Register(ctx context.Context, email, password, role string) (generated.User, error) {
+func (s *AuthService) Register(ctx context.Context, email, password, role, username string) (generated.User, error) {
 	// Check if user already exists
 	_, err := s.queries.GetUserByEmail(ctx, email)
 	if err == nil {
@@ -70,6 +73,7 @@ func (s *AuthService) Register(ctx context.Context, email, password, role string
 		Email:        email,
 		PasswordHash: string(hash),
 		Role:         role,
+		Username:     username,
 	})
 	if err != nil {
 		return generated.User{}, fmt.Errorf("create user: %w", err)
@@ -96,9 +100,12 @@ func (s *AuthService) Login(ctx context.Context, email, password string) (*AuthR
 	return &AuthResult{
 		Token: token,
 		User: AuthUserResult{
-			ID:    user.ID,
-			Email: user.Email,
-			Role:  user.Role,
+			ID:        user.ID,
+			Email:     user.Email,
+			Role:      user.Role,
+			Username:  user.Username,
+			FirstName: user.FirstName,
+			LastName:  user.LastName,
 		},
 	}, nil
 }

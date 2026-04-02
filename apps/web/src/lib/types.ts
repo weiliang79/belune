@@ -2,6 +2,9 @@ export interface User {
   id: string;
   email: string;
   role: "admin" | "member";
+  username: string;
+  first_name: string;
+  last_name: string;
   created_at?: string;
 }
 
@@ -40,10 +43,11 @@ export interface Deployment {
   id: string;
   application_id: string;
   status: "pending" | "building" | "deploying" | "success" | "failed";
-  triggered_by: "push" | "manual" | "api";
+  triggered_by: "push" | "manual" | "api" | "rollback";
   commit_sha: string | null;
   build_logs: string;
   error_message: string | null;
+  image_tag: string | null;
   started_at: string;
   finished_at: string | null;
 }

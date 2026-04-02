@@ -55,7 +55,7 @@ export function Sidebar() {
       <div className="border-t p-3">
         {isOpen && user && (
           <div className="text-muted-foreground mb-2 truncate text-xs">
-            {user.email}
+            {user.username || user.email}
           </div>
         )}
         <Button

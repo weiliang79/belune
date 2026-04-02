@@ -28,6 +28,7 @@ type createUserRequest struct {
 	Email    string `json:"email"`
 	Password string `json:"password"`
 	Role     string `json:"role"`
+	Username string `json:"username"`
 }
 
 func (h *Handler) CreateUser(w http.ResponseWriter, r *http.Request) {
@@ -52,7 +53,7 @@ func (h *Handler) CreateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user, err := h.auth.Register(r.Context(), req.Email, req.Password, req.Role)
+	user, err := h.auth.Register(r.Context(), req.Email, req.Password, req.Role, req.Username)
 	if err != nil {
 		if errors.Is(err, service.ErrUserAlreadyExists) {
 			writeError(w, http.StatusConflict, "user already exists")
@@ -66,6 +67,9 @@ func (h *Handler) CreateUser(w http.ResponseWriter, r *http.Request) {
 		ID:        user.ID,
 		Email:     user.Email,
 		Role:      user.Role,
+		Username:  user.Username,
+		FirstName: user.FirstName,
+		LastName:  user.LastName,
 		CreatedAt: user.CreatedAt,
 	})
 }

@@ -25,7 +25,7 @@ function SetupPage() {
   const [error, setError] = useState("");
 
   const form = useForm({
-    defaultValues: { email: "", password: "", confirmPassword: "" },
+    defaultValues: { email: "", password: "", confirmPassword: "", username: "" },
     onSubmit: async ({ value }) => {
       setError("");
       if (value.password !== value.confirmPassword) {
@@ -33,7 +33,7 @@ function SetupPage() {
         return;
       }
       try {
-        await setup(value.email, value.password);
+        await setup(value.email, value.password, value.username);
         await login(value.email, value.password);
         const user = await getMe();
         setUser(user);
@@ -67,6 +67,30 @@ function SetupPage() {
                 {error}
               </div>
             )}
+            <form.Field
+              name="username"
+              validators={{
+                onChange: z.string().min(1, "Username is required"),
+              }}
+              children={(field) => (
+                <div className="space-y-2">
+                  <Label htmlFor="username">Username</Label>
+                  <Input
+                    id="username"
+                    type="text"
+                    placeholder="admin"
+                    value={field.state.value}
+                    onBlur={field.handleBlur}
+                    onChange={(e) => field.handleChange(e.target.value)}
+                  />
+                  {field.state.meta.errors.length > 0 && (
+                    <p className="text-destructive text-sm">
+                      {typeof field.state.meta.errors[0] === 'string' ? field.state.meta.errors[0] : field.state.meta.errors[0]?.message}
+                    </p>
+                  )}
+                </div>
+              )}
+            />
             <form.Field
               name="email"
               validators={{

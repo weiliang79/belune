@@ -9,8 +9,13 @@ export function createUser(data: {
   email: string;
   password: string;
   role: string;
+  username?: string;
 }) {
   return api.post<User>("/users", data);
+}
+
+export function updateProfile(data: { username: string; first_name: string; last_name: string }) {
+  return api.put<User>("/auth/profile", data);
 }
 
 export function updateUserRole(userId: string, role: string) {

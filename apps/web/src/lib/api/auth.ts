@@ -20,6 +20,10 @@ export function checkSetup() {
   return api.get<{ setup_required: boolean }>("/auth/setup");
 }
 
-export function setup(email: string, password: string) {
-  return api.post<User>("/auth/setup", { email, password });
+export function setup(email: string, password: string, username?: string) {
+  return api.post<User>("/auth/setup", { email, password, username: username ?? "" });
+}
+
+export function updateProfile(data: { username: string; first_name: string; last_name: string }) {
+  return api.put<User>("/auth/profile", data);
 }

@@ -54,6 +54,7 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService,
 
 		r.Get("/api/auth/me", h.Me)
 		r.Put("/api/auth/password", h.ChangeOwnPassword)
+		r.Put("/api/auth/profile", h.UpdateProfile)
 
 		// Admin-only routes
 		r.Group(func(r chi.Router) {

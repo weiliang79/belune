@@ -17,6 +17,9 @@ RETURNING *;
 -- name: UpdateDeploymentBuildLogs :exec
 UPDATE deployments SET build_logs = $2 WHERE id = $1;
 
+-- name: UpdateDeploymentImageTag :exec
+UPDATE deployments SET image_tag = $2 WHERE id = $1;
+
 -- name: ListOldDeployments :many
 SELECT * FROM deployments WHERE application_id = $1 ORDER BY started_at DESC OFFSET $2;
 

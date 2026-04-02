@@ -76,14 +76,60 @@ func (h *Handler) Me(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	email := middleware.EmailFromContext(r.Context())
-	role := middleware.RoleFromContext(r.Context())
+	var userUUID pgtype.UUID
+	if err := userUUID.Scan(userID); err != nil {
+		writeError(w, http.StatusInternalServerError, "invalid user id")
+		return
+	}
 
-	writeJSON(w, http.StatusOK, map[string]string{
-		"id":    userID,
-		"email": email,
-		"role":  role,
+	user, err := h.queries.GetUserByID(r.Context(), userUUID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to get user")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"id":         userID,
+		"email":      user.Email,
+		"role":       user.Role,
+		"username":   user.Username,
+		"first_name": user.FirstName,
+		"last_name":  user.LastName,
 	})
+}
+
+type updateProfileRequest struct {
+	Username  string `json:"username"`
+	FirstName string `json:"first_name"`
+	LastName  string `json:"last_name"`
+}
+
+func (h *Handler) UpdateProfile(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.UserIDFromContext(r.Context())
+	var userUUID pgtype.UUID
+	if err := userUUID.Scan(userID); err != nil {
+		writeError(w, http.StatusInternalServerError, "invalid user id")
+		return
+	}
+
+	var req updateProfileRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	updated, err := h.queries.UpdateUserProfile(r.Context(), generated.UpdateUserProfileParams{
+		ID:        userUUID,
+		Username:  req.Username,
+		FirstName: req.FirstName,
+		LastName:  req.LastName,
+	})
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to update profile")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, updated)
 }
 
 type changePasswordRequest struct {
@@ -143,6 +189,7 @@ func (h *Handler) ChangeOwnPassword(w http.ResponseWriter, r *http.Request) {
 type setupRequest struct {
 	Email    string `json:"email"`
 	Password string `json:"password"`
+	Username string `json:"username"`
 }
 
 func (h *Handler) Setup(w http.ResponseWriter, r *http.Request) {
@@ -179,15 +226,16 @@ func (h *Handler) Setup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user, err := h.auth.Register(r.Context(), req.Email, req.Password, "admin")
+	user, err := h.auth.Register(r.Context(), req.Email, req.Password, "admin", req.Username)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to create admin user")
 		return
 	}
 
 	writeJSON(w, http.StatusCreated, map[string]any{
-		"id":    user.ID,
-		"email": user.Email,
-		"role":  user.Role,
+		"id":       user.ID,
+		"email":    user.Email,
+		"role":     user.Role,
+		"username": user.Username,
 	})
 }

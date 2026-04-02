@@ -46,3 +46,11 @@ export function useChangeOwnPassword() {
     mutationFn: usersApi.changeOwnPassword,
   });
 }
+
+export function useUpdateProfile() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: usersApi.updateProfile,
+    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.users.all }),
+  });
+}

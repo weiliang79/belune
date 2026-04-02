@@ -2,7 +2,7 @@ import { useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { useAuthStore } from "@/lib/stores/auth";
-import { useChangeOwnPassword } from "@/lib/hooks/use-users";
+import { useChangeOwnPassword, useUpdateProfile } from "@/lib/hooks/use-users";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -43,8 +43,76 @@ function SettingsPage() {
         </CardContent>
       </Card>
 
+      <ProfileCard />
       <ChangePasswordCard />
     </div>
+  );
+}
+
+function ProfileCard() {
+  const user = useAuthStore((s) => s.user);
+  const setUser = useAuthStore((s) => s.setUser);
+  const [username, setUsername] = useState(user?.username ?? "");
+  const [firstName, setFirstName] = useState(user?.first_name ?? "");
+  const [lastName, setLastName] = useState(user?.last_name ?? "");
+  const updateProfile = useUpdateProfile();
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    toast.promise(
+      updateProfile.mutateAsync({ username, first_name: firstName, last_name: lastName }).then((updated) => {
+        if (user) setUser({ ...user, username: updated.username, first_name: updated.first_name, last_name: updated.last_name });
+      }),
+      {
+        loading: "Saving profile...",
+        success: "Profile updated",
+        error: (err) => err.message,
+      },
+    );
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Profile</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="profile-username">Username</Label>
+            <Input
+              id="profile-username"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              placeholder="username"
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="first-name">First Name</Label>
+              <Input
+                id="first-name"
+                value={firstName}
+                onChange={(e) => setFirstName(e.target.value)}
+                placeholder="First"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="last-name">Last Name</Label>
+              <Input
+                id="last-name"
+                value={lastName}
+                onChange={(e) => setLastName(e.target.value)}
+                placeholder="Last"
+              />
+            </div>
+          </div>
+          <Button type="submit" disabled={updateProfile.isPending}>
+            {updateProfile.isPending ? "Saving..." : "Save Profile"}
+          </Button>
+        </form>
+      </CardContent>
+    </Card>
   );
 }
 
