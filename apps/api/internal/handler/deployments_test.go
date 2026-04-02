@@ -1,0 +1,176 @@
+package handler_test
+
+import (
+	"context"
+	"fmt"
+	"net/http"
+	"testing"
+
+	"github.com/hibiken/asynq"
+	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/ungweiliang/selfhost-paas/internal/status"
+	"github.com/ungweiliang/selfhost-paas/internal/store/generated"
+	"github.com/ungweiliang/selfhost-paas/internal/testutil"
+)
+
+func TestGetGlobalDeployments(t *testing.T) {
+	resetDB(t)
+	adminToken := env.SetupAdmin(t, "admin@test.com", "password123")
+
+	// Create a member
+	env.DoRequest(t, "POST", "/api/users", map[string]string{
+		"email": "member@test.com", "password": "password123", "role": "member",
+	}, testutil.AuthHeader(adminToken)).Body.Close()
+	memberToken := env.LoginAs(t, "member@test.com", "password123")
+
+	// Admin creates a project + app + triggers a deploy
+	project := env.CreateProject(t, adminToken, "Admin Project", "admin-project")
+	projectID := extractID(project["id"])
+	app := env.CreateApplication(t, adminToken, projectID, map[string]any{
+		"name": "App A", "type": "git", "build_type": "dockerfile",
+		"source_repo": "https://github.com/test/repo",
+	})
+	appID := extractID(app["id"])
+	resp := env.DoRequest(t, "POST", fmt.Sprintf("/api/projects/%s/applications/%s/deploy", projectID, appID), nil, testutil.AuthHeader(adminToken))
+	assert.Equal(t, http.StatusAccepted, resp.StatusCode)
+	resp.Body.Close()
+
+	// Admin sees the deployment
+	resp = env.DoRequest(t, "GET", "/api/deployments", nil, testutil.AuthHeader(adminToken))
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	rows := testutil.ReadJSONArray(t, resp)
+	assert.Len(t, rows, 1)
+
+	// Member (who owns no projects) sees none
+	resp = env.DoRequest(t, "GET", "/api/deployments", nil, testutil.AuthHeader(memberToken))
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	memberRows := testutil.ReadJSONArray(t, resp)
+	assert.Len(t, memberRows, 0)
+
+	// Unauthenticated is rejected
+	resp = env.DoRequest(t, "GET", "/api/deployments", nil, nil)
+	assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
+	resp.Body.Close()
+}
+
+func TestRollbackDeployment(t *testing.T) {
+	resetDB(t)
+	adminToken := env.SetupAdmin(t, "admin@test.com", "password123")
+
+	project := env.CreateProject(t, adminToken, "Rollback Project", "rollback-project")
+	projectID := extractID(project["id"])
+	app := env.CreateApplication(t, adminToken, projectID, map[string]any{
+		"name": "Rollback App", "type": "image", "build_type": "image",
+		"source_image": "nginx:latest",
+	})
+	appID := extractID(app["id"])
+
+	// Trigger a deploy to get a deployment record
+	deployResp := env.DoRequest(t, "POST", fmt.Sprintf("/api/projects/%s/applications/%s/deploy", projectID, appID), nil, testutil.AuthHeader(adminToken))
+	require.Equal(t, http.StatusAccepted, deployResp.StatusCode)
+	deployment := testutil.ReadJSON(t, deployResp)
+	deploymentID := extractID(deployment["id"])
+
+	// Scan the deployment UUID
+	var deployUUID pgtype.UUID
+	require.NoError(t, deployUUID.Scan(deploymentID))
+
+	// Simulate worker completing: set status=success and image_tag
+	ctx := context.Background()
+	_, err := env.Queries.UpdateDeploymentStatus(ctx, generated.UpdateDeploymentStatusParams{
+		ID:     deployUUID,
+		Status: status.DeploymentSuccess,
+	})
+	require.NoError(t, err)
+	require.NoError(t, env.Queries.UpdateDeploymentImageTag(ctx, generated.UpdateDeploymentImageTagParams{
+		ID:       deployUUID,
+		ImageTag: pgtype.Text{String: "nginx:latest", Valid: true},
+	}))
+
+	// Clear enqueued tasks so we can detect the rollback task
+	env.Asynq.Tasks = nil
+
+	// Happy path: rollback to the successful deployment
+	resp := env.DoRequest(t, "POST", fmt.Sprintf("/api/projects/%s/applications/%s/rollback", projectID, appID), map[string]string{
+		"deployment_id": deploymentID,
+	}, testutil.AuthHeader(adminToken))
+	assert.Equal(t, http.StatusAccepted, resp.StatusCode)
+	result := testutil.ReadJSON(t, resp)
+	assert.Equal(t, "pending", result["status"])
+	assert.Equal(t, "rollback", result["triggered_by"])
+	require.Len(t, env.Asynq.Tasks, 1)
+	assert.Equal(t, "deploy", env.Asynq.Tasks[0].TypeName)
+
+	// Conflict: another deploy is in progress (simulate by making enqueue return ErrTaskIDConflict)
+	env.Asynq.EnqueueErr = asynq.ErrTaskIDConflict
+	env.Asynq.EnqueueOnce = true
+	resp = env.DoRequest(t, "POST", fmt.Sprintf("/api/projects/%s/applications/%s/rollback", projectID, appID), map[string]string{
+		"deployment_id": deploymentID,
+	}, testutil.AuthHeader(adminToken))
+	assert.Equal(t, http.StatusConflict, resp.StatusCode)
+	resp.Body.Close()
+
+	// Error: deployment_id missing
+	resp = env.DoRequest(t, "POST", fmt.Sprintf("/api/projects/%s/applications/%s/rollback", projectID, appID), map[string]string{}, testutil.AuthHeader(adminToken))
+	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+	resp.Body.Close()
+
+	// Error: rollback to a non-successful deployment
+	deployResp2 := env.DoRequest(t, "POST", fmt.Sprintf("/api/projects/%s/applications/%s/deploy", projectID, appID), nil, testutil.AuthHeader(adminToken))
+	require.Equal(t, http.StatusAccepted, deployResp2.StatusCode)
+	pending := testutil.ReadJSON(t, deployResp2)
+	pendingID := extractID(pending["id"])
+
+	resp = env.DoRequest(t, "POST", fmt.Sprintf("/api/projects/%s/applications/%s/rollback", projectID, appID), map[string]string{
+		"deployment_id": pendingID,
+	}, testutil.AuthHeader(adminToken))
+	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+	resp.Body.Close()
+}
+
+func TestListApplicationLogs(t *testing.T) {
+	resetDB(t)
+	adminToken := env.SetupAdmin(t, "admin@test.com", "password123")
+
+	project := env.CreateProject(t, adminToken, "Log Project", "log-project")
+	projectID := extractID(project["id"])
+	app := env.CreateApplication(t, adminToken, projectID, map[string]any{
+		"name": "Log App", "type": "image", "build_type": "image",
+		"source_image": "nginx:latest",
+	})
+	appID := extractID(app["id"])
+
+	// No logs yet — should return empty array
+	resp := env.DoRequest(t, "GET", fmt.Sprintf("/api/projects/%s/applications/%s/logs/history", projectID, appID), nil, testutil.AuthHeader(adminToken))
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	logs := testutil.ReadJSONArray(t, resp)
+	assert.Len(t, logs, 0)
+
+	// Insert a log entry directly via queries
+	var appUUID pgtype.UUID
+	require.NoError(t, appUUID.Scan(appID))
+	ctx := context.Background()
+	require.NoError(t, env.Queries.InsertApplicationLog(ctx, generated.InsertApplicationLogParams{
+		ApplicationID: appUUID,
+		Stream:        "stdout",
+		Message:       "hello from test",
+	}))
+
+	// Should now return 1 entry
+	resp = env.DoRequest(t, "GET", fmt.Sprintf("/api/projects/%s/applications/%s/logs/history", projectID, appID), nil, testutil.AuthHeader(adminToken))
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	logs = testutil.ReadJSONArray(t, resp)
+	assert.Len(t, logs, 1)
+
+	firstLog := logs[0].(map[string]any)
+	assert.Equal(t, "stdout", firstLog["stream"])
+	assert.Equal(t, "hello from test", firstLog["message"])
+
+	// Unauthenticated is rejected
+	resp = env.DoRequest(t, "GET", fmt.Sprintf("/api/projects/%s/applications/%s/logs/history", projectID, appID), nil, nil)
+	assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
+	resp.Body.Close()
+}

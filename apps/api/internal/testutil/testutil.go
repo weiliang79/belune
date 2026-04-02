@@ -97,7 +97,7 @@ func runMigrations(pool *pgxpool.Pool) {
 // TruncateAll truncates all tables for test isolation.
 func TruncateAll(ctx context.Context, pool *pgxpool.Pool) error {
 	_, err := pool.Exec(ctx, `
-		TRUNCATE users, projects, applications, deployments, databases, domains, env_vars CASCADE
+		TRUNCATE users, projects, applications, deployments, databases, domains, env_vars, application_logs, request_logs CASCADE
 	`)
 	return err
 }
