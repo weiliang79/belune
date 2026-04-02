@@ -12,6 +12,7 @@ import (
 	"github.com/ungweiliang/selfhost-paas/internal/naming"
 	"github.com/ungweiliang/selfhost-paas/internal/pkg/crypto"
 	"github.com/ungweiliang/selfhost-paas/internal/runtime"
+	"github.com/ungweiliang/selfhost-paas/internal/status"
 	"github.com/ungweiliang/selfhost-paas/internal/store/generated"
 )
 
@@ -148,7 +149,7 @@ func (h *TaskHandler) HandleProvisionDBTask(ctx context.Context, t *asynq.Task) 
 	// Update database record with running status and connection info
 	h.Queries.UpdateDatabaseAfterProvision(ctx, generated.UpdateDatabaseAfterProvisionParams{
 		ID:           dbID,
-		Status:       "running",
+		Status:       status.DatabaseRunning,
 		InternalHost: pgtype.Text{String: containerName, Valid: true},
 		InternalPort: pgtype.Int4{Int32: port, Valid: true},
 	})
@@ -166,6 +167,6 @@ func (h *TaskHandler) failDatabase(ctx context.Context, dbID pgtype.UUID, errMsg
 	slog.Error("database provisioning failed", "database_id", fmt.Sprintf("%v", dbID), "error", errMsg)
 	h.Queries.UpdateDatabaseStatus(ctx, generated.UpdateDatabaseStatusParams{
 		ID:     dbID,
-		Status: "failed",
+		Status: status.DatabaseFailed,
 	})
 }

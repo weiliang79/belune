@@ -16,6 +16,7 @@ import (
 	"github.com/ungweiliang/selfhost-paas/internal/naming"
 	"github.com/ungweiliang/selfhost-paas/internal/pkg/buildlog"
 	"github.com/ungweiliang/selfhost-paas/internal/pkg/crypto"
+	"github.com/ungweiliang/selfhost-paas/internal/status"
 	"github.com/ungweiliang/selfhost-paas/internal/store/generated"
 )
 
@@ -38,7 +39,7 @@ func (h *TaskHandler) HandleBuildTask(ctx context.Context, t *asynq.Task) error 
 	// Update deployment status to building
 	h.Queries.UpdateDeploymentStatus(ctx, generated.UpdateDeploymentStatusParams{
 		ID:     deploymentID,
-		Status: "building",
+		Status: status.DeploymentBuilding,
 	})
 
 	// Fetch application details with project slug
@@ -60,7 +61,7 @@ func (h *TaskHandler) HandleBuildTask(ctx context.Context, t *asynq.Task) error 
 		slog.Info("skipping build for image-type application", "application_id", payload.ApplicationID)
 		h.Queries.UpdateDeploymentStatus(ctx, generated.UpdateDeploymentStatusParams{
 			ID:     deploymentID,
-			Status: "success",
+			Status: status.DeploymentSuccess,
 		})
 		return nil
 	}
@@ -154,7 +155,7 @@ func (h *TaskHandler) HandleBuildTask(ctx context.Context, t *asynq.Task) error 
 	// Mark as success — no container creation
 	h.Queries.UpdateDeploymentStatus(ctx, generated.UpdateDeploymentStatusParams{
 		ID:     deploymentID,
-		Status: "success",
+		Status: status.DeploymentSuccess,
 	})
 
 	slog.Info("build completed",

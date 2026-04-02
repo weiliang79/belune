@@ -10,6 +10,7 @@ import (
 
 	"github.com/ungweiliang/selfhost-paas/internal/pkg/buildlog"
 	"github.com/ungweiliang/selfhost-paas/internal/pkg/sse"
+	"github.com/ungweiliang/selfhost-paas/internal/status"
 )
 
 func (h *Handler) StreamBuildLogs(w http.ResponseWriter, r *http.Request) {
@@ -51,7 +52,7 @@ func (h *Handler) StreamBuildLogs(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// If build is already complete, send stored logs and done event
-	if deployment.Status != "building" && deployment.Status != "pending" {
+	if deployment.Status != status.DeploymentBuilding && deployment.Status != status.DeploymentPending {
 		if deployment.BuildLogs.Valid && deployment.BuildLogs.String != "" {
 			for _, line := range strings.Split(deployment.BuildLogs.String, "\n") {
 				if err := writer.SendData(line); err != nil {

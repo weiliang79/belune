@@ -13,6 +13,7 @@ import (
 	"github.com/ungweiliang/selfhost-paas/internal/naming"
 	"github.com/ungweiliang/selfhost-paas/internal/proxy"
 	"github.com/ungweiliang/selfhost-paas/internal/runtime"
+	"github.com/ungweiliang/selfhost-paas/internal/status"
 	"github.com/ungweiliang/selfhost-paas/internal/store/generated"
 )
 
@@ -50,7 +51,7 @@ type DeployTaskPayload struct {
 func (s *DeployService) Deploy(ctx context.Context, applicationID pgtype.UUID) (generated.Deployment, error) {
 	deployment, err := s.queries.CreateDeployment(ctx, generated.CreateDeploymentParams{
 		ApplicationID: applicationID,
-		Status:        "pending",
+		Status:        status.DeploymentPending,
 		TriggeredBy:   "manual",
 	})
 	if err != nil {
@@ -93,7 +94,7 @@ func (s *DeployService) Stop(ctx context.Context, applicationID pgtype.UUID) err
 	}
 	_, err = s.queries.UpdateApplicationStatus(ctx, generated.UpdateApplicationStatusParams{
 		ID:     applicationID,
-		Status: "stopped",
+		Status: status.ApplicationStopped,
 	})
 	return err
 }

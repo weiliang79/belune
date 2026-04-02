@@ -15,6 +15,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/ungweiliang/selfhost-paas/internal/git"
+	"github.com/ungweiliang/selfhost-paas/internal/status"
 	"github.com/ungweiliang/selfhost-paas/internal/store/generated"
 )
 
@@ -94,7 +95,7 @@ func (h *Handler) HandleWebhookPush(w http.ResponseWriter, r *http.Request) {
 
 		deployment, err := h.queries.CreateDeployment(r.Context(), generated.CreateDeploymentParams{
 			ApplicationID: app.ID,
-			Status:      "pending",
+			Status:      status.DeploymentPending,
 			TriggeredBy: "push",
 			CommitSha:   pgtype.Text{String: payload.CommitSHA, Valid: payload.CommitSHA != ""},
 		})

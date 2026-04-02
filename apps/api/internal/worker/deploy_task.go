@@ -19,6 +19,7 @@ import (
 	"github.com/ungweiliang/selfhost-paas/internal/pkg/crypto"
 	"github.com/ungweiliang/selfhost-paas/internal/proxy"
 	"github.com/ungweiliang/selfhost-paas/internal/runtime"
+	"github.com/ungweiliang/selfhost-paas/internal/status"
 	"github.com/ungweiliang/selfhost-paas/internal/store"
 	"github.com/ungweiliang/selfhost-paas/internal/store/generated"
 )
@@ -38,12 +39,6 @@ func (h *TaskHandler) HandleDeployTask(ctx context.Context, t *asynq.Task) error
 
 	applicationID := parseUUID(payload.ApplicationID)
 	deploymentID := parseUUID(payload.DeploymentID)
-
-	// Update deployment status to deploying
-	h.Queries.UpdateDeploymentStatus(ctx, generated.UpdateDeploymentStatusParams{
-		ID:     deploymentID,
-		Status: "deploying",
-	})
 
 	// Fetch application details with project slug
 	appRow, err := h.Queries.GetApplicationWithProjectSlug(ctx, applicationID)
@@ -121,6 +116,11 @@ func (h *TaskHandler) HandleDeployTask(ctx context.Context, t *asynq.Task) error
 
 	switch app.Type {
 	case "image":
+		// Image apps skip build — go straight to deploying
+		h.Queries.UpdateDeploymentStatus(ctx, generated.UpdateDeploymentStatusParams{
+			ID:     deploymentID,
+			Status: status.DeploymentDeploying,
+		})
 		imageName = app.SourceImage.String
 		slog.Info("pulling image", "image", imageName)
 		pullCtx, pullCancel := context.WithTimeout(ctx, time.Duration(h.Config.ImagePullTimeoutMinutes)*time.Minute)
@@ -187,10 +187,10 @@ func (h *TaskHandler) HandleDeployTask(ctx context.Context, t *asynq.Task) error
 			LogWriter:      logWriter,
 		}
 
-		// Update status to building
+		// Update status to building before build starts
 		h.Queries.UpdateDeploymentStatus(ctx, generated.UpdateDeploymentStatusParams{
 			ID:     deploymentID,
-			Status: "building",
+			Status: status.DeploymentBuilding,
 		})
 
 		slog.Info("building image", "tag", imageName)
@@ -212,6 +212,12 @@ func (h *TaskHandler) HandleDeployTask(ctx context.Context, t *asynq.Task) error
 
 		imageName = result.ImageTag
 		slog.Info("build completed", "image", imageName)
+
+		// Build done — now transition to deploying before container creation
+		h.Queries.UpdateDeploymentStatus(ctx, generated.UpdateDeploymentStatusParams{
+			ID:     deploymentID,
+			Status: status.DeploymentDeploying,
+		})
 
 	default:
 		h.failDeployment(ctx, deploymentID, fmt.Sprintf("unknown application type: %s", app.Type))
@@ -272,11 +278,11 @@ func (h *TaskHandler) HandleDeployTask(ctx context.Context, t *asynq.Task) error
 	if err := store.WithTx(ctx, h.DB, func(q *generated.Queries) error {
 		q.UpdateDeploymentStatus(ctx, generated.UpdateDeploymentStatusParams{
 			ID:     deploymentID,
-			Status: "success",
+			Status: status.DeploymentSuccess,
 		})
 		q.UpdateApplicationStatus(ctx, generated.UpdateApplicationStatusParams{
 			ID:     applicationID,
-			Status: "running",
+			Status: status.ApplicationRunning,
 		})
 		return nil
 	}); err != nil {
@@ -307,7 +313,7 @@ func (h *TaskHandler) failDeployment(ctx context.Context, deploymentID pgtype.UU
 	if retried >= maxRetry {
 		h.Queries.UpdateDeploymentStatus(ctx, generated.UpdateDeploymentStatusParams{
 			ID:           deploymentID,
-			Status:       "failed",
+			Status:       status.DeploymentFailed,
 			ErrorMessage: pgtype.Text{String: errMsg, Valid: true},
 		})
 	}

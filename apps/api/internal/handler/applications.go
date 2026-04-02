@@ -14,6 +14,7 @@ import (
 
 	"github.com/ungweiliang/selfhost-paas/internal/naming"
 	"github.com/ungweiliang/selfhost-paas/internal/service"
+	"github.com/ungweiliang/selfhost-paas/internal/status"
 	"github.com/ungweiliang/selfhost-paas/internal/store/generated"
 )
 
@@ -162,7 +163,7 @@ func (h *Handler) DeployApplication(w http.ResponseWriter, r *http.Request) {
 	// Create deployment record
 	deployment, err := h.queries.CreateDeployment(r.Context(), generated.CreateDeploymentParams{
 		ApplicationID: applicationUUID,
-		Status:      "pending",
+		Status:      status.DeploymentPending,
 		TriggeredBy: "manual",
 	})
 	if err != nil {
@@ -227,7 +228,7 @@ func (h *Handler) StopApplication(w http.ResponseWriter, r *http.Request) {
 
 	app, err := h.queries.UpdateApplicationStatus(r.Context(), generated.UpdateApplicationStatusParams{
 		ID:     applicationUUID,
-		Status: "stopped",
+		Status: status.ApplicationStopped,
 	})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to update application status")
@@ -265,7 +266,7 @@ func (h *Handler) StartApplication(w http.ResponseWriter, r *http.Request) {
 
 	app, err := h.queries.UpdateApplicationStatus(r.Context(), generated.UpdateApplicationStatusParams{
 		ID:     applicationUUID,
-		Status: "running",
+		Status: status.ApplicationRunning,
 	})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to update application status")
@@ -309,7 +310,7 @@ func (h *Handler) RestartApplication(w http.ResponseWriter, r *http.Request) {
 
 	app, err := h.queries.UpdateApplicationStatus(r.Context(), generated.UpdateApplicationStatusParams{
 		ID:     applicationUUID,
-		Status: "running",
+		Status: status.ApplicationRunning,
 	})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to update application status")
@@ -428,7 +429,7 @@ func (h *Handler) BuildApplication(w http.ResponseWriter, r *http.Request) {
 	// Create deployment record
 	deployment, err := h.queries.CreateDeployment(r.Context(), generated.CreateDeploymentParams{
 		ApplicationID: applicationUUID,
-		Status:      "pending",
+		Status:      status.DeploymentPending,
 		TriggeredBy: "manual",
 	})
 	if err != nil {

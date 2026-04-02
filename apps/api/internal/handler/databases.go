@@ -14,6 +14,7 @@ import (
 
 	"github.com/ungweiliang/selfhost-paas/internal/naming"
 	"github.com/ungweiliang/selfhost-paas/internal/pkg/crypto"
+	"github.com/ungweiliang/selfhost-paas/internal/status"
 	"github.com/ungweiliang/selfhost-paas/internal/store"
 	"github.com/ungweiliang/selfhost-paas/internal/store/generated"
 )
@@ -178,7 +179,7 @@ func (h *Handler) CreateDatabase(w http.ResponseWriter, r *http.Request) {
 			Name:                 req.Name,
 			Slug:                 baseSlug,
 			Version:              req.Version,
-			Status:               "creating",
+			Status:               status.DatabaseCreating,
 			InternalHost:         pgtype.Text{},
 			InternalPort:         pgtype.Int4{},
 			CredentialsEncrypted: encrypted,

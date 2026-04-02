@@ -6,6 +6,8 @@ import (
 	"net/http"
 
 	"github.com/hibiken/asynq"
+
+	"github.com/ungweiliang/selfhost-paas/internal/status"
 )
 
 type metricsResponse struct {
@@ -47,7 +49,7 @@ func (h *Handler) GetMetrics(w http.ResponseWriter, r *http.Request) {
 	if err == nil {
 		for _, c := range containers {
 			stats.Total++
-			if c.Status == "running" {
+			if c.Status == status.ApplicationRunning {
 				stats.Running++
 			} else {
 				stats.Stopped++
