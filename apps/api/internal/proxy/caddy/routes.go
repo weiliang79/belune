@@ -51,8 +51,10 @@ func (c *Client) AddRoute(ctx context.Context, cfg proxy.RouteConfig) error {
 		return fmt.Errorf("marshal route: %w", err)
 	}
 
-	// Insert at index 0 so domain-specific routes take priority over the catch-all :80 route.
-	url := fmt.Sprintf("%s/config/apps/http/servers/srv0/routes/0", c.adminURL)
+	// Insert at index 0 (%5B0%5D = [0]) so domain-specific routes take priority
+	// over the catch-all :80 route. Caddy evaluates routes in order; the catch-all
+	// has no host matcher and would match everything if placed first.
+	url := fmt.Sprintf("%s/config/apps/http/servers/srv0/routes/%%5B0%%5D", c.adminURL)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
 		return fmt.Errorf("create request: %w", err)
