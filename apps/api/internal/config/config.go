@@ -49,8 +49,14 @@ func Load() (*Config, error) {
 	if cfg.JWTSecret == "" {
 		return nil, fmt.Errorf("JWT_SECRET is required")
 	}
+	if len(cfg.JWTSecret) < 32 {
+		return nil, fmt.Errorf("JWT_SECRET must be at least 32 characters")
+	}
 	if cfg.EncryptionKey == "" {
 		return nil, fmt.Errorf("ENCRYPTION_KEY is required")
+	}
+	if len(cfg.EncryptionKey) != 64 || !isHex(cfg.EncryptionKey) {
+		return nil, fmt.Errorf("ENCRYPTION_KEY must be exactly 64 hex characters")
 	}
 
 	return cfg, nil
@@ -86,6 +92,15 @@ func getEnvList(key string, fallback []string) []string {
 		}
 	}
 	return fallback
+}
+
+func isHex(s string) bool {
+	for _, c := range s {
+		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')) {
+			return false
+		}
+	}
+	return true
 }
 
 func getEnvBool(key string, fallback bool) bool {

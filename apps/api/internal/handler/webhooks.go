@@ -107,10 +107,14 @@ func (h *Handler) HandleWebhookPush(w http.ResponseWriter, r *http.Request) {
 			deployment.ID.Bytes[0:4], deployment.ID.Bytes[4:6],
 			deployment.ID.Bytes[6:8], deployment.ID.Bytes[8:10], deployment.ID.Bytes[10:16])
 
-		taskPayload, _ := json.Marshal(deployPayload{
+		taskPayload, marshalErr := json.Marshal(deployPayload{
 			ApplicationID: applicationID,
 			DeploymentID:  deploymentID,
 		})
+		if marshalErr != nil {
+			slog.Error("webhook: failed to marshal deploy payload", "application", app.Name, "error", marshalErr)
+			continue
+		}
 
 		task := asynq.NewTask("deploy", taskPayload)
 		if _, enqErr := h.asynq.Enqueue(task,

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -170,10 +171,15 @@ func (h *Handler) DeployApplication(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Enqueue deploy task
-	payload, _ := json.Marshal(deployPayload{
+	payload, err := json.Marshal(deployPayload{
 		ApplicationID: applicationID,
 		DeploymentID:  fmt.Sprintf("%x-%x-%x-%x-%x", deployment.ID.Bytes[0:4], deployment.ID.Bytes[4:6], deployment.ID.Bytes[6:8], deployment.ID.Bytes[8:10], deployment.ID.Bytes[10:16]),
 	})
+	if err != nil {
+		slog.Error("failed to marshal deploy payload", "error", err)
+		writeError(w, http.StatusInternalServerError, "failed to create deploy task")
+		return
+	}
 
 	task := asynq.NewTask("deploy", payload)
 	_, err = h.asynq.Enqueue(task,
@@ -252,7 +258,8 @@ func (h *Handler) StartApplication(w http.ResponseWriter, r *http.Request) {
 
 	containerName := naming.ContainerName(row.ProjectSlug, row.Slug, applicationID)
 	if err := h.runtime.StartContainer(r.Context(), containerName); err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to start application: "+err.Error())
+		slog.Error("failed to start application container", "container", containerName, "error", err)
+		writeError(w, http.StatusInternalServerError, "failed to start application")
 		return
 	}
 
@@ -290,11 +297,13 @@ func (h *Handler) RestartApplication(w http.ResponseWriter, r *http.Request) {
 	// Stop and start the existing container (no rebuild)
 	containerName := naming.ContainerName(row.ProjectSlug, row.Slug, applicationID)
 	if err := h.runtime.StopContainer(r.Context(), containerName); err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to stop container: "+err.Error())
+		slog.Error("failed to stop container for restart", "container", containerName, "error", err)
+		writeError(w, http.StatusInternalServerError, "failed to stop container")
 		return
 	}
 	if err := h.runtime.StartContainer(r.Context(), containerName); err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to start container: "+err.Error())
+		slog.Error("failed to start container for restart", "container", containerName, "error", err)
+		writeError(w, http.StatusInternalServerError, "failed to start container")
 		return
 	}
 

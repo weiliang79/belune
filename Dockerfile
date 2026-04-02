@@ -22,7 +22,11 @@ RUN CGO_ENABLED=0 GOOS=linux go build \
 
 # Stage 3: Minimal runtime image
 FROM alpine:3.20
-RUN apk add --no-cache ca-certificates tzdata git
+RUN apk add --no-cache ca-certificates tzdata git && \
+    addgroup -S paas && adduser -S -G paas paas
 COPY --from=backend /paas /usr/local/bin/paas
+USER paas
 EXPOSE 8080
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD wget -qO- http://localhost:8080/health || exit 1
 ENTRYPOINT ["paas"]

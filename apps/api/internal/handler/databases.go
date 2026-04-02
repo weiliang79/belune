@@ -207,7 +207,12 @@ func (h *Handler) CreateDatabase(w http.ResponseWriter, r *http.Request) {
 	// Enqueue provision task
 	dbIDStr := fmt.Sprintf("%x-%x-%x-%x-%x",
 		db.ID.Bytes[0:4], db.ID.Bytes[4:6], db.ID.Bytes[6:8], db.ID.Bytes[8:10], db.ID.Bytes[10:16])
-	payload, _ := json.Marshal(provisionDBPayload{DatabaseID: dbIDStr})
+	payload, err := json.Marshal(provisionDBPayload{DatabaseID: dbIDStr})
+	if err != nil {
+		slog.Error("failed to marshal provision_db payload", "error", err)
+		writeError(w, http.StatusInternalServerError, "failed to create provision task")
+		return
+	}
 	task := asynq.NewTask("provision_db", payload)
 	if _, err := h.asynq.Enqueue(task, asynq.Queue("critical")); err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to enqueue provision task")

@@ -89,6 +89,12 @@ func (h *Handler) AddDomain(w http.ResponseWriter, r *http.Request) {
 		TLS:       req.SSLEnabled,
 	}); err != nil {
 		slog.Error("failed to add proxy route for domain", "hostname", req.Hostname, "container", containerName, "error", err)
+		// Rollback the domain DB insert since proxy registration failed
+		if delErr := h.queries.DeleteDomain(r.Context(), domain.ID); delErr != nil {
+			slog.Error("failed to rollback domain insert after proxy failure", "domain_id", domain.ID, "error", delErr)
+		}
+		writeError(w, http.StatusInternalServerError, "failed to configure proxy for domain")
+		return
 	}
 
 	writeJSON(w, http.StatusCreated, domain)
@@ -114,9 +120,11 @@ func (h *Handler) RemoveDomain(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Remove Caddy proxy route
+	// Remove Caddy proxy route first — if it fails, don't delete from DB
 	if err := h.proxy.RemoveRoute(r.Context(), domain.Hostname); err != nil {
-		slog.Warn("could not remove proxy route for domain", "hostname", domain.Hostname, "error", err)
+		slog.Error("failed to remove proxy route for domain", "hostname", domain.Hostname, "error", err)
+		writeError(w, http.StatusInternalServerError, "failed to remove proxy route for domain")
+		return
 	}
 
 	// Delete from database
