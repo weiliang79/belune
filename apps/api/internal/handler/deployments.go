@@ -12,6 +12,7 @@ import (
 	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/ungweiliang/selfhost-paas/internal/server/middleware"
 	"github.com/ungweiliang/selfhost-paas/internal/status"
 	"github.com/ungweiliang/selfhost-paas/internal/store/generated"
 )
@@ -65,6 +66,48 @@ func (h *Handler) GetDeployment(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, deployment)
+}
+
+// GetGlobalDeployments returns deployments across all applications.
+// Admins see all; members see only their own projects' deployments.
+// GET /api/deployments
+func (h *Handler) GetGlobalDeployments(w http.ResponseWriter, r *http.Request) {
+	limit, offset := parsePagination(r)
+	role := middleware.RoleFromContext(r.Context())
+
+	if role == "admin" {
+		rows, err := h.queries.ListGlobalDeployments(r.Context(), generated.ListGlobalDeploymentsParams{
+			Limit:  limit,
+			Offset: offset,
+		})
+		if err != nil {
+			slog.Error("failed to list global deployments", "error", err)
+			writeError(w, http.StatusInternalServerError, "failed to list deployments")
+			return
+		}
+		writeJSON(w, http.StatusOK, rows)
+		return
+	}
+
+	// Member: scope to user's projects
+	userIDStr := middleware.UserIDFromContext(r.Context())
+	var userUUID pgtype.UUID
+	if err := userUUID.Scan(userIDStr); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid user id in token")
+		return
+	}
+
+	rows, err := h.queries.ListUserDeployments(r.Context(), generated.ListUserDeploymentsParams{
+		UserID: userUUID,
+		Limit:  limit,
+		Offset: offset,
+	})
+	if err != nil {
+		slog.Error("failed to list user deployments", "error", err)
+		writeError(w, http.StatusInternalServerError, "failed to list deployments")
+		return
+	}
+	writeJSON(w, http.StatusOK, rows)
 }
 
 type rollbackRequest struct {

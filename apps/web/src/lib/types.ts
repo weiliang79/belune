@@ -103,6 +103,38 @@ export interface SettingEntry {
   value: string;
 }
 
+export interface GlobalDeployment {
+  id: string;
+  application_id: string;
+  status: string;
+  triggered_by: string;
+  commit_sha: string | null;
+  build_logs: string | null;
+  error_message: string | null;
+  image_tag: string | null;
+  started_at: string;
+  finished_at: string | null;
+  application_name: string;
+  application_slug: string;
+  project_id: string;
+  project_name: string;
+}
+
+export interface RequestLog {
+  id: string;
+  application_id: string;
+  method: string;
+  path: string;
+  status_code: number;
+  latency_ms: number;
+  hostname: string;
+  request_size: number | null;
+  response_size: number | null;
+  client_ip: string | null;
+  user_agent: string | null;
+  recorded_at: string;
+}
+
 export interface ApplicationLog {
   id: string;
   application_id: string;

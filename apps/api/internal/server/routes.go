@@ -123,6 +123,9 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService,
 		// Application live metrics stream (no historical — container metrics are on-demand only)
 		r.Get("/api/projects/{projectId}/applications/{applicationId}/metrics/stream", h.StreamApplicationMetrics)
 
+		// Global deployments (all authenticated users; scoped by role in handler)
+		r.Get("/api/deployments", h.GetGlobalDeployments)
+
 		// Metrics, Settings & Cleanup (admin-only)
 		r.Group(func(r chi.Router) {
 			r.Use(middleware.RequireRole("admin"))

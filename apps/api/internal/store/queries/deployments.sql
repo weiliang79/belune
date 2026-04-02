@@ -28,3 +28,24 @@ DELETE FROM deployments WHERE id = $1;
 
 -- name: CountDeployments :one
 SELECT count(*) FROM deployments;
+
+-- name: ListGlobalDeployments :many
+SELECT d.id, d.application_id, d.status, d.triggered_by, d.commit_sha, d.build_logs, d.error_message, d.started_at, d.finished_at, d.image_tag,
+       a.name AS application_name, a.slug AS application_slug,
+       p.id AS project_id, p.name AS project_name
+FROM deployments d
+JOIN applications a ON a.id = d.application_id
+JOIN projects p ON p.id = a.project_id
+ORDER BY d.started_at DESC
+LIMIT $1 OFFSET $2;
+
+-- name: ListUserDeployments :many
+SELECT d.id, d.application_id, d.status, d.triggered_by, d.commit_sha, d.build_logs, d.error_message, d.started_at, d.finished_at, d.image_tag,
+       a.name AS application_name, a.slug AS application_slug,
+       p.id AS project_id, p.name AS project_name
+FROM deployments d
+JOIN applications a ON a.id = d.application_id
+JOIN projects p ON p.id = a.project_id
+WHERE p.user_id = $1
+ORDER BY d.started_at DESC
+LIMIT $2 OFFSET $3;

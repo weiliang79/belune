@@ -5,23 +5,34 @@ import { logout } from "@/lib/api/auth";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
-const navItems = [
-  { to: "/dashboard" as const, label: "Dashboard", icon: "/" },
-  { to: "/projects" as const, label: "Projects", icon: "/" },
-  { to: "/settings" as const, label: "Settings", icon: "/" },
-];
-
 export function Sidebar() {
   const { isOpen, toggle } = useSidebarStore();
   const { user, clearUser } = useAuthStore();
   const routerState = useRouterState();
   const currentPath = routerState.location.pathname;
+  const isAdmin = user?.role === "admin";
 
   const handleLogout = async () => {
     await logout();
     clearUser();
     window.location.href = "/login";
   };
+
+  const isActive = (to: string, exact = false) =>
+    exact ? currentPath === to : currentPath.startsWith(to);
+
+  const navLink = (to: string, label: string, exact = false) => (
+    <Link
+      key={to}
+      to={to as any}
+      className={cn(
+        "hover:bg-sidebar-accent hover:text-sidebar-accent-foreground flex items-center rounded-md px-3 py-2 text-sm font-medium transition-colors",
+        isActive(to, exact) && "bg-sidebar-accent text-sidebar-accent-foreground",
+      )}
+    >
+      {isOpen && label}
+    </Link>
+  );
 
   return (
     <aside
@@ -36,20 +47,34 @@ export function Sidebar() {
         </button>
       </div>
 
-      <nav className="flex-1 space-y-1 p-2">
-        {navItems.map((item) => (
-          <Link
-            key={item.to}
-            to={item.to}
-            className={cn(
-              "hover:bg-sidebar-accent hover:text-sidebar-accent-foreground flex items-center rounded-md px-3 py-2 text-sm font-medium transition-colors",
-              currentPath.startsWith(item.to) &&
-                "bg-sidebar-accent text-sidebar-accent-foreground",
-            )}
-          >
-            {isOpen && item.label}
-          </Link>
-        ))}
+      <nav className="flex-1 space-y-4 overflow-y-auto p-2">
+        {/* Home section */}
+        <div>
+          {isOpen && (
+            <p className="text-muted-foreground mb-1 px-3 text-xs font-semibold uppercase tracking-wider">
+              Home
+            </p>
+          )}
+          <div className="space-y-1">
+            {navLink("/projects", "Projects")}
+            {navLink("/deployments", "Deployments")}
+            {isAdmin && navLink("/requests", "Requests")}
+          </div>
+        </div>
+
+        {/* Settings section */}
+        <div>
+          {isOpen && (
+            <p className="text-muted-foreground mb-1 px-3 text-xs font-semibold uppercase tracking-wider">
+              Settings
+            </p>
+          )}
+          <div className="space-y-1">
+            {navLink("/settings", "Account", true)}
+            {isAdmin && navLink("/settings/server", "Server")}
+            {isAdmin && navLink("/settings/team", "Team")}
+          </div>
+        </div>
       </nav>
 
       <div className="border-t p-3">
