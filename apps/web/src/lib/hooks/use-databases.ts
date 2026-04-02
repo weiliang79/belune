@@ -24,8 +24,10 @@ export function useCreateDatabase(projectId: string) {
   return useMutation({
     mutationFn: (data: Parameters<typeof databasesApi.createDatabase>[1]) =>
       databasesApi.createDatabase(projectId, data),
-    onSuccess: () =>
-      qc.invalidateQueries({ queryKey: queryKeys.databases.all(projectId) }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.databases.all(projectId) });
+      qc.invalidateQueries({ queryKey: queryKeys.projects.detail(projectId) });
+    },
   });
 }
 

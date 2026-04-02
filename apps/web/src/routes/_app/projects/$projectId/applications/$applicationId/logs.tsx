@@ -43,7 +43,7 @@ function LiveLogs({
   const scrollRef = useRef<HTMLPreElement>(null);
 
   const handleMessage = useCallback((data: string) => {
-    setLogs((prev) => [...prev, data]);
+    setLogs((prev) => [...prev, data].slice(-5000));
   }, []);
 
   const url = `/api/projects/${projectId}/applications/${applicationId}/logs?follow=true`;

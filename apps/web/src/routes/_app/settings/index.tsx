@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
+import { RouteError } from "@/lib/components/route-error";
 import { toast } from "sonner";
 import { useAuthStore } from "@/lib/stores/auth";
 import { useChangeOwnPassword, useUpdateProfile } from "@/lib/hooks/use-users";
@@ -11,6 +12,7 @@ import { SettingsNav } from "@/lib/components/settings-nav";
 
 export const Route = createFileRoute("/_app/settings/")({
   component: SettingsPage,
+  errorComponent: RouteError,
 });
 
 function SettingsPage() {

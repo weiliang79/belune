@@ -105,6 +105,7 @@ function ProjectOverview() {
   const [dbPassword, setDbPassword] = useState("");
   const [dbDatabaseName, setDbDatabaseName] = useState("");
   const [dbRootPassword, setDbRootPassword] = useState("");
+  const [dbError, setDbError] = useState("");
 
   const handleCreateApp = async () => {
     setAppError("");
@@ -156,6 +157,7 @@ function ProjectOverview() {
 
   const handleCreateDb = () => {
     if (!dbName.trim()) return;
+    setDbError("");
     const credentials =
       showCredentials &&
       (dbUser || dbPassword || dbDatabaseName || dbRootPassword)
@@ -187,6 +189,10 @@ function ProjectOverview() {
           setDbPassword("");
           setDbDatabaseName("");
           setDbRootPassword("");
+          setDbError("");
+        },
+        onError: (e) => {
+          setDbError(e instanceof Error ? e.message : "Failed to create database");
         },
       },
     );
@@ -364,7 +370,7 @@ function ProjectOverview() {
       </Dialog>
 
       {/* Create Database Dialog */}
-      <Dialog open={dbDialogOpen} onOpenChange={setDbDialogOpen}>
+      <Dialog open={dbDialogOpen} onOpenChange={(open) => { setDbDialogOpen(open); if (!open) setDbError(""); }}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Create Database</DialogTitle>
@@ -373,6 +379,11 @@ function ProjectOverview() {
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
+            {dbError && (
+              <div className="bg-destructive/10 text-destructive rounded-md px-3 py-2 text-sm">
+                {dbError}
+              </div>
+            )}
             <div className="space-y-2">
               <Label htmlFor="db-name">Name</Label>
               <Input

@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { RouteError } from "@/lib/components/route-error";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -19,6 +20,7 @@ import { UPlotAreaChart } from "@/components/ui/uplot-area-chart";
 
 export const Route = createFileRoute("/_app/settings/server")({
   component: ServerSettingsPage,
+  errorComponent: RouteError,
 });
 
 function formatTime(iso: string, range: string) {

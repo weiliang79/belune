@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
+import { RouteError } from "@/lib/components/route-error";
 import { toast } from "sonner";
 import { useAuthStore } from "@/lib/stores/auth";
 import {
@@ -50,6 +51,7 @@ import {
 
 export const Route = createFileRoute("/_app/settings/team")({
   component: TeamSettingsPage,
+  errorComponent: RouteError,
 });
 
 function TeamSettingsPage() {

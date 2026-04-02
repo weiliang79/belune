@@ -28,8 +28,10 @@ export function useCreateApplication(projectId: string) {
   return useMutation({
     mutationFn: (data: Parameters<typeof applicationsApi.createApplication>[1]) =>
       applicationsApi.createApplication(projectId, data),
-    onSuccess: () =>
-      qc.invalidateQueries({ queryKey: queryKeys.applications.all(projectId) }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.applications.all(projectId) });
+      qc.invalidateQueries({ queryKey: queryKeys.projects.detail(projectId) });
+    },
   });
 }
 

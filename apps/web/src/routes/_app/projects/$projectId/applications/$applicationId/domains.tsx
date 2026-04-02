@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useState } from "react";
+import { Loader2 } from "lucide-react";
 
 export const Route = createFileRoute(
   "/_app/projects/$projectId/applications/$applicationId/domains",
@@ -105,6 +106,7 @@ function DomainsPage() {
               SSL
             </label>
             <Button onClick={handleAdd} disabled={addDomain.isPending}>
+              {addDomain.isPending && <Loader2 className="mr-1 h-4 w-4 animate-spin" />}
               {addDomain.isPending ? "Adding..." : "Add"}
             </Button>
           </div>

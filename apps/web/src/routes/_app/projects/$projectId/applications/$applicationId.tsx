@@ -31,11 +31,13 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { AppBreadcrumb } from "@/lib/components/app-breadcrumb";
 import { StatusBadge } from "@/lib/components/status-badge";
 import { AppMetricsContext } from "@/lib/contexts/app-metrics-context";
+import { RouteError } from "@/lib/components/route-error";
 
 export const Route = createFileRoute(
   "/_app/projects/$projectId/applications/$applicationId",
 )({
   component: ApplicationLayout,
+  errorComponent: RouteError,
 });
 
 function ApplicationLayout() {

@@ -8,9 +8,11 @@ import { useProject } from "@/lib/hooks/use-projects";
 import { cn } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AppBreadcrumb } from "@/lib/components/app-breadcrumb";
+import { RouteError } from "@/lib/components/route-error";
 
 export const Route = createFileRoute("/_app/projects/$projectId")({
   component: ProjectLayout,
+  errorComponent: RouteError,
 });
 
 function ProjectLayout() {
