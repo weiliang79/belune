@@ -2,11 +2,12 @@
 	admin localhost:2019
 }
 
-# Default site — PaaS dashboard
+# Default site — PaaS dashboard (not logged — internal traffic only)
 :80 {
 	reverse_proxy localhost:8080
 }
 
-# Per-app configs are managed dynamically via the Caddy Admin API
+# Per-app configs are managed dynamically via the Caddy Admin API.
+# Access logging is configured by the PaaS app at startup via the Admin API.
 # See: infra/caddy/sites/
 import sites/*

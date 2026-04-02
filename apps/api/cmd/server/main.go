@@ -19,6 +19,7 @@ import (
 	"github.com/ungweiliang/selfhost-paas/internal/build/image"
 	"github.com/ungweiliang/selfhost-paas/internal/build/railpack"
 	"github.com/ungweiliang/selfhost-paas/internal/config"
+	"github.com/ungweiliang/selfhost-paas/internal/logtailer"
 	"github.com/ungweiliang/selfhost-paas/internal/migrations"
 	"github.com/ungweiliang/selfhost-paas/internal/proxy/caddy"
 	"github.com/ungweiliang/selfhost-paas/internal/runtime/docker"
@@ -124,6 +125,15 @@ func main() {
 	metricsCtx, cancelMetrics := context.WithCancel(context.Background())
 	defer cancelMetrics()
 	go w.StartMetricsTicker(metricsCtx)
+
+	// Configure Caddy access logging and start the log tailer
+	if err := caddyClient.ConfigureAccessLogs(context.Background(), cfg.AccessLogPath); err != nil {
+		slog.Warn("failed to configure Caddy access logs", "error", err)
+	}
+	tailerCtx, cancelTailer := context.WithCancel(context.Background())
+	defer cancelTailer()
+	accessLogTailer := logtailer.New(cfg.AccessLogPath, queries, rdb)
+	go accessLogTailer.Run(tailerCtx)
 
 	// Cleanup scheduler (runs every 24h)
 	scheduler, err := w.StartScheduler()

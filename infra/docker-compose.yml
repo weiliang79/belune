@@ -38,6 +38,7 @@ services:
       - ./caddy/sites:/etc/caddy/sites
       - caddydata:/data
       - caddyconfig:/config
+      - caddylogs:/var/log/caddy
 
   buildkit:
     image: moby/buildkit:latest
@@ -51,3 +52,4 @@ volumes:
   redisdata:
   caddydata:
   caddyconfig:
+  caddylogs:

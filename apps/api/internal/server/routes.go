@@ -95,6 +95,10 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService,
 		// Logs
 		r.Get("/api/projects/{projectId}/applications/{applicationId}/logs", h.StreamLogs)
 
+		// Request logs (HTTP access logs from Caddy)
+		r.Get("/api/projects/{projectId}/applications/{applicationId}/requests", h.ListRequestLogs)
+		r.Get("/api/projects/{projectId}/applications/{applicationId}/requests/stream", h.StreamRequestLogs)
+
 		// Environment variables
 		r.Get("/api/projects/{projectId}/applications/{applicationId}/env", h.ListEnvVars)
 		r.Put("/api/projects/{projectId}/applications/{applicationId}/env", h.UpdateEnvVars)
@@ -126,6 +130,9 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService,
 			r.Post("/api/cleanup", h.TriggerCleanup)
 			r.Get("/api/settings", h.ListSettings)
 			r.Put("/api/settings", h.UpdateSettings)
+			// Global request logs (admin only)
+			r.Get("/api/requests", h.ListAllRequestLogs)
+			r.Get("/api/requests/stream", h.StreamAllRequestLogs)
 		})
 
 		// Build (standalone build without deploy)

@@ -9,6 +9,9 @@ RETURNING *;
 -- name: GetDomain :one
 SELECT * FROM domains WHERE id = $1;
 
+-- name: GetDomainByHostname :one
+SELECT * FROM domains WHERE hostname = $1;
+
 -- name: DeleteDomain :exec
 DELETE FROM domains WHERE id = $1;
 
