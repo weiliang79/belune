@@ -1,5 +1,5 @@
 {
-	admin localhost:2019
+	admin 0.0.0.0:2019
 }
 
 # Default site — PaaS dashboard (not logged — internal traffic only)
