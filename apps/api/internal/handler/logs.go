@@ -10,6 +10,7 @@ import (
 
 	"github.com/ungweiliang/selfhost-paas/internal/naming"
 	"github.com/ungweiliang/selfhost-paas/internal/pkg/sse"
+	"github.com/ungweiliang/selfhost-paas/internal/store/generated"
 )
 
 func (h *Handler) StreamLogs(w http.ResponseWriter, r *http.Request) {
@@ -56,4 +57,33 @@ func (h *Handler) StreamLogs(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writer.SendEvent("done", "log stream ended")
+}
+
+// ListApplicationLogs returns paginated historical application logs for an app.
+// GET /api/projects/{projectId}/applications/{applicationId}/logs/history
+func (h *Handler) ListApplicationLogs(w http.ResponseWriter, r *http.Request) {
+	applicationID := chi.URLParam(r, "applicationId")
+	var appUUID pgtype.UUID
+	if err := appUUID.Scan(applicationID); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid application id")
+		return
+	}
+
+	if !h.canAccessApplication(r, appUUID) {
+		writeError(w, http.StatusForbidden, "access denied")
+		return
+	}
+
+	limit, offset := parsePagination(r)
+	logs, err := h.queries.ListApplicationLogsByApplication(r.Context(), generated.ListApplicationLogsByApplicationParams{
+		ApplicationID: appUUID,
+		Limit:         limit,
+		Offset:        offset,
+	})
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to list application logs")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, logs)
 }

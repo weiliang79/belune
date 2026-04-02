@@ -50,4 +50,8 @@ export const queryKeys = {
     detail: (projectId: string, databaseId: string) =>
       ["projects", projectId, "databases", databaseId] as const,
   },
+  applicationLogs: {
+    history: (projectId: string, applicationId: string) =>
+      ["projects", projectId, "applications", applicationId, "logs", "history"] as const,
+  },
 };

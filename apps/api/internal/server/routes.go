@@ -94,6 +94,7 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService,
 
 		// Logs
 		r.Get("/api/projects/{projectId}/applications/{applicationId}/logs", h.StreamLogs)
+		r.Get("/api/projects/{projectId}/applications/{applicationId}/logs/history", h.ListApplicationLogs)
 
 		// Request logs (HTTP access logs from Caddy)
 		r.Get("/api/projects/{projectId}/applications/{applicationId}/requests", h.ListRequestLogs)

@@ -5,6 +5,7 @@ import (
 	"io"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/hibiken/asynq"
 
@@ -51,6 +52,10 @@ func (m *MockContainerRuntime) RemoveContainer(_ context.Context, id string) err
 }
 
 func (m *MockContainerRuntime) ContainerLogs(_ context.Context, _ string, _ bool) (io.ReadCloser, error) {
+	return io.NopCloser(strings.NewReader("")), nil
+}
+
+func (m *MockContainerRuntime) ContainerLogsSince(_ context.Context, _ string, _ time.Time) (io.ReadCloser, error) {
 	return io.NopCloser(strings.NewReader("")), nil
 }
 

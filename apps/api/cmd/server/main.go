@@ -19,6 +19,7 @@ import (
 	"github.com/ungweiliang/selfhost-paas/internal/build/image"
 	"github.com/ungweiliang/selfhost-paas/internal/build/railpack"
 	"github.com/ungweiliang/selfhost-paas/internal/config"
+	"github.com/ungweiliang/selfhost-paas/internal/logcollector"
 	"github.com/ungweiliang/selfhost-paas/internal/logtailer"
 	"github.com/ungweiliang/selfhost-paas/internal/migrations"
 	"github.com/ungweiliang/selfhost-paas/internal/proxy/caddy"
@@ -134,6 +135,12 @@ func main() {
 	defer cancelTailer()
 	accessLogTailer := logtailer.New(cfg.AccessLogPath, queries, rdb)
 	go accessLogTailer.Run(tailerCtx)
+
+	// Application log collector: follows container logs and persists to DB
+	collectorCtx, cancelCollector := context.WithCancel(context.Background())
+	defer cancelCollector()
+	appLogCollector := logcollector.New(dockerClient, queries, rdb)
+	go appLogCollector.Run(collectorCtx)
 
 	// Cleanup scheduler (runs every 24h)
 	scheduler, err := w.StartScheduler()

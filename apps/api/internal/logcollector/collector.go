@@ -1,0 +1,271 @@
+// Package logcollector attaches to running container log streams, batch-inserts
+// log lines into the application_logs table, and publishes them to Redis pub/sub
+// so live SSE consumers can receive them.
+package logcollector
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"fmt"
+	"log/slog"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/docker/docker/pkg/stdcopy"
+	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/redis/go-redis/v9"
+
+	"github.com/ungweiliang/selfhost-paas/internal/runtime"
+	"github.com/ungweiliang/selfhost-paas/internal/store/generated"
+)
+
+const labelApplicationID = "application-id"
+
+// Collector watches running containers and persists their logs.
+type Collector struct {
+	runtime    runtime.ContainerRuntime
+	queries    *generated.Queries
+	rdb        *redis.Client
+	mu         sync.Mutex
+	watchers   map[string]context.CancelFunc // containerID → cancel
+	batchSize  int
+	flushEvery time.Duration
+}
+
+// New creates a new log collector.
+func New(rt runtime.ContainerRuntime, queries *generated.Queries, rdb *redis.Client) *Collector {
+	return &Collector{
+		runtime:    rt,
+		queries:    queries,
+		rdb:        rdb,
+		watchers:   make(map[string]context.CancelFunc),
+		batchSize:  50,
+		flushEvery: 2 * time.Second,
+	}
+}
+
+// Run starts the collector, blocking until ctx is cancelled.
+func (c *Collector) Run(ctx context.Context) {
+	slog.Info("application log collector starting")
+	c.sync(ctx, time.Now())
+
+	ticker := time.NewTicker(10 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			c.mu.Lock()
+			for _, cancel := range c.watchers {
+				cancel()
+			}
+			c.mu.Unlock()
+			return
+		case <-ticker.C:
+			c.sync(ctx, time.Now())
+		}
+	}
+}
+
+// sync lists running containers and starts/stops watchers as needed.
+// since is passed to ContainerLogsSince for newly attached containers.
+func (c *Collector) sync(ctx context.Context, since time.Time) {
+	containers, err := c.runtime.ListContainers(ctx)
+	if err != nil {
+		slog.Warn("log collector: failed to list containers", "error", err)
+		return
+	}
+
+	// Build set of running container IDs that have our app label.
+	active := make(map[string]struct{})
+	for _, ctr := range containers {
+		if ctr.Status != "running" {
+			continue
+		}
+		appID, ok := ctr.Labels[labelApplicationID]
+		if !ok || appID == "" {
+			continue
+		}
+		active[ctr.ID] = struct{}{}
+
+		c.mu.Lock()
+		_, watching := c.watchers[ctr.ID]
+		c.mu.Unlock()
+
+		if !watching {
+			watchCtx, cancel := context.WithCancel(ctx)
+			c.mu.Lock()
+			c.watchers[ctr.ID] = cancel
+			c.mu.Unlock()
+
+			ctrCopy := ctr
+			go func() {
+				defer func() {
+					c.mu.Lock()
+					delete(c.watchers, ctrCopy.ID)
+					c.mu.Unlock()
+				}()
+				c.watchContainer(watchCtx, ctrCopy, since)
+			}()
+		}
+	}
+
+	// Cancel watchers for containers that are no longer running.
+	c.mu.Lock()
+	for id, cancel := range c.watchers {
+		if _, ok := active[id]; !ok {
+			cancel()
+			delete(c.watchers, id)
+		}
+	}
+	c.mu.Unlock()
+}
+
+type logLine struct {
+	stream  string
+	message string
+}
+
+// chanWriter demultiplexes a Docker log stream into lines and sends them to ch.
+type chanWriter struct {
+	stream string
+	ch     chan<- logLine
+	buf    []byte
+}
+
+func (w *chanWriter) Write(p []byte) (int, error) {
+	w.buf = append(w.buf, p...)
+	for {
+		idx := bytes.IndexByte(w.buf, '\n')
+		if idx < 0 {
+			break
+		}
+		msg := strings.TrimRight(string(w.buf[:idx]), "\r")
+		msg = stripTimestamp(msg)
+		if msg != "" {
+			select {
+			case w.ch <- logLine{stream: w.stream, message: msg}:
+			default: // drop if channel full rather than blocking
+			}
+		}
+		w.buf = w.buf[idx+1:]
+	}
+	return len(p), nil
+}
+
+// stripTimestamp removes the Docker-prepended RFC3339Nano timestamp prefix.
+// Format: "2025-01-01T00:00:00.000000000Z message"
+func stripTimestamp(line string) string {
+	if len(line) < 20 {
+		return line
+	}
+	idx := strings.IndexByte(line, ' ')
+	if idx > 0 && idx <= 36 && line[4] == '-' && strings.ContainsAny(line[:idx], "TZ") {
+		return line[idx+1:]
+	}
+	return line
+}
+
+func (c *Collector) watchContainer(ctx context.Context, ctr runtime.ContainerInfo, since time.Time) {
+	appIDStr := ctr.Labels[labelApplicationID]
+	var appUUID pgtype.UUID
+	if err := appUUID.Scan(appIDStr); err != nil {
+		slog.Warn("log collector: invalid application-id label", "container", ctr.Name, "app_id", appIDStr)
+		return
+	}
+
+	slog.Info("log collector: attaching to container", "container", ctr.Name, "app_id", appIDStr)
+
+	rc, err := c.runtime.ContainerLogsSince(ctx, ctr.ID, since)
+	if err != nil {
+		slog.Warn("log collector: failed to attach to container logs", "container", ctr.Name, "error", err)
+		return
+	}
+	defer rc.Close()
+
+	lines := make(chan logLine, 256)
+	go func() {
+		defer close(lines)
+		stdout := &chanWriter{stream: "stdout", ch: lines}
+		stderr := &chanWriter{stream: "stderr", ch: lines}
+		stdcopy.StdCopy(stdout, stderr, rc) //nolint:errcheck
+	}()
+
+	var batch []generated.InsertApplicationLogParams
+	flushTicker := time.NewTicker(c.flushEvery)
+	defer flushTicker.Stop()
+
+	flush := func(flushCtx context.Context) {
+		if len(batch) == 0 {
+			return
+		}
+		c.flush(flushCtx, appUUID, appIDStr, batch)
+		batch = batch[:0]
+	}
+
+	for {
+		select {
+		case line, ok := <-lines:
+			if !ok {
+				// Container log stream ended (container stopped).
+				flush(ctx)
+				slog.Info("log collector: container log stream ended", "container", ctr.Name)
+				return
+			}
+			batch = append(batch, generated.InsertApplicationLogParams{
+				ApplicationID: appUUID,
+				Stream:        line.stream,
+				Message:       line.message,
+			})
+			if len(batch) >= c.batchSize {
+				flush(ctx)
+			}
+		case <-flushTicker.C:
+			flush(ctx)
+		case <-ctx.Done():
+			// rc.Close() via defer will unblock the stdcopy goroutine.
+			// Drain remaining buffered lines before returning.
+			drainTimeout := time.After(1 * time.Second)
+		drainLoop:
+			for {
+				select {
+				case line, ok := <-lines:
+					if !ok {
+						break drainLoop
+					}
+					batch = append(batch, generated.InsertApplicationLogParams{
+						ApplicationID: appUUID,
+						Stream:        line.stream,
+						Message:       line.message,
+					})
+				case <-drainTimeout:
+					break drainLoop
+				}
+			}
+			flush(context.Background())
+			return
+		}
+	}
+}
+
+func (c *Collector) flush(ctx context.Context, appID pgtype.UUID, appIDStr string, batch []generated.InsertApplicationLogParams) {
+	for _, p := range batch {
+		if err := c.queries.InsertApplicationLog(ctx, p); err != nil {
+			slog.Warn("log collector: failed to insert application log", "error", err)
+			continue
+		}
+
+		// Publish to Redis for live SSE consumers.
+		payload, _ := json.Marshal(map[string]any{
+			"stream":  p.Stream,
+			"message": p.Message,
+		})
+		appIDFormatted := fmt.Sprintf("%x-%x-%x-%x-%x",
+			appID.Bytes[0:4], appID.Bytes[4:6],
+			appID.Bytes[6:8], appID.Bytes[8:10],
+			appID.Bytes[10:16])
+		c.rdb.Publish(ctx, "applogs:live:"+appIDFormatted, string(payload))
+	}
+}

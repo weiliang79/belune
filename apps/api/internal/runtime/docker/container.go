@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"time"
 
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
@@ -110,6 +111,16 @@ func (c *Client) ContainerLogs(ctx context.Context, id string, follow bool) (io.
 		ShowStderr: true,
 		Follow:     follow,
 		Timestamps: true,
+	})
+}
+
+func (c *Client) ContainerLogsSince(ctx context.Context, id string, since time.Time) (io.ReadCloser, error) {
+	return c.cli.ContainerLogs(ctx, id, container.LogsOptions{
+		ShowStdout: true,
+		ShowStderr: true,
+		Follow:     true,
+		Timestamps: true,
+		Since:      since.Format(time.RFC3339),
 	})
 }
 

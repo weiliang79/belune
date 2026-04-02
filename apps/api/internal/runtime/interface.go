@@ -3,6 +3,7 @@ package runtime
 import (
 	"context"
 	"io"
+	"time"
 )
 
 type ContainerConfig struct {
@@ -44,6 +45,9 @@ type ContainerRuntime interface {
 	StopContainer(ctx context.Context, id string) error
 	RemoveContainer(ctx context.Context, id string) error
 	ContainerLogs(ctx context.Context, id string, follow bool) (io.ReadCloser, error)
+	// ContainerLogsSince streams logs from a container starting at the given time.
+	// Pass time.Now() to receive only new log lines (no backlog).
+	ContainerLogsSince(ctx context.Context, id string, since time.Time) (io.ReadCloser, error)
 	ListContainers(ctx context.Context) ([]ContainerInfo, error)
 	PullImage(ctx context.Context, image string) error
 	BuildImage(ctx context.Context, contextDir, dockerfile, tag string) error

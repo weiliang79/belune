@@ -81,22 +81,57 @@ func (s *MetricsService) PersistHostMetric(ctx context.Context, point HostMetric
 	}
 }
 
-// RetentionCleanup deletes host metrics older than the configured retention period.
+// RetentionCleanup deletes host metrics and application logs older than their configured retention periods.
 func (s *MetricsService) RetentionCleanup(ctx context.Context) {
-	retentionDays := 14
+	// Host metrics retention
+	metricsRetentionDays := 14
 	setting, err := s.queries.GetSetting(ctx, "metrics_retention_days")
 	if err == nil {
 		var days int
 		if _, scanErr := fmt.Sscanf(setting.Value, "%d", &days); scanErr == nil && days > 0 {
-			retentionDays = days
+			metricsRetentionDays = days
 		}
 	}
 
-	cutoff := time.Now().AddDate(0, 0, -retentionDays)
+	cutoff := time.Now().AddDate(0, 0, -metricsRetentionDays)
 	if err := s.queries.DeleteOldHostMetrics(ctx, pgtype.Timestamptz{Time: cutoff, Valid: true}); err != nil {
 		slog.Error("failed to delete old host metrics", "error", err)
 	} else {
-		slog.Info("metrics retention cleanup completed", "retention_days", retentionDays)
+		slog.Info("metrics retention cleanup completed", "retention_days", metricsRetentionDays)
+	}
+
+	// Application log retention
+	appLogRetentionDays := 7
+	logSetting, err := s.queries.GetSetting(ctx, "app_log_retention_days")
+	if err == nil {
+		var days int
+		if _, scanErr := fmt.Sscanf(logSetting.Value, "%d", &days); scanErr == nil && days > 0 {
+			appLogRetentionDays = days
+		}
+	}
+
+	daysStr := pgtype.Text{String: fmt.Sprintf("%d", appLogRetentionDays), Valid: true}
+	if err := s.queries.DeleteOldApplicationLogs(ctx, daysStr); err != nil {
+		slog.Error("failed to delete old application logs", "error", err)
+	} else {
+		slog.Info("application log retention cleanup completed", "retention_days", appLogRetentionDays)
+	}
+
+	// Request log retention (same period as app logs)
+	reqLogRetentionDays := 7
+	reqSetting, err := s.queries.GetSetting(ctx, "request_log_retention_days")
+	if err == nil {
+		var days int
+		if _, scanErr := fmt.Sscanf(reqSetting.Value, "%d", &days); scanErr == nil && days > 0 {
+			reqLogRetentionDays = days
+		}
+	}
+
+	reqDaysStr := pgtype.Text{String: fmt.Sprintf("%d", reqLogRetentionDays), Valid: true}
+	if err := s.queries.DeleteOldRequestLogs(ctx, reqDaysStr); err != nil {
+		slog.Error("failed to delete old request logs", "error", err)
+	} else {
+		slog.Info("request log retention cleanup completed", "retention_days", reqLogRetentionDays)
 	}
 }
 

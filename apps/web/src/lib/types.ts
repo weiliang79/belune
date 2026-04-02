@@ -103,6 +103,14 @@ export interface SettingEntry {
   value: string;
 }
 
+export interface ApplicationLog {
+  id: string;
+  application_id: string;
+  stream: "stdout" | "stderr";
+  message: string;
+  recorded_at: string;
+}
+
 export interface Database {
   id: string;
   project_id: string;
