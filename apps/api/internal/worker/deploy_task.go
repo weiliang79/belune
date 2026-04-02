@@ -270,7 +270,7 @@ func (h *TaskHandler) HandleDeployTask(ctx context.Context, t *asynq.Task) error
 
 	// Health check polling: poll the container's health endpoint until healthy or timeout
 	if app.HealthCheckPath.Valid && app.HealthCheckPath.String != "" {
-		healthURL := fmt.Sprintf("http://%s:8080%s", containerName, app.HealthCheckPath.String)
+		healthURL := fmt.Sprintf("http://%s:%d%s", containerName, app.Port, app.HealthCheckPath.String)
 		slog.Info("waiting for container health check", "url", healthURL)
 		if err := pollHealthCheck(ctx, healthURL, 60*time.Second); err != nil {
 			h.failDeployment(ctx, deploymentID, fmt.Sprintf("health check failed: %v", err))
@@ -285,7 +285,7 @@ func (h *TaskHandler) HandleDeployTask(ctx context.Context, t *asynq.Task) error
 		for _, domain := range domains {
 			h.Proxy.AddRoute(ctx, proxy.RouteConfig{
 				Hostname:  domain.Hostname,
-				TargetURL: fmt.Sprintf("http://%s:8080", containerName),
+				TargetURL: fmt.Sprintf("http://%s:%d", containerName, app.Port),
 				TLS:       domain.SslEnabled,
 			})
 		}

@@ -57,6 +57,7 @@ function ApplicationSettingsPage() {
       memory_limit_mb: application ? Math.round(application.memory_limit / (1024 * 1024)) : 0,
       git_token: "",
       health_check_path: application?.health_check_path ?? "",
+      port: application?.port ?? 8080,
     },
     onSubmit: async ({ value }) => {
       toast.promise(
@@ -70,6 +71,7 @@ function ApplicationSettingsPage() {
           memory_limit: value.memory_limit_mb > 0 ? value.memory_limit_mb * 1024 * 1024 : 0,
           git_token: value.git_token || undefined,
           health_check_path: value.health_check_path,
+          port: value.port,
         }),
         {
           loading: "Saving...",
@@ -317,24 +319,45 @@ function ApplicationSettingsPage() {
                 )}
               />
             </div>
-            <form.Field
-              name="health_check_path"
-              children={(field) => (
-                <div className="space-y-2">
-                  <Label>Health Check Path</Label>
-                  <Input
-                    value={field.state.value}
-                    onBlur={field.handleBlur}
-                    onChange={(e) => field.handleChange(e.target.value)}
-                    placeholder="/healthz"
-                    className="font-mono"
-                  />
-                  <p className="text-muted-foreground text-xs">
-                    HTTP path polled after deploy to confirm readiness (e.g. /healthz). Leave empty to skip.
-                  </p>
-                </div>
-              )}
-            />
+            <div className="grid grid-cols-2 gap-4">
+              <form.Field
+                name="health_check_path"
+                children={(field) => (
+                  <div className="space-y-2">
+                    <Label>Health Check Path</Label>
+                    <Input
+                      value={field.state.value}
+                      onBlur={field.handleBlur}
+                      onChange={(e) => field.handleChange(e.target.value)}
+                      placeholder="/healthz"
+                      className="font-mono"
+                    />
+                    <p className="text-muted-foreground text-xs">
+                      HTTP path polled after deploy to confirm readiness. Leave empty to skip.
+                    </p>
+                  </div>
+                )}
+              />
+              <form.Field
+                name="port"
+                children={(field) => (
+                  <div className="space-y-2">
+                    <Label>Container Port</Label>
+                    <Input
+                      type="number"
+                      min="1"
+                      max="65535"
+                      value={field.state.value}
+                      onBlur={field.handleBlur}
+                      onChange={(e) => field.handleChange(parseInt(e.target.value) || 8080)}
+                    />
+                    <p className="text-muted-foreground text-xs">
+                      Port the container listens on (default 8080).
+                    </p>
+                  </div>
+                )}
+              />
+            </div>
             <form.Subscribe
               selector={(s) => s.isSubmitting}
               children={(isSubmitting) => (

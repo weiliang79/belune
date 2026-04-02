@@ -85,7 +85,7 @@ func (h *Handler) AddDomain(w http.ResponseWriter, r *http.Request) {
 	containerName := naming.ContainerName(row.ProjectSlug, row.Slug, applicationID)
 	if err := h.proxy.AddRoute(r.Context(), proxy.RouteConfig{
 		Hostname:  req.Hostname,
-		TargetURL: fmt.Sprintf("http://%s:8080", containerName),
+		TargetURL: fmt.Sprintf("http://%s:%d", containerName, row.Port),
 		TLS:       req.SSLEnabled,
 	}); err != nil {
 		slog.Error("failed to add proxy route for domain", "hostname", req.Hostname, "container", containerName, "error", err)

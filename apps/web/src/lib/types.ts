@@ -35,6 +35,7 @@ export interface Application {
   webhook_secret: string | null;
   auto_deploy_branch: string | null;
   health_check_path: string | null;
+  port: number;
   created_at: string;
   updated_at: string;
 }

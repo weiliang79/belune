@@ -91,6 +91,7 @@ function ProjectOverview() {
   const [sourceRepo, setSourceRepo] = useState("");
   const [dockerfilePath, setDockerfilePath] = useState("Dockerfile");
   const [buildType, setBuildType] = useState("dockerfile");
+  const [appPort, setAppPort] = useState(8080);
   const [appError, setAppError] = useState("");
 
   // DB dialog state
@@ -126,6 +127,7 @@ function ProjectOverview() {
         name: appName.trim(),
         slug: appSlug || undefined,
         type: appType,
+        port: appPort,
         ...(appType === "image"
           ? { source_image: sourceImage, build_type: "image" }
           : {
@@ -143,6 +145,7 @@ function ProjectOverview() {
       setDockerfilePath("Dockerfile");
       setBuildType("dockerfile");
       setAppType("image");
+      setAppPort(8080);
       setAppError("");
       navigate({
         to: "/projects/$projectId/applications/$applicationId",
@@ -355,6 +358,20 @@ function ProjectOverview() {
               </>
             )}
           </div>
+          <div className="space-y-2">
+              <Label htmlFor="app-port">Container Port</Label>
+              <Input
+                id="app-port"
+                type="number"
+                min="1"
+                max="65535"
+                value={appPort}
+                onChange={(e) => setAppPort(parseInt(e.target.value) || 8080)}
+              />
+              <p className="text-muted-foreground text-xs">
+                Port the container listens on (default 8080).
+              </p>
+            </div>
           <DialogFooter>
             <Button
               onClick={handleCreateApp}
