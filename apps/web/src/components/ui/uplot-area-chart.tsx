@@ -22,6 +22,22 @@ function colorWithAlpha(color: string, alpha: number): string {
   return color.replace(/^hsl\(/, "hsla(").replace(/\)$/, `, ${alpha})`);
 }
 
+function nearestNonNull(
+  yData: (number | undefined)[],
+  hoveredIdx: number,
+): number {
+  const val = yData[hoveredIdx];
+  if (val != null && !isNaN(val)) return hoveredIdx;
+  const len = yData.length;
+  for (let d = 1; d < len; d++) {
+    const li = hoveredIdx - d;
+    const ri = hoveredIdx + d;
+    if (li >= 0 && yData[li] != null && !isNaN(yData[li]!)) return li;
+    if (ri < len && yData[ri] != null && !isNaN(yData[ri]!)) return ri;
+  }
+  return hoveredIdx;
+}
+
 function toAlignedData(
   timestamps: number[],
   values: (number | null)[],
@@ -43,6 +59,7 @@ export function UPlotAreaChart({
 }: UPlotAreaChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const uplotRef = useRef<uPlot | null>(null);
+  const cursorPosRef = useRef<{ left: number; top: number } | null>(null);
   const [width, setWidth] = useState(300);
   const [tooltip, setTooltip] = useState<{
     left: number;
@@ -80,7 +97,15 @@ export function UPlotAreaChart({
     return {
       width,
       height,
-      cursor: { show: true },
+      cursor: {
+        show: true,
+        // Snap cursor to nearest non-null data point so the dot marker
+        // doesn't drift to y=0 (top of chart) when hovering over NaN gaps
+        dataIdx: (u, seriesIdx, hoveredIdx) => {
+          if (seriesIdx !== 1 || hoveredIdx == null) return hoveredIdx;
+          return nearestNonNull(u.data[1] as (number | undefined)[], hoveredIdx);
+        },
+      },
       padding: [8, 0, 0, 0],
       series: [
         {},
@@ -123,21 +148,26 @@ export function UPlotAreaChart({
           (u) => {
             const idx = u.cursor.idx;
             if (idx == null) {
-              setTooltip(null);
-              return;
-            }
-            const ts = (u.data[0][idx] as number) * 1000;
-            const val = u.data[1][idx] as number | null | undefined;
-            if (val == null || isNaN(val as number)) {
-              setTooltip(null);
+              // Don't clear tooltip here — a data shift (setData) also triggers
+              // setCursor with idx=null. Only clear on explicit mouse leave.
               return;
             }
             const left = u.cursor.left ?? 0;
             const top = u.cursor.top ?? 0;
+            cursorPosRef.current = { left, top };
+            // Resolve to nearest non-null independently — u.cursor.idx is the
+            // raw hovered index, not the dataIdx-resolved one
+            const resolvedIdx = nearestNonNull(
+              u.data[1] as (number | undefined)[],
+              idx,
+            );
+            const ts = (u.data[0][resolvedIdx] as number) * 1000;
+            const val = u.data[1][resolvedIdx] as number | undefined;
+            if (val == null || isNaN(val)) return;
             setTooltip({
               left: left + u.bbox.left / devicePixelRatio,
               top: top + u.bbox.top / devicePixelRatio,
-              value: yFormatter(val as number),
+              value: yFormatter(val),
               time: new Date(ts).toLocaleString(),
             });
           },
@@ -156,11 +186,22 @@ export function UPlotAreaChart({
   useEffect(() => {
     if (uplotRef.current) {
       uplotRef.current.setData(alignedData);
+      // Re-fire cursor at last known position so tooltip stays visible as data shifts
+      if (cursorPosRef.current) {
+        uplotRef.current.setCursor(cursorPosRef.current);
+      }
     }
   }, [alignedData]);
 
   return (
-    <div ref={containerRef} className="relative w-full">
+    <div
+      ref={containerRef}
+      className="relative w-full"
+      onMouseLeave={() => {
+        cursorPosRef.current = null;
+        setTooltip(null);
+      }}
+    >
       <UPlotReact
         options={options}
         data={alignedData}

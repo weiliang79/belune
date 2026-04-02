@@ -12,6 +12,7 @@ import {
   useRestartApplication,
 } from "@/lib/hooks/use-applications";
 import { useProject } from "@/lib/hooks/use-projects";
+import { useAppMetricsStream } from "@/lib/hooks/use-metrics";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -29,6 +30,7 @@ import { cn } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AppBreadcrumb } from "@/lib/components/app-breadcrumb";
 import { StatusBadge } from "@/lib/components/status-badge";
+import { AppMetricsContext } from "@/lib/contexts/app-metrics-context";
 
 export const Route = createFileRoute(
   "/_app/projects/$projectId/applications/$applicationId",
@@ -40,6 +42,7 @@ function ApplicationLayout() {
   const { projectId, applicationId } = Route.useParams();
   const { data: application, isLoading } = useApplication(projectId, applicationId);
   const { data: project } = useProject(projectId);
+  const appMetrics = useAppMetricsStream(projectId, applicationId, true);
   const deploy = useDeployApplication(projectId, applicationId);
   const stop = useStopApplication(projectId, applicationId);
   const start = useStartApplication(projectId, applicationId);
@@ -208,7 +211,9 @@ function ApplicationLayout() {
         })}
       </nav>
 
-      <Outlet />
+      <AppMetricsContext value={appMetrics}>
+        <Outlet />
+      </AppMetricsContext>
     </div>
   );
 }

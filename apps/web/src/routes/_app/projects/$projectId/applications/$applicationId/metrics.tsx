@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { useAppMetricsStream } from "@/lib/hooks/use-metrics";
+import { useAppMetricsContext } from "@/lib/contexts/app-metrics-context";
 import type { AppMetricPoint } from "@/lib/types";
 import { UPlotAreaChart } from "@/components/ui/uplot-area-chart";
 
@@ -30,12 +30,7 @@ function formatBytes(bytes: number | null) {
 }
 
 function ApplicationMetricsPage() {
-  const { projectId, applicationId } = Route.useParams();
-  const { data: streamData, connected } = useAppMetricsStream(
-    projectId,
-    applicationId,
-    true,
-  );
+  const { data: streamData, connected } = useAppMetricsContext();
 
   return (
     <Card>

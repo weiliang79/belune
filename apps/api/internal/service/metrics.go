@@ -100,14 +100,14 @@ func (s *MetricsService) RetentionCleanup(ctx context.Context) {
 	}
 }
 
-// StartTicker collects host metrics every 2 seconds, publishes to Redis for live
+// StartTicker collects host metrics every 1 second, publishes to Redis for live
 // SSE consumers, and persists to DB every 60 seconds. Blocks until ctx is cancelled.
 func (s *MetricsService) StartTicker(ctx context.Context) {
-	ticker := time.NewTicker(2 * time.Second)
+	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
 
 	var tickCount int
-	const persistEvery = 30 // 30 ticks × 2s = 60s
+	const persistEvery = 60 // 60 ticks × 1s = 60s
 
 	for {
 		select {

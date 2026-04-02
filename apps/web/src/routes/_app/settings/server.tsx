@@ -53,7 +53,7 @@ function ServerSettingsPage() {
     const THIRTY_MIN = 30 * 60 * 1_000;
     // eslint-disable-next-line react-hooks/purity
     const now = Date.now();
-    const start = Math.floor((now - THIRTY_MIN) / ONE_SECOND) * ONE_SECOND;
+    const maxStart = Math.floor((now - THIRTY_MIN) / ONE_SECOND) * ONE_SECOND;
 
     // Both sources are 1s granularity — merge into a single 1s lookup
     const dataMap = new Map<number, HostMetricPoint>();
@@ -64,17 +64,24 @@ function ServerSettingsPage() {
       dataMap.set(t, point);
     }
 
-    // Generate 1h grid at 1s resolution, defaulting missing slots to 0
+    // Start from the oldest real data point so there's no empty void on the
+    // left, capped at 30 minutes back
+    const oldestDataTs =
+      dataMap.size > 0 ? Math.min(...dataMap.keys()) : maxStart;
+    const start = Math.max(oldestDataTs, maxStart);
+
+    // Generate grid at 1s resolution, using null for missing slots so
+    // uPlot spans gaps instead of dropping to zero between real data points
     const grid: HostMetricPoint[] = [];
     for (let t = start; t <= now; t += ONE_SECOND) {
       grid.push(
         dataMap.get(t) ?? {
           recorded_at: new Date(t).toISOString(),
-          cpu_percent: 0,
-          memory_used: 0,
-          memory_total: 0,
-          disk_used: 0,
-          disk_total: 0,
+          cpu_percent: null,
+          memory_used: null,
+          memory_total: null,
+          disk_used: null,
+          disk_total: null,
         },
       );
     }
@@ -227,6 +234,10 @@ function ServerSettingsPage() {
                     range="1h"
                     color="hsl(262, 83%, 58%)"
                     formatter={(v: number) => formatBytes(v)}
+                    domain={[
+                      0,
+                      Math.max(...hostMetrics.map((m) => m.memory_total ?? 0)),
+                    ]}
                   />
                   <HostChart
                     title="Disk Usage"
