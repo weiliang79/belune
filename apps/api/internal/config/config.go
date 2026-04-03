@@ -37,7 +37,7 @@ func Load() (*Config, error) {
 		JWTExpiryHours: getEnvInt("JWT_EXPIRY_HOURS", 24),
 		EncryptionKey:  getEnv("ENCRYPTION_KEY", ""),
 		CaddyAdminURL:  getEnv("CADDY_ADMIN_URL", "http://localhost:2019"),
-		AccessLogPath:  getEnv("ACCESS_LOG_PATH", "/var/log/caddy/access.log"),
+		AccessLogPath:  getEnv("ACCESS_LOG_PATH", "../../infra/caddy/logs/access.log"),
 		CORSOrigins:    getEnvList("CORS_ORIGINS", []string{"http://localhost:5173"}),
 		SecureCookies:  getEnvBool("SECURE_COOKIES", false),
 		TLS:      getEnvBool("TLS_ENABLED", false),

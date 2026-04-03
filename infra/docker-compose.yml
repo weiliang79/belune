@@ -38,7 +38,10 @@ services:
       - ./caddy/sites:/etc/caddy/sites
       - caddydata:/data
       - caddyconfig:/config
-      - caddylogs:/var/log/caddy
+      - ./caddy/logs:/var/log/caddy
+    networks:
+      - default
+      - paas-infra
 
   buildkit:
     image: moby/buildkit:latest
@@ -52,4 +55,9 @@ volumes:
   redisdata:
   caddydata:
   caddyconfig:
-  caddylogs:
+
+networks:
+  default: {}
+  paas-infra:
+    name: paas-infra
+    external: true

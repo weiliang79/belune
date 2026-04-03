@@ -4,7 +4,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { SettingsNav } from "@/lib/components/settings-nav";
 import {
   useMetrics,
   useTriggerCleanup,
@@ -128,8 +127,6 @@ function ServerSettingsPage() {
           Manage your account and platform settings.
         </p>
       </div>
-
-      <SettingsNav />
 
       {isLoading ? (
         <div className="grid grid-cols-2 gap-4 md:grid-cols-4">

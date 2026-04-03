@@ -1,13 +1,23 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useState } from "react";
+import { useCallback, useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useGlobalDeployments } from "@/lib/hooks/use-global-deployments";
-import { Card, CardContent } from "@/components/ui/card";
+import { useProjects } from "@/lib/hooks/use-projects";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Select,
+  SelectTrigger,
+  SelectValue,
+  SelectContent,
+  SelectItem,
+} from "@/components/ui/select";
+import { DateRangePicker } from "@/components/ui/date-range-picker";
 import { AppBreadcrumb } from "@/lib/components/app-breadcrumb";
 import { formatDate, formatDuration } from "@/lib/utils/format";
 import type { GlobalDeployment } from "@/lib/types";
+import * as applicationsApi from "@/lib/api/applications";
 
 export const Route = createFileRoute("/_app/deployments/")({
   component: GlobalDeploymentsPage,
@@ -24,7 +34,92 @@ const statusVariant: Record<
   failed: "destructive",
 };
 
+const STATUSES = [
+  { label: "All statuses", value: "" },
+  { label: "Success", value: "success" },
+  { label: "Failed", value: "failed" },
+  { label: "Building", value: "building" },
+  { label: "Deploying", value: "deploying" },
+  { label: "Pending", value: "pending" },
+] as const;
+
 const PAGE_SIZE = 50;
+
+interface Filters {
+  dateFrom?: string;
+  dateTo?: string;
+  status: string;
+  projectId: string;
+  applicationId: string;
+}
+
+function DeploymentFilters({ filters, onChange }: {
+  filters: Filters;
+  onChange: (f: Filters) => void;
+}) {
+  const { data: projects } = useProjects();
+  const { data: applications } = useQuery({
+    queryKey: ["applications", filters.projectId],
+    queryFn: () => applicationsApi.listApplications(filters.projectId),
+    enabled: !!filters.projectId,
+  });
+
+  return (
+    <div className="flex flex-wrap gap-2">
+      <DateRangePicker
+        value={{ from: filters.dateFrom, to: filters.dateTo }}
+        onChange={(range) => onChange({ ...filters, dateFrom: range.from, dateTo: range.to })}
+        placeholder="All time"
+        className="w-64"
+      />
+
+      <Select
+        value={filters.status}
+        onValueChange={(v) => onChange({ ...filters, status: v ?? "" })}
+      >
+        <SelectTrigger className="w-36">
+          <SelectValue placeholder="All statuses" />
+        </SelectTrigger>
+        <SelectContent>
+          {STATUSES.map((s) => (
+            <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+
+      <Select
+        value={filters.projectId}
+        onValueChange={(v) => onChange({ ...filters, projectId: v ?? "", applicationId: "" })}
+      >
+        <SelectTrigger className="w-40">
+          <SelectValue placeholder="All projects" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="">All projects</SelectItem>
+          {projects?.map((p) => (
+            <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+
+      <Select
+        value={filters.applicationId}
+        onValueChange={(v) => onChange({ ...filters, applicationId: v ?? "" })}
+        disabled={!filters.projectId}
+      >
+        <SelectTrigger className="w-44">
+          <SelectValue placeholder="All applications" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="">All applications</SelectItem>
+          {applications?.map((a) => (
+            <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  );
+}
 
 function DeploymentRow({ d }: { d: GlobalDeployment }) {
   const duration =
@@ -35,7 +130,7 @@ function DeploymentRow({ d }: { d: GlobalDeployment }) {
       : null;
 
   return (
-    <div className="flex items-center justify-between py-3">
+    <div className="flex items-center justify-between">
       <div className="flex min-w-0 flex-1 items-center gap-3">
         <Badge
           variant={statusVariant[d.status] ?? "outline"}
@@ -67,10 +162,28 @@ function DeploymentRow({ d }: { d: GlobalDeployment }) {
 
 function GlobalDeploymentsPage() {
   const [offset, setOffset] = useState(0);
-  const { data: deployments, isLoading } = useGlobalDeployments({
+  const [filters, setFilters] = useState<Filters>({
+    status: "",
+    projectId: "",
+    applicationId: "",
+  });
+
+  const handleFilterChange = useCallback((f: Filters) => {
+    setFilters(f);
+    setOffset(0);
+  }, []);
+
+  const queryParams = useMemo(() => ({
     limit: PAGE_SIZE,
     offset,
-  });
+    project_id: filters.projectId || undefined,
+    application_id: filters.applicationId || undefined,
+    status: filters.status || undefined,
+    from: filters.dateFrom,
+    to: filters.dateTo,
+  }), [filters, offset]);
+
+  const { data: deployments, isLoading } = useGlobalDeployments(queryParams);
 
   return (
     <div className="space-y-6">
@@ -82,46 +195,40 @@ function GlobalDeploymentsPage() {
         </p>
       </div>
 
+      <DeploymentFilters filters={filters} onChange={handleFilterChange} />
+
       {isLoading ? (
-        <Card>
-          <CardContent className="divide-y p-0">
-            {[1, 2, 3, 4, 5].map((i) => (
-              <div key={i} className="flex items-center justify-between px-4 py-3">
-                <div className="flex items-center gap-3">
-                  <Skeleton className="h-5 w-16 rounded-full" />
-                  <div className="space-y-1">
-                    <Skeleton className="h-4 w-40" />
-                    <Skeleton className="h-3 w-24" />
-                  </div>
+        <div className="space-y-2">
+          {[1, 2, 3, 4, 5].map((i) => (
+            <div key={i} className="border rounded-lg flex items-center justify-between px-4 py-3">
+              <div className="flex items-center gap-3">
+                <Skeleton className="h-5 w-16 rounded-full" />
+                <div className="space-y-1">
+                  <Skeleton className="h-4 w-40" />
+                  <Skeleton className="h-3 w-24" />
                 </div>
-                <Skeleton className="h-3 w-32" />
               </div>
-            ))}
-          </CardContent>
-        </Card>
+              <Skeleton className="h-3 w-32" />
+            </div>
+          ))}
+        </div>
       ) : !deployments || deployments.length === 0 ? (
-        <Card>
-          <CardContent className="text-muted-foreground py-12 text-center">
-            {offset > 0
-              ? "No more deployments."
-              : "No deployments yet."}
-          </CardContent>
-        </Card>
+        <div className="border rounded-lg text-muted-foreground py-12 text-center text-sm">
+          {offset > 0 ? "No more deployments." : "No deployments found."}
+        </div>
       ) : (
-        <Card>
-          <CardContent className="divide-y p-0">
-            {deployments.map((d) => (
-              <Link
-                key={d.id}
-                to="/projects/$projectId/applications/$applicationId/deployments"
-                params={{ projectId: d.project_id, applicationId: d.application_id }}
-                className="hover:bg-muted/50 block px-4 transition-colors"
-              >
-                <DeploymentRow d={d} />
-              </Link>
-            ))}
-          </CardContent>
-        </Card>
+        <div className="space-y-2">
+          {deployments.map((d) => (
+            <Link
+              key={d.id}
+              to="/projects/$projectId/applications/$applicationId/deployments"
+              params={{ projectId: d.project_id, applicationId: d.application_id }}
+              className="border rounded-lg px-4 py-3 hover:bg-muted/50 transition-colors block"
+            >
+              <DeploymentRow d={d} />
+            </Link>
+          ))}
+        </div>
       )}
 
       {/* Pagination */}

@@ -10,7 +10,6 @@ import {
   useDeleteUser,
   useResetUserPassword,
 } from "@/lib/hooks/use-users";
-import { SettingsNav } from "@/lib/components/settings-nav";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -76,8 +75,6 @@ function TeamSettingsPage() {
           Manage your account and platform settings.
         </p>
       </div>
-
-      <SettingsNav />
 
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">

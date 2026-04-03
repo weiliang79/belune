@@ -15,7 +15,9 @@ import { Route as AppRouteImport } from './routes/_app'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AppDashboardRouteImport } from './routes/_app/dashboard'
 import { Route as AppSettingsIndexRouteImport } from './routes/_app/settings/index'
+import { Route as AppRequestsIndexRouteImport } from './routes/_app/requests/index'
 import { Route as AppProjectsIndexRouteImport } from './routes/_app/projects/index'
+import { Route as AppDeploymentsIndexRouteImport } from './routes/_app/deployments/index'
 import { Route as AppSettingsTeamRouteImport } from './routes/_app/settings/team'
 import { Route as AppSettingsServerRouteImport } from './routes/_app/settings/server'
 import { Route as AppProjectsNewRouteImport } from './routes/_app/projects/new'
@@ -62,9 +64,19 @@ const AppSettingsIndexRoute = AppSettingsIndexRouteImport.update({
   path: '/settings/',
   getParentRoute: () => AppRoute,
 } as any)
+const AppRequestsIndexRoute = AppRequestsIndexRouteImport.update({
+  id: '/requests/',
+  path: '/requests/',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppProjectsIndexRoute = AppProjectsIndexRouteImport.update({
   id: '/projects/',
   path: '/projects/',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppDeploymentsIndexRoute = AppDeploymentsIndexRouteImport.update({
+  id: '/deployments/',
+  path: '/deployments/',
   getParentRoute: () => AppRoute,
 } as any)
 const AppSettingsTeamRoute = AppSettingsTeamRouteImport.update({
@@ -168,7 +180,9 @@ export interface FileRoutesByFullPath {
   '/projects/new': typeof AppProjectsNewRoute
   '/settings/server': typeof AppSettingsServerRoute
   '/settings/team': typeof AppSettingsTeamRoute
+  '/deployments/': typeof AppDeploymentsIndexRoute
   '/projects/': typeof AppProjectsIndexRoute
+  '/requests/': typeof AppRequestsIndexRoute
   '/settings/': typeof AppSettingsIndexRoute
   '/projects/$projectId/env': typeof AppProjectsProjectIdEnvRoute
   '/projects/$projectId/settings': typeof AppProjectsProjectIdSettingsRoute
@@ -191,7 +205,9 @@ export interface FileRoutesByTo {
   '/projects/new': typeof AppProjectsNewRoute
   '/settings/server': typeof AppSettingsServerRoute
   '/settings/team': typeof AppSettingsTeamRoute
+  '/deployments': typeof AppDeploymentsIndexRoute
   '/projects': typeof AppProjectsIndexRoute
+  '/requests': typeof AppRequestsIndexRoute
   '/settings': typeof AppSettingsIndexRoute
   '/projects/$projectId/env': typeof AppProjectsProjectIdEnvRoute
   '/projects/$projectId/settings': typeof AppProjectsProjectIdSettingsRoute
@@ -216,7 +232,9 @@ export interface FileRoutesById {
   '/_app/projects/new': typeof AppProjectsNewRoute
   '/_app/settings/server': typeof AppSettingsServerRoute
   '/_app/settings/team': typeof AppSettingsTeamRoute
+  '/_app/deployments/': typeof AppDeploymentsIndexRoute
   '/_app/projects/': typeof AppProjectsIndexRoute
+  '/_app/requests/': typeof AppRequestsIndexRoute
   '/_app/settings/': typeof AppSettingsIndexRoute
   '/_app/projects/$projectId/env': typeof AppProjectsProjectIdEnvRoute
   '/_app/projects/$projectId/settings': typeof AppProjectsProjectIdSettingsRoute
@@ -242,7 +260,9 @@ export interface FileRouteTypes {
     | '/projects/new'
     | '/settings/server'
     | '/settings/team'
+    | '/deployments/'
     | '/projects/'
+    | '/requests/'
     | '/settings/'
     | '/projects/$projectId/env'
     | '/projects/$projectId/settings'
@@ -265,7 +285,9 @@ export interface FileRouteTypes {
     | '/projects/new'
     | '/settings/server'
     | '/settings/team'
+    | '/deployments'
     | '/projects'
+    | '/requests'
     | '/settings'
     | '/projects/$projectId/env'
     | '/projects/$projectId/settings'
@@ -289,7 +311,9 @@ export interface FileRouteTypes {
     | '/_app/projects/new'
     | '/_app/settings/server'
     | '/_app/settings/team'
+    | '/_app/deployments/'
     | '/_app/projects/'
+    | '/_app/requests/'
     | '/_app/settings/'
     | '/_app/projects/$projectId/env'
     | '/_app/projects/$projectId/settings'
@@ -356,11 +380,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppSettingsIndexRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/requests/': {
+      id: '/_app/requests/'
+      path: '/requests'
+      fullPath: '/requests/'
+      preLoaderRoute: typeof AppRequestsIndexRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/projects/': {
       id: '/_app/projects/'
       path: '/projects'
       fullPath: '/projects/'
       preLoaderRoute: typeof AppProjectsIndexRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/deployments/': {
+      id: '/_app/deployments/'
+      path: '/deployments'
+      fullPath: '/deployments/'
+      preLoaderRoute: typeof AppDeploymentsIndexRouteImport
       parentRoute: typeof AppRoute
     }
     '/_app/settings/team': {
@@ -538,7 +576,9 @@ interface AppRouteChildren {
   AppProjectsNewRoute: typeof AppProjectsNewRoute
   AppSettingsServerRoute: typeof AppSettingsServerRoute
   AppSettingsTeamRoute: typeof AppSettingsTeamRoute
+  AppDeploymentsIndexRoute: typeof AppDeploymentsIndexRoute
   AppProjectsIndexRoute: typeof AppProjectsIndexRoute
+  AppRequestsIndexRoute: typeof AppRequestsIndexRoute
   AppSettingsIndexRoute: typeof AppSettingsIndexRoute
 }
 
@@ -548,7 +588,9 @@ const AppRouteChildren: AppRouteChildren = {
   AppProjectsNewRoute: AppProjectsNewRoute,
   AppSettingsServerRoute: AppSettingsServerRoute,
   AppSettingsTeamRoute: AppSettingsTeamRoute,
+  AppDeploymentsIndexRoute: AppDeploymentsIndexRoute,
   AppProjectsIndexRoute: AppProjectsIndexRoute,
+  AppRequestsIndexRoute: AppRequestsIndexRoute,
   AppSettingsIndexRoute: AppSettingsIndexRoute,
 }
 

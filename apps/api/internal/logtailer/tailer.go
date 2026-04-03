@@ -276,12 +276,14 @@ func (t *Tailer) flush(ctx context.Context, batch []generated.InsertRequestLogPa
 			p.ApplicationID.Bytes[10:16])
 
 		payload, _ := json.Marshal(map[string]any{
+			"id":          appIDStr + "-" + fmt.Sprint(time.Now().UnixNano()),
 			"method":      p.Method,
 			"path":        p.Path,
 			"status_code": p.StatusCode,
 			"latency_ms":  p.LatencyMs,
 			"hostname":    p.Hostname,
 			"client_ip":   p.ClientIp.String,
+			"recorded_at": time.Now().UTC().Format(time.RFC3339),
 		})
 		t.rdb.Publish(ctx, "requests:live:"+appIDStr, string(payload))
 	}

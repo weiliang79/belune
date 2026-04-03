@@ -40,6 +40,9 @@ packages/types/generated/ts/*
 apps/api/internal/store/generated/*
 !apps/api/internal/store/generated/.gitkeep
 
+# Caddy logs (bind mount from container)
+infra/caddy/logs/
+
 # Test
 coverage/
 *.out

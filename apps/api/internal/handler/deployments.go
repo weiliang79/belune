@@ -75,35 +75,52 @@ func (h *Handler) GetGlobalDeployments(w http.ResponseWriter, r *http.Request) {
 	limit, offset := parsePagination(r)
 	role := middleware.RoleFromContext(r.Context())
 
-	if role == "admin" {
-		rows, err := h.queries.ListGlobalDeployments(r.Context(), generated.ListGlobalDeploymentsParams{
-			Limit:  limit,
-			Offset: offset,
-		})
-		if err != nil {
-			slog.Error("failed to list global deployments", "error", err)
-			writeError(w, http.StatusInternalServerError, "failed to list deployments")
-			return
-		}
-		writeJSON(w, http.StatusOK, rows)
-		return
-	}
-
-	// Member: scope to user's projects
-	userIDStr := middleware.UserIDFromContext(r.Context())
-	var userUUID pgtype.UUID
-	if err := userUUID.Scan(userIDStr); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid user id in token")
-		return
-	}
-
-	rows, err := h.queries.ListUserDeployments(r.Context(), generated.ListUserDeploymentsParams{
-		UserID: userUUID,
+	params := generated.ListGlobalDeploymentsFilteredParams{
 		Limit:  limit,
 		Offset: offset,
-	})
+	}
+
+	// Optional filters
+	if v := r.URL.Query().Get("project_id"); v != "" {
+		var uuid pgtype.UUID
+		if err := uuid.Scan(v); err == nil {
+			params.ProjectID = uuid
+		}
+	}
+	if v := r.URL.Query().Get("application_id"); v != "" {
+		var uuid pgtype.UUID
+		if err := uuid.Scan(v); err == nil {
+			params.ApplicationID = uuid
+		}
+	}
+	if v := r.URL.Query().Get("status"); v != "" {
+		params.Status = pgtype.Text{String: v, Valid: true}
+	}
+	if v := r.URL.Query().Get("from"); v != "" {
+		if t, err := time.Parse(time.RFC3339, v); err == nil {
+			params.From = pgtype.Timestamptz{Time: t, Valid: true}
+		}
+	}
+	if v := r.URL.Query().Get("to"); v != "" {
+		if t, err := time.Parse(time.RFC3339, v); err == nil {
+			params.To = pgtype.Timestamptz{Time: t, Valid: true}
+		}
+	}
+
+	// Non-admins are scoped to their own projects
+	if role != "admin" {
+		userIDStr := middleware.UserIDFromContext(r.Context())
+		var userUUID pgtype.UUID
+		if err := userUUID.Scan(userIDStr); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid user id in token")
+			return
+		}
+		params.UserID = userUUID
+	}
+
+	rows, err := h.queries.ListGlobalDeploymentsFiltered(r.Context(), params)
 	if err != nil {
-		slog.Error("failed to list user deployments", "error", err)
+		slog.Error("failed to list global deployments", "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to list deployments")
 		return
 	}

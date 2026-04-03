@@ -128,9 +128,12 @@ func main() {
 	go w.StartMetricsTicker(metricsCtx)
 
 	// Configure Caddy access logging and start the log tailer
-	if err := caddyClient.ConfigureAccessLogs(context.Background(), cfg.AccessLogPath); err != nil {
+	if err := caddyClient.ConfigureAccessLogs(context.Background()); err != nil {
 		slog.Warn("failed to configure Caddy access logs", "error", err)
 	}
+
+	// Normalise Caddy route ordering: domain-specific routes first, catch-all last.
+	caddyClient.InitCatchAll(context.Background())
 	tailerCtx, cancelTailer := context.WithCancel(context.Background())
 	defer cancelTailer()
 	accessLogTailer := logtailer.New(cfg.AccessLogPath, queries, rdb)

@@ -93,14 +93,42 @@ func (h *Handler) StreamRequestLogs(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// ListAllRequestLogs returns paginated HTTP request logs across all applications (admin only).
-// GET /api/requests
+// ListAllRequestLogs returns paginated, filterable HTTP request logs across all applications (admin only).
+// GET /api/requests?application_id=&status_min=&status_max=&from=&to=
 func (h *Handler) ListAllRequestLogs(w http.ResponseWriter, r *http.Request) {
 	limit, offset := parsePagination(r)
-	logs, err := h.queries.ListRequestLogs(r.Context(), generated.ListRequestLogsParams{
-		Limit:  limit,
-		Offset: offset,
-	})
+	q := r.URL.Query()
+
+	params := generated.ListRequestLogsFilteredParams{Limit: limit, Offset: offset}
+
+	if v := q.Get("application_id"); v != "" {
+		var id pgtype.UUID
+		if err := id.Scan(v); err == nil {
+			params.ApplicationID = id
+		}
+	}
+	if v := q.Get("status_min"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			params.StatusMin = pgtype.Int2{Int16: int16(n), Valid: true}
+		}
+	}
+	if v := q.Get("status_max"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			params.StatusMax = pgtype.Int2{Int16: int16(n), Valid: true}
+		}
+	}
+	if v := q.Get("from"); v != "" {
+		if t, err := time.Parse(time.RFC3339, v); err == nil {
+			params.From = pgtype.Timestamptz{Time: t, Valid: true}
+		}
+	}
+	if v := q.Get("to"); v != "" {
+		if t, err := time.Parse(time.RFC3339, v); err == nil {
+			params.To = pgtype.Timestamptz{Time: t, Valid: true}
+		}
+	}
+
+	logs, err := h.queries.ListRequestLogsFiltered(r.Context(), params)
 	if err != nil {
 		slog.Error("failed to list all request logs", "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to list request logs")
