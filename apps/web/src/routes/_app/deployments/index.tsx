@@ -88,6 +88,10 @@ function DeploymentFilters({ filters, onChange }: {
       </Select>
 
       <Select
+        items={projects?.map((p) => ({
+          label: p.name,
+          value: p.id,
+        }))}
         value={filters.projectId}
         onValueChange={(v) => onChange({ ...filters, projectId: v ?? "", applicationId: "" })}
       >
@@ -103,6 +107,10 @@ function DeploymentFilters({ filters, onChange }: {
       </Select>
 
       <Select
+        items={applications?.map((a) => ({
+          label: a.name,
+          value: a.id,
+        }))}
         value={filters.applicationId}
         onValueChange={(v) => onChange({ ...filters, applicationId: v ?? "" })}
         disabled={!filters.projectId}
