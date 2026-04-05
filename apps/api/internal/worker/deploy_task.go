@@ -17,6 +17,7 @@ import (
 	"github.com/ungweiliang/selfhost-paas/internal/naming"
 	"github.com/ungweiliang/selfhost-paas/internal/pkg/buildlog"
 	"github.com/ungweiliang/selfhost-paas/internal/pkg/crypto"
+	"github.com/ungweiliang/selfhost-paas/internal/pkg/redact"
 	"github.com/ungweiliang/selfhost-paas/internal/proxy"
 	"github.com/ungweiliang/selfhost-paas/internal/runtime"
 	"github.com/ungweiliang/selfhost-paas/internal/status"
@@ -154,19 +155,35 @@ func (h *TaskHandler) HandleDeployTask(ctx context.Context, t *asynq.Task) error
 		buildCtx, buildCancel := context.WithTimeout(ctx, time.Duration(h.Config.BuildTimeoutMinutes)*time.Minute)
 		defer buildCancel()
 
-		// Decrypt git token if present (for private repositories)
-		var gitToken string
-		if len(app.GitCredentialsEncrypted) > 0 {
+		// Resolve git credentials: centralized credential takes priority, fallback to per-app token
+		var cloneURL string
+		if app.GitCredentialID.Valid {
+			cred, credErr := h.Queries.GetGitCredential(ctx, app.GitCredentialID)
+			if credErr != nil {
+				slog.Warn("failed to fetch git credential, trying per-app token", "error", credErr)
+			} else {
+				tokenBytes, decErr := crypto.Decrypt(cred.TokenEncrypted, h.EncryptionKey)
+				if decErr != nil {
+					slog.Warn("failed to decrypt centralized git credential", "error", decErr)
+				} else {
+					cloneURL = git.BuildCloneURL(cred.Provider, string(tokenBytes), cred.Username, app.SourceRepo.String)
+				}
+			}
+		}
+		if cloneURL == "" && len(app.GitCredentialsEncrypted) > 0 {
 			tokenBytes, decErr := crypto.Decrypt(app.GitCredentialsEncrypted, h.EncryptionKey)
 			if decErr != nil {
 				slog.Warn("failed to decrypt git credentials, cloning without token", "error", decErr)
 			} else {
-				gitToken = string(tokenBytes)
+				cloneURL = git.BuildCloneURL("generic", string(tokenBytes), "", app.SourceRepo.String)
 			}
+		}
+		if cloneURL == "" {
+			cloneURL = app.SourceRepo.String
 		}
 
 		slog.Info("cloning repository", "repo", app.SourceRepo.String, "dest", tmpDir)
-		cloneResult, err := git.Clone(buildCtx, app.SourceRepo.String, tmpDir, "", gitToken)
+		cloneResult, err := git.Clone(buildCtx, cloneURL, tmpDir, "", "")
 		if err != nil {
 			h.failDeployment(ctx, deploymentID, fmt.Sprintf("git clone: %v", err))
 			return fmt.Errorf("git clone: %w", err)
@@ -319,9 +336,12 @@ func (h *TaskHandler) failDeployment(ctx context.Context, deploymentID pgtype.UU
 	retried, _ := asynq.GetRetryCount(ctx)
 	maxRetry, _ := asynq.GetMaxRetry(ctx)
 
+	// Redact credentials from error messages before logging and storing
+	safeMsg := redact.Error(errMsg)
+
 	slog.Error("deployment failed",
 		"deployment_id", fmt.Sprintf("%v", deploymentID),
-		"error", errMsg,
+		"error", safeMsg,
 		"retry", retried,
 		"max_retry", maxRetry,
 	)
@@ -331,7 +351,7 @@ func (h *TaskHandler) failDeployment(ctx context.Context, deploymentID pgtype.UU
 		h.Queries.UpdateDeploymentStatus(ctx, generated.UpdateDeploymentStatusParams{
 			ID:           deploymentID,
 			Status:       status.DeploymentFailed,
-			ErrorMessage: pgtype.Text{String: errMsg, Valid: true},
+			ErrorMessage: pgtype.Text{String: safeMsg, Valid: true},
 		})
 	}
 }

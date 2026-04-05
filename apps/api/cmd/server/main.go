@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
@@ -114,18 +115,24 @@ func main() {
 		MetricsService: metricsSvc,
 	}
 
+	var wg sync.WaitGroup
+
 	w := worker.New(redisOpt, taskHandler)
+	wg.Add(1)
 	go func() {
+		defer wg.Done()
 		if err := w.Start(); err != nil {
 			slog.Error("worker failed to start", "error", err)
 		}
 	}()
-	defer w.Stop()
 
 	// Metrics collection on a precise 1s ticker (not via asynq scheduler)
 	metricsCtx, cancelMetrics := context.WithCancel(context.Background())
-	defer cancelMetrics()
-	go w.StartMetricsTicker(metricsCtx)
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		w.StartMetricsTicker(metricsCtx)
+	}()
 
 	// Configure Caddy access logging and start the log tailer
 	if err := caddyClient.ConfigureAccessLogs(context.Background()); err != nil {
@@ -135,15 +142,21 @@ func main() {
 	// Normalise Caddy route ordering: domain-specific routes first, catch-all last.
 	caddyClient.InitCatchAll(context.Background())
 	tailerCtx, cancelTailer := context.WithCancel(context.Background())
-	defer cancelTailer()
 	accessLogTailer := logtailer.New(cfg.AccessLogPath, queries, rdb)
-	go accessLogTailer.Run(tailerCtx)
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		accessLogTailer.Run(tailerCtx)
+	}()
 
 	// Application log collector: follows container logs and persists to DB
 	collectorCtx, cancelCollector := context.WithCancel(context.Background())
-	defer cancelCollector()
 	appLogCollector := logcollector.New(dockerClient, queries, rdb)
-	go appLogCollector.Run(collectorCtx)
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		appLogCollector.Run(collectorCtx)
+	}()
 
 	// Cleanup scheduler (runs every 24h)
 	scheduler, err := w.StartScheduler()
@@ -179,11 +192,28 @@ func main() {
 	<-quit
 
 	slog.Info("shutting down server...")
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
 
-	if err := httpServer.Shutdown(ctx); err != nil {
+	// Stop HTTP server
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer shutdownCancel()
+	if err := httpServer.Shutdown(shutdownCtx); err != nil {
 		slog.Error("server forced to shutdown", "error", err)
+	}
+
+	// Cancel background goroutines
+	cancelMetrics()
+	cancelTailer()
+	cancelCollector()
+	w.Stop()
+
+	// Wait for goroutines to finish with a timeout
+	done := make(chan struct{})
+	go func() { wg.Wait(); close(done) }()
+	select {
+	case <-done:
+		slog.Info("all goroutines stopped")
+	case <-time.After(10 * time.Second):
+		slog.Warn("goroutines did not finish within timeout")
 	}
 
 	slog.Info("server stopped")

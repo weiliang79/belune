@@ -2,7 +2,9 @@ package handler
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
+	"regexp"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -10,6 +12,8 @@ import (
 	"github.com/ungweiliang/selfhost-paas/internal/pkg/crypto"
 	"github.com/ungweiliang/selfhost-paas/internal/store/generated"
 )
+
+var envKeyRegex = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 
 type envVarResponse struct {
 	ID       pgtype.UUID `json:"id"`
@@ -93,6 +97,10 @@ func (h *Handler) UpdateEnvVars(w http.ResponseWriter, r *http.Request) {
 	for _, v := range req.Vars {
 		if v.Key == "" {
 			continue
+		}
+		if !envKeyRegex.MatchString(v.Key) {
+			writeError(w, http.StatusBadRequest, fmt.Sprintf("invalid env var key: %q", v.Key))
+			return
 		}
 
 		encrypted, err := crypto.Encrypt([]byte(v.Value), h.cfg.EncryptionKey)

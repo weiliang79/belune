@@ -68,8 +68,10 @@ func (h *Handler) AddDomain(w http.ResponseWriter, r *http.Request) {
 	// Insert domain record
 	domain, err := h.queries.CreateDomain(r.Context(), generated.CreateDomainParams{
 		ApplicationID: applicationUUID,
-		Hostname:   req.Hostname,
-		SslEnabled: req.SSLEnabled,
+		Hostname:      req.Hostname,
+		SslEnabled:    req.SSLEnabled,
+		ForceHttps:    req.SSLEnabled,
+		SslMode:       "automatic",
 	})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to add domain")

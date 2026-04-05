@@ -28,16 +28,17 @@ type Server struct {
 }
 
 func New(cfg *config.Config, db *pgxpool.Pool, queries *generated.Queries, asynqClient handler.TaskEnqueuer, rt runtime.ContainerRuntime, pm proxy.ProxyManager, rdb *redis.Client) *Server {
-	auth := service.NewAuthService(queries, cfg.JWTSecret, cfg.JWTExpiryHours)
+	auth := service.NewAuthService(queries, cfg.JWTSecret, cfg.JWTExpiryHours, rdb)
 	appSvc := service.NewApplicationService(db, queries, rt, cfg.EncryptionKey)
 	projSvc := service.NewProjectService(queries, rt)
 	dbSvc := service.NewDatabaseService(queries, rt)
+	gitCredSvc := service.NewGitCredentialService(queries, cfg.EncryptionKey)
 
 	s := &Server{
 		cfg:     cfg,
 		db:      db,
 		auth:    auth,
-		handler: handler.New(cfg, db, queries, asynqClient, rt, pm, auth, rdb, appSvc, projSvc, dbSvc),
+		handler: handler.New(cfg, db, queries, asynqClient, rt, pm, auth, rdb, appSvc, projSvc, dbSvc, gitCredSvc),
 	}
 
 	s.router = s.setupRouter()

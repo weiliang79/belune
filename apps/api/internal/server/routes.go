@@ -1,7 +1,6 @@
 package server
 
 import (
-	"net/http"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -13,11 +12,8 @@ import (
 )
 
 func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService, disableRateLimit bool) {
-	// Health check
-	r.Get("/healthz", func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("ok"))
-	})
+	// Health check (deep — checks DB, Redis, Docker)
+	r.Get("/healthz", h.HealthCheck)
 
 	// Public routes
 	r.Group(func(r chi.Router) {
@@ -29,7 +25,6 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService,
 			r.Post("/api/auth/login", h.Login)
 		})
 
-		r.Post("/api/auth/logout", h.Logout)
 		r.Get("/api/auth/setup", h.Setup)
 		r.Post("/api/auth/setup", h.Setup)
 
@@ -52,6 +47,7 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService,
 			r.Use(httprate.LimitByIP(100, time.Minute))
 		}
 
+		r.Post("/api/auth/logout", h.Logout)
 		r.Get("/api/auth/me", h.Me)
 		r.Put("/api/auth/password", h.ChangeOwnPassword)
 		r.Put("/api/auth/profile", h.UpdateProfile)
@@ -66,6 +62,12 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService,
 			r.Delete("/api/users/{userId}", h.DeleteUser)
 			r.Put("/api/users/{userId}/password", h.ResetUserPassword)
 		})
+
+		// Git credentials
+		r.Get("/api/git-credentials", h.ListGitCredentials)
+		r.Post("/api/git-credentials", h.CreateGitCredential)
+		r.Put("/api/git-credentials/{credentialId}", h.UpdateGitCredential)
+		r.Delete("/api/git-credentials/{credentialId}", h.DeleteGitCredential)
 
 		// Projects
 		r.Get("/api/projects", h.ListProjects)

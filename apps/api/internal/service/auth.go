@@ -7,7 +7,9 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/redis/go-redis/v9"
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/ungweiliang/selfhost-paas/internal/store/generated"
@@ -23,6 +25,7 @@ type AuthService struct {
 	queries        *generated.Queries
 	jwtSecret      []byte
 	jwtExpiryHours int
+	rdb            *redis.Client
 }
 
 type AuthClaims struct {
@@ -46,7 +49,7 @@ type AuthUserResult struct {
 	LastName  string      `json:"last_name"`
 }
 
-func NewAuthService(queries *generated.Queries, jwtSecret string, jwtExpiryHours int) *AuthService {
+func NewAuthService(queries *generated.Queries, jwtSecret string, jwtExpiryHours int, rdb *redis.Client) *AuthService {
 	if jwtExpiryHours <= 0 {
 		jwtExpiryHours = 24
 	}
@@ -54,6 +57,7 @@ func NewAuthService(queries *generated.Queries, jwtSecret string, jwtExpiryHours
 		queries:        queries,
 		jwtSecret:      []byte(jwtSecret),
 		jwtExpiryHours: jwtExpiryHours,
+		rdb:            rdb,
 	}
 }
 
@@ -126,7 +130,31 @@ func (s *AuthService) ValidateToken(tokenString string) (*AuthClaims, error) {
 		return nil, ErrInvalidToken
 	}
 
+	// Check if token has been blacklisted (logout)
+	if claims.ID != "" && s.rdb != nil {
+		exists, err := s.rdb.Exists(context.Background(), "jwt:blacklist:"+claims.ID).Result()
+		if err == nil && exists > 0 {
+			return nil, ErrInvalidToken
+		}
+	}
+
 	return claims, nil
+}
+
+// BlacklistToken adds a token's JTI to the Redis blacklist with TTL matching remaining lifetime.
+func (s *AuthService) BlacklistToken(ctx context.Context, tokenString string) error {
+	claims, err := s.ValidateToken(tokenString)
+	if err != nil {
+		return nil // already invalid, nothing to blacklist
+	}
+	if claims.ID == "" {
+		return nil // legacy token without JTI
+	}
+	ttl := time.Until(claims.ExpiresAt.Time)
+	if ttl <= 0 {
+		return nil // already expired
+	}
+	return s.rdb.Set(ctx, "jwt:blacklist:"+claims.ID, "1", ttl).Err()
 }
 
 func (s *AuthService) IsSetupRequired(ctx context.Context) (bool, error) {
@@ -147,6 +175,7 @@ func (s *AuthService) generateToken(user generated.User) (string, error) {
 		Email:  user.Email,
 		Role:   user.Role,
 		RegisteredClaims: jwt.RegisteredClaims{
+			ID:        uuid.New().String(),
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Duration(s.jwtExpiryHours) * time.Hour)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
 			Subject:   userIDStr,

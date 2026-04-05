@@ -56,6 +56,12 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
+	// Blacklist the current token so it can't be reused
+	tokenString := extractTokenFromRequest(r)
+	if tokenString != "" {
+		_ = h.auth.BlacklistToken(r.Context(), tokenString)
+	}
+
 	http.SetCookie(w, &http.Cookie{
 		Name:     "token",
 		Value:    "",
@@ -67,6 +73,17 @@ func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
 	})
 
 	writeJSON(w, http.StatusOK, map[string]string{"status": "logged out"})
+}
+
+// extractTokenFromRequest extracts the JWT from Authorization header or cookie.
+func extractTokenFromRequest(r *http.Request) string {
+	if auth := r.Header.Get("Authorization"); len(auth) > 7 && auth[:7] == "Bearer " {
+		return auth[7:]
+	}
+	if cookie, err := r.Cookie("token"); err == nil {
+		return cookie.Value
+	}
+	return ""
 }
 
 func (h *Handler) Me(w http.ResponseWriter, r *http.Request) {

@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -81,6 +82,10 @@ func (h *Handler) UpdateProjectEnvVars(w http.ResponseWriter, r *http.Request) {
 	for _, v := range req.Vars {
 		if v.Key == "" {
 			continue
+		}
+		if !envKeyRegex.MatchString(v.Key) {
+			writeError(w, http.StatusBadRequest, fmt.Sprintf("invalid env var key: %q", v.Key))
+			return
 		}
 
 		encrypted, err := crypto.Encrypt([]byte(v.Value), h.cfg.EncryptionKey)

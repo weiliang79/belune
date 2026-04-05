@@ -39,9 +39,10 @@ type CreateApplicationParams struct {
 	BuildType       string
 	CPULimit        float64
 	MemoryLimit     int64
-	GitToken        string // plaintext PAT; encrypted before storage
-	HealthCheckPath string // HTTP path to poll after deploy (e.g. /healthz)
-	Port            int    // container port the app listens on (default 8080)
+	GitToken        string      // plaintext PAT; encrypted before storage
+	HealthCheckPath string      // HTTP path to poll after deploy (e.g. /healthz)
+	Port            int         // container port the app listens on (default 8080)
+	GitCredentialID pgtype.UUID // optional FK to centralized git_credentials
 }
 
 // Create inserts the application record and sets its final slug atomically.
@@ -79,6 +80,7 @@ func (s *ApplicationService) Create(ctx context.Context, p CreateApplicationPara
 			GitCredentialsEncrypted: gitCreds,
 			HealthCheckPath:         pgtype.Text{String: p.HealthCheckPath, Valid: p.HealthCheckPath != ""},
 			Port:                    portOrDefault(p.Port),
+			GitCredentialID:         p.GitCredentialID,
 		})
 		if err != nil {
 			return err
@@ -107,9 +109,10 @@ type UpdateApplicationParams struct {
 	BuilderImage      string
 	CPULimit          float64
 	MemoryLimit       int64
-	GitToken          string // plaintext PAT; encrypted before storage; empty = no change
-	HealthCheckPath   string // empty = clear existing
-	Port              int    // container port; 0 = preserve existing
+	GitToken          string      // plaintext PAT; encrypted before storage; empty = no change
+	HealthCheckPath   string      // empty = clear existing
+	Port              int         // container port; 0 = preserve existing
+	GitCredentialID   pgtype.UUID // optional FK to centralized git_credentials; zero = no change
 }
 
 // Update applies field changes to an application.
@@ -154,6 +157,7 @@ func (s *ApplicationService) Update(
 		GitCredentialsEncrypted: gitCreds,
 		HealthCheckPath:         pgtype.Text{String: p.HealthCheckPath, Valid: p.HealthCheckPath != ""},
 		Port:                    port,
+		GitCredentialID:         p.GitCredentialID,
 	})
 }
 
