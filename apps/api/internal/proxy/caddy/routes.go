@@ -12,6 +12,9 @@ import (
 	"github.com/ungweiliang/selfhost-paas/internal/proxy"
 )
 
+// caddyMatcher is a generic Caddy matcher with arbitrary fields.
+type caddyMatcher map[string]any
+
 const catchAllRouteID = "route-catch-all"
 
 // caddyRoute represents a Caddy route configuration.
@@ -25,13 +28,20 @@ type caddyMatch struct {
 	Host []string `json:"host"`
 }
 
-type caddyHandle struct {
-	Handler   string          `json:"handler"`
-	Upstreams []caddyUpstream `json:"upstreams,omitempty"`
-}
+// caddyHandle is a flexible map-based handler to support all Caddy handler types
+// (reverse_proxy, authentication, headers, subroute, static_response, etc.).
+type caddyHandle map[string]any
 
 type caddyUpstream struct {
 	Dial string `json:"dial"`
+}
+
+// newReverseProxyHandle creates a reverse_proxy handler.
+func newReverseProxyHandle(upstreams []caddyUpstream) caddyHandle {
+	return caddyHandle{
+		"handler":   "reverse_proxy",
+		"upstreams": upstreams,
+	}
 }
 
 // InitCatchAll must be called once at startup. It normalises the routes list so
@@ -68,8 +78,8 @@ func (c *Client) InitCatchAll(ctx context.Context) {
 
 	// Re-append catch-all with known @id at the end.
 	catchAllJSON, _ := json.Marshal(caddyRoute{
-		ID:    catchAllRouteID,
-		Handle: []caddyHandle{{Handler: "reverse_proxy", Upstreams: []caddyUpstream{{Dial: "localhost:8080"}}}},
+		ID:     catchAllRouteID,
+		Handle: []caddyHandle{newReverseProxyHandle([]caddyUpstream{{Dial: "localhost:8080"}})},
 	})
 	newRoutes := append(domainRoutes, catchAllJSON)
 
@@ -78,17 +88,35 @@ func (c *Client) InitCatchAll(ctx context.Context) {
 }
 
 func (c *Client) AddRoute(ctx context.Context, cfg proxy.RouteConfig) error {
+	// Build the handler chain: feature handlers first, then reverse_proxy as the terminal handler.
+	handlers := buildFeatureHandlers(cfg)
+
+	// Reverse proxy is always the last handler.
+	handlers = append(handlers, newReverseProxyHandle([]caddyUpstream{{Dial: targetToDial(cfg.TargetURL)}}))
+
+	// If ForceHTTPS is enabled, prepend an HTTP→HTTPS redirect subroute.
+	if cfg.ForceHTTPS && cfg.SSLMode != "off" {
+		handlers = append([]caddyHandle{
+			{
+				"handler": "subroute",
+				"routes": []map[string]any{{
+					"match": []caddyMatcher{{"protocol": "http"}},
+					"handle": []caddyHandle{{
+						"handler":     "static_response",
+						"headers":     map[string][]string{"Location": {"{http.request.scheme}s://{http.request.host}{http.request.uri}"}},
+						"status_code": "301",
+					}},
+				}},
+			},
+		}, handlers...)
+	}
+
 	route := caddyRoute{
 		ID: fmt.Sprintf("route-%s", cfg.Hostname),
 		Match: []caddyMatch{
 			{Host: []string{cfg.Hostname}},
 		},
-		Handle: []caddyHandle{
-			{
-				Handler:   "reverse_proxy",
-				Upstreams: []caddyUpstream{{Dial: targetToDial(cfg.TargetURL)}},
-			},
-		},
+		Handle: handlers,
 	}
 
 	body, err := json.Marshal(route)
@@ -119,8 +147,115 @@ func (c *Client) AddRoute(ctx context.Context, cfg proxy.RouteConfig) error {
 	// Ensure the catch-all stays last so it doesn't shadow this new domain route.
 	c.moveCatchAllToEnd(ctx)
 
+	// Configure TLS if needed.
+	if cfg.TLS {
+		if err := c.SetupTLS(ctx, cfg.Hostname, cfg.SSLMode, cfg.CertPath, cfg.KeyPath); err != nil {
+			slog.Warn("caddy: TLS setup failed", "hostname", cfg.Hostname, "error", err)
+		}
+	}
+
 	slog.Info("caddy route added", "hostname", cfg.Hostname, "target", cfg.TargetURL)
 	return nil
+}
+
+// buildFeatureHandlers translates RouteFeatures into Caddy handler JSON.
+func buildFeatureHandlers(cfg proxy.RouteConfig) []caddyHandle {
+	var handlers []caddyHandle
+
+	for _, f := range cfg.Features {
+		if !f.Enabled {
+			continue
+		}
+		switch f.Type {
+		case "basic_auth":
+			// Config expected: {"username": "...", "hashed_password": "..."}
+			username, _ := f.Config["username"].(string)
+			hashedPw, _ := f.Config["hashed_password"].(string)
+			if username != "" && hashedPw != "" {
+				handlers = append(handlers, caddyHandle{
+					"handler": "authentication",
+					"providers": map[string]any{
+						"http_basic": map[string]any{
+							"accounts": []map[string]string{{
+								"username": username,
+								"password": hashedPw,
+							}},
+						},
+					},
+				})
+			}
+
+		case "headers":
+			// Config expected: {"response": {"set": {"X-Custom": ["value"]}}}
+			if resp, ok := f.Config["response"]; ok {
+				handlers = append(handlers, caddyHandle{
+					"handler":  "headers",
+					"response": resp,
+				})
+			}
+
+		case "ip_allowlist":
+			// Config expected: {"ranges": ["192.168.1.0/24", "10.0.0.0/8"]}
+			// IP allowlist is applied as a matcher on a subroute that returns 403.
+			if ranges, ok := f.Config["ranges"].([]any); ok && len(ranges) > 0 {
+				var rangeStrs []string
+				for _, r := range ranges {
+					if s, ok := r.(string); ok {
+						rangeStrs = append(rangeStrs, s)
+					}
+				}
+				handlers = append(handlers, caddyHandle{
+					"handler": "subroute",
+					"routes": []map[string]any{{
+						"match": []caddyMatcher{{"not": []caddyMatcher{{"remote_ip": map[string]any{"ranges": rangeStrs}}}}},
+						"handle": []caddyHandle{{
+							"handler":     "static_response",
+							"status_code": "403",
+							"body":        "Forbidden",
+						}},
+					}},
+				})
+			}
+
+		case "redirect":
+			// Config expected: {"from": "/old", "to": "/new", "status_code": 301}
+			from, _ := f.Config["from"].(string)
+			to, _ := f.Config["to"].(string)
+			statusCode := "301"
+			if sc, ok := f.Config["status_code"]; ok {
+				statusCode = fmt.Sprintf("%v", sc)
+			}
+			if from != "" && to != "" {
+				handlers = append(handlers, caddyHandle{
+					"handler": "subroute",
+					"routes": []map[string]any{{
+						"match": []caddyMatcher{{"path": []string{from}}},
+						"handle": []caddyHandle{{
+							"handler":     "static_response",
+							"headers":     map[string][]string{"Location": {to}},
+							"status_code": statusCode,
+						}},
+					}},
+				})
+			}
+
+		case "rate_limit":
+			// Rate limiting requires a Caddy module — log for now.
+			slog.Info("rate_limit feature configured but requires caddy-rate-limit module", "config", f.Config)
+		}
+	}
+
+	// Append advanced config handlers if provided.
+	if len(cfg.AdvancedConfig) > 0 {
+		var advHandlers []caddyHandle
+		if err := json.Unmarshal(cfg.AdvancedConfig, &advHandlers); err != nil {
+			slog.Warn("failed to parse advanced_config as handlers", "error", err)
+		} else {
+			handlers = append(handlers, advHandlers...)
+		}
+	}
+
+	return handlers
 }
 
 func (c *Client) RemoveRoute(ctx context.Context, hostname string) error {
@@ -167,8 +302,19 @@ func (c *Client) ListRoutes(ctx context.Context) ([]proxy.RouteConfig, error) {
 			cfg := proxy.RouteConfig{
 				Hostname: route.Match[0].Host[0],
 			}
-			if len(route.Handle) > 0 && len(route.Handle[0].Upstreams) > 0 {
-				cfg.TargetURL = route.Handle[0].Upstreams[0].Dial
+			// Extract target URL from the last handler (reverse_proxy).
+			for i := len(route.Handle) - 1; i >= 0; i-- {
+				h := route.Handle[i]
+				if h["handler"] == "reverse_proxy" {
+					if upstreams, ok := h["upstreams"].([]any); ok && len(upstreams) > 0 {
+						if u, ok := upstreams[0].(map[string]any); ok {
+							if dial, ok := u["dial"].(string); ok {
+								cfg.TargetURL = dial
+							}
+						}
+					}
+					break
+				}
 			}
 			result = append(result, cfg)
 		}
@@ -190,8 +336,8 @@ func (c *Client) moveCatchAllToEnd(ctx context.Context) {
 	}
 
 	route := caddyRoute{
-		ID:    catchAllRouteID,
-		Handle: []caddyHandle{{Handler: "reverse_proxy", Upstreams: []caddyUpstream{{Dial: "localhost:8080"}}}},
+		ID:     catchAllRouteID,
+		Handle: []caddyHandle{newReverseProxyHandle([]caddyUpstream{{Dial: "localhost:8080"}})},
 	}
 	body, _ := json.Marshal(route)
 	appendURL := fmt.Sprintf("%s/config/apps/http/servers/srv0/routes", c.adminURL)

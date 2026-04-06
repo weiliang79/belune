@@ -63,6 +63,8 @@ func (h *Handler) CreateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	h.audit(r, "create_user", "user", uuidToString(user.ID), map[string]any{"email": user.Email, "role": user.Role})
+
 	writeJSON(w, http.StatusCreated, generated.ListUsersRow{
 		ID:        user.ID,
 		Email:     user.Email,
@@ -125,6 +127,8 @@ func (h *Handler) UpdateUserRole(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	h.audit(r, "update_user_role", "user", id, map[string]any{"role": req.Role})
+
 	writeJSON(w, http.StatusOK, updated)
 }
 
@@ -166,6 +170,8 @@ func (h *Handler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "failed to delete user")
 		return
 	}
+
+	h.audit(r, "delete_user", "user", id, map[string]any{"email": target.Email})
 
 	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
 }

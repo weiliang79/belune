@@ -41,6 +41,8 @@ func (h *Handler) CreateProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	h.audit(r, "create_project", "project", uuidToString(project.ID), map[string]any{"name": req.Name})
+
 	writeJSON(w, http.StatusCreated, project)
 }
 
@@ -144,6 +146,8 @@ func (h *Handler) UpdateProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	h.audit(r, "update_project", "project", id, nil)
+
 	writeJSON(w, http.StatusOK, project)
 }
 
@@ -164,6 +168,8 @@ func (h *Handler) DeleteProject(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "failed to delete project")
 		return
 	}
+
+	h.audit(r, "delete_project", "project", id, nil)
 
 	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
 }

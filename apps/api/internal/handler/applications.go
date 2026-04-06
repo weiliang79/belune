@@ -90,6 +90,8 @@ func (h *Handler) CreateApplication(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	h.audit(r, "create_application", "application", uuidToString(app.ID), map[string]any{"name": req.Name, "project_id": projectID})
+
 	writeJSON(w, http.StatusCreated, app)
 }
 
@@ -201,6 +203,8 @@ func (h *Handler) DeployApplication(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	h.audit(r, "deploy_application", "application", applicationID, nil)
+
 	writeJSON(w, http.StatusAccepted, deployment)
 }
 
@@ -237,6 +241,8 @@ func (h *Handler) StopApplication(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "failed to update application status")
 		return
 	}
+
+	h.audit(r, "stop_application", "application", applicationID, nil)
 
 	writeJSON(w, http.StatusOK, app)
 }
@@ -275,6 +281,8 @@ func (h *Handler) StartApplication(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "failed to update application status")
 		return
 	}
+
+	h.audit(r, "start_application", "application", applicationID, nil)
 
 	writeJSON(w, http.StatusOK, app)
 }
@@ -319,6 +327,8 @@ func (h *Handler) RestartApplication(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "failed to update application status")
 		return
 	}
+
+	h.audit(r, "restart_application", "application", applicationID, nil)
 
 	writeJSON(w, http.StatusOK, app)
 }
@@ -381,6 +391,8 @@ func (h *Handler) UpdateApplication(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	h.audit(r, "update_application", "application", applicationID, nil)
+
 	writeJSON(w, http.StatusOK, app)
 }
 
@@ -407,6 +419,8 @@ func (h *Handler) DeleteApplication(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "failed to delete application")
 		return
 	}
+
+	h.audit(r, "delete_application", "application", applicationID, map[string]any{"name": row.Name})
 
 	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
 }

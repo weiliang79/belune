@@ -11,8 +11,10 @@ import (
 	"github.com/ungweiliang/selfhost-paas/internal/config"
 	"github.com/ungweiliang/selfhost-paas/internal/proxy"
 	"github.com/ungweiliang/selfhost-paas/internal/runtime"
+	"github.com/ungweiliang/selfhost-paas/internal/server/middleware"
 	"github.com/ungweiliang/selfhost-paas/internal/service"
 	"github.com/ungweiliang/selfhost-paas/internal/store/generated"
+	"github.com/ungweiliang/selfhost-paas/internal/ws"
 )
 
 // TaskEnqueuer abstracts task queue operations for testability.
@@ -33,6 +35,8 @@ type Handler struct {
 	projService *service.ProjectService
 	dbService   *service.DatabaseService
 	gitCredSvc  *service.GitCredentialService
+	hub         *ws.Hub
+	auditSvc    *service.AuditService
 }
 
 func New(
@@ -48,6 +52,8 @@ func New(
 	projSvc *service.ProjectService,
 	dbSvc *service.DatabaseService,
 	gitCredSvc *service.GitCredentialService,
+	hub *ws.Hub,
+	auditSvc *service.AuditService,
 ) *Handler {
 	return &Handler{
 		cfg:         cfg,
@@ -62,6 +68,16 @@ func New(
 		projService: projSvc,
 		dbService:   dbSvc,
 		gitCredSvc:  gitCredSvc,
+		hub:         hub,
+		auditSvc:    auditSvc,
+	}
+}
+
+// audit is a nil-safe wrapper for audit logging. Extracts user ID + IP from request context.
+func (h *Handler) audit(r *http.Request, action, resourceType, resourceID string, details map[string]any) {
+	if h.auditSvc != nil {
+		userID := middleware.UserIDFromContext(r.Context())
+		h.auditSvc.Log(userID, r.RemoteAddr, action, resourceType, resourceID, details)
 	}
 }
 

@@ -296,14 +296,43 @@ func (h *TaskHandler) HandleDeployTask(ctx context.Context, t *asynq.Task) error
 		slog.Info("container health check passed", "container", containerName)
 	}
 
-	// Add proxy route if the application has domains
+	// Add proxy route if the application has domains (with full config + features)
 	domains, err := h.Queries.ListDomainsByApplication(ctx, applicationID)
 	if err == nil {
 		for _, domain := range domains {
+			port := app.Port
+			if domain.ContainerPort.Valid {
+				port = domain.ContainerPort.Int32
+			}
+
+			// Load route features for this domain
+			var features []proxy.RouteFeature
+			dbFeatures, fErr := h.Queries.ListRouteFeaturesByDomain(ctx, domain.ID)
+			if fErr == nil {
+				for _, f := range dbFeatures {
+					var cfg map[string]any
+					if len(f.Config) > 0 {
+						json.Unmarshal(f.Config, &cfg)
+					}
+					features = append(features, proxy.RouteFeature{
+						Type:    f.FeatureType,
+						Config:  cfg,
+						Enabled: f.Enabled,
+					})
+				}
+			}
+
 			h.Proxy.AddRoute(ctx, proxy.RouteConfig{
-				Hostname:  domain.Hostname,
-				TargetURL: fmt.Sprintf("http://%s:%d", containerName, app.Port),
-				TLS:       domain.SslEnabled,
+				Hostname:       domain.Hostname,
+				TargetURL:      fmt.Sprintf("http://%s:%d", containerName, port),
+				TLS:            domain.SslEnabled,
+				ForceHTTPS:     domain.ForceHttps,
+				SSLMode:        domain.SslMode,
+				SSLProvider:    domain.SslProvider.String,
+				CertPath:       domain.CertPath.String,
+				KeyPath:        domain.KeyPath.String,
+				Features:       features,
+				AdvancedConfig: domain.AdvancedConfig,
 			})
 		}
 	}

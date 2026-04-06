@@ -84,6 +84,14 @@ func (m *MockContainerRuntime) ContainerStats(_ context.Context, _ string) (*run
 	return &runtime.ContainerResourceStats{}, nil
 }
 
+func (m *MockContainerRuntime) ContainerEvents(_ context.Context, _ map[string][]string) (<-chan runtime.ContainerEvent, <-chan error) {
+	ch := make(chan runtime.ContainerEvent)
+	errCh := make(chan error)
+	close(ch)
+	close(errCh)
+	return ch, errCh
+}
+
 // MockProxyManager implements proxy.ProxyManager for testing.
 type MockProxyManager struct {
 	mu            sync.Mutex
@@ -105,7 +113,7 @@ func (m *MockProxyManager) RemoveRoute(_ context.Context, hostname string) error
 	return nil
 }
 
-func (m *MockProxyManager) SetupTLS(_ context.Context, _ string) error { return nil }
+func (m *MockProxyManager) SetupTLS(_ context.Context, _, _, _, _ string) error { return nil }
 func (m *MockProxyManager) ListRoutes(_ context.Context) ([]proxy.RouteConfig, error) {
 	return nil, nil
 }

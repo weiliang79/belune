@@ -52,6 +52,11 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		MaxAge:   int(24 * time.Hour / time.Second),
 	})
 
+	if h.auditSvc != nil {
+		uid := uuidToString(result.User.ID)
+		h.auditSvc.Log(uid, r.RemoteAddr, "login", "user", uid, nil)
+	}
+
 	writeJSON(w, http.StatusOK, result)
 }
 
@@ -71,6 +76,8 @@ func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
 		SameSite: http.SameSiteLaxMode,
 		MaxAge:   -1,
 	})
+
+	h.audit(r, "logout", "user", "", nil)
 
 	writeJSON(w, http.StatusOK, map[string]string{"status": "logged out"})
 }

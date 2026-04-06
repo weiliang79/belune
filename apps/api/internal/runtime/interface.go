@@ -60,4 +60,14 @@ type ContainerRuntime interface {
 	PruneImages(ctx context.Context) error
 	PruneVolumes(ctx context.Context) error
 	ContainerStats(ctx context.Context, containerID string) (*ContainerResourceStats, error)
+	ContainerEvents(ctx context.Context, filters map[string][]string) (<-chan ContainerEvent, <-chan error)
+}
+
+// ContainerEvent represents a Docker container lifecycle event.
+type ContainerEvent struct {
+	ContainerID   string
+	ContainerName string
+	Status        string // start, stop, die, restart, oom
+	Labels        map[string]string
+	Time          time.Time
 }

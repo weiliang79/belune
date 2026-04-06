@@ -5,9 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"strings"
 	"time"
 
 	"github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/api/types/events"
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/api/types/network"
 	"github.com/docker/go-connections/nat"
@@ -199,4 +201,51 @@ func (c *Client) ContainerStats(ctx context.Context, containerID string) (*runti
 		NetworkRxBytes: rxBytes,
 		NetworkTxBytes: txBytes,
 	}, nil
+}
+
+func (c *Client) ContainerEvents(ctx context.Context, eventFilters map[string][]string) (<-chan runtime.ContainerEvent, <-chan error) {
+	outCh := make(chan runtime.ContainerEvent, 64)
+	errCh := make(chan error, 1)
+
+	f := filters.NewArgs()
+	f.Add("type", string(events.ContainerEventType))
+	for key, vals := range eventFilters {
+		for _, v := range vals {
+			f.Add(key, v)
+		}
+	}
+
+	msgCh, dockerErrCh := c.cli.Events(ctx, events.ListOptions{Filters: f})
+
+	go func() {
+		defer close(outCh)
+		defer close(errCh)
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case err, ok := <-dockerErrCh:
+				if !ok {
+					return
+				}
+				errCh <- err
+				return
+			case msg, ok := <-msgCh:
+				if !ok {
+					return
+				}
+				name := msg.Actor.Attributes["name"]
+				name = strings.TrimPrefix(name, "/")
+				outCh <- runtime.ContainerEvent{
+					ContainerID:   msg.Actor.ID,
+					ContainerName: name,
+					Status:        string(msg.Action),
+					Labels:        msg.Actor.Attributes,
+					Time:          time.Unix(msg.Time, msg.TimeNano),
+				}
+			}
+		}
+	}()
+
+	return outCh, errCh
 }

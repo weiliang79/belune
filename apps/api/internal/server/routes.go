@@ -47,6 +47,7 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService,
 			r.Use(httprate.LimitByIP(100, time.Minute))
 		}
 
+		r.Get("/api/ws", h.HandleWebSocket)
 		r.Post("/api/auth/logout", h.Logout)
 		r.Get("/api/auth/me", h.Me)
 		r.Put("/api/auth/password", h.ChangeOwnPassword)
@@ -110,7 +111,13 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService,
 		// Domains
 		r.Get("/api/projects/{projectId}/applications/{applicationId}/domains", h.ListDomains)
 		r.Post("/api/projects/{projectId}/applications/{applicationId}/domains", h.AddDomain)
+		r.Put("/api/projects/{projectId}/applications/{applicationId}/domains/{domainId}", h.UpdateDomain)
 		r.Delete("/api/projects/{projectId}/applications/{applicationId}/domains/{domainId}", h.RemoveDomain)
+
+		// Domain route features
+		r.Get("/api/projects/{projectId}/applications/{applicationId}/domains/{domainId}/features", h.ListRouteFeatures)
+		r.Put("/api/projects/{projectId}/applications/{applicationId}/domains/{domainId}/features", h.UpsertRouteFeature)
+		r.Delete("/api/projects/{projectId}/applications/{applicationId}/domains/{domainId}/features/{featureId}", h.DeleteRouteFeature)
 
 		// Project environment variables
 		r.Get("/api/projects/{projectId}/env", h.ListProjectEnvVars)
@@ -140,6 +147,9 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService,
 			// Global request logs (admin only)
 			r.Get("/api/requests", h.ListAllRequestLogs)
 			r.Get("/api/requests/stream", h.StreamAllRequestLogs)
+
+			// Audit logs (admin only)
+			r.Get("/api/audit-logs", h.ListAuditLogs)
 		})
 
 		// Build (standalone build without deploy)

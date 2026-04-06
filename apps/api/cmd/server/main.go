@@ -20,6 +20,7 @@ import (
 	"github.com/ungweiliang/selfhost-paas/internal/build/image"
 	"github.com/ungweiliang/selfhost-paas/internal/build/railpack"
 	"github.com/ungweiliang/selfhost-paas/internal/config"
+	"github.com/ungweiliang/selfhost-paas/internal/eventwatcher"
 	"github.com/ungweiliang/selfhost-paas/internal/logcollector"
 	"github.com/ungweiliang/selfhost-paas/internal/logtailer"
 	"github.com/ungweiliang/selfhost-paas/internal/migrations"
@@ -30,6 +31,7 @@ import (
 	"github.com/ungweiliang/selfhost-paas/internal/store"
 	"github.com/ungweiliang/selfhost-paas/internal/store/generated"
 	"github.com/ungweiliang/selfhost-paas/internal/worker"
+	"github.com/ungweiliang/selfhost-paas/internal/ws"
 )
 
 func main() {
@@ -166,8 +168,45 @@ func main() {
 		defer scheduler.Shutdown()
 	}
 
+	// WebSocket hub
+	hub := ws.NewHub()
+	hubCtx, cancelHub := context.WithCancel(context.Background())
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		hub.Run(hubCtx)
+	}()
+
+	// Redis → WebSocket adapters
+	adapterCtx, cancelAdapters := context.WithCancel(context.Background())
+	redisAdapter := ws.NewRedisAdapter(rdb, hub)
+	wg.Add(4)
+	go func() { defer wg.Done(); redisAdapter.RunBuildLogAdapter(adapterCtx) }()
+	go func() { defer wg.Done(); redisAdapter.RunHostMetricsAdapter(adapterCtx) }()
+	go func() { defer wg.Done(); redisAdapter.RunRequestLogAdapter(adapterCtx) }()
+	go func() { defer wg.Done(); redisAdapter.RunAppLogAdapter(adapterCtx) }()
+
+	// Docker event watcher for real-time container status
+	broadcaster := ws.NewContainerStatusBroadcaster(hub)
+	eventWatcher := eventwatcher.New(dockerClient, queries, broadcaster)
+	watcherCtx, cancelWatcher := context.WithCancel(context.Background())
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		eventWatcher.Run(watcherCtx)
+	}()
+
+	// Audit logging service (non-blocking, buffered)
+	auditSvc := service.NewAuditService(queries)
+	auditCtx, cancelAudit := context.WithCancel(context.Background())
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		auditSvc.Run(auditCtx)
+	}()
+
 	// HTTP server
-	srv := server.New(cfg, db, queries, asynqClient, dockerClient, caddyClient, rdb)
+	srv := server.New(cfg, db, queries, asynqClient, dockerClient, caddyClient, rdb, hub, auditSvc)
 
 	httpServer := &http.Server{
 		Addr:         fmt.Sprintf(":%d", cfg.Port),
@@ -201,6 +240,10 @@ func main() {
 	}
 
 	// Cancel background goroutines
+	cancelWatcher()
+	cancelAdapters()
+	cancelHub()
+	cancelAudit()
 	cancelMetrics()
 	cancelTailer()
 	cancelCollector()

@@ -50,5 +50,7 @@ func (h *Handler) UpdateSettings(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	h.audit(r, "update_settings", "settings", "", nil)
+
 	writeJSON(w, http.StatusOK, map[string]string{"status": "updated"})
 }

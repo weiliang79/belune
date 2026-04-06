@@ -220,6 +220,8 @@ func (h *Handler) CreateDatabase(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	h.audit(r, "create_database", "database", uuidToString(db.ID), map[string]any{"name": req.Name, "type": req.Type})
+
 	writeJSON(w, http.StatusAccepted, db)
 }
 
@@ -298,6 +300,8 @@ func (h *Handler) DeleteDatabase(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "failed to delete database")
 		return
 	}
+
+	h.audit(r, "delete_database", "database", databaseID, nil)
 
 	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
 }

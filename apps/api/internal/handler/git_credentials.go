@@ -62,6 +62,8 @@ func (h *Handler) CreateGitCredential(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	h.audit(r, "create_git_credential", "git_credential", uuidToString(cred.ID), map[string]any{"name": req.Name, "provider": req.Provider})
+
 	writeJSON(w, http.StatusCreated, cred)
 }
 
@@ -94,6 +96,8 @@ func (h *Handler) UpdateGitCredential(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	h.audit(r, "update_git_credential", "git_credential", credID, nil)
+
 	writeJSON(w, http.StatusOK, cred)
 }
 
@@ -109,6 +113,8 @@ func (h *Handler) DeleteGitCredential(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "failed to delete git credential")
 		return
 	}
+
+	h.audit(r, "delete_git_credential", "git_credential", credID, nil)
 
 	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
 }
