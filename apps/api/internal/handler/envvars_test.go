@@ -52,3 +52,41 @@ func TestUpdateAndListEnvVars(t *testing.T) {
 		}
 	}
 }
+
+func TestUpdateEnvVars_InvalidKey(t *testing.T) {
+	resetDB(t)
+	token := env.SetupAdmin(t, "admin@test.com", "password123")
+	project := env.CreateProject(t, token, "Test Project", "test-project")
+	projectID := extractID(project["id"])
+	app := env.CreateApplication(t, token, projectID, map[string]any{
+		"name": "Env App", "type": "git", "build_type": "dockerfile",
+	})
+	appID := extractID(app["id"])
+
+	// Invalid key: starts with a digit
+	resp := env.DoRequest(t, "PUT", fmt.Sprintf("/api/projects/%s/applications/%s/env", projectID, appID), map[string]any{
+		"vars": []map[string]any{
+			{"key": "1INVALID", "value": "test", "is_secret": false},
+		},
+	}, testutil.AuthHeader(token))
+	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+	resp.Body.Close()
+
+	// Invalid key: contains special chars
+	resp = env.DoRequest(t, "PUT", fmt.Sprintf("/api/projects/%s/applications/%s/env", projectID, appID), map[string]any{
+		"vars": []map[string]any{
+			{"key": "MY-VAR", "value": "test", "is_secret": false},
+		},
+	}, testutil.AuthHeader(token))
+	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+	resp.Body.Close()
+
+	// Valid key: normal env var names
+	resp = env.DoRequest(t, "PUT", fmt.Sprintf("/api/projects/%s/applications/%s/env", projectID, appID), map[string]any{
+		"vars": []map[string]any{
+			{"key": "_VALID_KEY_123", "value": "test", "is_secret": false},
+		},
+	}, testutil.AuthHeader(token))
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	resp.Body.Close()
+}

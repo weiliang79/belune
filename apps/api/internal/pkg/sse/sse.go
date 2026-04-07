@@ -21,6 +21,7 @@ func NewWriter(w http.ResponseWriter) (*Writer, error) {
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("X-Deprecated", "use WebSocket /api/ws")
 	w.WriteHeader(http.StatusOK)
 	flusher.Flush()
 

@@ -24,7 +24,9 @@ func (h *Handler) HealthCheck(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Redis
-	if err := h.rdb.Ping(ctx).Err(); err != nil {
+	if h.rdb == nil {
+		checks["redis"] = "not configured"
+	} else if err := h.rdb.Ping(ctx).Err(); err != nil {
 		checks["redis"] = "unhealthy: " + err.Error()
 	} else {
 		checks["redis"] = "ok"
@@ -39,7 +41,7 @@ func (h *Handler) HealthCheck(w http.ResponseWriter, r *http.Request) {
 	}
 
 	healthy := checks["database"] == "ok" &&
-		checks["redis"] == "ok" &&
+		(checks["redis"] == "ok" || checks["redis"] == "not configured") &&
 		strings.HasPrefix(checks["docker"], "ok")
 
 	status := http.StatusOK

@@ -61,6 +61,80 @@ func TestRemoveDomain(t *testing.T) {
 	assert.Equal(t, "remove.example.com", env.Proxy.RemovedRoutes[0])
 }
 
+func TestAddDomainWithConfig(t *testing.T) {
+	resetDB(t)
+	token := env.SetupAdmin(t, "admin@test.com", "password123")
+	project := env.CreateProject(t, token, "Test Project", "test-project")
+	projectID := extractID(project["id"])
+	app := env.CreateApplication(t, token, projectID, map[string]any{
+		"name": "Domain App", "type": "git", "build_type": "dockerfile",
+	})
+	appID := extractID(app["id"])
+
+	resp := env.DoRequest(t, "POST", fmt.Sprintf("/api/projects/%s/applications/%s/domains", projectID, appID), map[string]any{
+		"hostname":       "config.example.com",
+		"ssl_enabled":    true,
+		"container_port": 3000,
+		"force_https":    true,
+		"ssl_mode":       "automatic",
+	}, testutil.AuthHeader(token))
+	assert.Equal(t, http.StatusCreated, resp.StatusCode)
+	result := testutil.ReadJSON(t, resp)
+	assert.Equal(t, "config.example.com", result["hostname"])
+	assert.Equal(t, true, result["force_https"])
+	assert.Equal(t, "automatic", result["ssl_mode"])
+
+	// Verify proxy received the config
+	require.Len(t, env.Proxy.AddedRoutes, 1)
+	assert.Equal(t, true, env.Proxy.AddedRoutes[0].ForceHTTPS)
+}
+
+func TestUpdateDomain(t *testing.T) {
+	resetDB(t)
+	token := env.SetupAdmin(t, "admin@test.com", "password123")
+	project := env.CreateProject(t, token, "Test Project", "test-project")
+	projectID := extractID(project["id"])
+	app := env.CreateApplication(t, token, projectID, map[string]any{
+		"name": "Domain App", "type": "git", "build_type": "dockerfile",
+	})
+	appID := extractID(app["id"])
+
+	// Add domain
+	resp := env.DoRequest(t, "POST", fmt.Sprintf("/api/projects/%s/applications/%s/domains", projectID, appID), map[string]any{
+		"hostname": "update.example.com",
+	}, testutil.AuthHeader(token))
+	domain := testutil.ReadJSON(t, resp)
+	domainID := extractID(domain["id"])
+
+	// Update domain
+	resp = env.DoRequest(t, "PUT", fmt.Sprintf("/api/projects/%s/applications/%s/domains/%s", projectID, appID, domainID), map[string]any{
+		"hostname":    "update.example.com",
+		"force_https": true,
+		"ssl_mode":    "off",
+	}, testutil.AuthHeader(token))
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	updated := testutil.ReadJSON(t, resp)
+	assert.Equal(t, "off", updated["ssl_mode"])
+}
+
+func TestAddDomain_InvalidSSLMode(t *testing.T) {
+	resetDB(t)
+	token := env.SetupAdmin(t, "admin@test.com", "password123")
+	project := env.CreateProject(t, token, "Test Project", "test-project")
+	projectID := extractID(project["id"])
+	app := env.CreateApplication(t, token, projectID, map[string]any{
+		"name": "Domain App", "type": "git", "build_type": "dockerfile",
+	})
+	appID := extractID(app["id"])
+
+	resp := env.DoRequest(t, "POST", fmt.Sprintf("/api/projects/%s/applications/%s/domains", projectID, appID), map[string]any{
+		"hostname": "bad.example.com",
+		"ssl_mode": "invalid_mode",
+	}, testutil.AuthHeader(token))
+	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+	resp.Body.Close()
+}
+
 func TestListDomains(t *testing.T) {
 	resetDB(t)
 	token := env.SetupAdmin(t, "admin@test.com", "password123")
