@@ -19,7 +19,8 @@ import {
 } from "@/components/ui/alert-dialog";
 import type { Deployment } from "@/lib/types";
 import { formatDate, formatDuration } from "@/lib/utils/format";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
+import { useChannel } from "@/lib/hooks/use-websocket";
 
 export const Route = createFileRoute(
   "/_app/projects/$projectId/applications/$applicationId/deployments",
@@ -47,34 +48,23 @@ function useBuildLogStream(
   const [lines, setLines] = useState<string[]>([]);
   const queryClient = useQueryClient();
 
-  useEffect(() => {
-    if (!isBuilding) return;
-
-    const url = `/api/projects/${projectId}/applications/${applicationId}/deployments/${deploymentId}/build-logs`;
-    const source = new EventSource(url, { withCredentials: true });
-
-    source.onmessage = (event) => {
-      setLines((prev) => [...prev, event.data]);
-    };
-
-    source.addEventListener("done", () => {
-      source.close();
-      queryClient.invalidateQueries({
-        queryKey: queryKeys.deployments.all(projectId, applicationId),
-      });
-    });
-
-    source.addEventListener("error", (event) => {
-      if (event instanceof MessageEvent) {
-        setLines((prev) => [...prev, `Error: ${event.data}`]);
+  const handleMessage = useCallback(
+    (event: string, data: unknown) => {
+      if (event === "done") {
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.deployments.all(projectId, applicationId),
+        });
+        return;
       }
-      source.close();
-    });
+      if (typeof data === "string") {
+        setLines((prev) => [...prev, data]);
+      }
+    },
+    [queryClient, projectId, applicationId],
+  );
 
-    return () => {
-      source.close();
-    };
-  }, [projectId, applicationId, deploymentId, isBuilding, queryClient]);
+  const channel = isBuilding ? `build-logs:${deploymentId}` : null;
+  useChannel(channel, handleMessage);
 
   return lines;
 }

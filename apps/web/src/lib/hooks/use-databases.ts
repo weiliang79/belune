@@ -36,7 +36,9 @@ export function useDeleteDatabase(projectId: string) {
   return useMutation({
     mutationFn: (databaseId: string) =>
       databasesApi.deleteDatabase(projectId, databaseId),
-    onSuccess: () =>
-      qc.invalidateQueries({ queryKey: queryKeys.databases.all(projectId) }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.databases.all(projectId) });
+      qc.invalidateQueries({ queryKey: queryKeys.projects.detail(projectId) });
+    },
   });
 }

@@ -13,6 +13,10 @@ import {
 } from "@/lib/hooks/use-applications";
 import { useProject } from "@/lib/hooks/use-projects";
 import { useAppMetricsStream } from "@/lib/hooks/use-metrics";
+import { useChannel } from "@/lib/hooks/use-websocket";
+import { useQueryClient } from "@tanstack/react-query";
+import { queryKeys } from "@/lib/hooks/query-keys";
+import { useCallback } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -45,6 +49,19 @@ function ApplicationLayout() {
   const { data: application, isLoading } = useApplication(projectId, applicationId);
   const { data: project } = useProject(projectId);
   const appMetrics = useAppMetricsStream(projectId, applicationId, true);
+  const qc = useQueryClient();
+
+  // Subscribe to real-time container status changes
+  const handleContainerStatus = useCallback(
+    () => {
+      qc.invalidateQueries({
+        queryKey: queryKeys.applications.detail(projectId, applicationId),
+      });
+    },
+    [qc, projectId, applicationId],
+  );
+  useChannel(`container-status:${applicationId}`, handleContainerStatus);
+
   const deploy = useDeployApplication(projectId, applicationId);
   const stop = useStopApplication(projectId, applicationId);
   const start = useStartApplication(projectId, applicationId);

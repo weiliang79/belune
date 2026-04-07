@@ -16,6 +16,10 @@ export function SettingsNav() {
           { to: "/settings/team", label: "Team" },
         ]
       : []),
+    { to: "/settings/git-credentials", label: "Git Credentials" },
+    ...(isAdmin
+      ? [{ to: "/settings/audit", label: "Audit Log" }]
+      : []),
   ];
 
   return (

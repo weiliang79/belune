@@ -54,8 +54,10 @@ export function useDeleteApplication(projectId: string) {
   return useMutation({
     mutationFn: (applicationId: string) =>
       applicationsApi.deleteApplication(projectId, applicationId),
-    onSuccess: () =>
-      qc.invalidateQueries({ queryKey: queryKeys.applications.all(projectId) }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.applications.all(projectId) });
+      qc.invalidateQueries({ queryKey: queryKeys.projects.detail(projectId) });
+    },
   });
 }
 

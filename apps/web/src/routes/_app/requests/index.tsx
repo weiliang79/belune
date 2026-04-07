@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useCallback, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useRequestLogs } from "@/lib/hooks/use-request-logs";
-import { useSSEWithReconnect } from "@/lib/hooks/use-sse";
+import { useChannel } from "@/lib/hooks/use-websocket";
 import { useProjects } from "@/lib/hooks/use-projects";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -155,9 +155,9 @@ function RequestRow({ log }: { log: RequestLog }) {
 function LiveRequestsView({ filters }: { filters: Filters }) {
   const [logs, setLogs] = useState<RequestLog[]>([]);
 
-  const handleMessage = useCallback((data: string) => {
+  const handleMessage = useCallback((_event: string, data: unknown) => {
     try {
-      const parsed = JSON.parse(data) as RequestLog;
+      const parsed = (typeof data === "string" ? JSON.parse(data) : data) as RequestLog;
       // Apply client-side status filter for live view
       const { min, max } = statusRangeToMinMax(filters.statusRange);
       if (min != null && parsed.status_code < min) return;
@@ -169,7 +169,7 @@ function LiveRequestsView({ filters }: { filters: Filters }) {
     }
   }, [filters.statusRange, filters.applicationId]);
 
-  const { connected } = useSSEWithReconnect("/api/requests/stream", handleMessage);
+  const { connected } = useChannel("requests:all", handleMessage);
 
   return (
     <div className="space-y-3">

@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useState } from "react";
 import { queryKeys } from "./query-keys";
-import { useSSEWithReconnect } from "./use-sse";
+import { useChannel } from "./use-websocket";
 import * as metricsApi from "@/lib/api/metrics";
 import type { HostMetricPoint, AppMetricPoint } from "@/lib/types";
 
@@ -35,16 +35,20 @@ export function useHostHistoricalMetrics(range: string, enabled = true) {
 export function useHostMetricsStream(enabled: boolean) {
   const [data, setData] = useState<HostMetricPoint[]>([]);
 
-  const handleMessage = useCallback((raw: string) => {
-    const point: HostMetricPoint = JSON.parse(raw);
-    setData((prev) => {
-      const cutoff = new Date(Date.now() - STREAM_WINDOW_MS).toISOString();
-      return [...prev, point].filter((p) => p.recorded_at >= cutoff);
-    });
+  const handleMessage = useCallback((_event: string, raw: unknown) => {
+    try {
+      const point = (typeof raw === "string" ? JSON.parse(raw) : raw) as HostMetricPoint;
+      setData((prev) => {
+        const cutoff = new Date(Date.now() - STREAM_WINDOW_MS).toISOString();
+        return [...prev, point].filter((p) => p.recorded_at >= cutoff);
+      });
+    } catch {
+      // ignore
+    }
   }, []);
 
-  const url = enabled ? "/api/metrics/host/stream" : null;
-  const { connected } = useSSEWithReconnect(url, handleMessage);
+  const channel = enabled ? "metrics:host" : null;
+  const { connected } = useChannel(channel, handleMessage);
 
   useEffect(() => {
     if (!enabled) setData([]);
@@ -60,18 +64,20 @@ export function useAppMetricsStream(
 ) {
   const [data, setData] = useState<AppMetricPoint[]>([]);
 
-  const handleMessage = useCallback((raw: string) => {
-    const point: AppMetricPoint = JSON.parse(raw);
-    setData((prev) => {
-      const cutoff = new Date(Date.now() - STREAM_WINDOW_MS).toISOString();
-      return [...prev, point].filter((p) => p.recorded_at >= cutoff);
-    });
+  const handleMessage = useCallback((_event: string, raw: unknown) => {
+    try {
+      const point = (typeof raw === "string" ? JSON.parse(raw) : raw) as AppMetricPoint;
+      setData((prev) => {
+        const cutoff = new Date(Date.now() - STREAM_WINDOW_MS).toISOString();
+        return [...prev, point].filter((p) => p.recorded_at >= cutoff);
+      });
+    } catch {
+      // ignore
+    }
   }, []);
 
-  const url = enabled
-    ? `/api/projects/${projectId}/applications/${applicationId}/metrics/stream`
-    : null;
-  const { connected } = useSSEWithReconnect(url, handleMessage);
+  const channel = enabled ? `metrics:app:${applicationId}` : null;
+  const { connected } = useChannel(channel, handleMessage);
 
   useEffect(() => {
     if (!enabled) setData([]);

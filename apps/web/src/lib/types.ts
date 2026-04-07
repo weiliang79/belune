@@ -158,3 +158,45 @@ export interface Database {
   credentials?: Record<string, string>;
   connection_string?: string;
 }
+
+export interface GitCredential {
+  id: string;
+  name: string;
+  provider: "github" | "gitlab" | "bitbucket" | "generic";
+  username: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface RouteFeature {
+  id: string;
+  domain_id: string;
+  feature_type: "basic_auth" | "redirect" | "headers" | "ip_allowlist" | "rate_limit";
+  config: Record<string, unknown>;
+  enabled: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DomainExpanded extends Domain {
+  container_port?: number | null;
+  force_https: boolean;
+  ssl_mode: string;
+  ssl_provider?: string | null;
+  cert_path?: string | null;
+  key_path?: string | null;
+  advanced_config?: unknown;
+  features?: RouteFeature[];
+}
+
+export interface AuditLog {
+  id: string;
+  user_id: string | null;
+  action: string;
+  resource_type: string;
+  resource_id: string | null;
+  details: Record<string, unknown> | null;
+  ip_address: string | null;
+  created_at: string;
+  user_email?: string;
+}

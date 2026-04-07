@@ -20,6 +20,8 @@ import { Route as AppProjectsIndexRouteImport } from './routes/_app/projects/ind
 import { Route as AppDeploymentsIndexRouteImport } from './routes/_app/deployments/index'
 import { Route as AppSettingsTeamRouteImport } from './routes/_app/settings/team'
 import { Route as AppSettingsServerRouteImport } from './routes/_app/settings/server'
+import { Route as AppSettingsGitCredentialsRouteImport } from './routes/_app/settings/git-credentials'
+import { Route as AppSettingsAuditRouteImport } from './routes/_app/settings/audit'
 import { Route as AppProjectsNewRouteImport } from './routes/_app/projects/new'
 import { Route as AppProjectsProjectIdRouteImport } from './routes/_app/projects/$projectId'
 import { Route as AppProjectsProjectIdIndexRouteImport } from './routes/_app/projects/$projectId/index'
@@ -87,6 +89,17 @@ const AppSettingsTeamRoute = AppSettingsTeamRouteImport.update({
 const AppSettingsServerRoute = AppSettingsServerRouteImport.update({
   id: '/settings/server',
   path: '/settings/server',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppSettingsGitCredentialsRoute =
+  AppSettingsGitCredentialsRouteImport.update({
+    id: '/settings/git-credentials',
+    path: '/settings/git-credentials',
+    getParentRoute: () => AppRoute,
+  } as any)
+const AppSettingsAuditRoute = AppSettingsAuditRouteImport.update({
+  id: '/settings/audit',
+  path: '/settings/audit',
   getParentRoute: () => AppRoute,
 } as any)
 const AppProjectsNewRoute = AppProjectsNewRouteImport.update({
@@ -178,6 +191,8 @@ export interface FileRoutesByFullPath {
   '/dashboard': typeof AppDashboardRoute
   '/projects/$projectId': typeof AppProjectsProjectIdRouteWithChildren
   '/projects/new': typeof AppProjectsNewRoute
+  '/settings/audit': typeof AppSettingsAuditRoute
+  '/settings/git-credentials': typeof AppSettingsGitCredentialsRoute
   '/settings/server': typeof AppSettingsServerRoute
   '/settings/team': typeof AppSettingsTeamRoute
   '/deployments/': typeof AppDeploymentsIndexRoute
@@ -203,6 +218,8 @@ export interface FileRoutesByTo {
   '/setup': typeof SetupRoute
   '/dashboard': typeof AppDashboardRoute
   '/projects/new': typeof AppProjectsNewRoute
+  '/settings/audit': typeof AppSettingsAuditRoute
+  '/settings/git-credentials': typeof AppSettingsGitCredentialsRoute
   '/settings/server': typeof AppSettingsServerRoute
   '/settings/team': typeof AppSettingsTeamRoute
   '/deployments': typeof AppDeploymentsIndexRoute
@@ -230,6 +247,8 @@ export interface FileRoutesById {
   '/_app/dashboard': typeof AppDashboardRoute
   '/_app/projects/$projectId': typeof AppProjectsProjectIdRouteWithChildren
   '/_app/projects/new': typeof AppProjectsNewRoute
+  '/_app/settings/audit': typeof AppSettingsAuditRoute
+  '/_app/settings/git-credentials': typeof AppSettingsGitCredentialsRoute
   '/_app/settings/server': typeof AppSettingsServerRoute
   '/_app/settings/team': typeof AppSettingsTeamRoute
   '/_app/deployments/': typeof AppDeploymentsIndexRoute
@@ -258,6 +277,8 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/projects/$projectId'
     | '/projects/new'
+    | '/settings/audit'
+    | '/settings/git-credentials'
     | '/settings/server'
     | '/settings/team'
     | '/deployments/'
@@ -283,6 +304,8 @@ export interface FileRouteTypes {
     | '/setup'
     | '/dashboard'
     | '/projects/new'
+    | '/settings/audit'
+    | '/settings/git-credentials'
     | '/settings/server'
     | '/settings/team'
     | '/deployments'
@@ -309,6 +332,8 @@ export interface FileRouteTypes {
     | '/_app/dashboard'
     | '/_app/projects/$projectId'
     | '/_app/projects/new'
+    | '/_app/settings/audit'
+    | '/_app/settings/git-credentials'
     | '/_app/settings/server'
     | '/_app/settings/team'
     | '/_app/deployments/'
@@ -413,6 +438,20 @@ declare module '@tanstack/react-router' {
       path: '/settings/server'
       fullPath: '/settings/server'
       preLoaderRoute: typeof AppSettingsServerRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/settings/git-credentials': {
+      id: '/_app/settings/git-credentials'
+      path: '/settings/git-credentials'
+      fullPath: '/settings/git-credentials'
+      preLoaderRoute: typeof AppSettingsGitCredentialsRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/settings/audit': {
+      id: '/_app/settings/audit'
+      path: '/settings/audit'
+      fullPath: '/settings/audit'
+      preLoaderRoute: typeof AppSettingsAuditRouteImport
       parentRoute: typeof AppRoute
     }
     '/_app/projects/new': {
@@ -574,6 +613,8 @@ interface AppRouteChildren {
   AppDashboardRoute: typeof AppDashboardRoute
   AppProjectsProjectIdRoute: typeof AppProjectsProjectIdRouteWithChildren
   AppProjectsNewRoute: typeof AppProjectsNewRoute
+  AppSettingsAuditRoute: typeof AppSettingsAuditRoute
+  AppSettingsGitCredentialsRoute: typeof AppSettingsGitCredentialsRoute
   AppSettingsServerRoute: typeof AppSettingsServerRoute
   AppSettingsTeamRoute: typeof AppSettingsTeamRoute
   AppDeploymentsIndexRoute: typeof AppDeploymentsIndexRoute
@@ -586,6 +627,8 @@ const AppRouteChildren: AppRouteChildren = {
   AppDashboardRoute: AppDashboardRoute,
   AppProjectsProjectIdRoute: AppProjectsProjectIdRouteWithChildren,
   AppProjectsNewRoute: AppProjectsNewRoute,
+  AppSettingsAuditRoute: AppSettingsAuditRoute,
+  AppSettingsGitCredentialsRoute: AppSettingsGitCredentialsRoute,
   AppSettingsServerRoute: AppSettingsServerRoute,
   AppSettingsTeamRoute: AppSettingsTeamRoute,
   AppDeploymentsIndexRoute: AppDeploymentsIndexRoute,

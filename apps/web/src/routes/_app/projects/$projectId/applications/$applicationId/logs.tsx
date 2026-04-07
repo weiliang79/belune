@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useSSEWithReconnect } from "@/lib/hooks/use-sse";
+import { useChannel } from "@/lib/hooks/use-websocket";
 import { useApplicationLogs } from "@/lib/hooks/use-application-logs";
 
 export const Route = createFileRoute(
@@ -42,12 +42,13 @@ function LiveLogs({
   const [follow, setFollow] = useState(true);
   const scrollRef = useRef<HTMLPreElement>(null);
 
-  const handleMessage = useCallback((data: string) => {
-    setLogs((prev) => [...prev, data].slice(-5000));
+  const handleMessage = useCallback((_event: string, data: unknown) => {
+    if (typeof data === "string") {
+      setLogs((prev) => [...prev, data].slice(-5000));
+    }
   }, []);
 
-  const url = `/api/projects/${projectId}/applications/${applicationId}/logs?follow=true`;
-  const { connected } = useSSEWithReconnect(url, handleMessage);
+  const { connected } = useChannel(`app-logs:${applicationId}`, handleMessage);
 
   useEffect(() => {
     if (follow && scrollRef.current) {
