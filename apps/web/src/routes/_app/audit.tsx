@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatDate } from "@/lib/utils/format";
 
-export const Route = createFileRoute("/_app/settings/audit")({
+export const Route = createFileRoute("/_app/audit")({
   component: AuditLogPage,
   errorComponent: RouteError,
 });

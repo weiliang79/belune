@@ -19,7 +19,6 @@ export function createApplication(
     source_image?: string;
     dockerfile_path?: string;
     build_type?: string;
-    port?: number;
   },
 ) {
   return api.post<Application>(`/projects/${projectId}/applications`, data);
@@ -40,7 +39,6 @@ export function updateApplication(
     git_token?: string;
     git_credential_id?: string;
     health_check_path?: string;
-    port?: number;
   },
 ) {
   return api.put<Application>(`/projects/${projectId}/applications/${applicationId}`, data);

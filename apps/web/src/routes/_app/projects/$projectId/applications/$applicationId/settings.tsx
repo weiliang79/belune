@@ -67,7 +67,6 @@ function ApplicationSettingsPage() {
       git_token: "",
       git_credential_id: (application as Record<string, unknown>)?.git_credential_id as string ?? "",
       health_check_path: application?.health_check_path ?? "",
-      port: application?.port ?? 8080,
     },
     onSubmit: async ({ value }) => {
       toast.promise(
@@ -82,7 +81,6 @@ function ApplicationSettingsPage() {
           git_token: value.git_token || undefined,
           git_credential_id: value.git_credential_id || undefined,
           health_check_path: value.health_check_path,
-          port: value.port,
         }),
         {
           loading: "Saving...",
@@ -372,25 +370,6 @@ function ApplicationSettingsPage() {
                     />
                     <p className="text-muted-foreground text-xs">
                       HTTP path polled after deploy to confirm readiness. Leave empty to skip.
-                    </p>
-                  </div>
-                )}
-              />
-              <form.Field
-                name="port"
-                children={(field) => (
-                  <div className="space-y-2">
-                    <Label>Container Port</Label>
-                    <Input
-                      type="number"
-                      min="1"
-                      max="65535"
-                      value={field.state.value}
-                      onBlur={field.handleBlur}
-                      onChange={(e) => field.handleChange(parseInt(e.target.value) || 8080)}
-                    />
-                    <p className="text-muted-foreground text-xs">
-                      Port the container listens on (default 8080).
                     </p>
                   </div>
                 )}

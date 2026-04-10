@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
-export const Route = createFileRoute("/_app/settings/")({
+export const Route = createFileRoute("/_app/account")({
   component: SettingsPage,
   errorComponent: RouteError,
 });

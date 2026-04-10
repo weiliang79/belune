@@ -69,9 +69,7 @@ function DomainsPage() {
     const trimmed = hostname.trim();
     if (!trimmed) return;
     if (
-      !/^([a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$/.test(
-        trimmed,
-      )
+      !/^([a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$/.test(trimmed)
     ) {
       toast.error("Invalid hostname format");
       return;
@@ -130,12 +128,12 @@ function DomainsPage() {
               />
             </div>
             <div className="space-y-2">
-              <Label>Container Port Override</Label>
+              <Label>Container Port</Label>
               <Input
                 type="number"
                 min="1"
                 max="65535"
-                placeholder="Default (app port)"
+                placeholder="3000"
                 value={containerPort}
                 onChange={(e) => setContainerPort(e.target.value)}
               />
@@ -144,7 +142,10 @@ function DomainsPage() {
           <div className="flex items-end gap-3">
             <div className="space-y-2">
               <Label>SSL Mode</Label>
-              <Select value={sslMode} onValueChange={setSslMode}>
+              <Select
+                value={sslMode}
+                onValueChange={(value) => setSslMode(value ?? "automatic")}
+              >
                 <SelectTrigger className="w-48">
                   <SelectValue />
                 </SelectTrigger>
@@ -217,7 +218,9 @@ function DomainCard({
   const [editPort, setEditPort] = useState(
     domain.container_port?.toString() ?? "",
   );
-  const [editSslMode, setEditSslMode] = useState(domain.ssl_mode ?? "automatic");
+  const [editSslMode, setEditSslMode] = useState(
+    domain.ssl_mode ?? "automatic",
+  );
   const [editForceHttps, setEditForceHttps] = useState(domain.force_https);
   const [editCertPath, setEditCertPath] = useState(domain.cert_path ?? "");
   const [editKeyPath, setEditKeyPath] = useState(domain.key_path ?? "");
@@ -284,9 +287,7 @@ function DomainCard({
             onClick={() => setExpanded(!expanded)}
           >
             <span className="font-mono text-sm">{domain.hostname}</span>
-            <Badge variant="secondary">
-              {domain.ssl_mode ?? "automatic"}
-            </Badge>
+            <Badge variant="secondary">{domain.ssl_mode ?? "automatic"}</Badge>
             {domain.force_https && <Badge variant="outline">HTTPS</Badge>}
             {domain.container_port && (
               <Badge variant="outline">:{domain.container_port}</Badge>
@@ -310,20 +311,14 @@ function DomainCard({
               {editing ? "Cancel" : "Edit"}
             </Button>
             <AlertDialog>
-              <AlertDialogTrigger asChild>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="text-destructive"
-                >
+              <AlertDialogTrigger>
+                <Button size="sm" variant="ghost" className="text-destructive">
                   Remove
                 </Button>
               </AlertDialogTrigger>
               <AlertDialogContent>
                 <AlertDialogHeader>
-                  <AlertDialogTitle>
-                    Remove {domain.hostname}?
-                  </AlertDialogTitle>
+                  <AlertDialogTitle>Remove {domain.hostname}?</AlertDialogTitle>
                   <AlertDialogDescription>
                     This will remove the domain and all its route features.
                   </AlertDialogDescription>
@@ -355,12 +350,12 @@ function DomainCard({
             <div className="space-y-3 rounded-md border p-3">
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-2">
-                  <Label>Container Port Override</Label>
+                  <Label>Container Port</Label>
                   <Input
                     type="number"
                     min="1"
                     max="65535"
-                    placeholder="Default"
+                    placeholder="3000"
                     value={editPort}
                     onChange={(e) => setEditPort(e.target.value)}
                   />
@@ -369,7 +364,9 @@ function DomainCard({
                   <Label>SSL Mode</Label>
                   <Select
                     value={editSslMode}
-                    onValueChange={setEditSslMode}
+                    onValueChange={(value) =>
+                      setEditSslMode(value ?? "automatic")
+                    }
                   >
                     <SelectTrigger>
                       <SelectValue />
@@ -458,7 +455,9 @@ function DomainCard({
                         }),
                         {
                           loading: "Updating...",
-                          success: enabled ? "Feature enabled" : "Feature disabled",
+                          success: enabled
+                            ? "Feature enabled"
+                            : "Feature disabled",
                           error: (err) => err.message,
                         },
                       );
@@ -477,7 +476,7 @@ function DomainCard({
                 <Label className="text-xs">Type</Label>
                 <Select
                   value={newFeatureType}
-                  onValueChange={setNewFeatureType}
+                  onValueChange={(value) => setNewFeatureType(value ?? "")}
                 >
                   <SelectTrigger className="w-40">
                     <SelectValue placeholder="Select..." />

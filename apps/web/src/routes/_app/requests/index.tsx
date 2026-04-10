@@ -152,51 +152,14 @@ function RequestRow({ log }: { log: RequestLog }) {
   );
 }
 
-function LiveRequestsView({ filters }: { filters: Filters }) {
-  const [logs, setLogs] = useState<RequestLog[]>([]);
-
-  const handleMessage = useCallback((_event: string, data: unknown) => {
-    try {
-      const parsed = (typeof data === "string" ? JSON.parse(data) : data) as RequestLog;
-      // Apply client-side status filter for live view
-      const { min, max } = statusRangeToMinMax(filters.statusRange);
-      if (min != null && parsed.status_code < min) return;
-      if (max != null && parsed.status_code >= max) return;
-      if (filters.applicationId && parsed.application_id !== filters.applicationId) return;
-      setLogs((prev) => [parsed, ...prev].slice(0, 500));
-    } catch {
-      // ignore parse errors
-    }
-  }, [filters.statusRange, filters.applicationId]);
-
-  const { connected } = useChannel("requests:all", handleMessage);
-
-  return (
-    <div className="space-y-3">
-      <div className="flex items-center gap-2">
-        <span className={`size-2 rounded-full ${connected ? "bg-green-500" : "bg-gray-400"}`} />
-        <span className="text-muted-foreground text-sm">
-          {connected ? "Live" : "Disconnected"} — showing up to 500 entries
-        </span>
-        <Button size="sm" variant="outline" onClick={() => setLogs([])}>
-          Clear
-        </Button>
-      </div>
-      {logs.length === 0 ? (
-        <div className="border rounded-lg text-muted-foreground py-12 text-center text-sm">
-          Waiting for requests...
-        </div>
-      ) : (
-        <div className="space-y-2">
-          {logs.map((log) => <RequestRow key={log.id} log={log} />)}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function HistoryRequestsView({ filters }: { filters: Filters }) {
+function GlobalRequestsPage() {
+  const [liveEntries, setLiveEntries] = useState<RequestLog[]>([]);
   const [offset, setOffset] = useState(0);
+  const [filters, setFilters] = useState<Filters>({
+    statusRange: "",
+    projectId: "",
+    applicationId: "",
+  });
 
   const queryParams = useMemo(() => {
     const { min, max } = statusRangeToMinMax(filters.statusRange);
@@ -211,60 +174,29 @@ function HistoryRequestsView({ filters }: { filters: Filters }) {
     };
   }, [filters, offset]);
 
-  const { data: logs, isLoading } = useRequestLogs(queryParams);
+  const { data: history, isLoading } = useRequestLogs(queryParams);
 
-  return (
-    <div className="space-y-3">
-      {isLoading ? (
-        <div className="space-y-2">
-          {[1, 2, 3, 4, 5].map((i) => (
-            <div key={i} className="border rounded-lg flex items-center gap-3 px-4 py-3">
-              <Skeleton className="h-3 w-28" />
-              <Skeleton className="h-5 w-12 rounded-full" />
-              <Skeleton className="h-3 w-12" />
-              <Skeleton className="h-3 flex-1" />
-            </div>
-          ))}
-        </div>
-      ) : !logs || logs.length === 0 ? (
-        <div className="border rounded-lg text-muted-foreground py-12 text-center text-sm">
-          {offset > 0 ? "No more request logs." : "No request logs found."}
-        </div>
-      ) : (
-        <div className="space-y-2">
-          {logs.map((log) => <RequestRow key={log.id} log={log} />)}
-        </div>
-      )}
+  const handleMessage = useCallback((_event: string, data: unknown) => {
+    try {
+      const parsed = (typeof data === "string" ? JSON.parse(data) : data) as RequestLog;
+      const { min, max } = statusRangeToMinMax(filters.statusRange);
+      if (min != null && parsed.status_code < min) return;
+      if (max != null && parsed.status_code >= max) return;
+      if (filters.applicationId && parsed.application_id !== filters.applicationId) return;
+      setLiveEntries((prev) => [parsed, ...prev].slice(0, 500));
+    } catch {
+      // ignore parse errors
+    }
+  }, [filters.statusRange, filters.applicationId]);
 
-      <div className="flex items-center justify-between">
-        <Button variant="outline" size="sm" disabled={offset === 0}
-          onClick={() => setOffset(Math.max(0, offset - PAGE_SIZE))}>
-          Previous
-        </Button>
-        <span className="text-muted-foreground text-sm">
-          {offset + 1}–{offset + (logs?.length ?? 0)}
-        </span>
-        <Button variant="outline" size="sm"
-          disabled={!logs || logs.length < PAGE_SIZE}
-          onClick={() => setOffset(offset + PAGE_SIZE)}>
-          Next
-        </Button>
-      </div>
-    </div>
-  );
-}
-
-function GlobalRequestsPage() {
-  const [mode, setMode] = useState<"history" | "live">("history");
-  const [filters, setFilters] = useState<Filters>({
-    statusRange: "",
-    projectId: "",
-    applicationId: "",
-  });
+  const { connected } = useChannel("requests:all", handleMessage);
 
   const handleFilterChange = useCallback((f: Filters) => {
     setFilters(f);
+    setOffset(0);
   }, []);
+
+  const allLogs = [...liveEntries, ...(history ?? [])];
 
   return (
     <div className="space-y-6">
@@ -274,24 +206,51 @@ function GlobalRequestsPage() {
           <h1 className="text-2xl font-bold">Requests</h1>
           <p className="text-muted-foreground">HTTP access logs across all applications.</p>
         </div>
-        <div className="flex gap-2">
-          <Button size="sm" variant={mode === "history" ? "default" : "outline"}
-            onClick={() => setMode("history")}>
-            History
-          </Button>
-          <Button size="sm" variant={mode === "live" ? "default" : "outline"}
-            onClick={() => setMode("live")}>
-            Live
-          </Button>
+        <div className="flex items-center gap-2">
+          <span className={`size-2 rounded-full ${connected ? "bg-green-500" : "bg-gray-400"}`} />
+          <span className="text-muted-foreground text-sm">{connected ? "Live" : "Disconnected"}</span>
         </div>
       </div>
 
       <RequestFilters filters={filters} onChange={handleFilterChange} />
 
-      {mode === "live"
-        ? <LiveRequestsView filters={filters} />
-        : <HistoryRequestsView filters={filters} />
-      }
+      <div className="space-y-3">
+        {isLoading ? (
+          <div className="space-y-2">
+            {[1, 2, 3, 4, 5].map((i) => (
+              <div key={i} className="border rounded-lg flex items-center gap-3 px-4 py-3">
+                <Skeleton className="h-3 w-28" />
+                <Skeleton className="h-5 w-12 rounded-full" />
+                <Skeleton className="h-3 w-12" />
+                <Skeleton className="h-3 flex-1" />
+              </div>
+            ))}
+          </div>
+        ) : allLogs.length === 0 ? (
+          <div className="border rounded-lg text-muted-foreground py-12 text-center text-sm">
+            {offset > 0 ? "No more request logs." : "No request logs found."}
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {allLogs.map((log) => <RequestRow key={log.id} log={log} />)}
+          </div>
+        )}
+
+        <div className="flex items-center justify-between">
+          <Button variant="outline" size="sm" disabled={offset === 0}
+            onClick={() => setOffset(Math.max(0, offset - PAGE_SIZE))}>
+            Previous
+          </Button>
+          <span className="text-muted-foreground text-sm">
+            {offset + 1}–{offset + (history?.length ?? 0)}
+          </span>
+          <Button variant="outline" size="sm"
+            disabled={!history || history.length < PAGE_SIZE}
+            onClick={() => setOffset(offset + PAGE_SIZE)}>
+            Next
+          </Button>
+        </div>
+      </div>
     </div>
   );
 }

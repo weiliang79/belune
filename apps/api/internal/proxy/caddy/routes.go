@@ -83,11 +83,14 @@ func (c *Client) InitCatchAll(ctx context.Context) {
 	})
 	newRoutes := append(domainRoutes, catchAllJSON)
 
-	c.patchAllRoutes(ctx, newRoutes)
+	c.replaceAllRoutes(ctx, newRoutes)
 	slog.Info("caddy catch-all route initialised")
 }
 
 func (c *Client) AddRoute(ctx context.Context, cfg proxy.RouteConfig) error {
+	// Remove any existing route for this hostname first to prevent duplicates.
+	c.RemoveRoute(ctx, cfg.Hostname)
+
 	// Build the handler chain: feature handlers first, then reverse_proxy as the terminal handler.
 	handlers := buildFeatureHandlers(cfg)
 
@@ -373,14 +376,20 @@ func (c *Client) fetchRawRoutes(ctx context.Context) ([]json.RawMessage, error) 
 	return routes, nil
 }
 
-// patchAllRoutes replaces the entire routes array in srv0.
-func (c *Client) patchAllRoutes(ctx context.Context, routes []json.RawMessage) {
-	body, err := json.Marshal(routes)
+// replaceAllRoutes replaces the entire routes array in srv0 by patching the
+// server object. A direct PUT on the routes path can fail with "key already
+// exists", so we PATCH the parent server instead.
+func (c *Client) replaceAllRoutes(ctx context.Context, routes []json.RawMessage) {
+	wrapper := map[string]any{
+		"listen": []string{":80"},
+		"routes": routes,
+	}
+	body, err := json.Marshal(wrapper)
 	if err != nil {
-		slog.Warn("caddy: failed to marshal routes for patch", "error", err)
+		slog.Warn("caddy: failed to marshal server for route replacement", "error", err)
 		return
 	}
-	url := fmt.Sprintf("%s/config/apps/http/servers/srv0/routes", c.adminURL)
+	url := fmt.Sprintf("%s/config/apps/http/servers/srv0", c.adminURL)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPatch, url, bytes.NewReader(body))
 	if err != nil {
 		return
@@ -388,7 +397,7 @@ func (c *Client) patchAllRoutes(ctx context.Context, routes []json.RawMessage) {
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		slog.Warn("caddy: patchAllRoutes failed", "error", err)
+		slog.Warn("caddy: replaceAllRoutes failed", "error", err)
 		return
 	}
 	resp.Body.Close()

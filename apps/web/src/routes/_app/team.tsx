@@ -48,7 +48,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
-export const Route = createFileRoute("/_app/settings/team")({
+export const Route = createFileRoute("/_app/team")({
   component: TeamSettingsPage,
   errorComponent: RouteError,
 });

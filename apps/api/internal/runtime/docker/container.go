@@ -117,12 +117,18 @@ func (c *Client) ContainerLogs(ctx context.Context, id string, follow bool) (io.
 }
 
 func (c *Client) ContainerLogsSince(ctx context.Context, id string, since time.Time) (io.ReadCloser, error) {
+	// An empty Since tells Docker to return the full buffered log history.
+	// A non-zero time resumes from that point onward.
+	sinceStr := ""
+	if !since.IsZero() {
+		sinceStr = since.Format(time.RFC3339Nano)
+	}
 	return c.cli.ContainerLogs(ctx, id, container.LogsOptions{
 		ShowStdout: true,
 		ShowStderr: true,
 		Follow:     true,
 		Timestamps: true,
-		Since:      since.Format(time.RFC3339),
+		Since:      sinceStr,
 	})
 }
 

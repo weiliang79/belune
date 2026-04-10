@@ -30,7 +30,6 @@ type createApplicationRequest struct {
 	MemoryLimit     int64   `json:"memory_limit"`     // bytes (0 = unlimited)
 	GitToken        string  `json:"git_token"`         // PAT for private repos; encrypted server-side
 	HealthCheckPath string  `json:"health_check_path"` // HTTP path to poll after deploy (e.g. /healthz)
-	Port            int     `json:"port"`              // container port (default 8080)
 }
 
 func (h *Handler) CreateApplication(w http.ResponseWriter, r *http.Request) {
@@ -83,7 +82,6 @@ func (h *Handler) CreateApplication(w http.ResponseWriter, r *http.Request) {
 		MemoryLimit:     req.MemoryLimit,
 		GitToken:        req.GitToken,
 		HealthCheckPath: req.HealthCheckPath,
-		Port:            req.Port,
 	})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to create application")
@@ -344,7 +342,6 @@ type updateApplicationRequest struct {
 	MemoryLimit       int64   `json:"memory_limit"`
 	GitToken          string  `json:"git_token"`          // PAT for private repos; encrypted server-side; empty = preserve existing
 	HealthCheckPath   string  `json:"health_check_path"`  // HTTP path to poll after deploy; empty = clear
-	Port              int     `json:"port"`               // container port; 0 = preserve existing
 }
 
 func (h *Handler) UpdateApplication(w http.ResponseWriter, r *http.Request) {
@@ -384,7 +381,6 @@ func (h *Handler) UpdateApplication(w http.ResponseWriter, r *http.Request) {
 		MemoryLimit:       req.MemoryLimit,
 		GitToken:          req.GitToken,
 		HealthCheckPath:   req.HealthCheckPath,
-		Port:              req.Port,
 	})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to update application")

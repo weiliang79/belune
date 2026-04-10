@@ -285,9 +285,16 @@ func (h *TaskHandler) HandleDeployTask(ctx context.Context, t *asynq.Task) error
 		slog.Warn("could not connect container to paas-infra network", "container", containerID, "error", err)
 	}
 
+	// Load domains before health check so we can resolve the container port
+	domains, err := h.Queries.ListDomainsByApplication(ctx, applicationID)
+	if err != nil {
+		slog.Warn("failed to list domains for application", "application_id", payload.ApplicationID, "error", err)
+		domains = nil
+	}
+
 	// Health check polling: poll the container's health endpoint until healthy or timeout
 	if app.HealthCheckPath.Valid && app.HealthCheckPath.String != "" {
-		healthURL := fmt.Sprintf("http://%s:%d%s", containerName, app.Port, app.HealthCheckPath.String)
+		healthURL := fmt.Sprintf("http://%s:%d%s", containerName, resolveContainerPort(domains), app.HealthCheckPath.String)
 		slog.Info("waiting for container health check", "url", healthURL)
 		if err := pollHealthCheck(ctx, healthURL, 60*time.Second); err != nil {
 			h.failDeployment(ctx, deploymentID, fmt.Sprintf("health check failed: %v", err))
@@ -297,13 +304,9 @@ func (h *TaskHandler) HandleDeployTask(ctx context.Context, t *asynq.Task) error
 	}
 
 	// Add proxy route if the application has domains (with full config + features)
-	domains, err := h.Queries.ListDomainsByApplication(ctx, applicationID)
-	if err == nil {
+	if len(domains) > 0 {
 		for _, domain := range domains {
-			port := app.Port
-			if domain.ContainerPort.Valid {
-				port = domain.ContainerPort.Int32
-			}
+			port := resolveContainerPort([]generated.Domain{domain})
 
 			// Load route features for this domain
 			var features []proxy.RouteFeature
@@ -389,6 +392,16 @@ func parseUUID(s string) pgtype.UUID {
 	var u pgtype.UUID
 	u.Scan(s)
 	return u
+}
+
+// resolveContainerPort returns the container port from the first domain that has one, or 8080.
+func resolveContainerPort(domains []generated.Domain) int32 {
+	for _, d := range domains {
+		if d.ContainerPort.Valid {
+			return d.ContainerPort.Int32
+		}
+	}
+	return 8080
 }
 
 // pollHealthCheck repeatedly GETs url until a 2xx response is received or deadline expires.

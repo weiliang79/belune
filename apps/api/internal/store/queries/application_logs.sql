@@ -12,5 +12,9 @@ WHERE application_id = $1
 ORDER BY recorded_at DESC
 LIMIT $2 OFFSET $3;
 
+-- name: GetLatestApplicationLogTime :one
+SELECT MAX(recorded_at)::timestamptz FROM application_logs
+WHERE application_id = $1;
+
 -- name: DeleteOldApplicationLogs :exec
 DELETE FROM application_logs WHERE recorded_at < NOW() - ($1 || ' days')::INTERVAL;

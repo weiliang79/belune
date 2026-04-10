@@ -17,7 +17,7 @@ import { useState, useMemo } from "react";
 import type { HostMetricPoint } from "@/lib/types";
 import { UPlotAreaChart } from "@/components/ui/uplot-area-chart";
 
-export const Route = createFileRoute("/_app/settings/server")({
+export const Route = createFileRoute("/_app/server")({
   component: ServerSettingsPage,
   errorComponent: RouteError,
 });

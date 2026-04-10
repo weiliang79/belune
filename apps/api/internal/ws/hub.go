@@ -150,3 +150,17 @@ func (h *Hub) SubscriberCount(channel string) int {
 	defer h.mu.RUnlock()
 	return len(h.channels[channel])
 }
+
+// ActiveChannelsWithPrefix returns channel names that have at least one subscriber
+// and start with the given prefix. Used by adapters that drive on-demand data collection.
+func (h *Hub) ActiveChannelsWithPrefix(prefix string) []string {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	var out []string
+	for ch, subs := range h.channels {
+		if len(subs) > 0 && len(ch) >= len(prefix) && ch[:len(prefix)] == prefix {
+			out = append(out, ch)
+		}
+	}
+	return out
+}

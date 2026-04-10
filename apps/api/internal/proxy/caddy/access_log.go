@@ -41,8 +41,9 @@ func (c *Client) ConfigureAccessLogs(ctx context.Context) error {
 		return fmt.Errorf("configure access log writer: %w", err)
 	}
 
-	// Step 2: point srv0 to use that logger. The srv0/logs key may not exist yet
-	// so use PUT rather than PATCH.
+	// Step 2: point srv0 to use that logger.
+	// By the time this runs, replaceAllRoutes (called from InitCatchAll) has already
+	// patched srv0 with {listen, routes}, which clears the logs key — so PUT is safe.
 	serverLogsCfg := map[string]any{
 		"default_logger_name": loggerName,
 	}

@@ -135,7 +135,7 @@ func (h *Handler) AddDomain(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	port := row.Port
+	var port int32 = 8080
 	if req.ContainerPort != nil {
 		port = *req.ContainerPort
 	}
@@ -250,7 +250,7 @@ func (h *Handler) UpdateDomain(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	port := row.Port
+	var port int32 = 8080
 	if req.ContainerPort != nil {
 		port = *req.ContainerPort
 	}
@@ -417,7 +417,7 @@ func (h *Handler) rebuildDomainRoute(r *http.Request, domainID pgtype.UUID) {
 		return
 	}
 
-	port := row.Port
+	var port int32 = 8080
 	if domain.ContainerPort.Valid {
 		port = domain.ContainerPort.Int32
 	}

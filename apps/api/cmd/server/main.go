@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -12,6 +13,7 @@ import (
 	"time"
 
 	"github.com/hibiken/asynq"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/redis/go-redis/v9"
 
 	"github.com/ungweiliang/selfhost-paas/internal/build"
@@ -24,7 +26,9 @@ import (
 	"github.com/ungweiliang/selfhost-paas/internal/logcollector"
 	"github.com/ungweiliang/selfhost-paas/internal/logtailer"
 	"github.com/ungweiliang/selfhost-paas/internal/migrations"
+	"github.com/ungweiliang/selfhost-paas/internal/proxy"
 	"github.com/ungweiliang/selfhost-paas/internal/proxy/caddy"
+	"github.com/ungweiliang/selfhost-paas/internal/runtime"
 	"github.com/ungweiliang/selfhost-paas/internal/runtime/docker"
 	"github.com/ungweiliang/selfhost-paas/internal/server"
 	"github.com/ungweiliang/selfhost-paas/internal/service"
@@ -136,13 +140,18 @@ func main() {
 		w.StartMetricsTicker(metricsCtx)
 	}()
 
-	// Configure Caddy access logging and start the log tailer
+	// Normalise Caddy route ordering: domain-specific routes first, catch-all last.
+	caddyClient.InitCatchAll(context.Background())
+
+	// Recover proxy routes for all running applications (in case Caddy restarted).
+	recoverProxyRoutes(context.Background(), queries, caddyClient)
+
+	// Configure Caddy access logging AFTER route setup — InitCatchAll patches srv0
+	// with {listen, routes} which clears the logs key if done in the wrong order.
 	if err := caddyClient.ConfigureAccessLogs(context.Background()); err != nil {
 		slog.Warn("failed to configure Caddy access logs", "error", err)
 	}
 
-	// Normalise Caddy route ordering: domain-specific routes first, catch-all last.
-	caddyClient.InitCatchAll(context.Background())
 	tailerCtx, cancelTailer := context.WithCancel(context.Background())
 	accessLogTailer := logtailer.New(cfg.AccessLogPath, queries, rdb)
 	wg.Add(1)
@@ -180,11 +189,12 @@ func main() {
 	// Redis → WebSocket adapters
 	adapterCtx, cancelAdapters := context.WithCancel(context.Background())
 	redisAdapter := ws.NewRedisAdapter(rdb, hub)
-	wg.Add(4)
+	wg.Add(5)
 	go func() { defer wg.Done(); redisAdapter.RunBuildLogAdapter(adapterCtx) }()
 	go func() { defer wg.Done(); redisAdapter.RunHostMetricsAdapter(adapterCtx) }()
 	go func() { defer wg.Done(); redisAdapter.RunRequestLogAdapter(adapterCtx) }()
 	go func() { defer wg.Done(); redisAdapter.RunAppLogAdapter(adapterCtx) }()
+	go func() { defer wg.Done(); runAppMetricsBroadcaster(adapterCtx, hub, dockerClient, queries) }()
 
 	// Docker event watcher for real-time container status
 	broadcaster := ws.NewContainerStatusBroadcaster(hub)
@@ -260,4 +270,138 @@ func main() {
 	}
 
 	slog.Info("server stopped")
+}
+
+// runAppMetricsBroadcaster polls Docker container stats for applications that
+// have active WebSocket subscribers on "metrics:app:{applicationId}" and
+// broadcasts them to the hub. Runs until ctx is cancelled.
+func runAppMetricsBroadcaster(
+	ctx context.Context,
+	hub *ws.Hub,
+	rt runtime.ContainerRuntime,
+	queries *generated.Queries,
+) {
+	const channelPrefix = "metrics:app:"
+	ticker := time.NewTicker(2 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			channels := hub.ActiveChannelsWithPrefix(channelPrefix)
+			for _, ch := range channels {
+				appIDStr := ch[len(channelPrefix):]
+				var appUUID pgtype.UUID
+				if err := appUUID.Scan(appIDStr); err != nil {
+					continue
+				}
+				row, err := queries.GetApplicationWithProjectSlug(ctx, appUUID)
+				if err != nil {
+					continue
+				}
+				containerName := fmt.Sprintf("%s-%s-%s", row.ProjectSlug, row.Slug, appIDStr[:8])
+				stats, err := rt.ContainerStats(ctx, containerName)
+				if err != nil {
+					slog.Debug("app metrics: stats fetch failed", "container", containerName, "error", err)
+					continue
+				}
+				point := map[string]any{
+					"cpu_percent":      stats.CPUPercent,
+					"memory_usage":     stats.MemoryUsage,
+					"memory_limit":     stats.MemoryLimit,
+					"network_rx_bytes": stats.NetworkRxBytes,
+					"network_tx_bytes": stats.NetworkTxBytes,
+					"recorded_at":      time.Now().Format(time.RFC3339),
+				}
+				data, err := json.Marshal(point)
+				if err != nil {
+					continue
+				}
+				hub.Broadcast(ch, "metrics", data)
+			}
+		}
+	}
+}
+
+// recoverProxyRoutes re-registers Caddy routes for all running applications.
+// This ensures routes survive Caddy restarts since dynamically added routes
+// are not persisted in the Caddyfile.
+func recoverProxyRoutes(ctx context.Context, queries *generated.Queries, proxyClient *caddy.Client) {
+	apps, err := queries.ListAllApplications(ctx)
+	if err != nil {
+		slog.Warn("failed to list applications for route recovery", "error", err)
+		return
+	}
+
+	var recovered int
+	for _, app := range apps {
+		if app.Status != "running" {
+			continue
+		}
+
+		appIDStr := fmt.Sprintf("%x-%x-%x-%x-%x",
+			app.ID.Bytes[0:4], app.ID.Bytes[4:6], app.ID.Bytes[6:8],
+			app.ID.Bytes[8:10], app.ID.Bytes[10:16])
+
+		row, err := queries.GetApplicationWithProjectSlug(ctx, app.ID)
+		if err != nil {
+			slog.Warn("route recovery: failed to get project slug", "app", appIDStr, "error", err)
+			continue
+		}
+
+		containerName := fmt.Sprintf("%s-%s-%s", row.ProjectSlug, app.Slug, appIDStr[:8])
+
+		domains, err := queries.ListDomainsByApplication(ctx, app.ID)
+		if err != nil {
+			slog.Warn("route recovery: failed to list domains", "app", appIDStr, "error", err)
+			continue
+		}
+
+		for _, domain := range domains {
+			var port int32 = 8080
+			if domain.ContainerPort.Valid {
+				port = domain.ContainerPort.Int32
+			}
+
+			// Load route features
+			var features []proxy.RouteFeature
+			dbFeatures, fErr := queries.ListRouteFeaturesByDomain(ctx, domain.ID)
+			if fErr == nil {
+				for _, f := range dbFeatures {
+					var cfg map[string]any
+					if len(f.Config) > 0 {
+						json.Unmarshal(f.Config, &cfg)
+					}
+					features = append(features, proxy.RouteFeature{
+						Type:    f.FeatureType,
+						Config:  cfg,
+						Enabled: f.Enabled,
+					})
+				}
+			}
+
+			if err := proxyClient.AddRoute(ctx, proxy.RouteConfig{
+				Hostname:       domain.Hostname,
+				TargetURL:      fmt.Sprintf("http://%s:%d", containerName, port),
+				TLS:            domain.SslEnabled,
+				ForceHTTPS:     domain.ForceHttps,
+				SSLMode:        domain.SslMode,
+				SSLProvider:    domain.SslProvider.String,
+				CertPath:       domain.CertPath.String,
+				KeyPath:        domain.KeyPath.String,
+				Features:       features,
+				AdvancedConfig: domain.AdvancedConfig,
+			}); err != nil {
+				slog.Warn("route recovery: failed to add route", "hostname", domain.Hostname, "error", err)
+				continue
+			}
+			recovered++
+		}
+	}
+
+	if recovered > 0 {
+		slog.Info("recovered proxy routes", "count", recovered)
+	}
 }

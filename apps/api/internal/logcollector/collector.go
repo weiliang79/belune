@@ -49,7 +49,7 @@ func New(rt runtime.ContainerRuntime, queries *generated.Queries, rdb *redis.Cli
 // Run starts the collector, blocking until ctx is cancelled.
 func (c *Collector) Run(ctx context.Context) {
 	slog.Info("application log collector starting")
-	c.sync(ctx, time.Now())
+	c.sync(ctx)
 
 	ticker := time.NewTicker(10 * time.Second)
 	defer ticker.Stop()
@@ -64,14 +64,15 @@ func (c *Collector) Run(ctx context.Context) {
 			c.mu.Unlock()
 			return
 		case <-ticker.C:
-			c.sync(ctx, time.Now())
+			c.sync(ctx)
 		}
 	}
 }
 
 // sync lists running containers and starts/stops watchers as needed.
-// since is passed to ContainerLogsSince for newly attached containers.
-func (c *Collector) sync(ctx context.Context, since time.Time) {
+// For newly-attached containers, it picks up log collection from the last
+// recorded_at for that application (or from the beginning if none).
+func (c *Collector) sync(ctx context.Context) {
 	containers, err := c.runtime.ListContainers(ctx)
 	if err != nil {
 		slog.Warn("log collector: failed to list containers", "error", err)
@@ -107,7 +108,7 @@ func (c *Collector) sync(ctx context.Context, since time.Time) {
 					delete(c.watchers, ctrCopy.ID)
 					c.mu.Unlock()
 				}()
-				c.watchContainer(watchCtx, ctrCopy, since)
+				c.watchContainer(watchCtx, ctrCopy)
 			}()
 		}
 	}
@@ -168,7 +169,7 @@ func stripTimestamp(line string) string {
 	return line
 }
 
-func (c *Collector) watchContainer(ctx context.Context, ctr runtime.ContainerInfo, since time.Time) {
+func (c *Collector) watchContainer(ctx context.Context, ctr runtime.ContainerInfo) {
 	appIDStr := ctr.Labels[labelApplicationID]
 	var appUUID pgtype.UUID
 	if err := appUUID.Scan(appIDStr); err != nil {
@@ -176,7 +177,20 @@ func (c *Collector) watchContainer(ctx context.Context, ctr runtime.ContainerInf
 		return
 	}
 
-	slog.Info("log collector: attaching to container", "container", ctr.Name, "app_id", appIDStr)
+	// Resume from the last recorded log for this application so a restarted
+	// API server (or a brand-new container) doesn't drop early log lines.
+	// Zero time = fetch from the beginning of the container's log buffer.
+	var since time.Time
+	latest, err := c.queries.GetLatestApplicationLogTime(ctx, appUUID)
+	if err == nil && latest.Valid {
+		// Add 1ns so we don't re-ingest the exact line we already stored.
+		since = latest.Time.Add(time.Nanosecond)
+	}
+
+	slog.Info("log collector: attaching to container",
+		"container", ctr.Name,
+		"app_id", appIDStr,
+		"since", since.Format(time.RFC3339Nano))
 
 	rc, err := c.runtime.ContainerLogsSince(ctx, ctr.ID, since)
 	if err != nil {
@@ -257,7 +271,7 @@ func (c *Collector) flush(ctx context.Context, appID pgtype.UUID, appIDStr strin
 			continue
 		}
 
-		// Publish to Redis for live SSE consumers.
+		// Publish to Redis for live WebSocket consumers.
 		payload, _ := json.Marshal(map[string]any{
 			"stream":  p.Stream,
 			"message": p.Message,
@@ -266,6 +280,6 @@ func (c *Collector) flush(ctx context.Context, appID pgtype.UUID, appIDStr strin
 			appID.Bytes[0:4], appID.Bytes[4:6],
 			appID.Bytes[6:8], appID.Bytes[8:10],
 			appID.Bytes[10:16])
-		c.rdb.Publish(ctx, "applogs:live:"+appIDFormatted, string(payload))
+		c.rdb.Publish(ctx, "app-logs:"+appIDFormatted, string(payload))
 	}
 }

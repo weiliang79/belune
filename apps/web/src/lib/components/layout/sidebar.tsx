@@ -70,11 +70,11 @@ export function Sidebar() {
             </p>
           )}
           <div className="space-y-1">
-            {navLink("/settings", "Account", true)}
-            {isAdmin && navLink("/settings/server", "Server")}
-            {isAdmin && navLink("/settings/team", "Team")}
-            {navLink("/settings/git-credentials", "Git Credentials")}
-            {isAdmin && navLink("/settings/audit", "Audit Log")}
+            {navLink("/account", "Account", true)}
+            {isAdmin && navLink("/server", "Server")}
+            {isAdmin && navLink("/team", "Team")}
+            {navLink("/git-credentials", "Git Credentials")}
+            {isAdmin && navLink("/audit", "Audit Log")}
           </div>
         </div>
       </nav>

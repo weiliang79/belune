@@ -42,7 +42,7 @@ import {
 import type { GitCredential } from "@/lib/types";
 import { formatDate } from "@/lib/utils/format";
 
-export const Route = createFileRoute("/_app/settings/git-credentials")({
+export const Route = createFileRoute("/_app/git-credentials")({
   component: GitCredentialsPage,
   errorComponent: RouteError,
 });

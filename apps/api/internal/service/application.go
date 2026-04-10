@@ -41,7 +41,6 @@ type CreateApplicationParams struct {
 	MemoryLimit     int64
 	GitToken        string      // plaintext PAT; encrypted before storage
 	HealthCheckPath string      // HTTP path to poll after deploy (e.g. /healthz)
-	Port            int         // container port the app listens on (default 8080)
 	GitCredentialID pgtype.UUID // optional FK to centralized git_credentials
 }
 
@@ -79,7 +78,6 @@ func (s *ApplicationService) Create(ctx context.Context, p CreateApplicationPara
 			WebhookSecret:           pgtype.Text{String: webhookSecret, Valid: true},
 			GitCredentialsEncrypted: gitCreds,
 			HealthCheckPath:         pgtype.Text{String: p.HealthCheckPath, Valid: p.HealthCheckPath != ""},
-			Port:                    portOrDefault(p.Port),
 			GitCredentialID:         p.GitCredentialID,
 		})
 		if err != nil {
@@ -111,7 +109,6 @@ type UpdateApplicationParams struct {
 	MemoryLimit       int64
 	GitToken          string      // plaintext PAT; encrypted before storage; empty = no change
 	HealthCheckPath   string      // empty = clear existing
-	Port              int         // container port; 0 = preserve existing
 	GitCredentialID   pgtype.UUID // optional FK to centralized git_credentials; zero = no change
 }
 
@@ -126,11 +123,6 @@ func (s *ApplicationService) Update(
 	name := p.Name
 	if name == "" {
 		name = current.Name
-	}
-
-	port := current.Port
-	if p.Port > 0 {
-		port = int32(p.Port)
 	}
 
 	gitCreds := current.GitCredentialsEncrypted
@@ -156,17 +148,8 @@ func (s *ApplicationService) Update(
 		MemoryLimit:             p.MemoryLimit,
 		GitCredentialsEncrypted: gitCreds,
 		HealthCheckPath:         pgtype.Text{String: p.HealthCheckPath, Valid: p.HealthCheckPath != ""},
-		Port:                    port,
 		GitCredentialID:         p.GitCredentialID,
 	})
-}
-
-// portOrDefault returns p if > 0, else 8080.
-func portOrDefault(p int) int32 {
-	if p > 0 {
-		return int32(p)
-	}
-	return 8080
 }
 
 // Delete stops and removes the application container, then deletes the DB record.
