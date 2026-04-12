@@ -1,8 +1,10 @@
 import { Link, useRouterState } from "@tanstack/react-router";
+import { useState } from "react";
 import { useAuthStore } from "@/lib/stores/auth";
 import { useSidebarStore } from "@/lib/stores/sidebar";
 import { logout } from "@/lib/api/auth";
 import { Button } from "@/components/ui/button";
+import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export function Sidebar() {
@@ -11,11 +13,17 @@ export function Sidebar() {
   const routerState = useRouterState();
   const currentPath = routerState.location.pathname;
   const isAdmin = user?.role === "admin";
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
 
   const handleLogout = async () => {
-    await logout();
-    clearUser();
-    window.location.href = "/login";
+    setIsLoggingOut(true);
+    try {
+      await logout();
+      clearUser();
+      window.location.href = "/login";
+    } finally {
+      setIsLoggingOut(false);
+    }
   };
 
   const isActive = (to: string, exact = false) =>
@@ -90,8 +98,13 @@ export function Sidebar() {
           size="sm"
           className="w-full justify-start"
           onClick={handleLogout}
+          disabled={isLoggingOut}
         >
-          {isOpen ? "Logout" : "->"}
+          {isLoggingOut ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            isOpen ? "Logout" : "->"
+          )}
         </Button>
       </div>
     </aside>
