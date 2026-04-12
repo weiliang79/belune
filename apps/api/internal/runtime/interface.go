@@ -21,12 +21,13 @@ type ContainerConfig struct {
 }
 
 type ContainerInfo struct {
-	ID     string
-	Name   string
-	Image  string
-	Status string
-	Ports  map[string]string
-	Labels map[string]string
+	ID        string
+	Name      string
+	Image     string
+	Status    string
+	Ports     map[string]string
+	Labels    map[string]string
+	CreatedAt time.Time
 }
 
 // ContainerResourceStats holds resource usage stats for a single container.

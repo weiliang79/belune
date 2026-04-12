@@ -161,12 +161,13 @@ func (c *Client) ListContainers(ctx context.Context) ([]runtime.ContainerInfo, e
 		}
 
 		result = append(result, runtime.ContainerInfo{
-			ID:     ctr.ID,
-			Name:   name,
-			Image:  ctr.Image,
-			Status: ctr.State,
-			Ports:  ports,
-			Labels: ctr.Labels,
+			ID:        ctr.ID,
+			Name:      name,
+			Image:     ctr.Image,
+			Status:    ctr.State,
+			Ports:     ports,
+			Labels:    ctr.Labels,
+			CreatedAt: time.Unix(ctr.Created, 0),
 		})
 	}
 

@@ -120,18 +120,12 @@ func (h *TaskHandler) HandleDeployTask(ctx context.Context, t *asynq.Task) error
 		// Rollback: skip build entirely, redeploy a previously stored image.
 		imageName = payload.RollbackImageTag
 		slog.Info("rolling back to image", "image", imageName, "application_id", payload.ApplicationID)
-		h.Queries.UpdateDeploymentStatus(ctx, generated.UpdateDeploymentStatusParams{
-			ID:     deploymentID,
-			Status: status.DeploymentDeploying,
-		})
+		h.updateDeploymentStatus(ctx, deploymentID, status.DeploymentPending, status.DeploymentDeploying)
 	} else {
 	switch app.Type {
 	case "image":
 		// Image apps skip build — go straight to deploying
-		h.Queries.UpdateDeploymentStatus(ctx, generated.UpdateDeploymentStatusParams{
-			ID:     deploymentID,
-			Status: status.DeploymentDeploying,
-		})
+		h.updateDeploymentStatus(ctx, deploymentID, status.DeploymentPending, status.DeploymentDeploying)
 		imageName = app.SourceImage.String
 		slog.Info("pulling image", "image", imageName)
 		pullCtx, pullCancel := context.WithTimeout(ctx, time.Duration(h.Config.ImagePullTimeoutMinutes)*time.Minute)
@@ -215,10 +209,7 @@ func (h *TaskHandler) HandleDeployTask(ctx context.Context, t *asynq.Task) error
 		}
 
 		// Update status to building before build starts
-		h.Queries.UpdateDeploymentStatus(ctx, generated.UpdateDeploymentStatusParams{
-			ID:     deploymentID,
-			Status: status.DeploymentBuilding,
-		})
+		h.updateDeploymentStatus(ctx, deploymentID, status.DeploymentPending, status.DeploymentBuilding)
 
 		slog.Info("building image", "tag", imageName)
 		result, err := h.Chain.Build(buildCtx, buildOpts)
@@ -241,10 +232,7 @@ func (h *TaskHandler) HandleDeployTask(ctx context.Context, t *asynq.Task) error
 		slog.Info("build completed", "image", imageName)
 
 		// Build done — now transition to deploying before container creation
-		h.Queries.UpdateDeploymentStatus(ctx, generated.UpdateDeploymentStatusParams{
-			ID:     deploymentID,
-			Status: status.DeploymentDeploying,
-		})
+		h.updateDeploymentStatus(ctx, deploymentID, status.DeploymentBuilding, status.DeploymentDeploying)
 
 	default:
 		h.failDeployment(ctx, deploymentID, fmt.Sprintf("unknown application type: %s", app.Type))
@@ -342,6 +330,10 @@ func (h *TaskHandler) HandleDeployTask(ctx context.Context, t *asynq.Task) error
 
 	// Mark deployment as success and application as running — both or neither
 	if err := store.WithTx(ctx, h.DB, func(q *generated.Queries) error {
+		if !status.ValidTransition(status.DeploymentDeploying, status.DeploymentSuccess) {
+			slog.Warn("invalid deployment transition skipped", "from", status.DeploymentDeploying, "to", status.DeploymentSuccess)
+			return nil
+		}
 		q.UpdateDeploymentStatus(ctx, generated.UpdateDeploymentStatusParams{
 			ID:     deploymentID,
 			Status: status.DeploymentSuccess,
@@ -386,6 +378,20 @@ func (h *TaskHandler) failDeployment(ctx context.Context, deploymentID pgtype.UU
 			ErrorMessage: pgtype.Text{String: safeMsg, Valid: true},
 		})
 	}
+}
+
+// updateDeploymentStatus validates the transition and updates the deployment status.
+// It logs a warning and skips the update if the transition is not permitted.
+func (h *TaskHandler) updateDeploymentStatus(ctx context.Context, id pgtype.UUID, from, to string) {
+	if !status.ValidTransition(from, to) {
+		slog.Warn("invalid deployment transition skipped", "from", from, "to", to,
+			"deployment_id", fmt.Sprintf("%v", id))
+		return
+	}
+	h.Queries.UpdateDeploymentStatus(ctx, generated.UpdateDeploymentStatusParams{
+		ID:     id,
+		Status: to,
+	})
 }
 
 func parseUUID(s string) pgtype.UUID {

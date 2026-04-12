@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -107,11 +108,74 @@ func (h *TaskHandler) HandleCleanupTask(ctx context.Context, t *asynq.Task) erro
 		slog.Warn("failed to prune volumes", "error", err)
 	}
 
+	// Remove orphan containers: managed containers with no matching application in DB.
+	h.cleanupOrphanContainers(ctx)
+
 	slog.Info("cleanup completed",
 		"applications_processed", len(applications),
 		"deployments_removed", totalRemoved,
 	)
 	return nil
+}
+
+// cleanupOrphanContainers removes managed containers whose name does not match
+// any known application. Only containers older than 1 hour are considered to
+// avoid racing with in-progress deployments.
+func (h *TaskHandler) cleanupOrphanContainers(ctx context.Context) {
+	const orphanAge = time.Hour
+
+	containers, err := h.Runtime.ListContainers(ctx)
+	if err != nil {
+		slog.Warn("orphan cleanup: failed to list containers", "error", err)
+		return
+	}
+
+	// Build set of all valid container names from the database.
+	allApps, err := h.Queries.ListAllApplications(ctx)
+	if err != nil {
+		slog.Warn("orphan cleanup: failed to list applications", "error", err)
+		return
+	}
+
+	known := make(map[string]bool, len(allApps))
+	for _, app := range allApps {
+		appIDStr := formatUUID(app.ID)
+		if appIDStr == "" {
+			continue
+		}
+		project, err := h.Queries.GetProject(ctx, app.ProjectID)
+		if err != nil {
+			continue
+		}
+		known[naming.ContainerName(project.Slug, app.Slug, appIDStr)] = true
+		// Also mark old naming formats so we don't delete legacy containers.
+		known[naming.IntermediateContainerName(project.Slug, appIDStr)] = true
+		known[naming.OldContainerName(appIDStr)] = true
+	}
+
+	removed := 0
+	for _, ctr := range containers {
+		if known[ctr.Name] {
+			continue
+		}
+		if time.Since(ctr.CreatedAt) < orphanAge {
+			slog.Debug("orphan cleanup: skipping recent container", "container", ctr.Name, "age", time.Since(ctr.CreatedAt).Round(time.Second))
+			continue
+		}
+		slog.Info("orphan cleanup: removing container", "container", ctr.Name, "created_at", ctr.CreatedAt)
+		if err := h.Runtime.StopContainer(ctx, ctr.Name); err != nil {
+			slog.Debug("orphan cleanup: stop failed (may already be stopped)", "container", ctr.Name, "error", err)
+		}
+		if err := h.Runtime.RemoveContainer(ctx, ctr.Name); err != nil {
+			slog.Warn("orphan cleanup: failed to remove container", "container", ctr.Name, "error", err)
+			continue
+		}
+		removed++
+	}
+
+	if removed > 0 {
+		slog.Info("orphan cleanup: removed containers", "count", removed)
+	}
 }
 
 func formatUUID(u pgtype.UUID) string {

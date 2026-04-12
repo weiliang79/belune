@@ -128,7 +128,8 @@ func main() {
 	go func() {
 		defer wg.Done()
 		if err := w.Start(); err != nil {
-			slog.Error("worker failed to start", "error", err)
+			slog.Error("worker failed to start — job queue unavailable, shutting down", "error", err)
+			os.Exit(1)
 		}
 	}()
 
