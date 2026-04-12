@@ -25,6 +25,13 @@ export default defineConfig({
         target: "http://localhost:8080",
         changeOrigin: true,
         ws: true,
+        configure: (proxy) => {
+          proxy.on("error", (err) => {
+            if ((err as NodeJS.ErrnoException).code !== "EPIPE") {
+              console.error("[proxy error]", err);
+            }
+          });
+        },
       },
     },
   },
