@@ -38,6 +38,7 @@ import { useGitCredentials } from "@/lib/hooks/use-git-credentials";
 import { toast } from "sonner";
 import { TriangleAlert } from "lucide-react";
 import { useCallback } from "react";
+import { CopyButton } from "@/lib/components/copy-button";
 
 export const Route = createFileRoute(
   "/_app/projects/$projectId/applications/$applicationId/settings",
@@ -400,8 +401,11 @@ function ApplicationSettingsPage() {
                 Configure a webhook secret to enable push-to-deploy. Add this URL
                 as a webhook in your GitHub or GitLab repository:
               </p>
-              <div className="bg-muted rounded-md px-3 py-2 text-sm font-mono mb-4 break-all">
-                {window.location.origin}/api/webhooks/push
+              <div className="bg-muted flex items-center justify-between rounded-md px-3 py-2 mb-4">
+                <code className="text-sm font-mono break-all">
+                  {window.location.origin}/api/webhooks/push
+                </code>
+                <CopyButton value={`${window.location.origin}/api/webhooks/push`} />
               </div>
               <form
                 onSubmit={(e) => {

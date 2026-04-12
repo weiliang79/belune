@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import {
   Card,
@@ -24,44 +23,17 @@ import {
 import { toast } from "sonner";
 import { useDatabase, useDeleteDatabase } from "@/lib/hooks/use-databases";
 import { useProject } from "@/lib/hooks/use-projects";
-import { copyToClipboard } from "@/lib/utils/clipboard";
-import { Copy, Check, Loader2, Trash2 } from "lucide-react";
+import { Loader2, Trash2 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AppBreadcrumb } from "@/lib/components/app-breadcrumb";
 import { StatusBadge } from "@/lib/components/status-badge";
+import { CopyButton } from "@/lib/components/copy-button";
 
 export const Route = createFileRoute(
   "/_app/projects/$projectId/databases/$databaseId",
 )({
   component: DatabaseDetailPage,
 });
-
-function CopyButton({ value }: { value: string }) {
-  const [copied, setCopied] = useState(false);
-
-  const handleCopy = async () => {
-    const ok = await copyToClipboard(value);
-    if (ok) {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    }
-  };
-
-  return (
-    <Button
-      variant="ghost"
-      size="icon"
-      className="h-7 w-7"
-      onClick={handleCopy}
-    >
-      {copied ? (
-        <Check className="h-3.5 w-3.5 text-green-500" />
-      ) : (
-        <Copy className="h-3.5 w-3.5" />
-      )}
-    </Button>
-  );
-}
 
 function DatabaseDetailPage() {
   const { projectId, databaseId } = Route.useParams();

@@ -380,8 +380,8 @@ func (h *TaskHandler) failDeployment(ctx context.Context, deploymentID pgtype.UU
 	}
 }
 
-// updateDeploymentStatus validates the transition and updates the deployment status.
-// It logs a warning and skips the update if the transition is not permitted.
+// updateDeploymentStatus validates the transition, updates the deployment status,
+// and stamps the relevant timing column for the new state.
 func (h *TaskHandler) updateDeploymentStatus(ctx context.Context, id pgtype.UUID, from, to string) {
 	if !status.ValidTransition(from, to) {
 		slog.Warn("invalid deployment transition skipped", "from", from, "to", to,
@@ -392,6 +392,16 @@ func (h *TaskHandler) updateDeploymentStatus(ctx context.Context, id pgtype.UUID
 		ID:     id,
 		Status: to,
 	})
+	// Stamp the timing column that corresponds to this transition.
+	switch to {
+	case status.DeploymentBuilding:
+		h.Queries.SetDeploymentBuildStarted(ctx, id)
+	case status.DeploymentDeploying:
+		if from == status.DeploymentBuilding {
+			h.Queries.SetDeploymentBuildEnded(ctx, id)
+		}
+		h.Queries.SetDeploymentDeployStarted(ctx, id)
+	}
 }
 
 func parseUUID(s string) pgtype.UUID {

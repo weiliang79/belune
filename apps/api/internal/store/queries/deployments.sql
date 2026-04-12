@@ -14,6 +14,15 @@ UPDATE deployments SET status = $2, error_message = $3, finished_at = NOW()
 WHERE id = $1
 RETURNING *;
 
+-- name: SetDeploymentBuildStarted :exec
+UPDATE deployments SET build_started_at = NOW() WHERE id = $1;
+
+-- name: SetDeploymentBuildEnded :exec
+UPDATE deployments SET build_ended_at = NOW() WHERE id = $1;
+
+-- name: SetDeploymentDeployStarted :exec
+UPDATE deployments SET deploy_started_at = NOW() WHERE id = $1;
+
 -- name: UpdateDeploymentBuildLogs :exec
 UPDATE deployments SET build_logs = $2 WHERE id = $1;
 

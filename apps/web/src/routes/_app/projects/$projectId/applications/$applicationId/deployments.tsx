@@ -161,13 +161,25 @@ function DeploymentCard({
   const lines = useBuildLogStream(projectId, applicationId, d.id, isBuilding);
   const canRollback = d.status === "success" && !!d.image_tag;
 
-  const duration =
+  // Overall duration (started → finished)
+  const totalDuration =
     d.finished_at && d.started_at
-      ? formatDuration(
-          new Date(d.finished_at).getTime() -
-            new Date(d.started_at).getTime(),
-        )
+      ? formatDuration(new Date(d.finished_at).getTime() - new Date(d.started_at).getTime())
       : null;
+
+  // Build phase: build_started_at → build_ended_at
+  const buildDuration =
+    d.build_started_at && d.build_ended_at
+      ? formatDuration(new Date(d.build_ended_at).getTime() - new Date(d.build_started_at).getTime())
+      : null;
+
+  // Deploy phase: deploy_started_at → finished_at
+  const deployDuration =
+    d.deploy_started_at && d.finished_at
+      ? formatDuration(new Date(d.finished_at).getTime() - new Date(d.deploy_started_at).getTime())
+      : null;
+
+  const hasSplit = buildDuration !== null && deployDuration !== null;
 
   return (
     <Card
@@ -198,7 +210,13 @@ function DeploymentCard({
               />
             )}
             <div className="text-muted-foreground flex items-center gap-3 text-xs">
-              {duration && <span>{duration}</span>}
+              {hasSplit ? (
+                <span title={`Build: ${buildDuration} · Deploy: ${deployDuration}`}>
+                  {buildDuration} + {deployDuration}
+                </span>
+              ) : totalDuration ? (
+                <span>{totalDuration}</span>
+              ) : null}
               <span>{formatDate(d.started_at)}</span>
             </div>
           </div>

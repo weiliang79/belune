@@ -82,6 +82,9 @@ CREATE TABLE deployments (
     build_logs TEXT,
     error_message TEXT,
     started_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    build_started_at TIMESTAMPTZ,
+    build_ended_at TIMESTAMPTZ,
+    deploy_started_at TIMESTAMPTZ,
     finished_at TIMESTAMPTZ
 );
 

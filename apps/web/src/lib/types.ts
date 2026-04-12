@@ -49,6 +49,9 @@ export interface Deployment {
   error_message: string | null;
   image_tag: string | null;
   started_at: string;
+  build_started_at: string | null;
+  build_ended_at: string | null;
+  deploy_started_at: string | null;
   finished_at: string | null;
 }
 
