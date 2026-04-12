@@ -51,8 +51,8 @@ export const queryKeys = {
       ["projects", projectId, "databases", databaseId] as const,
   },
   applicationLogs: {
-    history: (projectId: string, applicationId: string) =>
-      ["projects", projectId, "applications", applicationId, "logs", "history"] as const,
+    history: (projectId: string, applicationId: string, params?: object) =>
+      ["projects", projectId, "applications", applicationId, "logs", "history", params] as const,
   },
   globalDeployments: (params?: object) =>
     ["deployments", params] as const,
