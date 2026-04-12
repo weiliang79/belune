@@ -6,6 +6,12 @@ import (
 	"time"
 )
 
+// TerminalExecSession represents an active exec session with TTY in a container.
+type TerminalExecSession struct {
+	ExecID string
+	RWC    io.ReadWriteCloser // combined stdin+stdout stream (TTY mode — no mux header)
+}
+
 type ContainerConfig struct {
 	Name        string
 	Image       string
@@ -62,6 +68,12 @@ type ContainerRuntime interface {
 	PruneVolumes(ctx context.Context) error
 	ContainerStats(ctx context.Context, containerID string) (*ContainerResourceStats, error)
 	ContainerEvents(ctx context.Context, filters map[string][]string) (<-chan ContainerEvent, <-chan error)
+	// ContainerExecTTY creates a new exec session in the named container with TTY enabled.
+	// cmd is the command to run (e.g. ["sh"] or ["bash"]).
+	// Returns a TerminalExecSession with an exec ID (for resize) and a combined RWC.
+	ContainerExecTTY(ctx context.Context, containerName string, cmd []string) (*TerminalExecSession, error)
+	// ContainerExecResize resizes the PTY for the given exec session.
+	ContainerExecResize(ctx context.Context, execID string, rows, cols uint) error
 }
 
 // ContainerEvent represents a Docker container lifecycle event.

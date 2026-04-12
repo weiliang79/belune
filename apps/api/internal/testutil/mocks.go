@@ -92,6 +92,14 @@ func (m *MockContainerRuntime) ContainerEvents(_ context.Context, _ map[string][
 	return ch, errCh
 }
 
+func (m *MockContainerRuntime) ContainerExecTTY(_ context.Context, _ string, _ []string) (*runtime.TerminalExecSession, error) {
+	return nil, nil
+}
+
+func (m *MockContainerRuntime) ContainerExecResize(_ context.Context, _ string, _, _ uint) error {
+	return nil
+}
+
 // MockProxyManager implements proxy.ProxyManager for testing.
 type MockProxyManager struct {
 	mu            sync.Mutex

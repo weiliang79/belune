@@ -98,6 +98,7 @@ function ApplicationLayout() {
     { to: `${basePath}/logs`, label: "Logs" },
     { to: `${basePath}/env`, label: "Env Vars" },
     { to: `${basePath}/domains`, label: "Domains" },
+    { to: `${basePath}/terminal`, label: "Terminal" },
     { to: `${basePath}/settings`, label: "Settings" },
   ];
 

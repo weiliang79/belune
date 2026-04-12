@@ -16,6 +16,7 @@ import (
 	"github.com/ungweiliang/selfhost-paas/internal/server/middleware"
 	"github.com/ungweiliang/selfhost-paas/internal/service"
 	"github.com/ungweiliang/selfhost-paas/internal/store/generated"
+	"github.com/ungweiliang/selfhost-paas/internal/terminal"
 	"github.com/ungweiliang/selfhost-paas/internal/ws"
 	"github.com/ungweiliang/selfhost-paas/web"
 )
@@ -28,7 +29,7 @@ type Server struct {
 	auth    *service.AuthService
 }
 
-func New(cfg *config.Config, db *pgxpool.Pool, queries *generated.Queries, asynqClient handler.TaskEnqueuer, rt runtime.ContainerRuntime, pm proxy.ProxyManager, rdb *redis.Client, hub *ws.Hub, auditSvc *service.AuditService) *Server {
+func New(cfg *config.Config, db *pgxpool.Pool, queries *generated.Queries, asynqClient handler.TaskEnqueuer, rt runtime.ContainerRuntime, pm proxy.ProxyManager, rdb *redis.Client, hub *ws.Hub, auditSvc *service.AuditService, termMgr *terminal.Manager) *Server {
 	auth := service.NewAuthService(queries, cfg.JWTSecret, cfg.JWTExpiryHours, rdb)
 	appSvc := service.NewApplicationService(db, queries, rt, cfg.EncryptionKey)
 	projSvc := service.NewProjectService(queries, rt)
@@ -39,7 +40,7 @@ func New(cfg *config.Config, db *pgxpool.Pool, queries *generated.Queries, asynq
 		cfg:     cfg,
 		db:      db,
 		auth:    auth,
-		handler: handler.New(cfg, db, queries, asynqClient, rt, pm, auth, rdb, appSvc, projSvc, dbSvc, gitCredSvc, hub, auditSvc),
+		handler: handler.New(cfg, db, queries, asynqClient, rt, pm, auth, rdb, appSvc, projSvc, dbSvc, gitCredSvc, hub, auditSvc, termMgr),
 	}
 
 	s.router = s.setupRouter()

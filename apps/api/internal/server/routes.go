@@ -51,12 +51,13 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService,
 		})
 	})
 
-	// WebSocket: auth-protected but not rate-limited. The httprate middleware
+	// WebSocket routes: auth-protected but not rate-limited. The httprate middleware
 	// wraps the ResponseWriter in a way that breaks Hijacker, preventing the
 	// protocol upgrade.
 	r.Group(func(r chi.Router) {
 		r.Use(middleware.Auth(auth))
 		r.Get("/api/ws", h.HandleWebSocket)
+		r.Get("/api/ws/terminal/{sessionId}", h.HandleTerminalWebSocket)
 	})
 
 	// Protected routes
@@ -116,6 +117,9 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService,
 		r.Get("/api/projects/{projectId}/applications/{applicationId}/deployments/{deploymentId}", h.GetDeployment)
 		r.Get("/api/projects/{projectId}/applications/{applicationId}/deployments/{deploymentId}/build-logs", h.StreamBuildLogs)
 		r.Post("/api/projects/{projectId}/applications/{applicationId}/rollback", h.RollbackDeployment)
+
+		// Terminal sessions
+		r.Post("/api/projects/{projectId}/applications/{applicationId}/terminal", h.CreateTerminalSession)
 
 		// Logs
 		r.Get("/api/projects/{projectId}/applications/{applicationId}/logs", h.StreamLogs)

@@ -34,6 +34,7 @@ import (
 	"github.com/ungweiliang/selfhost-paas/internal/service"
 	"github.com/ungweiliang/selfhost-paas/internal/store"
 	"github.com/ungweiliang/selfhost-paas/internal/store/generated"
+	"github.com/ungweiliang/selfhost-paas/internal/terminal"
 	"github.com/ungweiliang/selfhost-paas/internal/worker"
 	"github.com/ungweiliang/selfhost-paas/internal/ws"
 )
@@ -216,8 +217,11 @@ func main() {
 		auditSvc.Run(auditCtx)
 	}()
 
+	// Terminal session manager
+	termMgr := terminal.NewManager()
+
 	// HTTP server
-	srv := server.New(cfg, db, queries, asynqClient, dockerClient, caddyClient, rdb, hub, auditSvc)
+	srv := server.New(cfg, db, queries, asynqClient, dockerClient, caddyClient, rdb, hub, auditSvc, termMgr)
 
 	httpServer := &http.Server{
 		Addr:         fmt.Sprintf(":%d", cfg.Port),
@@ -249,6 +253,9 @@ func main() {
 	if err := httpServer.Shutdown(shutdownCtx); err != nil {
 		slog.Error("server forced to shutdown", "error", err)
 	}
+
+	// Close all active terminal sessions
+	termMgr.CloseAll()
 
 	// Cancel background goroutines
 	cancelWatcher()

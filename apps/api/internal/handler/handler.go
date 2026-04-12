@@ -14,6 +14,7 @@ import (
 	"github.com/ungweiliang/selfhost-paas/internal/server/middleware"
 	"github.com/ungweiliang/selfhost-paas/internal/service"
 	"github.com/ungweiliang/selfhost-paas/internal/store/generated"
+	"github.com/ungweiliang/selfhost-paas/internal/terminal"
 	"github.com/ungweiliang/selfhost-paas/internal/ws"
 )
 
@@ -37,6 +38,7 @@ type Handler struct {
 	gitCredSvc  *service.GitCredentialService
 	hub         *ws.Hub
 	auditSvc    *service.AuditService
+	termManager *terminal.Manager
 }
 
 func New(
@@ -54,6 +56,7 @@ func New(
 	gitCredSvc *service.GitCredentialService,
 	hub *ws.Hub,
 	auditSvc *service.AuditService,
+	termMgr *terminal.Manager,
 ) *Handler {
 	return &Handler{
 		cfg:         cfg,
@@ -70,6 +73,7 @@ func New(
 		gitCredSvc:  gitCredSvc,
 		hub:         hub,
 		auditSvc:    auditSvc,
+		termManager: termMgr,
 	}
 }
 
