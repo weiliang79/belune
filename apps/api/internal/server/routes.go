@@ -1,6 +1,7 @@
 package server
 
 import (
+	"net/http"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -10,6 +11,16 @@ import (
 	"github.com/ungweiliang/selfhost-paas/internal/server/middleware"
 	"github.com/ungweiliang/selfhost-paas/internal/service"
 )
+
+// keyByUserIDOrIP keys rate limiting by authenticated user ID, falling back to
+// IP address for unauthenticated requests. This ensures per-user limits rather
+// than per-IP limits on protected routes.
+func keyByUserIDOrIP(r *http.Request) (string, error) {
+	if userID := middleware.UserIDFromContext(r.Context()); userID != "" {
+		return "user:" + userID, nil
+	}
+	return httprate.KeyByIP(r)
+}
 
 func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService, disableRateLimit bool) {
 	// Health check (deep — checks DB, Redis, Docker)
@@ -52,7 +63,10 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService,
 	r.Group(func(r chi.Router) {
 		r.Use(middleware.Auth(auth))
 		if !disableRateLimit {
-			r.Use(httprate.LimitByIP(100, time.Minute))
+			// Key by user ID so each authenticated user gets their own 100 req/min
+			// bucket, independent of IP. Falls back to IP for unauthenticated paths
+			// that share this group (none currently, but safe by default).
+			r.Use(httprate.Limit(100, time.Minute, httprate.WithKeyFuncs(keyByUserIDOrIP)))
 		}
 
 		r.Post("/api/auth/logout", h.Logout)
