@@ -83,28 +83,38 @@ func (h *Handler) GetGlobalDeployments(w http.ResponseWriter, r *http.Request) {
 	// Optional filters
 	if v := r.URL.Query().Get("project_id"); v != "" {
 		var uuid pgtype.UUID
-		if err := uuid.Scan(v); err == nil {
-			params.ProjectID = uuid
+		if err := uuid.Scan(v); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid project_id format")
+			return
 		}
+		params.ProjectID = uuid
 	}
 	if v := r.URL.Query().Get("application_id"); v != "" {
 		var uuid pgtype.UUID
-		if err := uuid.Scan(v); err == nil {
-			params.ApplicationID = uuid
+		if err := uuid.Scan(v); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid application_id format")
+			return
 		}
+		params.ApplicationID = uuid
 	}
 	if v := r.URL.Query().Get("status"); v != "" {
 		params.Status = pgtype.Text{String: v, Valid: true}
 	}
 	if v := r.URL.Query().Get("from"); v != "" {
-		if t, err := time.Parse(time.RFC3339, v); err == nil {
-			params.From = pgtype.Timestamptz{Time: t, Valid: true}
+		t, err := time.Parse(time.RFC3339, v)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "invalid from format, expected RFC3339")
+			return
 		}
+		params.From = pgtype.Timestamptz{Time: t, Valid: true}
 	}
 	if v := r.URL.Query().Get("to"); v != "" {
-		if t, err := time.Parse(time.RFC3339, v); err == nil {
-			params.To = pgtype.Timestamptz{Time: t, Valid: true}
+		t, err := time.Parse(time.RFC3339, v)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "invalid to format, expected RFC3339")
+			return
 		}
+		params.To = pgtype.Timestamptz{Time: t, Valid: true}
 	}
 
 	// Non-admins are scoped to their own projects

@@ -25,8 +25,27 @@ func (h *Handler) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Validate the Origin header against the configured allowed origins to prevent
+	// cross-site WebSocket hijacking (CSWSH). Browsers always send Origin; requests
+	// without an Origin header (same-origin or non-browser clients) are allowed through.
+	if origin := r.Header.Get("Origin"); origin != "" {
+		allowed := false
+		for _, o := range h.cfg.CORSOrigins {
+			if o == origin {
+				allowed = true
+				break
+			}
+		}
+		if !allowed {
+			slog.Warn("ws: rejected connection from disallowed origin", "origin", origin)
+			writeError(w, http.StatusForbidden, "origin not allowed")
+			return
+		}
+	}
+
 	conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{
-		// Allow all origins in dev; in production, configure via CORS
+		// Origin is validated manually above; skip the library's host-match check
+		// so that allowed cross-origin clients (e.g. frontend on a different port) can connect.
 		InsecureSkipVerify: true,
 	})
 	if err != nil {

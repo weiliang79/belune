@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"regexp"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -14,6 +15,10 @@ import (
 	"github.com/ungweiliang/selfhost-paas/internal/proxy"
 	"github.com/ungweiliang/selfhost-paas/internal/store/generated"
 )
+
+// hostnameRegex validates RFC 1123 hostnames. Each label is 1–63 alphanumeric characters
+// or internal hyphens; the full name must have at least one dot (or be "localhost").
+var hostnameRegex = regexp.MustCompile(`^(([a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}|localhost)$`)
 
 // uuidToString converts a pgtype.UUID to its string representation.
 func uuidToString(u pgtype.UUID) string {
@@ -90,6 +95,10 @@ func (h *Handler) AddDomain(w http.ResponseWriter, r *http.Request) {
 
 	if req.Hostname == "" {
 		writeError(w, http.StatusBadRequest, "hostname is required")
+		return
+	}
+	if !hostnameRegex.MatchString(req.Hostname) {
+		writeError(w, http.StatusBadRequest, "invalid hostname format")
 		return
 	}
 
@@ -197,6 +206,10 @@ func (h *Handler) UpdateDomain(w http.ResponseWriter, r *http.Request) {
 
 	if req.Hostname == "" {
 		writeError(w, http.StatusBadRequest, "hostname is required")
+		return
+	}
+	if !hostnameRegex.MatchString(req.Hostname) {
+		writeError(w, http.StatusBadRequest, "invalid hostname format")
 		return
 	}
 	if req.SSLMode != "" && !validSSLModes[req.SSLMode] {
