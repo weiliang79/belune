@@ -1,0 +1,31 @@
+services:
+  api:
+    image: mcr.microsoft.com/devcontainers/go:1-1.25-bookworm
+    command: sleep infinity
+    volumes:
+      - ..:/workspaces/selfhost-paas:cached
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /var/tmp/paas-builds:/var/tmp/paas-builds
+    environment:
+      DATABASE_URL: postgres://paas:paas@postgres:5432/paas?sslmode=disable
+      REDIS_URL: redis://redis:6379
+      CADDY_ADMIN_URL: http://caddy:2019
+      BUILDKIT_HOST: tcp://buildkit:1234
+      TMPDIR: /var/tmp/paas-builds
+      PORT: "8080"
+    env_file:
+      - ../.env
+    networks:
+      - default
+      - paas-infra
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+networks:
+  paas-infra:
+    name: paas-infra
+    external: true
+  default: {}

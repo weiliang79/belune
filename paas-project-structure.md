@@ -469,8 +469,8 @@ tasks:
 5. Visit http://localhost:5173 → proxied to :8080 for API calls
 
 Production build:
-1. task build:web          → outputs to apps/api/frontend/
-2. task build:api          → embeds frontend, outputs single binary
+1. task build:web          → outputs to apps/api/web/dist/
+2. task build:api          → embeds frontend via //go:embed, outputs single binary
 3. ./paas                  → serves both API and UI on :8080
 ```
 
