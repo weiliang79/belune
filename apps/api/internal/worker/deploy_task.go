@@ -409,35 +409,9 @@ func (h *TaskHandler) wireProxy(ctx context.Context, dc *deployContext) error {
 	}
 
 	for _, domain := range dc.domains {
-		port := resolveContainerPort([]generated.Domain{domain})
-
-		var features []proxy.RouteFeature
-		dbFeatures, fErr := h.Queries.ListRouteFeaturesByDomain(ctx, domain.ID)
-		if fErr == nil {
-			for _, f := range dbFeatures {
-				var cfg map[string]any
-				if len(f.Config) > 0 {
-					json.Unmarshal(f.Config, &cfg)
-				}
-				features = append(features, proxy.RouteFeature{
-					Type:    f.FeatureType,
-					Config:  cfg,
-					Enabled: f.Enabled,
-				})
-			}
-		}
-
-		cfg := proxy.RouteConfig{
-			Hostname:       domain.Hostname,
-			TargetURL:      fmt.Sprintf("http://%s:%d", dc.containerName, port),
-			TLS:            domain.SslEnabled,
-			ForceHTTPS:     domain.ForceHttps,
-			SSLMode:        domain.SslMode,
-			SSLProvider:    domain.SslProvider.String,
-			CertPath:       domain.CertPath.String,
-			KeyPath:        domain.KeyPath.String,
-			Features:       features,
-			AdvancedConfig: domain.AdvancedConfig,
+		cfg, err := proxy.BuildRouteConfigFromDB(ctx, h.Queries, domain, dc.containerName)
+		if err != nil {
+			return fmt.Errorf("build route config for %s: %w", domain.Hostname, err)
 		}
 		if err := h.Proxy.AddRoute(ctx, cfg); err != nil {
 			return fmt.Errorf("add route for %s: %w", domain.Hostname, err)

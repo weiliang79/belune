@@ -146,8 +146,15 @@ func main() {
 	// Normalise Caddy route ordering: domain-specific routes first, catch-all last.
 	caddyClient.InitCatchAll(context.Background())
 
-	// Recover proxy routes for all running applications (in case Caddy restarted).
-	recoverProxyRoutes(context.Background(), queries, caddyClient)
+	// Start proxy reconciler — reconciles immediately (replacing the old one-shot
+	// recoverProxyRoutes call) and then every 30s to correct Caddy/DB drift.
+	reconcilerCtx, cancelReconciler := context.WithCancel(context.Background())
+	reconciler := proxy.NewReconciler(queries, caddyClient, 30*time.Second)
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		reconciler.Run(reconcilerCtx)
+	}()
 
 	// Configure Caddy access logging AFTER route setup — InitCatchAll patches srv0
 	// with {listen, routes} which clears the logs key if done in the wrong order.
@@ -259,6 +266,7 @@ func main() {
 	termMgr.CloseAll()
 
 	// Cancel background goroutines
+	cancelReconciler()
 	cancelWatcher()
 	cancelAdapters()
 	cancelHub()
@@ -334,83 +342,3 @@ func runAppMetricsBroadcaster(
 	}
 }
 
-// recoverProxyRoutes re-registers Caddy routes for all running applications.
-// This ensures routes survive Caddy restarts since dynamically added routes
-// are not persisted in the Caddyfile.
-func recoverProxyRoutes(ctx context.Context, queries *generated.Queries, proxyClient *caddy.Client) {
-	apps, err := queries.ListAllApplications(ctx)
-	if err != nil {
-		slog.Warn("failed to list applications for route recovery", "error", err)
-		return
-	}
-
-	var recovered int
-	for _, app := range apps {
-		if app.Status != "running" {
-			continue
-		}
-
-		appIDStr := fmt.Sprintf("%x-%x-%x-%x-%x",
-			app.ID.Bytes[0:4], app.ID.Bytes[4:6], app.ID.Bytes[6:8],
-			app.ID.Bytes[8:10], app.ID.Bytes[10:16])
-
-		row, err := queries.GetApplicationWithProjectSlug(ctx, app.ID)
-		if err != nil {
-			slog.Warn("route recovery: failed to get project slug", "app", appIDStr, "error", err)
-			continue
-		}
-
-		containerName := fmt.Sprintf("%s-%s-%s", row.ProjectSlug, app.Slug, appIDStr[:8])
-
-		domains, err := queries.ListDomainsByApplication(ctx, app.ID)
-		if err != nil {
-			slog.Warn("route recovery: failed to list domains", "app", appIDStr, "error", err)
-			continue
-		}
-
-		for _, domain := range domains {
-			var port int32 = 8080
-			if domain.ContainerPort.Valid {
-				port = domain.ContainerPort.Int32
-			}
-
-			// Load route features
-			var features []proxy.RouteFeature
-			dbFeatures, fErr := queries.ListRouteFeaturesByDomain(ctx, domain.ID)
-			if fErr == nil {
-				for _, f := range dbFeatures {
-					var cfg map[string]any
-					if len(f.Config) > 0 {
-						json.Unmarshal(f.Config, &cfg)
-					}
-					features = append(features, proxy.RouteFeature{
-						Type:    f.FeatureType,
-						Config:  cfg,
-						Enabled: f.Enabled,
-					})
-				}
-			}
-
-			if err := proxyClient.AddRoute(ctx, proxy.RouteConfig{
-				Hostname:       domain.Hostname,
-				TargetURL:      fmt.Sprintf("http://%s:%d", containerName, port),
-				TLS:            domain.SslEnabled,
-				ForceHTTPS:     domain.ForceHttps,
-				SSLMode:        domain.SslMode,
-				SSLProvider:    domain.SslProvider.String,
-				CertPath:       domain.CertPath.String,
-				KeyPath:        domain.KeyPath.String,
-				Features:       features,
-				AdvancedConfig: domain.AdvancedConfig,
-			}); err != nil {
-				slog.Warn("route recovery: failed to add route", "hostname", domain.Hostname, "error", err)
-				continue
-			}
-			recovered++
-		}
-	}
-
-	if recovered > 0 {
-		slog.Info("recovered proxy routes", "count", recovered)
-	}
-}
