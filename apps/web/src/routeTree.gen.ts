@@ -30,6 +30,7 @@ import { Route as AppProjectsProjectIdEnvRouteImport } from './routes/_app/proje
 import { Route as AppProjectsProjectIdDatabasesDatabaseIdRouteImport } from './routes/_app/projects/$projectId/databases/$databaseId'
 import { Route as AppProjectsProjectIdApplicationsApplicationIdRouteImport } from './routes/_app/projects/$projectId/applications/$applicationId'
 import { Route as AppProjectsProjectIdApplicationsApplicationIdIndexRouteImport } from './routes/_app/projects/$projectId/applications/$applicationId/index'
+import { Route as AppProjectsProjectIdApplicationsApplicationIdTerminalRouteImport } from './routes/_app/projects/$projectId/applications/$applicationId/terminal'
 import { Route as AppProjectsProjectIdApplicationsApplicationIdSettingsRouteImport } from './routes/_app/projects/$projectId/applications/$applicationId/settings'
 import { Route as AppProjectsProjectIdApplicationsApplicationIdMetricsRouteImport } from './routes/_app/projects/$projectId/applications/$applicationId/metrics'
 import { Route as AppProjectsProjectIdApplicationsApplicationIdLogsRouteImport } from './routes/_app/projects/$projectId/applications/$applicationId/logs'
@@ -146,6 +147,12 @@ const AppProjectsProjectIdApplicationsApplicationIdIndexRoute =
     path: '/',
     getParentRoute: () => AppProjectsProjectIdApplicationsApplicationIdRoute,
   } as any)
+const AppProjectsProjectIdApplicationsApplicationIdTerminalRoute =
+  AppProjectsProjectIdApplicationsApplicationIdTerminalRouteImport.update({
+    id: '/terminal',
+    path: '/terminal',
+    getParentRoute: () => AppProjectsProjectIdApplicationsApplicationIdRoute,
+  } as any)
 const AppProjectsProjectIdApplicationsApplicationIdSettingsRoute =
   AppProjectsProjectIdApplicationsApplicationIdSettingsRouteImport.update({
     id: '/settings',
@@ -209,6 +216,7 @@ export interface FileRoutesByFullPath {
   '/projects/$projectId/applications/$applicationId/logs': typeof AppProjectsProjectIdApplicationsApplicationIdLogsRoute
   '/projects/$projectId/applications/$applicationId/metrics': typeof AppProjectsProjectIdApplicationsApplicationIdMetricsRoute
   '/projects/$projectId/applications/$applicationId/settings': typeof AppProjectsProjectIdApplicationsApplicationIdSettingsRoute
+  '/projects/$projectId/applications/$applicationId/terminal': typeof AppProjectsProjectIdApplicationsApplicationIdTerminalRoute
   '/projects/$projectId/applications/$applicationId/': typeof AppProjectsProjectIdApplicationsApplicationIdIndexRoute
 }
 export interface FileRoutesByTo {
@@ -235,6 +243,7 @@ export interface FileRoutesByTo {
   '/projects/$projectId/applications/$applicationId/logs': typeof AppProjectsProjectIdApplicationsApplicationIdLogsRoute
   '/projects/$projectId/applications/$applicationId/metrics': typeof AppProjectsProjectIdApplicationsApplicationIdMetricsRoute
   '/projects/$projectId/applications/$applicationId/settings': typeof AppProjectsProjectIdApplicationsApplicationIdSettingsRoute
+  '/projects/$projectId/applications/$applicationId/terminal': typeof AppProjectsProjectIdApplicationsApplicationIdTerminalRoute
   '/projects/$projectId/applications/$applicationId': typeof AppProjectsProjectIdApplicationsApplicationIdIndexRoute
 }
 export interface FileRoutesById {
@@ -265,6 +274,7 @@ export interface FileRoutesById {
   '/_app/projects/$projectId/applications/$applicationId/logs': typeof AppProjectsProjectIdApplicationsApplicationIdLogsRoute
   '/_app/projects/$projectId/applications/$applicationId/metrics': typeof AppProjectsProjectIdApplicationsApplicationIdMetricsRoute
   '/_app/projects/$projectId/applications/$applicationId/settings': typeof AppProjectsProjectIdApplicationsApplicationIdSettingsRoute
+  '/_app/projects/$projectId/applications/$applicationId/terminal': typeof AppProjectsProjectIdApplicationsApplicationIdTerminalRoute
   '/_app/projects/$projectId/applications/$applicationId/': typeof AppProjectsProjectIdApplicationsApplicationIdIndexRoute
 }
 export interface FileRouteTypes {
@@ -295,6 +305,7 @@ export interface FileRouteTypes {
     | '/projects/$projectId/applications/$applicationId/logs'
     | '/projects/$projectId/applications/$applicationId/metrics'
     | '/projects/$projectId/applications/$applicationId/settings'
+    | '/projects/$projectId/applications/$applicationId/terminal'
     | '/projects/$projectId/applications/$applicationId/'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -321,6 +332,7 @@ export interface FileRouteTypes {
     | '/projects/$projectId/applications/$applicationId/logs'
     | '/projects/$projectId/applications/$applicationId/metrics'
     | '/projects/$projectId/applications/$applicationId/settings'
+    | '/projects/$projectId/applications/$applicationId/terminal'
     | '/projects/$projectId/applications/$applicationId'
   id:
     | '__root__'
@@ -350,6 +362,7 @@ export interface FileRouteTypes {
     | '/_app/projects/$projectId/applications/$applicationId/logs'
     | '/_app/projects/$projectId/applications/$applicationId/metrics'
     | '/_app/projects/$projectId/applications/$applicationId/settings'
+    | '/_app/projects/$projectId/applications/$applicationId/terminal'
     | '/_app/projects/$projectId/applications/$applicationId/'
   fileRoutesById: FileRoutesById
 }
@@ -509,6 +522,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppProjectsProjectIdApplicationsApplicationIdIndexRouteImport
       parentRoute: typeof AppProjectsProjectIdApplicationsApplicationIdRoute
     }
+    '/_app/projects/$projectId/applications/$applicationId/terminal': {
+      id: '/_app/projects/$projectId/applications/$applicationId/terminal'
+      path: '/terminal'
+      fullPath: '/projects/$projectId/applications/$applicationId/terminal'
+      preLoaderRoute: typeof AppProjectsProjectIdApplicationsApplicationIdTerminalRouteImport
+      parentRoute: typeof AppProjectsProjectIdApplicationsApplicationIdRoute
+    }
     '/_app/projects/$projectId/applications/$applicationId/settings': {
       id: '/_app/projects/$projectId/applications/$applicationId/settings'
       path: '/settings'
@@ -561,6 +581,7 @@ interface AppProjectsProjectIdApplicationsApplicationIdRouteChildren {
   AppProjectsProjectIdApplicationsApplicationIdLogsRoute: typeof AppProjectsProjectIdApplicationsApplicationIdLogsRoute
   AppProjectsProjectIdApplicationsApplicationIdMetricsRoute: typeof AppProjectsProjectIdApplicationsApplicationIdMetricsRoute
   AppProjectsProjectIdApplicationsApplicationIdSettingsRoute: typeof AppProjectsProjectIdApplicationsApplicationIdSettingsRoute
+  AppProjectsProjectIdApplicationsApplicationIdTerminalRoute: typeof AppProjectsProjectIdApplicationsApplicationIdTerminalRoute
   AppProjectsProjectIdApplicationsApplicationIdIndexRoute: typeof AppProjectsProjectIdApplicationsApplicationIdIndexRoute
 }
 
@@ -578,6 +599,8 @@ const AppProjectsProjectIdApplicationsApplicationIdRouteChildren: AppProjectsPro
       AppProjectsProjectIdApplicationsApplicationIdMetricsRoute,
     AppProjectsProjectIdApplicationsApplicationIdSettingsRoute:
       AppProjectsProjectIdApplicationsApplicationIdSettingsRoute,
+    AppProjectsProjectIdApplicationsApplicationIdTerminalRoute:
+      AppProjectsProjectIdApplicationsApplicationIdTerminalRoute,
     AppProjectsProjectIdApplicationsApplicationIdIndexRoute:
       AppProjectsProjectIdApplicationsApplicationIdIndexRoute,
   }

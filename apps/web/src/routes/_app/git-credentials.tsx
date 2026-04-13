@@ -97,8 +97,8 @@ function GitCredentialsPage() {
             if (!open) setEditing(null);
           }}
         >
-          <DialogTrigger asChild>
-            <Button>Add Credential</Button>
+          <DialogTrigger render={<Button />}>
+            Add Credential
           </DialogTrigger>
           <DialogContent>
             <DialogHeader>
@@ -174,10 +174,12 @@ function CredentialRow({
           Edit
         </Button>
         <AlertDialog>
-          <AlertDialogTrigger asChild>
-            <Button size="sm" variant="ghost" className="text-destructive">
-              Delete
-            </Button>
+          <AlertDialogTrigger
+            render={
+              <Button size="sm" variant="ghost" className="text-destructive" />
+            }
+          >
+            Delete
           </AlertDialogTrigger>
           <AlertDialogContent>
             <AlertDialogHeader>

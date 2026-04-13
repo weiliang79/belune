@@ -107,15 +107,17 @@ function RollbackButton({
 
   return (
     <AlertDialog>
-      <AlertDialogTrigger asChild>
-        <Button
-          size="sm"
-          variant="outline"
-          disabled={isPending}
-          onClick={(e) => e.stopPropagation()}
-        >
-          {isPending ? "Rolling back..." : "Rollback"}
-        </Button>
+      <AlertDialogTrigger
+        render={
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={isPending}
+            onClick={(e) => e.stopPropagation()}
+          />
+        }
+      >
+        {isPending ? "Rolling back..." : "Rollback"}
       </AlertDialogTrigger>
       <AlertDialogContent>
         <AlertDialogHeader>

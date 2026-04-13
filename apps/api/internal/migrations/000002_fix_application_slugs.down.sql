@@ -1,0 +1,1 @@
+-- No rollback: slug data before migration is not recoverable without a backup.

@@ -26,6 +26,7 @@ import (
 	"github.com/ungweiliang/selfhost-paas/internal/logcollector"
 	"github.com/ungweiliang/selfhost-paas/internal/logtailer"
 	"github.com/ungweiliang/selfhost-paas/internal/migrations"
+	"github.com/ungweiliang/selfhost-paas/internal/naming"
 	"github.com/ungweiliang/selfhost-paas/internal/proxy"
 	"github.com/ungweiliang/selfhost-paas/internal/proxy/caddy"
 	"github.com/ungweiliang/selfhost-paas/internal/runtime"
@@ -309,7 +310,7 @@ func runAppMetricsBroadcaster(
 				if err != nil {
 					continue
 				}
-				containerName := fmt.Sprintf("%s-%s-%s", row.ProjectSlug, row.Slug, appIDStr[:8])
+				containerName := naming.ContainerName(row.ProjectSlug, row.Slug, appIDStr)
 				stats, err := rt.ContainerStats(ctx, containerName)
 				if err != nil {
 					slog.Debug("app metrics: stats fetch failed", "container", containerName, "error", err)

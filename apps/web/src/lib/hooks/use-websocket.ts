@@ -56,6 +56,11 @@ function connect(): Promise<void> {
 
     ws.onopen = () => {
       retryCount = 0;
+      // If all listeners were removed while we were connecting, close cleanly now.
+      if (listeners.size === 0) {
+        ws?.close();
+        return;
+      }
       // Re-subscribe to all active channels
       for (const channel of listeners.keys()) {
         sendJSON({ action: "subscribe", channel });
@@ -120,7 +125,12 @@ function unsubscribe(channel: string, handler: MessageHandler) {
         clearTimeout(reconnectTimer);
         reconnectTimer = null;
       }
-      ws?.close();
+      // Only close if OPEN — if still CONNECTING, onopen will detect
+      // listeners.size === 0 and close cleanly, avoiding the
+      // "WebSocket closed before connection established" warning.
+      if (ws?.readyState === WebSocket.OPEN) {
+        ws.close();
+      }
       ws = null;
       connectPromise = null;
       retryCount = 0;
