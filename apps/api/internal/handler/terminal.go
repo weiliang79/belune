@@ -75,7 +75,12 @@ func (h *Handler) CreateTerminalSession(w http.ResponseWriter, r *http.Request) 
 	}
 
 	userID := middleware.UserIDFromContext(r.Context())
-	s := h.termManager.Create(applicationID, userID, shell, sess.ExecID, sess.RWC)
+	s, ok := h.termManager.Create(applicationID, userID, shell, sess.ExecID, sess.RWC)
+	if !ok {
+		sess.RWC.Close()
+		writeError(w, http.StatusTooManyRequests, "terminal session limit reached")
+		return
+	}
 
 	h.audit(r, "terminal.session.started", "application", applicationID, map[string]any{
 		"shell":      shell,

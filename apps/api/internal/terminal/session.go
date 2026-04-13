@@ -36,17 +36,30 @@ func (s *Session) Done() <-chan struct{} {
 
 // Manager holds all active terminal sessions in memory.
 type Manager struct {
-	mu       sync.Mutex
-	sessions map[string]*Session
+	mu              sync.Mutex
+	sessions        map[string]*Session
+	sessionsPerUser map[string]int
+	maxPerUser      int
 }
 
 // NewManager creates a new session manager.
-func NewManager() *Manager {
-	return &Manager{sessions: make(map[string]*Session)}
+// maxPerUser is the maximum number of concurrent sessions allowed per user ID.
+func NewManager(maxPerUser int) *Manager {
+	return &Manager{
+		sessions:        make(map[string]*Session),
+		sessionsPerUser: make(map[string]int),
+		maxPerUser:      maxPerUser,
+	}
 }
 
 // Create registers a new session and returns it.
-func (m *Manager) Create(appID, userID, shell, execID string, rwc io.ReadWriteCloser) *Session {
+// Returns (nil, false) if the user has reached the per-user session cap.
+func (m *Manager) Create(appID, userID, shell, execID string, rwc io.ReadWriteCloser) (*Session, bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.sessionsPerUser[userID] >= m.maxPerUser {
+		return nil, false
+	}
 	s := &Session{
 		ID:            newSessionID(),
 		ApplicationID: appID,
@@ -57,10 +70,9 @@ func (m *Manager) Create(appID, userID, shell, execID string, rwc io.ReadWriteCl
 		CreatedAt:     time.Now(),
 		done:          make(chan struct{}),
 	}
-	m.mu.Lock()
 	m.sessions[s.ID] = s
-	m.mu.Unlock()
-	return s
+	m.sessionsPerUser[userID]++
+	return s, true
 }
 
 // Get returns a session by ID, or nil if not found.
@@ -70,12 +82,16 @@ func (m *Manager) Get(id string) *Session {
 	return m.sessions[id]
 }
 
-// Delete removes and closes a session.
+// Delete removes and closes a session, decrementing the per-user counter.
 func (m *Manager) Delete(id string) {
 	m.mu.Lock()
 	s, ok := m.sessions[id]
 	if ok {
 		delete(m.sessions, id)
+		m.sessionsPerUser[s.UserID]--
+		if m.sessionsPerUser[s.UserID] <= 0 {
+			delete(m.sessionsPerUser, s.UserID)
+		}
 	}
 	m.mu.Unlock()
 	if ok {

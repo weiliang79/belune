@@ -8,7 +8,6 @@ import (
 )
 
 const (
-	maxConnectionsPerUser = 10
 	// maxConsecutiveDrops is the number of messages that can be dropped for a
 	// slow client before it is forcibly disconnected to prevent memory build-up.
 	maxConsecutiveDrops = 10
@@ -16,10 +15,11 @@ const (
 
 // Hub manages WebSocket clients and channel subscriptions.
 type Hub struct {
-	mu          sync.RWMutex
-	clients     map[*Client]struct{}
-	channels    map[string]map[*Client]struct{} // channel → clients
-	userConns   map[string]int                  // userID → connection count
+	mu              sync.RWMutex
+	clients         map[*Client]struct{}
+	channels        map[string]map[*Client]struct{} // channel → clients
+	userConns       map[string]int                  // userID → connection count
+	maxConnsPerUser int
 
 	registerCh   chan *Client
 	unregisterCh chan *Client
@@ -32,14 +32,16 @@ type broadcastMsg struct {
 	data    json.RawMessage
 }
 
-func NewHub() *Hub {
+// NewHub creates a hub with a configurable per-user connection cap.
+func NewHub(maxConnsPerUser int) *Hub {
 	return &Hub{
-		clients:      make(map[*Client]struct{}),
-		channels:     make(map[string]map[*Client]struct{}),
-		userConns:    make(map[string]int),
-		registerCh:   make(chan *Client, 64),
-		unregisterCh: make(chan *Client, 64),
-		broadcastCh:  make(chan broadcastMsg, 256),
+		maxConnsPerUser: maxConnsPerUser,
+		clients:         make(map[*Client]struct{}),
+		channels:        make(map[string]map[*Client]struct{}),
+		userConns:       make(map[string]int),
+		registerCh:      make(chan *Client, 64),
+		unregisterCh:    make(chan *Client, 64),
+		broadcastCh:     make(chan broadcastMsg, 256),
 	}
 }
 
@@ -114,11 +116,12 @@ func (h *Hub) Run(ctx context.Context) {
 }
 
 // Register adds a client to the hub.
+// Returns false if the user has reached the per-user connection cap.
 func (h *Hub) Register(c *Client) bool {
 	h.mu.RLock()
 	count := h.userConns[c.userID]
 	h.mu.RUnlock()
-	if count >= maxConnectionsPerUser {
+	if count >= h.maxConnsPerUser {
 		return false
 	}
 	h.registerCh <- c

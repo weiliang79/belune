@@ -107,8 +107,8 @@ func New(cfg *config.Config) (*App, error) {
 
 	metricsSvc := service.NewMetricsService(queries, rdb)
 	auditSvc := service.NewAuditService(queries)
-	termMgr := terminal.NewManager()
-	hub := ws.NewHub()
+	termMgr := terminal.NewManager(cfg.MaxTerminalSessionsPerUser)
+	hub := ws.NewHub(cfg.MaxWebSocketConnsPerUser)
 
 	taskHandler := &worker.TaskHandler{
 		Runtime:        dockerClient,

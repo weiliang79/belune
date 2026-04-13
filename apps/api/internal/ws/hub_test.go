@@ -22,7 +22,7 @@ func fakeClient(hub *Hub, userID string) *Client {
 
 func startHub(t *testing.T) (*Hub, context.CancelFunc) {
 	t.Helper()
-	hub := NewHub()
+	hub := NewHub(20)
 	ctx, cancel := context.WithCancel(context.Background())
 	go hub.Run(ctx)
 	return hub, cancel
@@ -110,11 +110,14 @@ func TestHub_Unsubscribe(t *testing.T) {
 }
 
 func TestHub_MaxConnectionsPerUser(t *testing.T) {
-	hub, cancel := startHub(t)
+	const testMax = 3
+	hub := NewHub(testMax)
+	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+	go hub.Run(ctx)
 
-	// Register maxConnectionsPerUser clients
-	for i := 0; i < maxConnectionsPerUser; i++ {
+	// Register exactly testMax clients — all should succeed
+	for i := 0; i < testMax; i++ {
 		c := fakeClient(hub, "user-1")
 		ok := hub.Register(c)
 		require.True(t, ok, "should allow connection %d", i)

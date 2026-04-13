@@ -26,6 +26,10 @@ type Config struct {
 	BuildTimeoutMinutes     int // max duration for build operations (default 30)
 	TaskTimeoutMinutes      int // max duration for asynq tasks (default 45)
 	ImagePullTimeoutMinutes int // max duration for image pull operations (default 10)
+
+	// Resource limits
+	MaxTerminalSessionsPerUser int // per-user cap on concurrent terminal sessions (default 5)
+	MaxWebSocketConnsPerUser   int // per-user cap on concurrent WebSocket connections (default 20)
 }
 
 func Load() (*Config, error) {
@@ -46,6 +50,9 @@ func Load() (*Config, error) {
 		BuildTimeoutMinutes:     getEnvInt("BUILD_TIMEOUT_MINUTES", 30),
 		TaskTimeoutMinutes:      getEnvInt("TASK_TIMEOUT_MINUTES", 45),
 		ImagePullTimeoutMinutes: getEnvInt("IMAGE_PULL_TIMEOUT_MINUTES", 10),
+
+		MaxTerminalSessionsPerUser: getEnvInt("MAX_TERMINAL_SESSIONS_PER_USER", 5),
+		MaxWebSocketConnsPerUser:   getEnvInt("MAX_WEBSOCKET_CONNS_PER_USER", 20),
 	}
 
 	if cfg.JWTSecret == "" {

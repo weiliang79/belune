@@ -12,6 +12,12 @@ import (
 	"github.com/ungweiliang/selfhost-paas/internal/service"
 )
 
+const (
+	defaultBodyLimit = 1 << 20      // 1 MB — applied to all non-streaming routes
+	envBodyLimit     = 5 << 20      // 5 MB — raised for bulk env-var imports
+	handlerTimeout   = 15 * time.Second
+)
+
 // keyByUserIDOrIP keys rate limiting by authenticated user ID, falling back to
 // IP address for unauthenticated requests. This ensures per-user limits rather
 // than per-IP limits on protected routes.
@@ -22,38 +28,47 @@ func keyByUserIDOrIP(r *http.Request) (string, error) {
 	return httprate.KeyByIP(r)
 }
 
+// withTimeout wraps a handler in an http.TimeoutHandler so slow-loris attacks
+// cannot hold non-streaming connections open indefinitely.
+func withTimeout(d time.Duration) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.TimeoutHandler(next, d, `{"error":"request timeout"}`)
+	}
+}
+
 func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService, disableRateLimit bool) {
-	// Health check (deep — checks DB, Redis, Docker)
+	// Health check (unauthenticated; no body limit needed, no timeout applied so
+	// health-check pollers with long intervals are not artificially rejected).
 	r.Get("/healthz", h.HealthCheck)
 
-	// Public routes
+	// Public routes — small body limit; no timeout on login (rate-limited instead)
 	r.Group(func(r chi.Router) {
+		r.Use(middleware.BodyLimit(defaultBodyLimit))
+
 		// Login rate limit: 5 req/min per IP
 		r.Group(func(r chi.Router) {
 			if !disableRateLimit {
 				r.Use(httprate.LimitByIP(5, time.Minute))
 			}
-			r.Post("/api/auth/login", h.Login)
+			r.With(withTimeout(handlerTimeout)).Post("/api/auth/login", h.Login)
 		})
 
-		r.Get("/api/auth/setup", h.Setup)
-		r.Post("/api/auth/setup", h.Setup)
-
-		// Feature flags / system status
-		r.Get("/api/features", h.GetFeatures)
+		r.With(withTimeout(handlerTimeout)).Get("/api/auth/setup", h.Setup)
+		r.With(withTimeout(handlerTimeout)).Post("/api/auth/setup", h.Setup)
+		r.With(withTimeout(handlerTimeout)).Get("/api/features", h.GetFeatures)
 
 		// Webhooks: 30 req/min per IP
 		r.Group(func(r chi.Router) {
 			if !disableRateLimit {
 				r.Use(httprate.LimitByIP(30, time.Minute))
 			}
-			r.Post("/api/webhooks/push", h.HandleWebhookPush)
+			r.With(withTimeout(handlerTimeout)).Post("/api/webhooks/push", h.HandleWebhookPush)
 		})
 	})
 
-	// WebSocket routes: auth-protected but not rate-limited. The httprate middleware
-	// wraps the ResponseWriter in a way that breaks Hijacker, preventing the
-	// protocol upgrade.
+	// WebSocket routes: auth-protected, no body limit, no timeout (long-lived connections).
+	// httprate must NOT be applied here — it wraps ResponseWriter in a way that
+	// breaks Hijacker and prevents the protocol upgrade.
 	r.Group(func(r chi.Router) {
 		r.Use(middleware.Auth(auth))
 		r.Get("/api/ws", h.HandleWebSocket)
@@ -64,128 +79,133 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService,
 	r.Group(func(r chi.Router) {
 		r.Use(middleware.Auth(auth))
 		if !disableRateLimit {
-			// Key by user ID so each authenticated user gets their own 100 req/min
-			// bucket, independent of IP. Falls back to IP for unauthenticated paths
-			// that share this group (none currently, but safe by default).
 			r.Use(httprate.Limit(100, time.Minute, httprate.WithKeyFuncs(keyByUserIDOrIP)))
 		}
 
-		r.Post("/api/auth/logout", h.Logout)
-		r.Get("/api/auth/me", h.Me)
-		r.Put("/api/auth/password", h.ChangeOwnPassword)
-		r.Put("/api/auth/profile", h.UpdateProfile)
-
-		// Admin-only routes
+		// Standard JSON routes: 1 MB body limit + 15 s timeout.
 		r.Group(func(r chi.Router) {
-			r.Use(middleware.RequireRole("admin"))
+			r.Use(middleware.BodyLimit(defaultBodyLimit))
+			r.Use(withTimeout(handlerTimeout))
 
-			r.Get("/api/users", h.ListUsers)
-			r.Put("/api/users/{userId}/role", h.UpdateUserRole)
-			r.Delete("/api/users/{userId}", h.DeleteUser)
+			r.Post("/api/auth/logout", h.Logout)
+			r.Get("/api/auth/me", h.Me)
+			r.Put("/api/auth/password", h.ChangeOwnPassword)
+			r.Put("/api/auth/profile", h.UpdateProfile)
 
-			// Tighter rate limit on user creation and password reset to limit blast
-			// radius if an admin session is compromised.
+			// Admin-only routes
 			r.Group(func(r chi.Router) {
-				if !disableRateLimit {
-					r.Use(httprate.LimitByIP(10, time.Minute))
-				}
-				r.Post("/api/users", h.CreateUser)
-				r.Put("/api/users/{userId}/password", h.ResetUserPassword)
+				r.Use(middleware.RequireRole("admin"))
+
+				r.Get("/api/users", h.ListUsers)
+				r.Put("/api/users/{userId}/role", h.UpdateUserRole)
+				r.Delete("/api/users/{userId}", h.DeleteUser)
+
+				r.Group(func(r chi.Router) {
+					if !disableRateLimit {
+						r.Use(httprate.LimitByIP(10, time.Minute))
+					}
+					r.Post("/api/users", h.CreateUser)
+					r.Put("/api/users/{userId}/password", h.ResetUserPassword)
+				})
+			})
+
+			// Git credentials
+			r.Get("/api/git-credentials", h.ListGitCredentials)
+			r.Post("/api/git-credentials", h.CreateGitCredential)
+			r.Put("/api/git-credentials/{credentialId}", h.UpdateGitCredential)
+			r.Delete("/api/git-credentials/{credentialId}", h.DeleteGitCredential)
+
+			// Projects
+			r.Get("/api/projects", h.ListProjects)
+			r.Post("/api/projects", h.CreateProject)
+			r.Get("/api/projects/{projectId}", h.GetProject)
+			r.Put("/api/projects/{projectId}", h.UpdateProject)
+			r.Delete("/api/projects/{projectId}", h.DeleteProject)
+			r.Put("/api/projects/{projectId}/transfer", h.TransferProject)
+
+			// Applications
+			r.Get("/api/projects/{projectId}/applications", h.ListApplications)
+			r.Post("/api/projects/{projectId}/applications", h.CreateApplication)
+			r.Get("/api/projects/{projectId}/applications/{applicationId}", h.GetApplication)
+			r.Put("/api/projects/{projectId}/applications/{applicationId}", h.UpdateApplication)
+			r.Delete("/api/projects/{projectId}/applications/{applicationId}", h.DeleteApplication)
+			r.Put("/api/projects/{projectId}/applications/{applicationId}/webhook", h.UpdateApplicationWebhook)
+			r.Post("/api/projects/{projectId}/applications/{applicationId}/deploy", h.DeployApplication)
+			r.Post("/api/projects/{projectId}/applications/{applicationId}/stop", h.StopApplication)
+			r.Post("/api/projects/{projectId}/applications/{applicationId}/start", h.StartApplication)
+			r.Post("/api/projects/{projectId}/applications/{applicationId}/restart", h.RestartApplication)
+			r.Post("/api/projects/{projectId}/applications/{applicationId}/build", h.BuildApplication)
+			r.Post("/api/projects/{projectId}/applications/{applicationId}/rollback", h.RollbackDeployment)
+
+			// Deployments
+			r.Get("/api/projects/{projectId}/applications/{applicationId}/deployments", h.ListDeployments)
+			r.Get("/api/projects/{projectId}/applications/{applicationId}/deployments/{deploymentId}", h.GetDeployment)
+
+			// Terminal session creation (exec is short; websocket tunnel is in the WS group)
+			r.Post("/api/projects/{projectId}/applications/{applicationId}/terminal", h.CreateTerminalSession)
+
+			// Application logs history (paginated query, not a stream)
+			r.Get("/api/projects/{projectId}/applications/{applicationId}/logs/history", h.ListApplicationLogs)
+
+			// Request logs (paginated)
+			r.Get("/api/projects/{projectId}/applications/{applicationId}/requests", h.ListRequestLogs)
+
+			// Domains
+			r.Get("/api/projects/{projectId}/applications/{applicationId}/domains", h.ListDomains)
+			r.Post("/api/projects/{projectId}/applications/{applicationId}/domains", h.AddDomain)
+			r.Put("/api/projects/{projectId}/applications/{applicationId}/domains/{domainId}", h.UpdateDomain)
+			r.Delete("/api/projects/{projectId}/applications/{applicationId}/domains/{domainId}", h.RemoveDomain)
+
+			// Domain route features
+			r.Get("/api/projects/{projectId}/applications/{applicationId}/domains/{domainId}/features", h.ListRouteFeatures)
+			r.Put("/api/projects/{projectId}/applications/{applicationId}/domains/{domainId}/features", h.UpsertRouteFeature)
+			r.Delete("/api/projects/{projectId}/applications/{applicationId}/domains/{domainId}/features/{featureId}", h.DeleteRouteFeature)
+
+			// Global deployments
+			r.Get("/api/deployments", h.GetGlobalDeployments)
+
+			// Admin-only: metrics snapshots, settings, cleanup, audit
+			r.Group(func(r chi.Router) {
+				r.Use(middleware.RequireRole("admin"))
+				r.Get("/api/metrics", h.GetMetrics)
+				r.Get("/api/metrics/host", h.GetHostHistoricalMetrics)
+				r.Post("/api/cleanup", h.TriggerCleanup)
+				r.Get("/api/settings", h.ListSettings)
+				r.Put("/api/settings", h.UpdateSettings)
+				r.Get("/api/requests", h.ListAllRequestLogs)
+				r.Get("/api/audit-logs", h.ListAuditLogs)
 			})
 		})
 
-		// Git credentials
-		r.Get("/api/git-credentials", h.ListGitCredentials)
-		r.Post("/api/git-credentials", h.CreateGitCredential)
-		r.Put("/api/git-credentials/{credentialId}", h.UpdateGitCredential)
-		r.Delete("/api/git-credentials/{credentialId}", h.DeleteGitCredential)
-
-		// Projects
-		r.Get("/api/projects", h.ListProjects)
-		r.Post("/api/projects", h.CreateProject)
-		r.Get("/api/projects/{projectId}", h.GetProject)
-		r.Put("/api/projects/{projectId}", h.UpdateProject)
-		r.Delete("/api/projects/{projectId}", h.DeleteProject)
-		r.Put("/api/projects/{projectId}/transfer", h.TransferProject) // admin-only enforced in handler
-
-		// Applications
-		r.Get("/api/projects/{projectId}/applications", h.ListApplications)
-		r.Post("/api/projects/{projectId}/applications", h.CreateApplication)
-		r.Get("/api/projects/{projectId}/applications/{applicationId}", h.GetApplication)
-		r.Put("/api/projects/{projectId}/applications/{applicationId}", h.UpdateApplication)
-		r.Delete("/api/projects/{projectId}/applications/{applicationId}", h.DeleteApplication)
-		r.Put("/api/projects/{projectId}/applications/{applicationId}/webhook", h.UpdateApplicationWebhook)
-		r.Post("/api/projects/{projectId}/applications/{applicationId}/deploy", h.DeployApplication)
-		r.Post("/api/projects/{projectId}/applications/{applicationId}/stop", h.StopApplication)
-		r.Post("/api/projects/{projectId}/applications/{applicationId}/start", h.StartApplication)
-		r.Post("/api/projects/{projectId}/applications/{applicationId}/restart", h.RestartApplication)
-
-		// Deployments
-		r.Get("/api/projects/{projectId}/applications/{applicationId}/deployments", h.ListDeployments)
-		r.Get("/api/projects/{projectId}/applications/{applicationId}/deployments/{deploymentId}", h.GetDeployment)
-		r.Get("/api/projects/{projectId}/applications/{applicationId}/deployments/{deploymentId}/build-logs", h.StreamBuildLogs)
-		r.Post("/api/projects/{projectId}/applications/{applicationId}/rollback", h.RollbackDeployment)
-
-		// Terminal sessions
-		r.Post("/api/projects/{projectId}/applications/{applicationId}/terminal", h.CreateTerminalSession)
-
-		// Logs
-		r.Get("/api/projects/{projectId}/applications/{applicationId}/logs", h.StreamLogs)
-		r.Get("/api/projects/{projectId}/applications/{applicationId}/logs/history", h.ListApplicationLogs)
-
-		// Request logs (HTTP access logs from Caddy)
-		r.Get("/api/projects/{projectId}/applications/{applicationId}/requests", h.ListRequestLogs)
-		r.Get("/api/projects/{projectId}/applications/{applicationId}/requests/stream", h.StreamRequestLogs)
-
-		// Environment variables
-		r.Get("/api/projects/{projectId}/applications/{applicationId}/env", h.ListEnvVars)
-		r.Put("/api/projects/{projectId}/applications/{applicationId}/env", h.UpdateEnvVars)
-
-		// Domains
-		r.Get("/api/projects/{projectId}/applications/{applicationId}/domains", h.ListDomains)
-		r.Post("/api/projects/{projectId}/applications/{applicationId}/domains", h.AddDomain)
-		r.Put("/api/projects/{projectId}/applications/{applicationId}/domains/{domainId}", h.UpdateDomain)
-		r.Delete("/api/projects/{projectId}/applications/{applicationId}/domains/{domainId}", h.RemoveDomain)
-
-		// Domain route features
-		r.Get("/api/projects/{projectId}/applications/{applicationId}/domains/{domainId}/features", h.ListRouteFeatures)
-		r.Put("/api/projects/{projectId}/applications/{applicationId}/domains/{domainId}/features", h.UpsertRouteFeature)
-		r.Delete("/api/projects/{projectId}/applications/{applicationId}/domains/{domainId}/features/{featureId}", h.DeleteRouteFeature)
-
-		// Project environment variables
-		r.Get("/api/projects/{projectId}/env", h.ListProjectEnvVars)
-		r.Put("/api/projects/{projectId}/env", h.UpdateProjectEnvVars)
-
-		// Databases
-		r.Get("/api/projects/{projectId}/databases", h.ListDatabases)
-		r.Post("/api/projects/{projectId}/databases", h.CreateDatabase)
-		r.Get("/api/projects/{projectId}/databases/{databaseId}", h.GetDatabase)
-		r.Delete("/api/projects/{projectId}/databases/{databaseId}", h.DeleteDatabase)
-
-		// Application live metrics stream (no historical — container metrics are on-demand only)
-		r.Get("/api/projects/{projectId}/applications/{applicationId}/metrics/stream", h.StreamApplicationMetrics)
-
-		// Global deployments (all authenticated users; scoped by role in handler)
-		r.Get("/api/deployments", h.GetGlobalDeployments)
-
-		// Metrics, Settings & Cleanup (admin-only)
+		// Env routes: 5 MB body limit + 15 s timeout (bulk import may exceed 1 MB).
 		r.Group(func(r chi.Router) {
-			r.Use(middleware.RequireRole("admin"))
-			r.Get("/api/metrics", h.GetMetrics)
-			r.Get("/api/metrics/host", h.GetHostHistoricalMetrics)
-			r.Get("/api/metrics/host/stream", h.StreamHostMetrics)
-			r.Post("/api/cleanup", h.TriggerCleanup)
-			r.Get("/api/settings", h.ListSettings)
-			r.Put("/api/settings", h.UpdateSettings)
-			// Global request logs (admin only)
-			r.Get("/api/requests", h.ListAllRequestLogs)
-			r.Get("/api/requests/stream", h.StreamAllRequestLogs)
-
-			// Audit logs (admin only)
-			r.Get("/api/audit-logs", h.ListAuditLogs)
+			r.Use(middleware.BodyLimit(envBodyLimit))
+			r.Use(withTimeout(handlerTimeout))
+			r.Get("/api/projects/{projectId}/env", h.ListProjectEnvVars)
+			r.Put("/api/projects/{projectId}/env", h.UpdateProjectEnvVars)
+			r.Get("/api/projects/{projectId}/applications/{applicationId}/env", h.ListEnvVars)
+			r.Put("/api/projects/{projectId}/applications/{applicationId}/env", h.UpdateEnvVars)
 		})
 
-		// Build (standalone build without deploy)
-		r.Post("/api/projects/{projectId}/applications/{applicationId}/build", h.BuildApplication)
+		// Databases: standard limit + timeout
+		r.Group(func(r chi.Router) {
+			r.Use(middleware.BodyLimit(defaultBodyLimit))
+			r.Use(withTimeout(handlerTimeout))
+			r.Get("/api/projects/{projectId}/databases", h.ListDatabases)
+			r.Post("/api/projects/{projectId}/databases", h.CreateDatabase)
+			r.Get("/api/projects/{projectId}/databases/{databaseId}", h.GetDatabase)
+			r.Delete("/api/projects/{projectId}/databases/{databaseId}", h.DeleteDatabase)
+		})
+
+		// Streaming routes: SSE / long-poll — no timeout, no body limit.
+		r.Get("/api/projects/{projectId}/applications/{applicationId}/deployments/{deploymentId}/build-logs", h.StreamBuildLogs)
+		r.Get("/api/projects/{projectId}/applications/{applicationId}/logs", h.StreamLogs)
+		r.Get("/api/projects/{projectId}/applications/{applicationId}/requests/stream", h.StreamRequestLogs)
+		r.Get("/api/projects/{projectId}/applications/{applicationId}/metrics/stream", h.StreamApplicationMetrics)
+		r.Group(func(r chi.Router) {
+			r.Use(middleware.RequireRole("admin"))
+			r.Get("/api/metrics/host/stream", h.StreamHostMetrics)
+			r.Get("/api/requests/stream", h.StreamAllRequestLogs)
+		})
 	})
 }

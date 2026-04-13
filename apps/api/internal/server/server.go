@@ -59,7 +59,6 @@ func (s *Server) setupRouter() chi.Router {
 	r.Use(chiMiddleware.RealIP)
 	r.Use(middleware.Logger)
 	r.Use(chiMiddleware.Recoverer)
-	r.Use(middleware.BodyLimit(1 << 20)) // 1MB max body size
 	if s.cfg.TLS {
 		r.Use(func(next http.Handler) http.Handler {
 			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
