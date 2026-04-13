@@ -7,7 +7,12 @@ import (
 	"sync"
 )
 
-const maxConnectionsPerUser = 10
+const (
+	maxConnectionsPerUser = 10
+	// maxConsecutiveDrops is the number of messages that can be dropped for a
+	// slow client before it is forcibly disconnected to prevent memory build-up.
+	maxConsecutiveDrops = 10
+)
 
 // Hub manages WebSocket clients and channel subscriptions.
 type Hub struct {
@@ -81,6 +86,7 @@ func (h *Hub) Run(ctx context.Context) {
 		case msg := <-h.broadcastCh:
 			h.mu.RLock()
 			subs := h.channels[msg.channel]
+			var slowClients []*Client
 			for c := range subs {
 				out := OutboundMessage{
 					Channel: msg.channel,
@@ -89,11 +95,20 @@ func (h *Hub) Run(ctx context.Context) {
 				}
 				select {
 				case c.send <- out:
+					c.consecutiveDrops = 0
 				default:
-					slog.Debug("ws: dropping message for slow client", "channel", msg.channel)
+					c.consecutiveDrops++
+					slog.Debug("ws: dropping message for slow client", "channel", msg.channel, "user", c.userID, "drops", c.consecutiveDrops)
+					if c.consecutiveDrops >= maxConsecutiveDrops {
+						slog.Warn("ws: disconnecting slow client after too many dropped messages", "user", c.userID, "drops", c.consecutiveDrops)
+						slowClients = append(slowClients, c)
+					}
 				}
 			}
 			h.mu.RUnlock()
+			for _, c := range slowClients {
+				h.Unregister(c)
+			}
 		}
 	}
 }

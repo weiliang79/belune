@@ -42,6 +42,42 @@ func TestError_RedactsKeyValuePatterns(t *testing.T) {
 	}
 }
 
+func TestError_RedactsBearerTokens(t *testing.T) {
+	tests := []string{
+		"Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.payload.sig",
+		"bearer abc123token",
+		"BEARER eyABC==",
+	}
+	for _, input := range tests {
+		result := Error(input)
+		assert.Contains(t, result, "[REDACTED]", "should redact bearer token: %s", input)
+	}
+}
+
+func TestError_RedactsAPIKeys(t *testing.T) {
+	tests := []string{
+		"request failed: api_key=sk-abc123",
+		"sending with apikey: supersecret",
+		"header x-api-key: myapikey123",
+	}
+	for _, input := range tests {
+		result := Error(input)
+		assert.Contains(t, result, "[REDACTED]", "should redact API key: %s", input)
+	}
+}
+
+func TestError_RedactsWebhookSignatures(t *testing.T) {
+	tests := []string{
+		"x-hub-signature: sha256=abc123def456",
+		"x-signature=deadbeef",
+		"X-Webhook-Secret: mysecret",
+	}
+	for _, input := range tests {
+		result := Error(input)
+		assert.Contains(t, result, "[REDACTED]", "should redact webhook signature: %s", input)
+	}
+}
+
 func TestError_PreservesCleanMessages(t *testing.T) {
 	msg := "git clone: repository not found: exit status 128"
 	result := Error(msg)

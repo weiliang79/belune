@@ -19,11 +19,12 @@ const (
 
 // Client represents a single WebSocket connection.
 type Client struct {
-	hub           *Hub
-	conn          *websocket.Conn
-	userID        string
-	send          chan OutboundMessage
-	subscriptions map[string]struct{}
+	hub              *Hub
+	conn             *websocket.Conn
+	userID           string
+	send             chan OutboundMessage
+	subscriptions    map[string]struct{}
+	consecutiveDrops int // incremented by hub broadcast loop; reset on successful send
 }
 
 // NewClient creates a new WebSocket client.

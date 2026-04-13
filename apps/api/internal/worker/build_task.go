@@ -72,7 +72,11 @@ func (h *TaskHandler) HandleBuildTask(ctx context.Context, t *asynq.Task) error 
 		h.failDeployment(ctx, deploymentID, fmt.Sprintf("create temp dir: %v", err))
 		return fmt.Errorf("create temp dir: %w", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() {
+		if err := os.RemoveAll(tmpDir); err != nil {
+			slog.Warn("failed to clean up build dir", "path", tmpDir, "error", err)
+		}
+	}()
 
 	buildCtx, buildCancel := context.WithTimeout(ctx, time.Duration(h.Config.BuildTimeoutMinutes)*time.Minute)
 	defer buildCancel()

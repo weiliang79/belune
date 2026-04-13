@@ -80,10 +80,18 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService,
 			r.Use(middleware.RequireRole("admin"))
 
 			r.Get("/api/users", h.ListUsers)
-			r.Post("/api/users", h.CreateUser)
 			r.Put("/api/users/{userId}/role", h.UpdateUserRole)
 			r.Delete("/api/users/{userId}", h.DeleteUser)
-			r.Put("/api/users/{userId}/password", h.ResetUserPassword)
+
+			// Tighter rate limit on user creation and password reset to limit blast
+			// radius if an admin session is compromised.
+			r.Group(func(r chi.Router) {
+				if !disableRateLimit {
+					r.Use(httprate.LimitByIP(10, time.Minute))
+				}
+				r.Post("/api/users", h.CreateUser)
+				r.Put("/api/users/{userId}/password", h.ResetUserPassword)
+			})
 		})
 
 		// Git credentials
