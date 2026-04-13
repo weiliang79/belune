@@ -2,6 +2,15 @@
 # Self-Hosted PaaS — Backup
 # Creates a timestamped backup of Postgres data and Caddy TLS certs.
 # Usage: bash backup.sh [output-dir]
+#
+# Optional encryption (age):
+#   Set BACKUP_ENCRYPTION_KEY to an age public key (starts with "age1...")
+#   or to a path of a file containing the public key.
+#   The final archive will be written as <name>.tar.gz.age and can be
+#   decrypted with:  age --decrypt -i <private-key-file> <archive>.tar.gz.age
+#
+# Example .env entry:
+#   BACKUP_ENCRYPTION_KEY=age1ql3z7hjy54pw...
 set -euo pipefail
 
 INSTALL_DIR="${PAAS_DIR:-/opt/paas}"
@@ -9,6 +18,13 @@ BACKUP_DIR="${1:-${INSTALL_DIR}/backups}"
 TIMESTAMP=$(date -u +"%Y%m%dT%H%M%SZ")
 BACKUP_NAME="paas-backup-${TIMESTAMP}"
 WORK_DIR="${BACKUP_DIR}/${BACKUP_NAME}"
+
+# Resolve encryption key from env or .env file
+BACKUP_ENCRYPTION_KEY="${BACKUP_ENCRYPTION_KEY:-}"
+if [[ -z "${BACKUP_ENCRYPTION_KEY}" && -f "${INSTALL_DIR}/.env" ]]; then
+  BACKUP_ENCRYPTION_KEY=$(grep '^BACKUP_ENCRYPTION_KEY=' "${INSTALL_DIR}/.env" 2>/dev/null \
+    | cut -d= -f2- | tr -d '"' || true)
+fi
 
 info()    { echo "  [info]  $*"; }
 success() { echo "  [ok]    $*"; }
@@ -63,6 +79,28 @@ ARCHIVE="${BACKUP_DIR}/${BACKUP_NAME}.tar.gz"
 info "Creating archive ${ARCHIVE}..."
 tar -czf "${ARCHIVE}" -C "${BACKUP_DIR}" "${BACKUP_NAME}"
 rm -rf "${WORK_DIR}"
+
+# ── Encrypt (optional) ─────────────────────────────────────────────────────────
+
+if [[ -n "${BACKUP_ENCRYPTION_KEY}" ]]; then
+  if ! command -v age &>/dev/null; then
+    die "'age' is not installed. Install it (https://github.com/FiloSottile/age) or unset BACKUP_ENCRYPTION_KEY."
+  fi
+
+  ENCRYPTED_ARCHIVE="${ARCHIVE}.age"
+  info "Encrypting archive with age..."
+
+  # Key can be a literal public key string or a path to a file containing one
+  if [[ -f "${BACKUP_ENCRYPTION_KEY}" ]]; then
+    age --encrypt -r "$(cat "${BACKUP_ENCRYPTION_KEY}")" --output "${ENCRYPTED_ARCHIVE}" "${ARCHIVE}"
+  else
+    age --encrypt -r "${BACKUP_ENCRYPTION_KEY}" --output "${ENCRYPTED_ARCHIVE}" "${ARCHIVE}"
+  fi
+
+  rm -f "${ARCHIVE}"
+  ARCHIVE="${ENCRYPTED_ARCHIVE}"
+  success "Encrypted archive: ${ARCHIVE}"
+fi
 
 echo ""
 success "Backup complete: ${ARCHIVE}"

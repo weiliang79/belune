@@ -1,17 +1,22 @@
 #!/usr/bin/env bash
 # Self-Hosted PaaS — Restore
 # Restores a backup created by backup.sh.
-# Usage: bash restore.sh <backup.tar.gz>
+# Usage: bash restore.sh <backup.tar.gz[.age]> [age-identity-file]
+#
+# If the archive ends in .age it will be decrypted first.
+# Provide the age identity (private key) file as the second argument, or
+# set BACKUP_IDENTITY_FILE in the environment.
 set -euo pipefail
 
 INSTALL_DIR="${PAAS_DIR:-/opt/paas}"
 BACKUP_ARCHIVE="${1:-}"
+BACKUP_IDENTITY_FILE="${2:-${BACKUP_IDENTITY_FILE:-}}"
 
 info()    { echo "  [info]  $*"; }
 success() { echo "  [ok]    $*"; }
 die()     { echo "  [err]   $*" >&2; exit 1; }
 
-[[ -n "${BACKUP_ARCHIVE}" ]] || die "Usage: $0 <backup.tar.gz>"
+[[ -n "${BACKUP_ARCHIVE}" ]] || die "Usage: $0 <backup.tar.gz[.age]> [age-identity-file]"
 [[ -f "${BACKUP_ARCHIVE}" ]] || die "Backup file not found: ${BACKUP_ARCHIVE}"
 [[ -f "${INSTALL_DIR}/docker-compose.yml" ]] || \
   die "No docker-compose.yml found at ${INSTALL_DIR}. Is PaaS installed?"
@@ -24,13 +29,33 @@ echo "  ============================"
 echo "  Source: ${BACKUP_ARCHIVE}"
 echo ""
 
-# ── Extract archive ────────────────────────────────────────────────────────────
+# ── Decrypt archive (if encrypted) ────────────────────────────────────────────
 
 WORK_DIR=$(mktemp -d)
 trap 'rm -rf "${WORK_DIR}"' EXIT
 
+ARCHIVE_TO_EXTRACT="${BACKUP_ARCHIVE}"
+
+if [[ "${BACKUP_ARCHIVE}" == *.age ]]; then
+  if ! command -v age &>/dev/null; then
+    die "'age' is not installed. Install it (https://github.com/FiloSottile/age) to restore encrypted backups."
+  fi
+  [[ -n "${BACKUP_IDENTITY_FILE}" ]] || \
+    die "Encrypted backup requires an age identity file. Pass it as the second argument or set BACKUP_IDENTITY_FILE."
+  [[ -f "${BACKUP_IDENTITY_FILE}" ]] || \
+    die "Age identity file not found: ${BACKUP_IDENTITY_FILE}"
+
+  DECRYPTED="${WORK_DIR}/decrypted.tar.gz"
+  info "Decrypting archive with age..."
+  age --decrypt -i "${BACKUP_IDENTITY_FILE}" --output "${DECRYPTED}" "${BACKUP_ARCHIVE}"
+  ARCHIVE_TO_EXTRACT="${DECRYPTED}"
+  success "Archive decrypted."
+fi
+
+# ── Extract archive ────────────────────────────────────────────────────────────
+
 info "Extracting backup..."
-tar -xzf "${BACKUP_ARCHIVE}" -C "${WORK_DIR}"
+tar -xzf "${ARCHIVE_TO_EXTRACT}" -C "${WORK_DIR}"
 BACKUP_DIR=$(find "${WORK_DIR}" -mindepth 1 -maxdepth 1 -type d | head -1)
 [[ -n "${BACKUP_DIR}" ]] || die "Could not find backup directory inside archive."
 
