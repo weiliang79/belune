@@ -75,7 +75,7 @@ function LogsPage() {
     setInputValue(search.q ?? "");
   }, [search.q]);
 
-  const { data: history, isLoading } = useApplicationLogs(
+  const { data: history, isLoading, error } = useApplicationLogs(
     projectId,
     applicationId,
     {
@@ -201,6 +201,10 @@ function LogsPage() {
           >
             {isLoading ? (
               <span className="text-zinc-500">Loading logs...</span>
+            ) : error ? (
+              <span className="text-red-400">
+                Failed to load log history: {error.message}
+              </span>
             ) : entries.length === 0 ? (
               <span className="text-zinc-500">
                 {search.q || search.stream

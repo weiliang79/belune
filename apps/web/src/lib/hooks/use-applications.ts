@@ -1,4 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { queryKeys } from "./query-keys";
 import * as applicationsApi from "@/lib/api/applications";
 
@@ -6,7 +7,12 @@ export function useApplications(projectId: string) {
   return useQuery({
     queryKey: queryKeys.applications.all(projectId),
     queryFn: () => applicationsApi.listApplications(projectId),
-    refetchInterval: 5000,
+    refetchInterval: (query) => {
+      const hasTransitional = query.state.data?.some((app) =>
+        ["building", "deploying", "pending"].includes(app.status),
+      );
+      return hasTransitional ? 3000 : 10000;
+    },
   });
 }
 
@@ -32,6 +38,7 @@ export function useCreateApplication(projectId: string) {
       qc.invalidateQueries({ queryKey: queryKeys.applications.all(projectId) });
       qc.invalidateQueries({ queryKey: queryKeys.projects.detail(projectId) });
     },
+    onError: (error) => toast.error(error.message),
   });
 }
 
@@ -46,6 +53,7 @@ export function useUpdateApplication(projectId: string, applicationId: string) {
         queryKey: queryKeys.applications.detail(projectId, applicationId),
       });
     },
+    onError: (error) => toast.error(error.message),
   });
 }
 
@@ -58,6 +66,7 @@ export function useDeleteApplication(projectId: string) {
       qc.invalidateQueries({ queryKey: queryKeys.applications.all(projectId) });
       qc.invalidateQueries({ queryKey: queryKeys.projects.detail(projectId) });
     },
+    onError: (error) => toast.error(error.message),
   });
 }
 
@@ -73,6 +82,7 @@ export function useDeployApplication(projectId: string, applicationId: string) {
         queryKey: queryKeys.deployments.all(projectId, applicationId),
       });
     },
+    onError: (error) => toast.error(error.message),
   });
 }
 
@@ -84,6 +94,7 @@ export function useStopApplication(projectId: string, applicationId: string) {
       qc.invalidateQueries({
         queryKey: queryKeys.applications.detail(projectId, applicationId),
       }),
+    onError: (error) => toast.error(error.message),
   });
 }
 
@@ -95,6 +106,7 @@ export function useStartApplication(projectId: string, applicationId: string) {
       qc.invalidateQueries({
         queryKey: queryKeys.applications.detail(projectId, applicationId),
       }),
+    onError: (error) => toast.error(error.message),
   });
 }
 
@@ -106,6 +118,7 @@ export function useRestartApplication(projectId: string, applicationId: string) 
       qc.invalidateQueries({
         queryKey: queryKeys.applications.detail(projectId, applicationId),
       }),
+    onError: (error) => toast.error(error.message),
   });
 }
 
@@ -119,5 +132,6 @@ export function useUpdateWebhook(projectId: string, applicationId: string) {
         queryKey: queryKeys.applications.detail(projectId, applicationId),
       });
     },
+    onError: (error) => toast.error(error.message),
   });
 }

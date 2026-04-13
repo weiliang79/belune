@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { queryKeys } from "./query-keys";
 import * as deploymentsApi from "@/lib/api/deployments";
 
@@ -37,5 +38,6 @@ export function useRollbackDeployment(projectId: string, applicationId: string) 
         queryKey: queryKeys.deployments.all(projectId, applicationId),
       });
     },
+    onError: (error) => toast.error(error.message),
   });
 }

@@ -241,7 +241,7 @@ function DeploymentCard({
 
 function DeploymentsPage() {
   const { projectId, applicationId } = Route.useParams();
-  const { data: deployments, isLoading } = useDeployments(projectId, applicationId);
+  const { data: deployments, isLoading, error } = useDeployments(projectId, applicationId);
 
   if (isLoading) {
     return (
@@ -260,6 +260,16 @@ function DeploymentsPage() {
           </Card>
         ))}
       </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <Card>
+        <CardContent className="text-destructive py-12 text-center">
+          Failed to load deployments: {error.message}
+        </CardContent>
+      </Card>
     );
   }
 
