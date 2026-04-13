@@ -15,6 +15,7 @@ export function StatusBadge({ status }: { status: string }) {
   return (
     <Badge variant="outline" className="gap-1.5 capitalize">
       <span
+        aria-hidden="true"
         className={cn(
           "size-2 rounded-full",
           statusColor[status] ?? "bg-gray-500",

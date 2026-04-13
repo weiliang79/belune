@@ -209,7 +209,7 @@ function ApplicationLayout() {
         </div>
       </div>
 
-      <nav className="flex gap-1 overflow-x-auto border-b">
+      <nav aria-label="Application navigation" className="flex gap-1 overflow-x-auto border-b">
         {tabs.map((tab) => {
           const isActive = tab.exact
             ? currentPath === tab.to
@@ -218,6 +218,7 @@ function ApplicationLayout() {
             <Link
               key={tab.to}
               to={tab.to}
+              aria-current={isActive ? "page" : undefined}
               className={cn(
                 "border-b-2 px-3 py-2 text-sm font-medium whitespace-nowrap transition-colors",
                 isActive

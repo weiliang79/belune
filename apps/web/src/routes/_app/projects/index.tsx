@@ -39,7 +39,7 @@ function ProjectApplicationCount({ projectId }: { projectId: string }) {
   }
   return (
     <Badge variant="outline">
-      <span className={cn("size-2 rounded-full", getStatusColor())} />
+      <span aria-hidden="true" className={cn("size-2 rounded-full", getStatusColor())} />
       {running} / {applications.length + databases.length} Apps
     </Badge>
   );
@@ -108,7 +108,7 @@ function ProjectsPage() {
                 <CardHeader className="pb-2">
                   <div className="flex items-start justify-between">
                     <div className="flex items-start gap-2">
-                      <FolderOpenIcon className="text-muted-foreground size-4" />
+                      <FolderOpenIcon aria-hidden="true" className="text-muted-foreground size-4" />
                       <div className="flex flex-col">
                         <CardTitle className="text-base leading-none">
                           {project.name}

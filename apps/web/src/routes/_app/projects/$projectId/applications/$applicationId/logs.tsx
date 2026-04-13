@@ -170,6 +170,7 @@ function LogsPage() {
 
         <div className="flex items-center gap-2">
           <span
+            aria-hidden="true"
             className={`size-2 rounded-full ${connected ? "bg-green-500" : "bg-gray-400"}`}
           />
           <span className="text-muted-foreground text-sm">

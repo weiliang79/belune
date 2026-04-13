@@ -32,7 +32,7 @@ export function CopyButton({ value, size = "icon", className }: CopyButtonProps)
       size={size === "icon" ? "icon" : "sm"}
       className={size === "icon" ? `h-7 w-7 ${className ?? ""}` : className}
       onClick={handleCopy}
-      title="Copy to clipboard"
+      aria-label={copied ? "Copied!" : "Copy to clipboard"}
     >
       {copied ? (
         <Check className="h-3.5 w-3.5 text-green-500" />

@@ -33,12 +33,13 @@ export function Sidebar() {
     <Link
       key={to}
       to={to as any}
+      aria-label={!isOpen ? label : undefined}
       className={cn(
         "hover:bg-sidebar-accent hover:text-sidebar-accent-foreground flex items-center rounded-md px-3 py-2 text-sm font-medium transition-colors",
         isActive(to, exact) && "bg-sidebar-accent text-sidebar-accent-foreground",
       )}
     >
-      {isOpen && label}
+      {isOpen ? label : <span className="sr-only">{label}</span>}
     </Link>
   );
 
@@ -50,7 +51,12 @@ export function Sidebar() {
       )}
     >
       <div className="flex h-14 items-center border-b px-4">
-        <button onClick={toggle} className="text-lg font-bold hover:opacity-80">
+        <button
+          onClick={toggle}
+          aria-label={isOpen ? "Collapse sidebar" : "Expand sidebar"}
+          aria-expanded={isOpen}
+          className="text-lg font-bold hover:opacity-80"
+        >
           {isOpen ? "PaaS" : "P"}
         </button>
       </div>
@@ -99,11 +105,14 @@ export function Sidebar() {
           className="w-full justify-start"
           onClick={handleLogout}
           disabled={isLoggingOut}
+          aria-label={!isOpen ? "Logout" : undefined}
         >
           {isLoggingOut ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
+            <Loader2 aria-hidden="true" className="h-4 w-4 animate-spin" />
+          ) : isOpen ? (
+            "Logout"
           ) : (
-            isOpen ? "Logout" : "->"
+            <span aria-hidden="true">{"→"}</span>
           )}
         </Button>
       </div>
