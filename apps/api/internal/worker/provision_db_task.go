@@ -28,7 +28,10 @@ func (h *TaskHandler) HandleProvisionDBTask(ctx context.Context, t *asynq.Task) 
 
 	slog.Info("handling provision_db task", "database_id", payload.DatabaseID)
 
-	dbID := parseUUID(payload.DatabaseID)
+	dbID, err := parseUUID(payload.DatabaseID)
+	if err != nil {
+		return fmt.Errorf("invalid database_id (permanent): %w: %w", err, asynq.SkipRetry)
+	}
 
 	db, err := h.Queries.GetDatabase(ctx, dbID)
 	if err != nil {

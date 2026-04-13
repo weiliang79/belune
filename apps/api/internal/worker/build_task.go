@@ -33,8 +33,14 @@ func (h *TaskHandler) HandleBuildTask(ctx context.Context, t *asynq.Task) error 
 
 	slog.Info("handling build task", "application_id", payload.ApplicationID, "deployment_id", payload.DeploymentID)
 
-	applicationID := parseUUID(payload.ApplicationID)
-	deploymentID := parseUUID(payload.DeploymentID)
+	applicationID, err := parseUUID(payload.ApplicationID)
+	if err != nil {
+		return fmt.Errorf("invalid application_id (permanent): %w: %w", err, asynq.SkipRetry)
+	}
+	deploymentID, err := parseUUID(payload.DeploymentID)
+	if err != nil {
+		return fmt.Errorf("invalid deployment_id (permanent): %w: %w", err, asynq.SkipRetry)
+	}
 
 	// Update deployment status to building
 	h.Queries.UpdateDeploymentStatus(ctx, generated.UpdateDeploymentStatusParams{

@@ -37,7 +37,11 @@ func (h *TaskHandler) HandleCleanupTask(ctx context.Context, t *asynq.Task) erro
 	var err error
 
 	if payload.ApplicationID != "" {
-		app, err := h.Queries.GetApplication(ctx, parseUUID(payload.ApplicationID))
+		appID, err := parseUUID(payload.ApplicationID)
+		if err != nil {
+			return fmt.Errorf("invalid application_id (permanent): %w: %w", err, asynq.SkipRetry)
+		}
+		app, err := h.Queries.GetApplication(ctx, appID)
 		if err != nil {
 			return fmt.Errorf("get application: %w", err)
 		}

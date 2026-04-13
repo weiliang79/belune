@@ -31,6 +31,27 @@ type deployPayload struct {
 	RollbackImageTag string `json:"rollback_image_tag,omitempty"` // non-empty = skip build, redeploy this image
 }
 
+// deployContext holds all state accumulated across deploy stages.
+type deployContext struct {
+	payload       deployPayload
+	applicationID pgtype.UUID
+	deploymentID  pgtype.UUID
+	appRow        generated.GetApplicationWithProjectSlugRow
+	app           generated.Application
+	containerName string
+	containerID   string
+	env           map[string]string
+	imageName     string
+	commitSHA     string
+	domains       []generated.Domain
+	// compensators are cleanup functions appended as resources are created.
+	// On any post-creation failure they run in reverse order.
+	compensators []func()
+}
+
+// HandleDeployTask is the asynq task handler for application deployments.
+// It drives a sequence of named stages; any failure after resource creation
+// triggers the compensating cleanup chain.
 func (h *TaskHandler) HandleDeployTask(ctx context.Context, t *asynq.Task) error {
 	var payload deployPayload
 	if err := json.Unmarshal(t.Payload(), &payload); err != nil {
@@ -39,17 +60,80 @@ func (h *TaskHandler) HandleDeployTask(ctx context.Context, t *asynq.Task) error
 
 	slog.Info("handling deploy task", "application_id", payload.ApplicationID, "deployment_id", payload.DeploymentID)
 
-	applicationID := parseUUID(payload.ApplicationID)
-	deploymentID := parseUUID(payload.DeploymentID)
-
-	// Fetch application details with project slug
-	appRow, err := h.Queries.GetApplicationWithProjectSlug(ctx, applicationID)
+	applicationID, err := parseUUID(payload.ApplicationID)
 	if err != nil {
-		h.failDeployment(ctx, deploymentID, fmt.Sprintf("fetch application: %v", err))
-		return fmt.Errorf("get application (permanent): %w: %w", err, asynq.SkipRetry)
+		return fmt.Errorf("invalid application_id (permanent): %w: %w", err, asynq.SkipRetry)
 	}
-	// Map row to a usable application reference
-	app := generated.Application{
+	deploymentID, err := parseUUID(payload.DeploymentID)
+	if err != nil {
+		return fmt.Errorf("invalid deployment_id (permanent): %w: %w", err, asynq.SkipRetry)
+	}
+
+	dc := &deployContext{
+		payload:       payload,
+		applicationID: applicationID,
+		deploymentID:  deploymentID,
+	}
+
+	// Stage 1: load application and decrypt env vars — permanent failure if missing
+	if err := h.loadApplication(ctx, dc); err != nil {
+		h.failDeployment(ctx, dc.deploymentID, fmt.Sprintf("load application: %v", err))
+		return fmt.Errorf("load application (permanent): %w: %w", err, asynq.SkipRetry)
+	}
+
+	// Stage 2 & 3: idempotent cleanup and network setup — log-only on error
+	h.cleanupExisting(ctx, dc)
+	h.ensureNetworks(ctx, dc)
+
+	// Stage 4: build or pull image
+	if err := h.prepareImage(ctx, dc); err != nil {
+		h.failDeployment(ctx, dc.deploymentID, fmt.Sprintf("%v", err))
+		return err
+	}
+
+	// Stage 5: create and start container — appends a compensator on success
+	if err := h.createAndStart(ctx, dc); err != nil {
+		h.runCompensators(dc)
+		h.failDeployment(ctx, dc.deploymentID, fmt.Sprintf("create container: %v", err))
+		return fmt.Errorf("create container: %w", err)
+	}
+
+	// Stage 6: optional health check
+	if err := h.checkHealth(ctx, dc); err != nil {
+		h.runCompensators(dc)
+		h.failDeployment(ctx, dc.deploymentID, fmt.Sprintf("health check failed: %v", err))
+		return fmt.Errorf("health check: %w", err)
+	}
+
+	// Stage 7: wire proxy routes — appends a compensator per successful AddRoute
+	if err := h.wireProxy(ctx, dc); err != nil {
+		h.runCompensators(dc)
+		h.failDeployment(ctx, dc.deploymentID, fmt.Sprintf("wire proxy: %v", err))
+		return fmt.Errorf("wire proxy: %w", err)
+	}
+
+	// Stage 8: atomic finalize — mark deployment success + application running
+	if err := h.finalize(ctx, dc); err != nil {
+		slog.Error("failed to commit deploy success status", "application_id", payload.ApplicationID, "error", err)
+	}
+
+	slog.Info("deploy completed",
+		"application_id", payload.ApplicationID,
+		"deployment_id", payload.DeploymentID,
+		"container", dc.containerID,
+		"commit", dc.commitSHA,
+	)
+	return nil
+}
+
+// loadApplication fetches the application row, maps it, and decrypts env vars.
+func (h *TaskHandler) loadApplication(ctx context.Context, dc *deployContext) error {
+	appRow, err := h.Queries.GetApplicationWithProjectSlug(ctx, dc.applicationID)
+	if err != nil {
+		return fmt.Errorf("fetch application: %w", err)
+	}
+	dc.appRow = appRow
+	dc.app = generated.Application{
 		ID: appRow.ID, ProjectID: appRow.ProjectID, Name: appRow.Name,
 		Type: appRow.Type, SourceRepo: appRow.SourceRepo, SourceImage: appRow.SourceImage,
 		DockerfilePath: appRow.DockerfilePath, BuildType: appRow.BuildType,
@@ -59,35 +143,11 @@ func (h *TaskHandler) HandleDeployTask(ctx context.Context, t *asynq.Task) error
 		GitCredentialsEncrypted: appRow.GitCredentialsEncrypted,
 		HealthCheckPath:         appRow.HealthCheckPath,
 	}
+	dc.containerName = naming.ContainerName(appRow.ProjectSlug, appRow.Slug, dc.payload.ApplicationID)
 
-	containerName := naming.ContainerName(appRow.ProjectSlug, appRow.Slug, payload.ApplicationID)
-
-	// Stop and remove existing container if any (try all naming formats)
-	intermediateContainerName := naming.IntermediateContainerName(appRow.ProjectSlug, payload.ApplicationID)
-	oldContainerName := naming.OldContainerName(payload.ApplicationID)
-	for _, name := range []string{oldContainerName, intermediateContainerName, containerName} {
-		if err := h.Runtime.StopContainer(ctx, name); err != nil {
-			slog.Debug("could not stop container before deploy (may not exist)", "container", name, "error", err)
-		}
-		if err := h.Runtime.RemoveContainer(ctx, name); err != nil {
-			slog.Debug("could not remove container before deploy (may not exist)", "container", name, "error", err)
-		}
-	}
-
-	// Ensure project-scoped network exists (idempotent)
-	projectNetwork := naming.ProjectNetworkName(appRow.ProjectSlug)
-	if err := h.Runtime.CreateNetwork(ctx, projectNetwork); err != nil {
-		slog.Debug("could not create project network (may already exist)", "network", projectNetwork, "error", err)
-	}
-	// Ensure shared infra network exists (used by Caddy to reach containers)
-	if err := h.Runtime.CreateNetwork(ctx, "paas-infra"); err != nil {
-		slog.Debug("could not create paas-infra network (may already exist)", "error", err)
-	}
-
-	// Fetch and decrypt env vars: project-level first (base), then app-level (override)
+	// Decrypt env vars: project-level first (base), then app-level (override)
 	env := make(map[string]string)
-
-	projectEnvVars, err := h.Queries.ListProjectEnvVars(ctx, app.ProjectID)
+	projectEnvVars, err := h.Queries.ListProjectEnvVars(ctx, dc.app.ProjectID)
 	if err != nil {
 		slog.Warn("failed to fetch project env vars, continuing without them", "error", err)
 	}
@@ -100,7 +160,7 @@ func (h *TaskHandler) HandleDeployTask(ctx context.Context, t *asynq.Task) error
 		env[ev.Key] = string(decrypted)
 	}
 
-	appEnvVars, err := h.Queries.ListEnvVarsByApplication(ctx, applicationID)
+	appEnvVars, err := h.Queries.ListEnvVarsByApplication(ctx, dc.applicationID)
 	if err != nil {
 		slog.Warn("failed to fetch app env vars, continuing without them", "error", err)
 	}
@@ -112,159 +172,185 @@ func (h *TaskHandler) HandleDeployTask(ctx context.Context, t *asynq.Task) error
 		}
 		env[ev.Key] = string(decrypted)
 	}
+	dc.env = env
+	return nil
+}
 
-	var imageName string
-	var commitSHA string
+// cleanupExisting stops and removes any pre-existing containers (all naming formats).
+func (h *TaskHandler) cleanupExisting(ctx context.Context, dc *deployContext) {
+	intermediateContainerName := naming.IntermediateContainerName(dc.appRow.ProjectSlug, dc.payload.ApplicationID)
+	oldContainerName := naming.OldContainerName(dc.payload.ApplicationID)
+	for _, name := range []string{oldContainerName, intermediateContainerName, dc.containerName} {
+		if err := h.Runtime.StopContainer(ctx, name); err != nil {
+			slog.Debug("could not stop container before deploy (may not exist)", "container", name, "error", err)
+		}
+		if err := h.Runtime.RemoveContainer(ctx, name); err != nil {
+			slog.Debug("could not remove container before deploy (may not exist)", "container", name, "error", err)
+		}
+	}
+}
 
-	if payload.RollbackImageTag != "" {
-		// Rollback: skip build entirely, redeploy a previously stored image.
-		imageName = payload.RollbackImageTag
-		slog.Info("rolling back to image", "image", imageName, "application_id", payload.ApplicationID)
-		h.updateDeploymentStatus(ctx, deploymentID, status.DeploymentPending, status.DeploymentDeploying)
-	} else {
-	switch app.Type {
+// ensureNetworks creates the project-scoped and shared infra networks (idempotent).
+func (h *TaskHandler) ensureNetworks(ctx context.Context, dc *deployContext) {
+	projectNetwork := naming.ProjectNetworkName(dc.appRow.ProjectSlug)
+	if err := h.Runtime.CreateNetwork(ctx, projectNetwork); err != nil {
+		slog.Debug("could not create project network (may already exist)", "network", projectNetwork, "error", err)
+	}
+	if err := h.Runtime.CreateNetwork(ctx, "paas-infra"); err != nil {
+		slog.Debug("could not create paas-infra network (may already exist)", "error", err)
+	}
+}
+
+// prepareImage resolves the image to deploy: rollback, image-pull, or git-build path.
+func (h *TaskHandler) prepareImage(ctx context.Context, dc *deployContext) error {
+	if dc.payload.RollbackImageTag != "" {
+		dc.imageName = dc.payload.RollbackImageTag
+		slog.Info("rolling back to image", "image", dc.imageName, "application_id", dc.payload.ApplicationID)
+		h.updateDeploymentStatus(ctx, dc.deploymentID, status.DeploymentPending, status.DeploymentDeploying)
+		return nil
+	}
+
+	switch dc.app.Type {
 	case "image":
-		// Image apps skip build — go straight to deploying
-		h.updateDeploymentStatus(ctx, deploymentID, status.DeploymentPending, status.DeploymentDeploying)
-		imageName = app.SourceImage.String
-		slog.Info("pulling image", "image", imageName)
+		h.updateDeploymentStatus(ctx, dc.deploymentID, status.DeploymentPending, status.DeploymentDeploying)
+		dc.imageName = dc.app.SourceImage.String
+		slog.Info("pulling image", "image", dc.imageName)
 		pullCtx, pullCancel := context.WithTimeout(ctx, time.Duration(h.Config.ImagePullTimeoutMinutes)*time.Minute)
 		defer pullCancel()
-		if err := h.Runtime.PullImage(pullCtx, imageName); err != nil {
-			h.failDeployment(ctx, deploymentID, fmt.Sprintf("pull image: %v", err))
+		if err := h.Runtime.PullImage(pullCtx, dc.imageName); err != nil {
 			return fmt.Errorf("pull image: %w", err)
 		}
 
 	case "git":
-		imageName = naming.ImageTag(appRow.ProjectSlug, appRow.Slug, payload.ApplicationID, payload.DeploymentID)
-
-		// Clone the repository
-		tmpDir, err := os.MkdirTemp("", "paas-build-*")
-		if err != nil {
-			h.failDeployment(ctx, deploymentID, fmt.Sprintf("create temp dir: %v", err))
-			return fmt.Errorf("create temp dir: %w", err)
+		if err := h.buildFromGit(ctx, dc); err != nil {
+			return err
 		}
-		defer os.RemoveAll(tmpDir)
-
-		buildCtx, buildCancel := context.WithTimeout(ctx, time.Duration(h.Config.BuildTimeoutMinutes)*time.Minute)
-		defer buildCancel()
-
-		// Resolve git credentials: centralized credential takes priority, fallback to per-app token
-		var cloneURL string
-		if app.GitCredentialID.Valid {
-			cred, credErr := h.Queries.GetGitCredential(ctx, app.GitCredentialID)
-			if credErr != nil {
-				slog.Warn("failed to fetch git credential, trying per-app token", "error", credErr)
-			} else {
-				tokenBytes, decErr := crypto.Decrypt(cred.TokenEncrypted, h.EncryptionKey)
-				if decErr != nil {
-					slog.Warn("failed to decrypt centralized git credential", "error", decErr)
-				} else {
-					cloneURL = git.BuildCloneURL(cred.Provider, string(tokenBytes), cred.Username, app.SourceRepo.String)
-				}
-			}
-		}
-		if cloneURL == "" && len(app.GitCredentialsEncrypted) > 0 {
-			tokenBytes, decErr := crypto.Decrypt(app.GitCredentialsEncrypted, h.EncryptionKey)
-			if decErr != nil {
-				slog.Warn("failed to decrypt git credentials, cloning without token", "error", decErr)
-			} else {
-				cloneURL = git.BuildCloneURL("generic", string(tokenBytes), "", app.SourceRepo.String)
-			}
-		}
-		if cloneURL == "" {
-			cloneURL = app.SourceRepo.String
-		}
-
-		slog.Info("cloning repository", "repo", app.SourceRepo.String, "dest", tmpDir)
-		cloneResult, err := git.Clone(buildCtx, cloneURL, tmpDir, "", "")
-		if err != nil {
-			h.failDeployment(ctx, deploymentID, fmt.Sprintf("git clone: %v", err))
-			return fmt.Errorf("git clone: %w", err)
-		}
-		commitSHA = cloneResult.CommitSHA
-		slog.Info("cloned repository", "commit", commitSHA)
-
-		// Parse custom buildpacks from application config
-		var customBuildpacks []string
-		if len(app.CustomBuildpacks) > 0 {
-			if err := json.Unmarshal(app.CustomBuildpacks, &customBuildpacks); err != nil {
-				slog.Debug("could not parse custom buildpacks, using defaults", "app_id", payload.ApplicationID, "error", err)
-			}
-		}
-
-		// Set up build log streaming via Redis pub/sub
-		pub := buildlog.NewPublisher(h.RedisClient, payload.DeploymentID)
-		logWriter := buildlog.NewLineWriter(pub, buildCtx)
-
-		buildOpts := build.BuildOptions{
-			SourceDir:      tmpDir,
-			ImageTag:       imageName,
-			DockerfilePath: app.DockerfilePath.String,
-			BuilderImage:   app.BuilderImage.String,
-			Buildpacks:     customBuildpacks,
-			Env:            env,
-			BuildType:      app.BuildType,
-			LogWriter:      logWriter,
-		}
-
-		// Update status to building before build starts
-		h.updateDeploymentStatus(ctx, deploymentID, status.DeploymentPending, status.DeploymentBuilding)
-
-		slog.Info("building image", "tag", imageName)
-		result, err := h.Chain.Build(buildCtx, buildOpts)
-		logWriter.Flush()
-		pub.Close(ctx)
-		if err != nil {
-			h.failDeployment(ctx, deploymentID, fmt.Sprintf("build: %v", err))
-			return fmt.Errorf("build: %w", err)
-		}
-
-		// Store build logs in deployment record
-		if result.Logs != "" {
-			h.Queries.UpdateDeploymentBuildLogs(ctx, generated.UpdateDeploymentBuildLogsParams{
-				ID:        deploymentID,
-				BuildLogs: pgtype.Text{String: result.Logs, Valid: true},
-			})
-		}
-
-		imageName = result.ImageTag
-		slog.Info("build completed", "image", imageName)
-
-		// Build done — now transition to deploying before container creation
-		h.updateDeploymentStatus(ctx, deploymentID, status.DeploymentBuilding, status.DeploymentDeploying)
 
 	default:
-		h.failDeployment(ctx, deploymentID, fmt.Sprintf("unknown application type: %s", app.Type))
-		return fmt.Errorf("unknown application type %s (permanent): %w", app.Type, asynq.SkipRetry)
+		return fmt.Errorf("unknown application type %s: %w", dc.app.Type, asynq.SkipRetry)
 	}
-	} // end else (non-rollback)
 
 	// Store the image tag for future rollback support.
 	h.Queries.UpdateDeploymentImageTag(ctx, generated.UpdateDeploymentImageTagParams{
-		ID:       deploymentID,
-		ImageTag: pgtype.Text{String: imageName, Valid: true},
+		ID:       dc.deploymentID,
+		ImageTag: pgtype.Text{String: dc.imageName, Valid: true},
 	})
+	return nil
+}
 
-	// Create and start container
+// buildFromGit clones the repository, runs the build chain, and sets dc.imageName.
+func (h *TaskHandler) buildFromGit(ctx context.Context, dc *deployContext) error {
+	dc.imageName = naming.ImageTag(dc.appRow.ProjectSlug, dc.appRow.Slug, dc.payload.ApplicationID, dc.payload.DeploymentID)
+
+	tmpDir, err := os.MkdirTemp("", "paas-build-*")
+	if err != nil {
+		return fmt.Errorf("create temp dir: %w", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	buildCtx, buildCancel := context.WithTimeout(ctx, time.Duration(h.Config.BuildTimeoutMinutes)*time.Minute)
+	defer buildCancel()
+
+	// Resolve git credentials: centralized credential takes priority, fallback to per-app token
+	var cloneURL string
+	if dc.app.GitCredentialID.Valid {
+		cred, credErr := h.Queries.GetGitCredential(ctx, dc.app.GitCredentialID)
+		if credErr != nil {
+			slog.Warn("failed to fetch git credential, trying per-app token", "error", credErr)
+		} else {
+			tokenBytes, decErr := crypto.Decrypt(cred.TokenEncrypted, h.EncryptionKey)
+			if decErr != nil {
+				slog.Warn("failed to decrypt centralized git credential", "error", decErr)
+			} else {
+				cloneURL = git.BuildCloneURL(cred.Provider, string(tokenBytes), cred.Username, dc.app.SourceRepo.String)
+			}
+		}
+	}
+	if cloneURL == "" && len(dc.app.GitCredentialsEncrypted) > 0 {
+		tokenBytes, decErr := crypto.Decrypt(dc.app.GitCredentialsEncrypted, h.EncryptionKey)
+		if decErr != nil {
+			slog.Warn("failed to decrypt git credentials, cloning without token", "error", decErr)
+		} else {
+			cloneURL = git.BuildCloneURL("generic", string(tokenBytes), "", dc.app.SourceRepo.String)
+		}
+	}
+	if cloneURL == "" {
+		cloneURL = dc.app.SourceRepo.String
+	}
+
+	slog.Info("cloning repository", "repo", dc.app.SourceRepo.String, "dest", tmpDir)
+	cloneResult, err := git.Clone(buildCtx, cloneURL, tmpDir, "", "")
+	if err != nil {
+		return fmt.Errorf("git clone: %w", err)
+	}
+	dc.commitSHA = cloneResult.CommitSHA
+	slog.Info("cloned repository", "commit", dc.commitSHA)
+
+	var customBuildpacks []string
+	if len(dc.app.CustomBuildpacks) > 0 {
+		if err := json.Unmarshal(dc.app.CustomBuildpacks, &customBuildpacks); err != nil {
+			slog.Debug("could not parse custom buildpacks, using defaults", "app_id", dc.payload.ApplicationID, "error", err)
+		}
+	}
+
+	pub := buildlog.NewPublisher(h.RedisClient, dc.payload.DeploymentID)
+	logWriter := buildlog.NewLineWriter(pub, buildCtx)
+
+	buildOpts := build.BuildOptions{
+		SourceDir:      tmpDir,
+		ImageTag:       dc.imageName,
+		DockerfilePath: dc.app.DockerfilePath.String,
+		BuilderImage:   dc.app.BuilderImage.String,
+		Buildpacks:     customBuildpacks,
+		Env:            dc.env,
+		BuildType:      dc.app.BuildType,
+		LogWriter:      logWriter,
+	}
+
+	h.updateDeploymentStatus(ctx, dc.deploymentID, status.DeploymentPending, status.DeploymentBuilding)
+
+	slog.Info("building image", "tag", dc.imageName)
+	result, err := h.Chain.Build(buildCtx, buildOpts)
+	logWriter.Flush()
+	pub.Close(ctx)
+	if err != nil {
+		return fmt.Errorf("build: %w", err)
+	}
+
+	if result.Logs != "" {
+		h.Queries.UpdateDeploymentBuildLogs(ctx, generated.UpdateDeploymentBuildLogsParams{
+			ID:        dc.deploymentID,
+			BuildLogs: pgtype.Text{String: result.Logs, Valid: true},
+		})
+	}
+
+	dc.imageName = result.ImageTag
+	slog.Info("build completed", "image", dc.imageName)
+	h.updateDeploymentStatus(ctx, dc.deploymentID, status.DeploymentBuilding, status.DeploymentDeploying)
+	return nil
+}
+
+// createAndStart creates the container, starts it, and connects it to paas-infra.
+// On success it appends a compensator that stops and removes the container.
+func (h *TaskHandler) createAndStart(ctx context.Context, dc *deployContext) error {
 	containerID, err := h.Runtime.CreateContainer(ctx, runtime.ContainerConfig{
-		Name:            containerName,
-		Image:           imageName,
-		Env:             env,
+		Name:            dc.containerName,
+		Image:           dc.imageName,
+		Env:             dc.env,
 		Ports:           map[string]string{},
-		Network:         naming.ProjectNetworkName(appRow.ProjectSlug),
-		Labels:          map[string]string{"application-id": payload.ApplicationID},
-		CPULimit:        app.CpuLimit,
-		MemoryLimit:     app.MemoryLimit,
-		HealthCheckPath: app.HealthCheckPath.String,
+		Network:         naming.ProjectNetworkName(dc.appRow.ProjectSlug),
+		Labels:          map[string]string{"application-id": dc.payload.ApplicationID},
+		CPULimit:        dc.app.CpuLimit,
+		MemoryLimit:     dc.app.MemoryLimit,
+		HealthCheckPath: dc.app.HealthCheckPath.String,
 	})
 	if err != nil {
-		h.failDeployment(ctx, deploymentID, fmt.Sprintf("create container: %v", err))
 		return fmt.Errorf("create container: %w", err)
 	}
 
 	if err := h.Runtime.StartContainer(ctx, containerID); err != nil {
-		h.failDeployment(ctx, deploymentID, fmt.Sprintf("start container: %v", err))
+		// Container created but not started — remove it before returning
+		h.Runtime.RemoveContainer(context.Background(), containerID)
 		return fmt.Errorf("start container: %w", err)
 	}
 
@@ -273,94 +359,131 @@ func (h *TaskHandler) HandleDeployTask(ctx context.Context, t *asynq.Task) error
 		slog.Warn("could not connect container to paas-infra network", "container", containerID, "error", err)
 	}
 
-	// Load domains before health check so we can resolve the container port
-	domains, err := h.Queries.ListDomainsByApplication(ctx, applicationID)
+	dc.containerID = containerID
+
+	// Compensator: stop and remove this container if a later stage fails
+	dc.compensators = append(dc.compensators, func() {
+		cleanCtx := context.Background()
+		if err := h.Runtime.StopContainer(cleanCtx, dc.containerID); err != nil {
+			slog.Warn("compensator: failed to stop container", "container", dc.containerID, "error", err)
+		}
+		if err := h.Runtime.RemoveContainer(cleanCtx, dc.containerID); err != nil {
+			slog.Warn("compensator: failed to remove container", "container", dc.containerID, "error", err)
+		}
+	})
+	return nil
+}
+
+// checkHealth polls the container's health endpoint if configured.
+func (h *TaskHandler) checkHealth(ctx context.Context, dc *deployContext) error {
+	if !dc.app.HealthCheckPath.Valid || dc.app.HealthCheckPath.String == "" {
+		return nil
+	}
+
+	// Load domains to resolve the container port
+	domains, err := h.Queries.ListDomainsByApplication(ctx, dc.applicationID)
 	if err != nil {
-		slog.Warn("failed to list domains for application", "application_id", payload.ApplicationID, "error", err)
-		domains = nil
+		slog.Warn("failed to list domains for health check port resolution", "application_id", dc.payload.ApplicationID, "error", err)
 	}
+	dc.domains = domains
 
-	// Health check polling: poll the container's health endpoint until healthy or timeout
-	if app.HealthCheckPath.Valid && app.HealthCheckPath.String != "" {
-		healthURL := fmt.Sprintf("http://%s:%d%s", containerName, resolveContainerPort(domains), app.HealthCheckPath.String)
-		slog.Info("waiting for container health check", "url", healthURL)
-		if err := pollHealthCheck(ctx, healthURL, 60*time.Second); err != nil {
-			h.failDeployment(ctx, deploymentID, fmt.Sprintf("health check failed: %v", err))
-			return fmt.Errorf("health check: %w", err)
+	healthURL := fmt.Sprintf("http://%s:%d%s", dc.containerName, resolveContainerPort(domains), dc.app.HealthCheckPath.String)
+	slog.Info("waiting for container health check", "url", healthURL)
+	if err := pollHealthCheck(ctx, healthURL, 60*time.Second); err != nil {
+		return err
+	}
+	slog.Info("container health check passed", "container", dc.containerName)
+	return nil
+}
+
+// wireProxy adds a Caddy route for each domain. On success it appends a compensator
+// per route so they can be removed if a later stage fails.
+func (h *TaskHandler) wireProxy(ctx context.Context, dc *deployContext) error {
+	// Load domains if not already fetched by checkHealth
+	if dc.domains == nil {
+		domains, err := h.Queries.ListDomainsByApplication(ctx, dc.applicationID)
+		if err != nil {
+			slog.Warn("failed to list domains for application", "application_id", dc.payload.ApplicationID, "error", err)
 		}
-		slog.Info("container health check passed", "container", containerName)
+		dc.domains = domains
 	}
 
-	// Add proxy route if the application has domains (with full config + features)
-	if len(domains) > 0 {
-		for _, domain := range domains {
-			port := resolveContainerPort([]generated.Domain{domain})
+	for _, domain := range dc.domains {
+		port := resolveContainerPort([]generated.Domain{domain})
 
-			// Load route features for this domain
-			var features []proxy.RouteFeature
-			dbFeatures, fErr := h.Queries.ListRouteFeaturesByDomain(ctx, domain.ID)
-			if fErr == nil {
-				for _, f := range dbFeatures {
-					var cfg map[string]any
-					if len(f.Config) > 0 {
-						json.Unmarshal(f.Config, &cfg)
-					}
-					features = append(features, proxy.RouteFeature{
-						Type:    f.FeatureType,
-						Config:  cfg,
-						Enabled: f.Enabled,
-					})
+		var features []proxy.RouteFeature
+		dbFeatures, fErr := h.Queries.ListRouteFeaturesByDomain(ctx, domain.ID)
+		if fErr == nil {
+			for _, f := range dbFeatures {
+				var cfg map[string]any
+				if len(f.Config) > 0 {
+					json.Unmarshal(f.Config, &cfg)
 				}
+				features = append(features, proxy.RouteFeature{
+					Type:    f.FeatureType,
+					Config:  cfg,
+					Enabled: f.Enabled,
+				})
 			}
-
-			h.Proxy.AddRoute(ctx, proxy.RouteConfig{
-				Hostname:       domain.Hostname,
-				TargetURL:      fmt.Sprintf("http://%s:%d", containerName, port),
-				TLS:            domain.SslEnabled,
-				ForceHTTPS:     domain.ForceHttps,
-				SSLMode:        domain.SslMode,
-				SSLProvider:    domain.SslProvider.String,
-				CertPath:       domain.CertPath.String,
-				KeyPath:        domain.KeyPath.String,
-				Features:       features,
-				AdvancedConfig: domain.AdvancedConfig,
-			})
 		}
-	}
 
-	// Mark deployment as success and application as running — both or neither
-	if err := store.WithTx(ctx, h.DB, func(q *generated.Queries) error {
+		cfg := proxy.RouteConfig{
+			Hostname:       domain.Hostname,
+			TargetURL:      fmt.Sprintf("http://%s:%d", dc.containerName, port),
+			TLS:            domain.SslEnabled,
+			ForceHTTPS:     domain.ForceHttps,
+			SSLMode:        domain.SslMode,
+			SSLProvider:    domain.SslProvider.String,
+			CertPath:       domain.CertPath.String,
+			KeyPath:        domain.KeyPath.String,
+			Features:       features,
+			AdvancedConfig: domain.AdvancedConfig,
+		}
+		if err := h.Proxy.AddRoute(ctx, cfg); err != nil {
+			return fmt.Errorf("add route for %s: %w", domain.Hostname, err)
+		}
+
+		// Compensator: remove this route if a later stage fails
+		hostname := domain.Hostname
+		dc.compensators = append(dc.compensators, func() {
+			if err := h.Proxy.RemoveRoute(context.Background(), hostname); err != nil {
+				slog.Warn("compensator: failed to remove proxy route", "hostname", hostname, "error", err)
+			}
+		})
+	}
+	return nil
+}
+
+// finalize atomically marks the deployment as succeeded and the application as running.
+func (h *TaskHandler) finalize(ctx context.Context, dc *deployContext) error {
+	return store.WithTx(ctx, h.DB, func(q *generated.Queries) error {
 		if !status.ValidTransition(status.DeploymentDeploying, status.DeploymentSuccess) {
 			slog.Warn("invalid deployment transition skipped", "from", status.DeploymentDeploying, "to", status.DeploymentSuccess)
 			return nil
 		}
 		q.UpdateDeploymentStatus(ctx, generated.UpdateDeploymentStatusParams{
-			ID:     deploymentID,
+			ID:     dc.deploymentID,
 			Status: status.DeploymentSuccess,
 		})
 		q.UpdateApplicationStatus(ctx, generated.UpdateApplicationStatusParams{
-			ID:     applicationID,
+			ID:     dc.applicationID,
 			Status: status.ApplicationRunning,
 		})
 		return nil
-	}); err != nil {
-		slog.Error("failed to commit deploy success status", "application_id", payload.ApplicationID, "error", err)
-	}
+	})
+}
 
-	slog.Info("deploy completed",
-		"application_id", payload.ApplicationID,
-		"deployment_id", payload.DeploymentID,
-		"container", containerID,
-		"commit", commitSHA,
-	)
-	return nil
+// runCompensators runs all compensating cleanup functions in reverse order.
+func (h *TaskHandler) runCompensators(dc *deployContext) {
+	for i := len(dc.compensators) - 1; i >= 0; i-- {
+		dc.compensators[i]()
+	}
 }
 
 func (h *TaskHandler) failDeployment(ctx context.Context, deploymentID pgtype.UUID, errMsg string) {
 	retried, _ := asynq.GetRetryCount(ctx)
 	maxRetry, _ := asynq.GetMaxRetry(ctx)
 
-	// Redact credentials from error messages before logging and storing
 	safeMsg := redact.Error(errMsg)
 
 	slog.Error("deployment failed",
@@ -370,7 +493,6 @@ func (h *TaskHandler) failDeployment(ctx context.Context, deploymentID pgtype.UU
 		"max_retry", maxRetry,
 	)
 
-	// Only mark as permanently failed after all retries are exhausted
 	if retried >= maxRetry {
 		h.Queries.UpdateDeploymentStatus(ctx, generated.UpdateDeploymentStatusParams{
 			ID:           deploymentID,
@@ -392,7 +514,6 @@ func (h *TaskHandler) updateDeploymentStatus(ctx context.Context, id pgtype.UUID
 		ID:     id,
 		Status: to,
 	})
-	// Stamp the timing column that corresponds to this transition.
 	switch to {
 	case status.DeploymentBuilding:
 		h.Queries.SetDeploymentBuildStarted(ctx, id)
@@ -404,10 +525,13 @@ func (h *TaskHandler) updateDeploymentStatus(ctx context.Context, id pgtype.UUID
 	}
 }
 
-func parseUUID(s string) pgtype.UUID {
+// parseUUID parses a UUID string into a pgtype.UUID, returning an error on invalid input.
+func parseUUID(s string) (pgtype.UUID, error) {
 	var u pgtype.UUID
-	u.Scan(s)
-	return u
+	if err := u.Scan(s); err != nil {
+		return pgtype.UUID{}, fmt.Errorf("invalid UUID %q: %w", s, err)
+	}
+	return u, nil
 }
 
 // resolveContainerPort returns the container port from the first domain that has one, or 8080.
@@ -425,7 +549,11 @@ func pollHealthCheck(ctx context.Context, url string, timeout time.Duration) err
 	deadline := time.Now().Add(timeout)
 	client := &http.Client{Timeout: 5 * time.Second}
 	for time.Now().Before(deadline) {
-		resp, err := client.Get(url) //nolint:noctx
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+		if err != nil {
+			return fmt.Errorf("build health check request: %w", err)
+		}
+		resp, err := client.Do(req)
 		if err == nil {
 			resp.Body.Close()
 			if resp.StatusCode >= 200 && resp.StatusCode < 300 {
