@@ -1,0 +1,67 @@
+package ws
+
+import (
+	"context"
+	"encoding/json"
+	"log/slog"
+	"time"
+
+	"github.com/jackc/pgx/v5/pgtype"
+
+	"github.com/ungweiliang/selfhost-paas/internal/naming"
+	"github.com/ungweiliang/selfhost-paas/internal/runtime"
+	"github.com/ungweiliang/selfhost-paas/internal/store/generated"
+)
+
+// RunAppMetricsBroadcaster polls Docker container stats for applications that
+// have active WebSocket subscribers on "metrics:app:{applicationId}" and
+// broadcasts them to the hub. Runs until ctx is cancelled.
+func RunAppMetricsBroadcaster(
+	ctx context.Context,
+	hub *Hub,
+	rt runtime.ContainerRuntime,
+	queries *generated.Queries,
+) {
+	const channelPrefix = "metrics:app:"
+	ticker := time.NewTicker(2 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			channels := hub.ActiveChannelsWithPrefix(channelPrefix)
+			for _, ch := range channels {
+				appIDStr := ch[len(channelPrefix):]
+				var appUUID pgtype.UUID
+				if err := appUUID.Scan(appIDStr); err != nil {
+					continue
+				}
+				row, err := queries.GetApplicationWithProjectSlug(ctx, appUUID)
+				if err != nil {
+					continue
+				}
+				containerName := naming.ContainerName(row.ProjectSlug, row.Slug, appIDStr)
+				stats, err := rt.ContainerStats(ctx, containerName)
+				if err != nil {
+					slog.Debug("app metrics: stats fetch failed", "container", containerName, "error", err)
+					continue
+				}
+				point := map[string]any{
+					"cpu_percent":      stats.CPUPercent,
+					"memory_usage":     stats.MemoryUsage,
+					"memory_limit":     stats.MemoryLimit,
+					"network_rx_bytes": stats.NetworkRxBytes,
+					"network_tx_bytes": stats.NetworkTxBytes,
+					"recorded_at":      time.Now().Format(time.RFC3339),
+				}
+				data, err := json.Marshal(point)
+				if err != nil {
+					continue
+				}
+				hub.Broadcast(ch, "metrics", data)
+			}
+		}
+	}
+}
