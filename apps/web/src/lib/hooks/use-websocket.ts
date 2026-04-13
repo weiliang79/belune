@@ -13,13 +13,26 @@ interface InboundMessage {
 
 type MessageHandler = (event: string, data: unknown) => void;
 
-// Singleton WebSocket manager
+export type ConnectionState = "connected" | "connecting" | "disconnected" | "failed";
+
+// Singleton WebSocket state
 let ws: WebSocket | null = null;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let retryCount = 0;
-const MAX_RETRIES = 20;
+const MAX_RETRIES = 10;
 const listeners = new Map<string, Set<MessageHandler>>();
 let connectPromise: Promise<void> | null = null;
+
+let connectionState: ConnectionState = "disconnected";
+const stateListeners = new Set<(state: ConnectionState) => void>();
+
+function setConnectionState(state: ConnectionState) {
+  if (connectionState === state) return;
+  connectionState = state;
+  for (const listener of stateListeners) {
+    listener(state);
+  }
+}
 
 function getWsUrl() {
   const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
@@ -51,20 +64,23 @@ function connect(): Promise<void> {
     return connectPromise ?? Promise.resolve();
   }
 
+  setConnectionState("connecting");
+
   connectPromise = new Promise<void>((resolve) => {
     ws = new WebSocket(getWsUrl());
 
     ws.onopen = () => {
       retryCount = 0;
-      // If all listeners were removed while we were connecting, close cleanly now.
+      // If all listeners were removed while connecting, close cleanly now.
       if (listeners.size === 0) {
         ws?.close();
         return;
       }
-      // Re-subscribe to all active channels
+      // Re-subscribe to all active channels after a (re)connect.
       for (const channel of listeners.keys()) {
         sendJSON({ action: "subscribe", channel });
       }
+      setConnectionState("connected");
       resolve();
     };
 
@@ -74,16 +90,19 @@ function connect(): Promise<void> {
       ws = null;
       connectPromise = null;
       if (listeners.size > 0 && retryCount < MAX_RETRIES) {
+        setConnectionState("connecting");
         const delay = Math.min(1000 * 2 ** retryCount, 30000);
         retryCount++;
-        reconnectTimer = setTimeout(() => {
-          connect();
-        }, delay);
+        reconnectTimer = setTimeout(() => connect(), delay);
+      } else if (retryCount >= MAX_RETRIES) {
+        setConnectionState("failed");
+      } else {
+        setConnectionState("disconnected");
       }
     };
 
     ws.onerror = () => {
-      // onclose will fire after this
+      // onclose fires after onerror — state is updated there.
     };
   });
 
@@ -106,8 +125,15 @@ function subscribe(channel: string, handler: MessageHandler) {
   handlers.add(handler);
 
   if (isNew) {
-    ensureConnected();
-    sendJSON({ action: "subscribe", channel });
+    if (ws?.readyState === WebSocket.OPEN) {
+      // Already connected — send the subscribe message immediately.
+      sendJSON({ action: "subscribe", channel });
+    } else {
+      // Not yet connected — ensureConnected starts the connection.
+      // onopen will re-subscribe all active channels once connected,
+      // so we must NOT call sendJSON here (WS is not OPEN yet).
+      ensureConnected();
+    }
   }
 }
 
@@ -119,21 +145,21 @@ function unsubscribe(channel: string, handler: MessageHandler) {
     listeners.delete(channel);
     sendJSON({ action: "unsubscribe", channel });
 
-    // Close WS if no more listeners
+    // Close WS when no more listeners remain.
     if (listeners.size === 0) {
       if (reconnectTimer) {
         clearTimeout(reconnectTimer);
         reconnectTimer = null;
       }
-      // Only close if OPEN — if still CONNECTING, onopen will detect
-      // listeners.size === 0 and close cleanly, avoiding the
-      // "WebSocket closed before connection established" warning.
+      retryCount = 0;
+      // Only close if OPEN — if CONNECTING, onopen checks listeners.size === 0
+      // and closes cleanly to avoid "WebSocket closed before connection established".
       if (ws?.readyState === WebSocket.OPEN) {
         ws.close();
       }
       ws = null;
       connectPromise = null;
-      retryCount = 0;
+      setConnectionState("disconnected");
     }
   }
 }
@@ -147,7 +173,7 @@ export function useChannel<T = unknown>(
   channel: string | null,
   onMessage: (event: string, data: T) => void,
 ) {
-  const [connected, setConnected] = useState(false);
+  const [connected, setConnected] = useState(() => connectionState === "connected");
   const onMessageRef = useRef(onMessage);
   onMessageRef.current = onMessage;
 
@@ -156,16 +182,44 @@ export function useChannel<T = unknown>(
   }, []);
 
   useEffect(() => {
-    if (!channel) return;
+    if (!channel) {
+      setConnected(false);
+      return;
+    }
 
     subscribe(channel, handler);
-    setConnected(true);
+    setConnected(connectionState === "connected");
+
+    const stateListener = (state: ConnectionState) => {
+      setConnected(state === "connected");
+    };
+    stateListeners.add(stateListener);
 
     return () => {
       unsubscribe(channel, handler);
+      stateListeners.delete(stateListener);
       setConnected(false);
     };
   }, [channel, handler]);
 
   return { connected };
+}
+
+/**
+ * Returns the current WebSocket connection state. Useful for showing a
+ * global "connection lost" banner when the state is "failed".
+ */
+export function useWebSocketStatus(): ConnectionState {
+  const [state, setState] = useState<ConnectionState>(() => connectionState);
+
+  useEffect(() => {
+    // Sync in case state changed between render and effect.
+    setState(connectionState);
+    stateListeners.add(setState);
+    return () => {
+      stateListeners.delete(setState);
+    };
+  }, []);
+
+  return state;
 }
