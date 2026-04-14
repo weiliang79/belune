@@ -5,6 +5,7 @@
 *.so
 *.dylib
 paas
+apps/api/server
 
 # Go
 apps/api/tmp/
