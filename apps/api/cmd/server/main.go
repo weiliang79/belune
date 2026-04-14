@@ -10,6 +10,7 @@ import (
 
 	"github.com/ungweiliang/selfhost-paas/internal/app"
 	"github.com/ungweiliang/selfhost-paas/internal/config"
+	"github.com/ungweiliang/selfhost-paas/internal/pkg/logger"
 )
 
 func main() {
@@ -23,7 +24,8 @@ func main() {
 	if err := logLevel.UnmarshalText([]byte(cfg.LogLevel)); err != nil {
 		logLevel = slog.LevelInfo
 	}
-	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: logLevel})))
+	jsonHandler := slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: logLevel})
+	slog.SetDefault(slog.New(logger.NewRedactHandler(jsonHandler)))
 
 	a, err := app.New(cfg)
 	if err != nil {

@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/json"
+	"log/slog"
 	"net/http"
 
 	"github.com/hibiken/asynq"
@@ -77,11 +78,11 @@ func New(
 	}
 }
 
-// audit is a nil-safe wrapper for audit logging. Extracts user ID + IP from request context.
+// audit is a nil-safe wrapper for audit logging. Extracts user ID + real client IP from request.
 func (h *Handler) audit(r *http.Request, action, resourceType, resourceID string, details map[string]any) {
 	if h.auditSvc != nil {
 		userID := middleware.UserIDFromContext(r.Context())
-		h.auditSvc.Log(userID, r.RemoteAddr, action, resourceType, resourceID, details)
+		h.auditSvc.Log(userID, middleware.ClientIP(r), action, resourceType, resourceID, details)
 	}
 }
 
@@ -89,7 +90,9 @@ func (h *Handler) audit(r *http.Request, action, resourceType, resourceID string
 func writeJSON(w http.ResponseWriter, status int, data any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(data)
+	if err := json.NewEncoder(w).Encode(data); err != nil {
+		slog.Debug("writeJSON: encode error", "error", err)
+	}
 }
 
 // writeError writes a JSON error response.

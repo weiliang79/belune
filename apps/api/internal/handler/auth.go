@@ -54,7 +54,7 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 
 	if h.auditSvc != nil {
 		uid := uuidToString(result.User.ID)
-		h.auditSvc.Log(uid, r.RemoteAddr, "login", "user", uid, nil)
+		h.auditSvc.Log(uid, middleware.ClientIP(r), "login", "user", uid, nil)
 	}
 
 	writeJSON(w, http.StatusOK, result)
