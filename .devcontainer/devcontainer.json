@@ -4,11 +4,8 @@
   "service": "api",
   "workspaceFolder": "/workspaces/selfhost-paas",
   "initializeCommand": "mkdir -p /var/tmp/paas-builds && docker network create paas-infra 2>/dev/null || true",
-  "features": {
-    "ghcr.io/devcontainers/features/docker-outside-of-docker:1": {}
-  },
   "forwardPorts": [8080],
-  "postCreateCommand": "bash .devcontainer/post-create.sh",
+  "postCreateCommand": "bash /workspaces/selfhost-paas/.devcontainer/post-create.sh",
   "customizations": {
     "vscode": {
       "extensions": [

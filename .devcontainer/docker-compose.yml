@@ -1,6 +1,6 @@
 services:
   api:
-    image: mcr.microsoft.com/devcontainers/go:1-1.25-bookworm
+    image: mcr.microsoft.com/devcontainers/go:1.26-bookworm
     command: sleep infinity
     volumes:
       - ..:/workspaces/selfhost-paas:cached
