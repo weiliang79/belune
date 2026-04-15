@@ -31,10 +31,10 @@ type Server struct {
 
 func New(cfg *config.Config, db *pgxpool.Pool, queries *generated.Queries, asynqClient handler.TaskEnqueuer, rt runtime.ContainerRuntime, pm proxy.ProxyManager, rdb *redis.Client, hub *ws.Hub, auditSvc *service.AuditService, termMgr *terminal.Manager) *Server {
 	auth := service.NewAuthService(queries, cfg.JWTSecret, cfg.JWTExpiryHours, rdb)
-	appSvc := service.NewApplicationService(db, queries, rt, cfg.EncryptionKey)
+	appSvc := service.NewApplicationService(db, queries, rt, cfg.Keyring)
 	projSvc := service.NewProjectService(queries, rt)
 	dbSvc := service.NewDatabaseService(queries, rt)
-	gitCredSvc := service.NewGitCredentialService(queries, cfg.EncryptionKey)
+	gitCredSvc := service.NewGitCredentialService(queries, cfg.Keyring)
 
 	s := &Server{
 		cfg:     cfg,

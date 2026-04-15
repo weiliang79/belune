@@ -13,7 +13,6 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/ungweiliang/selfhost-paas/internal/naming"
-	"github.com/ungweiliang/selfhost-paas/internal/pkg/crypto"
 	"github.com/ungweiliang/selfhost-paas/internal/status"
 	"github.com/ungweiliang/selfhost-paas/internal/store"
 	"github.com/ungweiliang/selfhost-paas/internal/store/generated"
@@ -34,10 +33,10 @@ type createDatabaseCredentials struct {
 }
 
 type createDatabaseRequest struct {
-	Name        string                    `json:"name"`
-	Slug        string                    `json:"slug"`
-	Type        string                    `json:"type"`
-	Version     string                    `json:"version"`
+	Name        string                     `json:"name"`
+	Slug        string                     `json:"slug"`
+	Type        string                     `json:"type"`
+	Version     string                     `json:"version"`
 	Credentials *createDatabaseCredentials `json:"credentials"`
 }
 
@@ -164,7 +163,7 @@ func (h *Handler) CreateDatabase(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	encrypted, err := crypto.Encrypt(credsJSON, h.cfg.EncryptionKey)
+	encrypted, err := h.cfg.Keyring.Encrypt(credsJSON)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to encrypt credentials")
 		return
@@ -270,7 +269,7 @@ func (h *Handler) GetDatabase(w http.ResponseWriter, r *http.Request) {
 
 	// Decrypt credentials
 	if len(db.CredentialsEncrypted) > 0 {
-		credsJSON, err := crypto.Decrypt(db.CredentialsEncrypted, h.cfg.EncryptionKey)
+		credsJSON, err := h.cfg.Keyring.Decrypt(db.CredentialsEncrypted)
 		if err == nil {
 			var creds map[string]string
 			if json.Unmarshal(credsJSON, &creds) == nil {

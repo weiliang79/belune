@@ -15,7 +15,6 @@ import (
 	"github.com/ungweiliang/selfhost-paas/internal/git"
 	"github.com/ungweiliang/selfhost-paas/internal/naming"
 	"github.com/ungweiliang/selfhost-paas/internal/pkg/buildlog"
-	"github.com/ungweiliang/selfhost-paas/internal/pkg/crypto"
 	"github.com/ungweiliang/selfhost-paas/internal/status"
 	"github.com/ungweiliang/selfhost-paas/internal/store/generated"
 )
@@ -89,7 +88,7 @@ func (h *TaskHandler) HandleBuildTask(ctx context.Context, t *asynq.Task) error 
 
 	var gitToken string
 	if len(app.GitCredentialsEncrypted) > 0 {
-		tokenBytes, decErr := crypto.Decrypt(app.GitCredentialsEncrypted, h.EncryptionKey)
+		tokenBytes, decErr := h.Keyring.Decrypt(app.GitCredentialsEncrypted)
 		if decErr != nil {
 			slog.Warn("failed to decrypt git credentials, cloning without token", "error", decErr)
 		} else {
@@ -113,7 +112,7 @@ func (h *TaskHandler) HandleBuildTask(ctx context.Context, t *asynq.Task) error 
 
 	env := make(map[string]string)
 	for _, ev := range envVars {
-		decrypted, err := crypto.Decrypt(ev.ValueEncrypted, h.EncryptionKey)
+		decrypted, err := h.Keyring.Decrypt(ev.ValueEncrypted)
 		if err != nil {
 			slog.Warn("failed to decrypt env var, skipping", "key", ev.Key, "error", err)
 			continue

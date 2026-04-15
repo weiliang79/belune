@@ -38,7 +38,6 @@ func SetupTestServer(pool *pgxpool.Pool, queries *generated.Queries) *TestEnv {
 	cfg := &config.Config{
 		Port:                8080,
 		JWTSecret:           TestJWTSecret,
-		EncryptionKey:       TestEncryptionKey,
 		Keyring:             keyring,
 		CaddyAdminURL:       "http://localhost:2019",
 		DisableRateLimiting: true,

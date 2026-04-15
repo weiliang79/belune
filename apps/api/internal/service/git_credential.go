@@ -11,12 +11,12 @@ import (
 )
 
 type GitCredentialService struct {
-	queries       *generated.Queries
-	encryptionKey string
+	queries *generated.Queries
+	keyring *crypto.Keyring
 }
 
-func NewGitCredentialService(queries *generated.Queries, encryptionKey string) *GitCredentialService {
-	return &GitCredentialService{queries: queries, encryptionKey: encryptionKey}
+func NewGitCredentialService(queries *generated.Queries, keyring *crypto.Keyring) *GitCredentialService {
+	return &GitCredentialService{queries: queries, keyring: keyring}
 }
 
 type CreateGitCredentialParams struct {
@@ -28,7 +28,7 @@ type CreateGitCredentialParams struct {
 }
 
 func (s *GitCredentialService) Create(ctx context.Context, p CreateGitCredentialParams) (generated.GitCredential, error) {
-	encrypted, err := crypto.Encrypt([]byte(p.Token), s.encryptionKey)
+	encrypted, err := s.keyring.Encrypt([]byte(p.Token))
 	if err != nil {
 		return generated.GitCredential{}, fmt.Errorf("encrypt token: %w", err)
 	}
@@ -65,7 +65,7 @@ func (s *GitCredentialService) Update(ctx context.Context, id pgtype.UUID, p Upd
 
 	tokenEncrypted := current.TokenEncrypted
 	if p.Token != "" {
-		tokenEncrypted, err = crypto.Encrypt([]byte(p.Token), s.encryptionKey)
+		tokenEncrypted, err = s.keyring.Encrypt([]byte(p.Token))
 		if err != nil {
 			return generated.GitCredential{}, fmt.Errorf("encrypt token: %w", err)
 		}
@@ -86,7 +86,7 @@ func (s *GitCredentialService) Delete(ctx context.Context, id pgtype.UUID) error
 
 // DecryptToken decrypts the token for a credential (used by deploy worker).
 func (s *GitCredentialService) DecryptToken(cred generated.GitCredential) (string, error) {
-	plaintext, err := crypto.Decrypt(cred.TokenEncrypted, s.encryptionKey)
+	plaintext, err := s.keyring.Decrypt(cred.TokenEncrypted)
 	if err != nil {
 		return "", fmt.Errorf("decrypt token: %w", err)
 	}

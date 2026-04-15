@@ -16,7 +16,6 @@ import (
 	"github.com/ungweiliang/selfhost-paas/internal/git"
 	"github.com/ungweiliang/selfhost-paas/internal/naming"
 	"github.com/ungweiliang/selfhost-paas/internal/pkg/buildlog"
-	"github.com/ungweiliang/selfhost-paas/internal/pkg/crypto"
 	"github.com/ungweiliang/selfhost-paas/internal/pkg/redact"
 	"github.com/ungweiliang/selfhost-paas/internal/proxy"
 	"github.com/ungweiliang/selfhost-paas/internal/runtime"
@@ -138,7 +137,7 @@ func (h *TaskHandler) loadApplication(ctx context.Context, dc *deployContext) er
 		Type: appRow.Type, SourceRepo: appRow.SourceRepo, SourceImage: appRow.SourceImage,
 		DockerfilePath: appRow.DockerfilePath, BuildType: appRow.BuildType,
 		BuilderImage: appRow.BuilderImage, CustomBuildpacks: appRow.CustomBuildpacks,
-		Status: appRow.Status,
+		Status:   appRow.Status,
 		CpuLimit: appRow.CpuLimit, MemoryLimit: appRow.MemoryLimit,
 		GitCredentialsEncrypted: appRow.GitCredentialsEncrypted,
 		HealthCheckPath:         appRow.HealthCheckPath,
@@ -152,7 +151,7 @@ func (h *TaskHandler) loadApplication(ctx context.Context, dc *deployContext) er
 		slog.Warn("failed to fetch project env vars, continuing without them", "error", err)
 	}
 	for _, ev := range projectEnvVars {
-		decrypted, err := crypto.Decrypt(ev.ValueEncrypted, h.EncryptionKey)
+		decrypted, err := h.Keyring.Decrypt(ev.ValueEncrypted)
 		if err != nil {
 			slog.Warn("failed to decrypt project env var, skipping", "key", ev.Key, "error", err)
 			continue
@@ -165,7 +164,7 @@ func (h *TaskHandler) loadApplication(ctx context.Context, dc *deployContext) er
 		slog.Warn("failed to fetch app env vars, continuing without them", "error", err)
 	}
 	for _, ev := range appEnvVars {
-		decrypted, err := crypto.Decrypt(ev.ValueEncrypted, h.EncryptionKey)
+		decrypted, err := h.Keyring.Decrypt(ev.ValueEncrypted)
 		if err != nil {
 			slog.Warn("failed to decrypt env var, skipping", "key", ev.Key, "error", err)
 			continue
@@ -258,7 +257,7 @@ func (h *TaskHandler) buildFromGit(ctx context.Context, dc *deployContext) error
 		if credErr != nil {
 			slog.Warn("failed to fetch git credential, trying per-app token", "error", credErr)
 		} else {
-			tokenBytes, decErr := crypto.Decrypt(cred.TokenEncrypted, h.EncryptionKey)
+			tokenBytes, decErr := h.Keyring.Decrypt(cred.TokenEncrypted)
 			if decErr != nil {
 				slog.Warn("failed to decrypt centralized git credential", "error", decErr)
 			} else {
@@ -267,7 +266,7 @@ func (h *TaskHandler) buildFromGit(ctx context.Context, dc *deployContext) error
 		}
 	}
 	if cloneURL == "" && len(dc.app.GitCredentialsEncrypted) > 0 {
-		tokenBytes, decErr := crypto.Decrypt(dc.app.GitCredentialsEncrypted, h.EncryptionKey)
+		tokenBytes, decErr := h.Keyring.Decrypt(dc.app.GitCredentialsEncrypted)
 		if decErr != nil {
 			slog.Warn("failed to decrypt git credentials, cloning without token", "error", decErr)
 		} else {

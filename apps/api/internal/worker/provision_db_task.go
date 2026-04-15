@@ -10,7 +10,6 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/ungweiliang/selfhost-paas/internal/naming"
-	"github.com/ungweiliang/selfhost-paas/internal/pkg/crypto"
 	"github.com/ungweiliang/selfhost-paas/internal/runtime"
 	"github.com/ungweiliang/selfhost-paas/internal/status"
 	"github.com/ungweiliang/selfhost-paas/internal/store/generated"
@@ -39,7 +38,7 @@ func (h *TaskHandler) HandleProvisionDBTask(ctx context.Context, t *asynq.Task) 
 	}
 
 	// Decrypt credentials
-	credsJSON, err := crypto.Decrypt(db.CredentialsEncrypted, h.EncryptionKey)
+	credsJSON, err := h.Keyring.Decrypt(db.CredentialsEncrypted)
 	if err != nil {
 		h.failDatabase(ctx, dbID, fmt.Sprintf("decrypt credentials: %v", err))
 		return fmt.Errorf("decrypt credentials: %w", err)

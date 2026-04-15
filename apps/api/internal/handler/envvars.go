@@ -9,7 +9,6 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
-	"github.com/ungweiliang/selfhost-paas/internal/pkg/crypto"
 	"github.com/ungweiliang/selfhost-paas/internal/store/generated"
 )
 
@@ -51,7 +50,7 @@ func (h *Handler) ListEnvVars(w http.ResponseWriter, r *http.Request) {
 
 		// Decrypt and show non-secret values; mask secrets
 		if !ev.IsSecret {
-			decrypted, err := crypto.Decrypt(ev.ValueEncrypted, h.cfg.EncryptionKey)
+			decrypted, err := h.cfg.Keyring.Decrypt(ev.ValueEncrypted)
 			if err == nil {
 				resp.Value = string(decrypted)
 			}
@@ -103,14 +102,14 @@ func (h *Handler) UpdateEnvVars(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		encrypted, err := crypto.Encrypt([]byte(v.Value), h.cfg.EncryptionKey)
+		encrypted, err := h.cfg.Keyring.Encrypt([]byte(v.Value))
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, "failed to encrypt value")
 			return
 		}
 
 		_, err = h.queries.UpsertEnvVar(r.Context(), generated.UpsertEnvVarParams{
-			ApplicationID: applicationUUID,
+			ApplicationID:  applicationUUID,
 			Key:            v.Key,
 			ValueEncrypted: encrypted,
 			IsSecret:       v.IsSecret,

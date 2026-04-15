@@ -16,14 +16,14 @@ import (
 )
 
 type ApplicationService struct {
-	db            *pgxpool.Pool
-	queries       *generated.Queries
-	runtime       runtime.ContainerRuntime
-	encryptionKey string
+	db      *pgxpool.Pool
+	queries *generated.Queries
+	runtime runtime.ContainerRuntime
+	keyring *crypto.Keyring
 }
 
-func NewApplicationService(db *pgxpool.Pool, queries *generated.Queries, rt runtime.ContainerRuntime, encryptionKey string) *ApplicationService {
-	return &ApplicationService{db: db, queries: queries, runtime: rt, encryptionKey: encryptionKey}
+func NewApplicationService(db *pgxpool.Pool, queries *generated.Queries, rt runtime.ContainerRuntime, keyring *crypto.Keyring) *ApplicationService {
+	return &ApplicationService{db: db, queries: queries, runtime: rt, keyring: keyring}
 }
 
 // CreateApplicationParams holds the parameters for creating an application.
@@ -54,7 +54,7 @@ func (s *ApplicationService) Create(ctx context.Context, p CreateApplicationPara
 
 	var gitCreds []byte
 	if p.GitToken != "" {
-		encrypted, err := crypto.Encrypt([]byte(p.GitToken), s.encryptionKey)
+		encrypted, err := s.keyring.Encrypt([]byte(p.GitToken))
 		if err != nil {
 			return generated.Application{}, fmt.Errorf("encrypt git token: %w", err)
 		}
@@ -127,7 +127,7 @@ func (s *ApplicationService) Update(
 
 	gitCreds := current.GitCredentialsEncrypted
 	if p.GitToken != "" {
-		encrypted, err := crypto.Encrypt([]byte(p.GitToken), s.encryptionKey)
+		encrypted, err := s.keyring.Encrypt([]byte(p.GitToken))
 		if err != nil {
 			return generated.Application{}, fmt.Errorf("encrypt git token: %w", err)
 		}

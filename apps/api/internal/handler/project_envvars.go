@@ -8,7 +8,6 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
-	"github.com/ungweiliang/selfhost-paas/internal/pkg/crypto"
 	"github.com/ungweiliang/selfhost-paas/internal/store/generated"
 )
 
@@ -40,7 +39,7 @@ func (h *Handler) ListProjectEnvVars(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if !ev.IsSecret {
-			decrypted, err := crypto.Decrypt(ev.ValueEncrypted, h.cfg.EncryptionKey)
+			decrypted, err := h.cfg.Keyring.Decrypt(ev.ValueEncrypted)
 			if err == nil {
 				resp.Value = string(decrypted)
 			}
@@ -88,7 +87,7 @@ func (h *Handler) UpdateProjectEnvVars(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		encrypted, err := crypto.Encrypt([]byte(v.Value), h.cfg.EncryptionKey)
+		encrypted, err := h.cfg.Keyring.Encrypt([]byte(v.Value))
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, "failed to encrypt value")
 			return

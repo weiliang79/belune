@@ -12,6 +12,7 @@ import (
 
 	"github.com/ungweiliang/selfhost-paas/internal/build"
 	"github.com/ungweiliang/selfhost-paas/internal/config"
+	"github.com/ungweiliang/selfhost-paas/internal/pkg/crypto"
 	"github.com/ungweiliang/selfhost-paas/internal/proxy"
 	"github.com/ungweiliang/selfhost-paas/internal/runtime"
 	"github.com/ungweiliang/selfhost-paas/internal/service"
@@ -25,7 +26,7 @@ type TaskHandler struct {
 	DB             *pgxpool.Pool
 	Queries        *generated.Queries
 	Chain          *build.Chain
-	EncryptionKey  string
+	Keyring        *crypto.Keyring
 	RedisClient    *redis.Client
 	Config         *config.Config
 	MetricsService *service.MetricsService

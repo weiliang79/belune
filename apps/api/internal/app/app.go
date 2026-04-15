@@ -116,7 +116,7 @@ func New(cfg *config.Config) (*App, error) {
 		DB:             db,
 		Queries:        queries,
 		Chain:          buildChain,
-		EncryptionKey:  cfg.EncryptionKey,
+		Keyring:        cfg.Keyring,
 		RedisClient:    rdb,
 		Config:         cfg,
 		MetricsService: metricsSvc,
