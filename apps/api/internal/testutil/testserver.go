@@ -6,6 +6,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/ungweiliang/selfhost-paas/internal/config"
+	"github.com/ungweiliang/selfhost-paas/internal/pkg/crypto"
 	"github.com/ungweiliang/selfhost-paas/internal/server"
 	"github.com/ungweiliang/selfhost-paas/internal/store/generated"
 )
@@ -30,10 +31,15 @@ type TestEnv struct {
 // SetupTestServer creates a full HTTP test server with real DB and mock external deps.
 // Called from TestMain so does not take *testing.T.
 func SetupTestServer(pool *pgxpool.Pool, queries *generated.Queries) *TestEnv {
+	keyring, err := crypto.ParseKeyringEnv("", TestEncryptionKey, "")
+	if err != nil {
+		panic("testutil: build test keyring: " + err.Error())
+	}
 	cfg := &config.Config{
 		Port:                8080,
 		JWTSecret:           TestJWTSecret,
 		EncryptionKey:       TestEncryptionKey,
+		Keyring:             keyring,
 		CaddyAdminURL:       "http://localhost:2019",
 		DisableRateLimiting: true,
 	}

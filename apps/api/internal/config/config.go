@@ -5,22 +5,30 @@ import (
 	"os"
 	"strconv"
 	"strings"
+
+	"github.com/ungweiliang/selfhost-paas/internal/pkg/crypto"
 )
 
 type Config struct {
-	Port                int
-	DatabaseURL         string
-	RedisURL            string
-	JWTSecret           string
-	JWTExpiryHours      int
-	EncryptionKey       string
-	CaddyAdminURL       string
-	AccessLogPath       string
-	CORSOrigins         []string
-	SecureCookies       bool
-	TLS                 bool   // when true, send HSTS headers
-	LogLevel            string // debug, info, warn, error (default: info)
-	DisableRateLimiting bool   // set true in tests to avoid per-IP counter accumulation
+	Port           int
+	DatabaseURL    string
+	RedisURL       string
+	JWTSecret      string
+	JWTExpiryHours int
+	// EncryptionKey is the legacy single-KEK env var (ENCRYPTION_KEY). Retained
+	// for backward compatibility with call sites that have not yet migrated to
+	// the keyring. New code should use Keyring instead.
+	EncryptionKey        string
+	EncryptionKeys       string // ENCRYPTION_KEYS — "v1:hex64,v2:hex64,..."
+	EncryptionKeyCurrent string // ENCRYPTION_KEY_CURRENT — "v2" (optional override)
+	Keyring              *crypto.Keyring
+	CaddyAdminURL        string
+	AccessLogPath        string
+	CORSOrigins          []string
+	SecureCookies        bool
+	TLS                  bool   // when true, send HSTS headers
+	LogLevel             string // debug, info, warn, error (default: info)
+	DisableRateLimiting  bool   // set true in tests to avoid per-IP counter accumulation
 
 	// Timeouts
 	BuildTimeoutMinutes     int // max duration for build operations (default 30)
@@ -34,18 +42,20 @@ type Config struct {
 
 func Load() (*Config, error) {
 	cfg := &Config{
-		Port:           getEnvInt("PORT", 8080),
-		DatabaseURL:    getEnv("DATABASE_URL", "postgres://paas:paas@localhost:5432/paas?sslmode=disable"),
-		RedisURL:       getEnv("REDIS_URL", "redis://localhost:6379"),
-		JWTSecret:      getEnv("JWT_SECRET", ""),
-		JWTExpiryHours: getEnvInt("JWT_EXPIRY_HOURS", 24),
-		EncryptionKey:  getEnv("ENCRYPTION_KEY", ""),
-		CaddyAdminURL:  getEnv("CADDY_ADMIN_URL", "http://localhost:2019"),
-		AccessLogPath:  getEnv("ACCESS_LOG_PATH", "../../infra/caddy/logs/access.log"),
-		CORSOrigins:    getEnvList("CORS_ORIGINS", []string{"http://localhost:5173"}),
-		SecureCookies:  getEnvBool("SECURE_COOKIES", false),
-		TLS:      getEnvBool("TLS_ENABLED", false),
-		LogLevel: getEnv("LOG_LEVEL", "info"),
+		Port:                 getEnvInt("PORT", 8080),
+		DatabaseURL:          getEnv("DATABASE_URL", "postgres://paas:paas@localhost:5432/paas?sslmode=disable"),
+		RedisURL:             getEnv("REDIS_URL", "redis://localhost:6379"),
+		JWTSecret:            getEnv("JWT_SECRET", ""),
+		JWTExpiryHours:       getEnvInt("JWT_EXPIRY_HOURS", 24),
+		EncryptionKey:        getEnv("ENCRYPTION_KEY", ""),
+		EncryptionKeys:       getEnv("ENCRYPTION_KEYS", ""),
+		EncryptionKeyCurrent: getEnv("ENCRYPTION_KEY_CURRENT", ""),
+		CaddyAdminURL:        getEnv("CADDY_ADMIN_URL", "http://localhost:2019"),
+		AccessLogPath:        getEnv("ACCESS_LOG_PATH", "../../infra/caddy/logs/access.log"),
+		CORSOrigins:          getEnvList("CORS_ORIGINS", []string{"http://localhost:5173"}),
+		SecureCookies:        getEnvBool("SECURE_COOKIES", false),
+		TLS:                  getEnvBool("TLS_ENABLED", false),
+		LogLevel:             getEnv("LOG_LEVEL", "info"),
 
 		BuildTimeoutMinutes:     getEnvInt("BUILD_TIMEOUT_MINUTES", 30),
 		TaskTimeoutMinutes:      getEnvInt("TASK_TIMEOUT_MINUTES", 45),
@@ -61,12 +71,13 @@ func Load() (*Config, error) {
 	if len(cfg.JWTSecret) < 32 {
 		return nil, fmt.Errorf("JWT_SECRET must be at least 32 characters")
 	}
-	if cfg.EncryptionKey == "" {
-		return nil, fmt.Errorf("ENCRYPTION_KEY is required")
+	// Keyring accepts either ENCRYPTION_KEYS (multi-key) or the legacy
+	// ENCRYPTION_KEY (single key, promoted to v1). At least one must be set.
+	keyring, err := crypto.ParseKeyringEnv(cfg.EncryptionKeys, cfg.EncryptionKey, cfg.EncryptionKeyCurrent)
+	if err != nil {
+		return nil, err
 	}
-	if len(cfg.EncryptionKey) != 64 || !isHex(cfg.EncryptionKey) {
-		return nil, fmt.Errorf("ENCRYPTION_KEY must be exactly 64 hex characters")
-	}
+	cfg.Keyring = keyring
 
 	return cfg, nil
 }
@@ -101,15 +112,6 @@ func getEnvList(key string, fallback []string) []string {
 		}
 	}
 	return fallback
-}
-
-func isHex(s string) bool {
-	for _, c := range s {
-		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')) {
-			return false
-		}
-	}
-	return true
 }
 
 func getEnvBool(key string, fallback bool) bool {
