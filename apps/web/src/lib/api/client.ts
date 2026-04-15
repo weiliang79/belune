@@ -1,5 +1,7 @@
 const BASE_URL = "/api";
 
+const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
+
 export class ApiError extends Error {
   status: number;
 
@@ -10,14 +12,30 @@ export class ApiError extends Error {
   }
 }
 
+function readCsrfToken(): string | null {
+  const match = document.cookie.match(/(?:^|;\s*)csrf_token=([^;]+)/);
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
 async function request<T>(
   method: string,
   path: string,
   body?: unknown,
 ): Promise<T> {
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+
+  if (!SAFE_METHODS.has(method)) {
+    const csrf = readCsrfToken();
+    if (csrf) {
+      headers["X-CSRF-Token"] = csrf;
+    }
+  }
+
   const options: RequestInit = {
     method,
-    headers: { "Content-Type": "application/json" },
+    headers,
     credentials: "include",
   };
 

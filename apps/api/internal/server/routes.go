@@ -78,6 +78,7 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService,
 	// Protected routes
 	r.Group(func(r chi.Router) {
 		r.Use(middleware.Auth(auth))
+		r.Use(middleware.CSRF())
 		if !disableRateLimit {
 			r.Use(httprate.Limit(100, time.Minute, httprate.WithKeyFuncs(keyByUserIDOrIP)))
 		}

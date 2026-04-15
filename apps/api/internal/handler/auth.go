@@ -41,12 +41,30 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Set HTTP-only cookie
+	csrfToken, err := middleware.GenerateCSRFToken()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to generate csrf token")
+		return
+	}
+
+	// HTTP-only JWT cookie — not readable by JS, submitted automatically.
 	http.SetCookie(w, &http.Cookie{
 		Name:     "token",
 		Value:    result.Token,
 		Path:     "/",
 		HttpOnly: true,
+		Secure:   h.cfg.SecureCookies,
+		SameSite: http.SameSiteLaxMode,
+		MaxAge:   int(24 * time.Hour / time.Second),
+	})
+
+	// CSRF cookie — readable by JS so the frontend can mirror it into
+	// the X-CSRF-Token header for the double-submit check.
+	http.SetCookie(w, &http.Cookie{
+		Name:     middleware.CSRFCookieName,
+		Value:    csrfToken,
+		Path:     "/",
+		HttpOnly: false,
 		Secure:   h.cfg.SecureCookies,
 		SameSite: http.SameSiteLaxMode,
 		MaxAge:   int(24 * time.Hour / time.Second),
@@ -72,6 +90,15 @@ func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
 		Value:    "",
 		Path:     "/",
 		HttpOnly: true,
+		Secure:   h.cfg.SecureCookies,
+		SameSite: http.SameSiteLaxMode,
+		MaxAge:   -1,
+	})
+	http.SetCookie(w, &http.Cookie{
+		Name:     middleware.CSRFCookieName,
+		Value:    "",
+		Path:     "/",
+		HttpOnly: false,
 		Secure:   h.cfg.SecureCookies,
 		SameSite: http.SameSiteLaxMode,
 		MaxAge:   -1,
