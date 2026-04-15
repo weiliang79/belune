@@ -89,6 +89,16 @@ tasks:
     dir: '{{.API_DIR}}'
     cmd: migrate create -ext sql -dir internal/migrations -seq {{.CLI_ARGS}}
 
+  # ─── Encryption ────────────────────────────────────────────────
+
+  encryption:rewrap:
+    desc: |
+      Re-encrypt every secret column under the current KEK. Idempotent — rows
+      already tagged with the current version are skipped. Pass --dry-run to
+      report without writing: `task encryption:rewrap -- --dry-run`.
+    dir: '{{.API_DIR}}'
+    cmd: go run ./cmd/rewrap {{.CLI_ARGS}}
+
   # ─── Testing ───────────────────────────────────────────────────
 
   test:api:
