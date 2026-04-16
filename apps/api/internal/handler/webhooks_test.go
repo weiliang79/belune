@@ -88,6 +88,56 @@ func TestWebhookPush_GitHub(t *testing.T) {
 	assert.Equal(t, "deploy", env.Asynq.Tasks[0].TypeName)
 }
 
+func TestWebhookPush_DuplicateDelivery(t *testing.T) {
+	resetDB(t)
+	token := env.SetupAdmin(t, "admin@test.com", "password123")
+	project := env.CreateProject(t, token, "Test Project", "test-project")
+	projectID := extractID(project["id"])
+
+	app := env.CreateApplication(t, token, projectID, map[string]any{
+		"name":        "Webhook App",
+		"type":        "git",
+		"build_type":  "dockerfile",
+		"source_repo": "https://github.com/test/repo",
+	})
+	appID := extractID(app["id"])
+
+	secret := "test-secret-123"
+	env.DoRequest(t, "PUT", fmt.Sprintf("/api/projects/%s/applications/%s/webhook", projectID, appID), map[string]any{
+		"webhook_secret":     secret,
+		"auto_deploy_branch": "main",
+	}, testutil.AuthHeader(token)).Body.Close()
+
+	payload := map[string]any{
+		"ref":   "refs/heads/main",
+		"after": "abc123def456",
+		"repository": map[string]any{
+			"clone_url": "https://github.com/test/repo.git",
+		},
+	}
+	body, _ := json.Marshal(payload)
+	mac := hmac.New(sha256.New, []byte(secret))
+	mac.Write(body)
+	signature := "sha256=" + hex.EncodeToString(mac.Sum(nil))
+	headers := map[string]string{
+		"X-GitHub-Event":      "push",
+		"X-Hub-Signature-256": signature,
+	}
+
+	// First delivery creates a deployment.
+	resp := env.DoRequest(t, "POST", "/api/webhooks/push", payload, headers)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	resp.Body.Close()
+	require.Len(t, env.Asynq.Tasks, 1)
+
+	// Duplicate delivery (same commit SHA) within the idempotency window is
+	// deduped — no new deployment, no new enqueue.
+	resp = env.DoRequest(t, "POST", "/api/webhooks/push", payload, headers)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	resp.Body.Close()
+	assert.Len(t, env.Asynq.Tasks, 1, "duplicate webhook should not enqueue a second deploy")
+}
+
 func TestWebhookPush_BranchMismatch(t *testing.T) {
 	resetDB(t)
 	token := env.SetupAdmin(t, "admin@test.com", "password123")

@@ -12,8 +12,10 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/hibiken/asynq"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/ungweiliang/selfhost-paas/internal/deploy"
 	"github.com/ungweiliang/selfhost-paas/internal/git"
 	"github.com/ungweiliang/selfhost-paas/internal/status"
 	"github.com/ungweiliang/selfhost-paas/internal/store/generated"
@@ -89,15 +91,44 @@ func (h *Handler) HandleWebhookPush(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// Create deployment and enqueue task
-		applicationID := fmt.Sprintf("%x-%x-%x-%x-%x",
-			app.ID.Bytes[0:4], app.ID.Bytes[4:6],
-			app.ID.Bytes[6:8], app.ID.Bytes[8:10], app.ID.Bytes[10:16])
+		applicationID := uuidToString(app.ID)
+
+		// Dedup duplicate webhook deliveries: same application + commit in the
+		// last WindowPushSeconds reuses the existing deployment instead of
+		// creating a second one. Requires a commit SHA — pushes without one
+		// can't be safely fingerprinted.
+		var idempotencyKey pgtype.Text
+		if payload.CommitSHA != "" {
+			key := deploy.Key(applicationID, "push", payload.CommitSHA)
+			idempotencyKey = pgtype.Text{String: key, Valid: true}
+
+			existing, lookupErr := h.queries.FindRecentDeploymentByIdempotencyKey(r.Context(), generated.FindRecentDeploymentByIdempotencyKeyParams{
+				ApplicationID:  app.ID,
+				IdempotencyKey: idempotencyKey,
+				WindowSeconds:  int32(deploy.WindowPushSeconds),
+			})
+			if lookupErr == nil {
+				slog.Info("webhook: duplicate delivery, reusing existing deployment",
+					"application", app.Name,
+					"commit", payload.CommitSHA,
+					"deployment_id", uuidToString(existing.ID),
+				)
+				continue
+			}
+			if !errors.Is(lookupErr, pgx.ErrNoRows) {
+				// Fail open — a lookup hiccup shouldn't block a legitimate deploy.
+				slog.Warn("webhook: idempotency lookup failed, proceeding",
+					"application", app.Name, "error", lookupErr,
+				)
+			}
+		}
 
 		deployment, err := h.queries.CreateDeployment(r.Context(), generated.CreateDeploymentParams{
-			ApplicationID: app.ID,
-			Status:      status.DeploymentPending,
-			TriggeredBy: "push",
-			CommitSha:   pgtype.Text{String: payload.CommitSHA, Valid: payload.CommitSHA != ""},
+			ApplicationID:  app.ID,
+			Status:         status.DeploymentPending,
+			TriggeredBy:    "push",
+			CommitSha:      pgtype.Text{String: payload.CommitSHA, Valid: payload.CommitSHA != ""},
+			IdempotencyKey: idempotencyKey,
 		})
 		if err != nil {
 			slog.Error("webhook: failed to create deployment", "application", app.Name, "error", err)
