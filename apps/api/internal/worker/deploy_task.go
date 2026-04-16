@@ -68,6 +68,22 @@ func (h *TaskHandler) HandleDeployTask(ctx context.Context, t *asynq.Task) error
 		return fmt.Errorf("invalid deployment_id (permanent): %w: %w", err, asynq.SkipRetry)
 	}
 
+	// Defense-in-depth: if the deployment row is already in a terminal state,
+	// a duplicate task slipped past webhook dedup and the asynq TaskID lock
+	// (e.g., a stale retry after the first run finished). Skip without
+	// retrying instead of clobbering the existing success/failure.
+	existing, err := h.Queries.GetDeployment(ctx, deploymentID)
+	if err != nil {
+		return fmt.Errorf("fetch deployment (permanent): %w: %w", err, asynq.SkipRetry)
+	}
+	if existing.Status == status.DeploymentSuccess || existing.Status == status.DeploymentFailed {
+		slog.Info("deploy task skipped: deployment already terminal",
+			"deployment_id", payload.DeploymentID,
+			"status", existing.Status,
+		)
+		return nil
+	}
+
 	dc := &deployContext{
 		payload:       payload,
 		applicationID: applicationID,
