@@ -5,9 +5,17 @@ SELECT * FROM deployments WHERE application_id = $1 ORDER BY started_at DESC;
 SELECT * FROM deployments WHERE id = $1;
 
 -- name: CreateDeployment :one
-INSERT INTO deployments (application_id, status, triggered_by, commit_sha)
-VALUES ($1, $2, $3, $4)
+INSERT INTO deployments (application_id, status, triggered_by, commit_sha, idempotency_key)
+VALUES ($1, $2, $3, $4, $5)
 RETURNING *;
+
+-- name: FindRecentDeploymentByIdempotencyKey :one
+SELECT * FROM deployments
+WHERE application_id = $1
+  AND idempotency_key = $2
+  AND started_at > NOW() - make_interval(secs => sqlc.arg(window_seconds)::int)
+ORDER BY started_at DESC
+LIMIT 1;
 
 -- name: UpdateDeploymentStatus :one
 UPDATE deployments SET status = $2, error_message = $3, finished_at = NOW()
