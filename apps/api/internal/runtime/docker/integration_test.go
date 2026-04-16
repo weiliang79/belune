@@ -1,0 +1,192 @@
+//go:build integration_docker
+
+// Real-Docker integration tests for the runtime.ContainerRuntime implementation.
+// Gated behind a build tag so CI can opt in without pulling docker into every
+// unit-test run. Run with:
+//
+//	go test -tags=integration_docker ./internal/runtime/docker/...
+//
+// Each test talks to the docker daemon the test host exposes — it does not
+// bring up its own daemon. Tests clean up the resources they create, but a
+// failed run may leak a container or image; the prune helpers below mop that
+// up on the next invocation.
+package docker
+
+import (
+	"context"
+	"crypto/rand"
+	"encoding/hex"
+	"io"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/ungweiliang/selfhost-paas/internal/runtime"
+)
+
+const testImage = "busybox:latest"
+
+func uniqueName(t *testing.T, prefix string) string {
+	t.Helper()
+	var b [6]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		t.Fatalf("rand: %v", err)
+	}
+	return "paas-it-" + prefix + "-" + hex.EncodeToString(b[:])
+}
+
+func newTestClient(t *testing.T) *Client {
+	t.Helper()
+	c, err := New()
+	require.NoError(t, err, "docker client unavailable — is the daemon running?")
+	t.Cleanup(func() { _ = c.Close() })
+	return c
+}
+
+// ensureTestImage pulls busybox once per test run (idempotent: subsequent pulls
+// are near-instant because the layers are already local).
+func ensureTestImage(t *testing.T, c *Client) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	require.NoError(t, c.PullImage(ctx, testImage), "pull %s", testImage)
+}
+
+func TestIntegration_ImagePullRemove(t *testing.T) {
+	c := newTestClient(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
+	require.NoError(t, c.PullImage(ctx, testImage))
+	// Pull again — must be idempotent and fast.
+	start := time.Now()
+	require.NoError(t, c.PullImage(ctx, testImage))
+	assert.Less(t, time.Since(start), 30*time.Second, "second pull should be fast (cached)")
+}
+
+func TestIntegration_NetworkCreateRemove(t *testing.T) {
+	c := newTestClient(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	name := uniqueName(t, "net")
+	require.NoError(t, c.CreateNetwork(ctx, name))
+	t.Cleanup(func() { _ = c.RemoveNetwork(context.Background(), name) })
+
+	// Second call must be a no-op (idempotent).
+	require.NoError(t, c.CreateNetwork(ctx, name))
+
+	require.NoError(t, c.RemoveNetwork(ctx, name))
+}
+
+func TestIntegration_VolumeCreateRemove(t *testing.T) {
+	c := newTestClient(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	name := uniqueName(t, "vol")
+	require.NoError(t, c.CreateVolume(ctx, name))
+	t.Cleanup(func() { _ = c.RemoveVolume(context.Background(), name) })
+
+	require.NoError(t, c.RemoveVolume(ctx, name))
+}
+
+func TestIntegration_ContainerLifecycle(t *testing.T) {
+	c := newTestClient(t)
+	ensureTestImage(t, c)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
+	defer cancel()
+
+	networkName := uniqueName(t, "netlc")
+	require.NoError(t, c.CreateNetwork(ctx, networkName))
+	t.Cleanup(func() { _ = c.RemoveNetwork(context.Background(), networkName) })
+
+	containerName := uniqueName(t, "ctr")
+	id, err := c.CreateContainer(ctx, runtime.ContainerConfig{
+		Name:    containerName,
+		Image:   testImage,
+		Cmd:     []string{"sh", "-c", "echo hello-from-paas-it && sleep 3600"},
+		Env:     map[string]string{"PAAS_TEST": "1"},
+		Labels:  map[string]string{"paas-integration-test": "true"},
+		Network: networkName,
+		// Conservative limits so this works on constrained CI boxes.
+		CPULimit:    0.5,
+		MemoryLimit: 64 * 1024 * 1024, // 64 MiB
+	})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = c.RemoveContainer(context.Background(), id) })
+
+	require.NoError(t, c.StartContainer(ctx, id))
+
+	// ListContainers filters by the managed-by label — this container must show up.
+	listed, err := c.ListContainers(ctx)
+	require.NoError(t, err)
+	found := false
+	for _, ci := range listed {
+		if ci.ID == id {
+			found = true
+			assert.Equal(t, "true", ci.Labels["paas-integration-test"])
+		}
+	}
+	assert.True(t, found, "created container should appear in ListContainers")
+
+	// Poll stats until the daemon returns a non-zero sample — can take a second
+	// after start while the cgroup is populated.
+	var stats *runtime.ContainerResourceStats
+	require.Eventually(t, func() bool {
+		s, err := c.ContainerStats(ctx, id)
+		if err != nil || s == nil {
+			return false
+		}
+		stats = s
+		return s.MemoryLimit > 0
+	}, 10*time.Second, 500*time.Millisecond, "stats should populate after start")
+	assert.InDelta(t, 64*1024*1024, stats.MemoryLimit, float64(4*1024*1024), "memory limit roughly 64 MiB")
+
+	// Logs should contain the echo line.
+	logs, err := c.ContainerLogs(ctx, id, false)
+	require.NoError(t, err)
+	defer logs.Close()
+	buf, err := io.ReadAll(logs)
+	require.NoError(t, err)
+	assert.Contains(t, string(buf), "hello-from-paas-it")
+
+	require.NoError(t, c.StopContainer(ctx, id))
+	require.NoError(t, c.RemoveContainer(ctx, id))
+}
+
+func TestIntegration_NetworkAttachSecondary(t *testing.T) {
+	c := newTestClient(t)
+	ensureTestImage(t, c)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
+	defer cancel()
+
+	primary := uniqueName(t, "netp")
+	secondary := uniqueName(t, "nets")
+	require.NoError(t, c.CreateNetwork(ctx, primary))
+	require.NoError(t, c.CreateNetwork(ctx, secondary))
+	t.Cleanup(func() {
+		_ = c.RemoveNetwork(context.Background(), primary)
+		_ = c.RemoveNetwork(context.Background(), secondary)
+	})
+
+	name := uniqueName(t, "ctrnet")
+	id, err := c.CreateContainer(ctx, runtime.ContainerConfig{
+		Name:    name,
+		Image:   testImage,
+		Cmd:     []string{"sleep", "3600"},
+		Network: primary,
+	})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = c.RemoveContainer(context.Background(), id) })
+
+	require.NoError(t, c.StartContainer(ctx, id))
+	require.NoError(t, c.ConnectContainerToNetwork(ctx, id, secondary))
+
+	require.NoError(t, c.StopContainer(ctx, id))
+	require.NoError(t, c.RemoveContainer(ctx, id))
+}
