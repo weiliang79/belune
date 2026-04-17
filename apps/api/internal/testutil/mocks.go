@@ -75,8 +75,12 @@ func (m *MockContainerRuntime) BuildImage(_ context.Context, _, _, _ string) err
 func (m *MockContainerRuntime) CreateNetwork(_ context.Context, _ string) error              { return nil }
 func (m *MockContainerRuntime) RemoveNetwork(_ context.Context, _ string) error              { return nil }
 func (m *MockContainerRuntime) ConnectContainerToNetwork(_ context.Context, _, _ string) error { return nil }
-func (m *MockContainerRuntime) CreateVolume(_ context.Context, _ string) error   { return nil }
-func (m *MockContainerRuntime) RemoveVolume(_ context.Context, _ string) error   { return nil }
+func (m *MockContainerRuntime) CreateVolume(_ context.Context, _ string) error      { return nil }
+func (m *MockContainerRuntime) CreateCacheVolume(_ context.Context, _ string) error { return nil }
+func (m *MockContainerRuntime) VolumeSize(_ context.Context, _ string) (int64, error) {
+	return 0, nil
+}
+func (m *MockContainerRuntime) RemoveVolume(_ context.Context, _ string) error { return nil }
 func (m *MockContainerRuntime) RemoveImage(_ context.Context, _ string) error    { return nil }
 func (m *MockContainerRuntime) PruneImages(_ context.Context) error  { return nil }
 func (m *MockContainerRuntime) PruneVolumes(_ context.Context) error { return nil }

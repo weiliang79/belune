@@ -44,3 +44,24 @@ func ImageTag(_, appSlug, _, deploymentID string) string {
 func ProjectNetworkName(projectSlug string) string {
 	return fmt.Sprintf("paas-%s", projectSlug)
 }
+
+// CNBCacheVolumeName returns the Docker volume name holding the CNB
+// (Cloud Native Buildpacks) build cache for a single application. Keying by
+// application ID keeps layer history isolated per app: one misbehaving build
+// cannot poison another app's cache, and clearing is a single volume delete.
+func CNBCacheVolumeName(applicationID string) string {
+	if len(applicationID) < 8 {
+		return fmt.Sprintf("paas-cnb-cache-%s", applicationID)
+	}
+	return fmt.Sprintf("paas-cnb-cache-%s", applicationID[:8])
+}
+
+// CNBLaunchCacheVolumeName is the companion launch-layer cache volume. Pack
+// separates build-time and launch-time layers into two distinct caches;
+// colocating naming here avoids drift between the two.
+func CNBLaunchCacheVolumeName(applicationID string) string {
+	if len(applicationID) < 8 {
+		return fmt.Sprintf("paas-cnb-launch-%s", applicationID)
+	}
+	return fmt.Sprintf("paas-cnb-launch-%s", applicationID[:8])
+}

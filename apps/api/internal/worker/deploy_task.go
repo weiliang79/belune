@@ -395,6 +395,7 @@ func (h *TaskHandler) buildFromGit(ctx context.Context, dc *deployContext) error
 		Env:            dc.env,
 		BuildType:      dc.app.BuildType,
 		LogWriter:      logWriter,
+		ApplicationID:  dc.payload.ApplicationID,
 	}
 
 	h.updateDeploymentStatus(ctx, dc.deploymentID, status.DeploymentPending, status.DeploymentBuilding)

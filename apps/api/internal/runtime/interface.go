@@ -62,6 +62,14 @@ type ContainerRuntime interface {
 	RemoveNetwork(ctx context.Context, name string) error
 	ConnectContainerToNetwork(ctx context.Context, containerID, networkName string) error
 	CreateVolume(ctx context.Context, name string) error
+	// CreateCacheVolume creates (or no-ops on) a Docker volume labelled as a
+	// build cache. The cache label opts the volume out of PruneVolumes so the
+	// periodic cleanup worker cannot wipe layer history between builds.
+	CreateCacheVolume(ctx context.Context, name string) error
+	// VolumeSize reports the on-disk size in bytes of a named volume, or
+	// (0, nil) when the volume does not exist. Used to surface per-app cache
+	// usage in the UI.
+	VolumeSize(ctx context.Context, name string) (int64, error)
 	RemoveVolume(ctx context.Context, name string) error
 	RemoveImage(ctx context.Context, image string) error
 	PruneImages(ctx context.Context) error

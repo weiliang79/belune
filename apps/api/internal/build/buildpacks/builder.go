@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/ungweiliang/selfhost-paas/internal/build"
+	"github.com/ungweiliang/selfhost-paas/internal/naming"
 	"github.com/ungweiliang/selfhost-paas/internal/runtime"
 )
 
@@ -54,6 +55,31 @@ func (b *Builder) Build(ctx context.Context, opts build.BuildOptions) (*build.Bu
 
 	for k, v := range opts.Env {
 		args = append(args, "--env", fmt.Sprintf("%s=%s", k, v))
+	}
+
+	// Wire persistent build+launch caches keyed by application ID so each app
+	// reuses its own layer history across deploys. Without these flags pack
+	// derives an auto-generated volume name from the image digest, which
+	// churns every time the image tag changes (we tag each deploy uniquely).
+	//
+	// Pre-create the volumes so they carry the paas-cache label — auto-created
+	// volumes would not be labelled and the periodic cleanup worker would
+	// wipe them via PruneVolumes.
+	if opts.ApplicationID != "" {
+		buildVol := naming.CNBCacheVolumeName(opts.ApplicationID)
+		launchVol := naming.CNBLaunchCacheVolumeName(opts.ApplicationID)
+		if b.runtime != nil {
+			if err := b.runtime.CreateCacheVolume(ctx, buildVol); err != nil {
+				slog.Warn("ensure cnb build cache volume", "volume", buildVol, "error", err)
+			}
+			if err := b.runtime.CreateCacheVolume(ctx, launchVol); err != nil {
+				slog.Warn("ensure cnb launch cache volume", "volume", launchVol, "error", err)
+			}
+		}
+		args = append(args,
+			"--cache", fmt.Sprintf("type=build;format=volume;name=%s", buildVol),
+			"--cache", fmt.Sprintf("type=launch;format=volume;name=%s", launchVol),
+		)
 	}
 
 	slog.Info("running pack build", "image", opts.ImageTag, "builder", builderImage)

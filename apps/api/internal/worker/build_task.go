@@ -142,6 +142,7 @@ func (h *TaskHandler) HandleBuildTask(ctx context.Context, t *asynq.Task) error 
 		Buildpacks:     customBuildpacks,
 		Env:            env,
 		LogWriter:      logWriter,
+		ApplicationID:  payload.ApplicationID,
 	}
 
 	slog.Info("building image", "tag", imageName)

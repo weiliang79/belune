@@ -1,0 +1,28 @@
+# BuildKit daemon config — persistent cache with a bounded size.
+#
+# The buildkit service mounts a named volume at /var/lib/buildkit so layer
+# cache survives container restarts. gckeepstorage caps the total cache size
+# (in MB); once exceeded, BuildKit's GC evicts the least-recently-used
+# records first. Tune by editing this file and restarting the buildkit
+# service (`task dev:infra:down && task dev:infra`).
+
+debug = false
+insecure-entitlements = []
+
+[worker.oci]
+  enabled = true
+  gc = true
+  # Cap at 10 GB of build cache. Raise for monorepos with large layer sets;
+  # lower if host disk space is tight.
+  gckeepstorage = 10000
+
+[[worker.oci.gcpolicy]]
+  # Keep sources (git checkouts, HTTP/ADD artefacts) under this byte cap.
+  keepBytes = "1GB"
+  filters = ["type==source.local", "type==exec.cachemount", "type==source.git.checkout"]
+
+[[worker.oci.gcpolicy]]
+  # Evict everything else older than 7 days or beyond the overall cap.
+  keepBytes = "9GB"
+  keepDuration = "168h"
+  all = true

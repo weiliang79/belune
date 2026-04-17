@@ -167,5 +167,18 @@ func (s *ApplicationService) Delete(ctx context.Context, appID pgtype.UUID, proj
 			slog.Warn("could not remove container during app deletion", "container", name, "error", err)
 		}
 	}
+
+	// Drop the per-app CNB cache volumes too. They are tagged paas-cache=true
+	// so PruneVolumes would not have reclaimed them; leaving them behind after
+	// delete would leak disk space permanently.
+	for _, vol := range []string{
+		naming.CNBCacheVolumeName(appIDStr),
+		naming.CNBLaunchCacheVolumeName(appIDStr),
+	} {
+		if err := s.runtime.RemoveVolume(ctx, vol); err != nil {
+			slog.Debug("could not remove cache volume during app deletion (may not exist)", "volume", vol, "error", err)
+		}
+	}
+
 	return s.queries.DeleteApplication(ctx, appID)
 }
