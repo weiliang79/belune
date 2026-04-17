@@ -122,6 +122,25 @@ export function useRestartApplication(projectId: string, applicationId: string) 
   });
 }
 
+export function useBuildCache(projectId: string, applicationId: string) {
+  return useQuery({
+    queryKey: queryKeys.applications.buildCache(projectId, applicationId),
+    queryFn: () => applicationsApi.getBuildCache(projectId, applicationId),
+  });
+}
+
+export function useClearBuildCache(projectId: string, applicationId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => applicationsApi.clearBuildCache(projectId, applicationId),
+    onSuccess: () =>
+      qc.invalidateQueries({
+        queryKey: queryKeys.applications.buildCache(projectId, applicationId),
+      }),
+    onError: (error) => toast.error(error.message),
+  });
+}
+
 export function useUpdateWebhook(projectId: string, applicationId: string) {
   const qc = useQueryClient();
   return useMutation({

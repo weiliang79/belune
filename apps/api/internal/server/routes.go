@@ -138,6 +138,8 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService,
 			r.Post("/api/projects/{projectId}/applications/{applicationId}/restart", h.RestartApplication)
 			r.Post("/api/projects/{projectId}/applications/{applicationId}/build", h.BuildApplication)
 			r.Post("/api/projects/{projectId}/applications/{applicationId}/rollback", h.RollbackDeployment)
+			r.Get("/api/projects/{projectId}/applications/{applicationId}/cache", h.GetBuildCache)
+			r.Delete("/api/projects/{projectId}/applications/{applicationId}/cache", h.ClearBuildCache)
 
 			// Deployments
 			r.Get("/api/projects/{projectId}/applications/{applicationId}/deployments", h.ListDeployments)

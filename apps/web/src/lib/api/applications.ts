@@ -72,6 +72,24 @@ export function restartApplication(projectId: string, applicationId: string) {
   );
 }
 
+export interface BuildCacheInfo {
+  build_cache_bytes: number;
+  launch_cache_bytes: number;
+  total_bytes: number;
+}
+
+export function getBuildCache(projectId: string, applicationId: string) {
+  return api.get<BuildCacheInfo>(
+    `/projects/${projectId}/applications/${applicationId}/cache`,
+  );
+}
+
+export function clearBuildCache(projectId: string, applicationId: string) {
+  return api.delete<{ status: string }>(
+    `/projects/${projectId}/applications/${applicationId}/cache`,
+  );
+}
+
 export function updateWebhook(
   projectId: string,
   applicationId: string,

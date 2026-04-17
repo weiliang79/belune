@@ -424,6 +424,81 @@ func (h *Handler) DeleteApplication(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
 }
 
+// GetBuildCache reports the size (in bytes) of the CNB build + launch cache
+// volumes for this application. Missing volumes contribute zero; an app that
+// has never built surfaces 0 B with no error.
+func (h *Handler) GetBuildCache(w http.ResponseWriter, r *http.Request) {
+	applicationID := chi.URLParam(r, "applicationId")
+	var applicationUUID pgtype.UUID
+	if err := applicationUUID.Scan(applicationID); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid application id")
+		return
+	}
+
+	if !h.canAccessApplication(r, applicationUUID) {
+		writeError(w, http.StatusForbidden, "access denied")
+		return
+	}
+
+	if _, err := h.queries.GetApplication(r.Context(), applicationUUID); err != nil {
+		writeError(w, http.StatusNotFound, "application not found")
+		return
+	}
+
+	buildVol := naming.CNBCacheVolumeName(applicationID)
+	launchVol := naming.CNBLaunchCacheVolumeName(applicationID)
+
+	buildSize, err := h.runtime.VolumeSize(r.Context(), buildVol)
+	if err != nil {
+		slog.Warn("failed to read build cache size", "application_id", applicationID, "error", err)
+	}
+	launchSize, err := h.runtime.VolumeSize(r.Context(), launchVol)
+	if err != nil {
+		slog.Warn("failed to read launch cache size", "application_id", applicationID, "error", err)
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"build_cache_bytes":  buildSize,
+		"launch_cache_bytes": launchSize,
+		"total_bytes":        buildSize + launchSize,
+	})
+}
+
+// ClearBuildCache deletes the application's CNB cache volumes. The next
+// build will re-create them from scratch — this is the "make it fresh"
+// escape hatch when a cache is suspected of poisoning output.
+func (h *Handler) ClearBuildCache(w http.ResponseWriter, r *http.Request) {
+	applicationID := chi.URLParam(r, "applicationId")
+	var applicationUUID pgtype.UUID
+	if err := applicationUUID.Scan(applicationID); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid application id")
+		return
+	}
+
+	if !h.canAccessApplication(r, applicationUUID) {
+		writeError(w, http.StatusForbidden, "access denied")
+		return
+	}
+
+	if _, err := h.queries.GetApplication(r.Context(), applicationUUID); err != nil {
+		writeError(w, http.StatusNotFound, "application not found")
+		return
+	}
+
+	for _, vol := range []string{
+		naming.CNBCacheVolumeName(applicationID),
+		naming.CNBLaunchCacheVolumeName(applicationID),
+	} {
+		if err := h.runtime.RemoveVolume(r.Context(), vol); err != nil {
+			slog.Debug("could not remove cache volume (may not exist)", "volume", vol, "error", err)
+		}
+	}
+
+	h.audit(r, "clear_build_cache", "application", applicationID, nil)
+
+	writeJSON(w, http.StatusOK, map[string]string{"status": "cleared"})
+}
+
 func (h *Handler) BuildApplication(w http.ResponseWriter, r *http.Request) {
 	applicationID := chi.URLParam(r, "applicationId")
 	var applicationUUID pgtype.UUID
