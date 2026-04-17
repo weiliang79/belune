@@ -30,7 +30,7 @@ type Server struct {
 	auth    *service.AuthService
 }
 
-func New(cfg *config.Config, db *pgxpool.Pool, queries *generated.Queries, asynqClient handler.TaskEnqueuer, rt runtime.ContainerRuntime, pm proxy.ProxyManager, rdb *redis.Client, hub *ws.Hub, auditSvc *service.AuditService, termMgr *terminal.Manager) *Server {
+func New(cfg *config.Config, db *pgxpool.Pool, queries *generated.Queries, asynqClient handler.TaskEnqueuer, rt runtime.ContainerRuntime, pm proxy.ProxyManager, reconciler handler.ReconcilerStatusProvider, rdb *redis.Client, hub *ws.Hub, auditSvc *service.AuditService, termMgr *terminal.Manager) *Server {
 	auth := service.NewAuthService(queries, cfg.JWTSecret, cfg.JWTExpiryHours, rdb)
 	appSvc := service.NewApplicationService(db, queries, rt, cfg.Keyring)
 	projSvc := service.NewProjectService(queries, rt)
@@ -41,7 +41,7 @@ func New(cfg *config.Config, db *pgxpool.Pool, queries *generated.Queries, asynq
 		cfg:     cfg,
 		db:      db,
 		auth:    auth,
-		handler: handler.New(cfg, db, queries, asynqClient, rt, pm, auth, rdb, appSvc, projSvc, dbSvc, gitCredSvc, hub, auditSvc, termMgr),
+		handler: handler.New(cfg, db, queries, asynqClient, rt, pm, reconciler, auth, rdb, appSvc, projSvc, dbSvc, gitCredSvc, hub, auditSvc, termMgr),
 	}
 
 	s.router = s.setupRouter()

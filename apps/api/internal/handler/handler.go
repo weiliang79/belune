@@ -24,6 +24,13 @@ type TaskEnqueuer interface {
 	Enqueue(task *asynq.Task, opts ...asynq.Option) (*asynq.TaskInfo, error)
 }
 
+// ReconcilerStatusProvider is the narrow interface the handler consumes to
+// surface proxy reconciler state on the admin API. Concrete type lives in
+// internal/proxy.
+type ReconcilerStatusProvider interface {
+	Status() proxy.ReconcilerStatus
+}
+
 type Handler struct {
 	cfg         *config.Config
 	db          *pgxpool.Pool
@@ -31,6 +38,7 @@ type Handler struct {
 	asynq       TaskEnqueuer
 	runtime     runtime.ContainerRuntime
 	proxy       proxy.ProxyManager
+	reconciler  ReconcilerStatusProvider
 	auth        *service.AuthService
 	rdb         *redis.Client
 	appService  *service.ApplicationService
@@ -49,6 +57,7 @@ func New(
 	asynqClient TaskEnqueuer,
 	rt runtime.ContainerRuntime,
 	pm proxy.ProxyManager,
+	reconciler ReconcilerStatusProvider,
 	auth *service.AuthService,
 	rdb *redis.Client,
 	appSvc *service.ApplicationService,
@@ -66,6 +75,7 @@ func New(
 		asynq:       asynqClient,
 		runtime:     rt,
 		proxy:       pm,
+		reconciler:  reconciler,
 		auth:        auth,
 		rdb:         rdb,
 		appService:  appSvc,

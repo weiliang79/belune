@@ -4,6 +4,7 @@ import (
 	"context"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/ungweiliang/selfhost-paas/internal/proxy"
 )
@@ -111,6 +112,20 @@ func TestReconcilerDiff_AddAndRemove(t *testing.T) {
 	}
 	if len(mock.removed) != 1 || mock.removed[0] != "stale.example.com" {
 		t.Fatalf("expected stale.example.com removed, got: %v", mock.removed)
+	}
+}
+
+func TestReconcilerStatus_Initial(t *testing.T) {
+	r := proxy.NewReconciler(nil, &mockProxy{}, 30*time.Second)
+	s := r.Status()
+	if s.IntervalSeconds != 30 {
+		t.Fatalf("expected interval 30, got %d", s.IntervalSeconds)
+	}
+	if s.RunCount != 0 {
+		t.Fatalf("expected run_count 0 before first reconcile, got %d", s.RunCount)
+	}
+	if !s.LastRunAt.IsZero() {
+		t.Fatalf("expected zero last_run_at before first reconcile, got %v", s.LastRunAt)
 	}
 }
 

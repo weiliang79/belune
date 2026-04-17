@@ -137,7 +137,7 @@ func New(cfg *config.Config) (*App, error) {
 	}
 
 	broadcaster := ws.NewContainerStatusBroadcaster(hub)
-	httpSrv := server.New(cfg, db, queries, asynqClient, dockerClient, caddyClient, rdb, hub, auditSvc, termMgr)
+	httpSrv := server.New(cfg, db, queries, asynqClient, dockerClient, caddyClient, reconciler, rdb, hub, auditSvc, termMgr)
 
 	return &App{
 		cfg:          cfg,

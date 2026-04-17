@@ -175,6 +175,7 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService,
 				r.Put("/api/settings", h.UpdateSettings)
 				r.Get("/api/requests", h.ListAllRequestLogs)
 				r.Get("/api/audit-logs", h.ListAuditLogs)
+				r.Get("/api/proxy/reconciler", h.GetProxyReconcilerStatus)
 			})
 		})
 

@@ -47,7 +47,7 @@ func SetupTestServer(pool *pgxpool.Pool, queries *generated.Queries) *TestEnv {
 	mockProxy := &MockProxyManager{}
 	mockAsynq := &MockTaskEnqueuer{}
 
-	srv := server.New(cfg, pool, queries, mockAsynq, mockRuntime, mockProxy, nil, nil, nil, nil)
+	srv := server.New(cfg, pool, queries, mockAsynq, mockRuntime, mockProxy, nil, nil, nil, nil, nil)
 	ts := httptest.NewServer(srv.Router())
 
 	return &TestEnv{
