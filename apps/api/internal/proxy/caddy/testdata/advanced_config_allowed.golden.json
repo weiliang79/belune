@@ -1,0 +1,6 @@
+[
+  {
+    "handler": "rewrite",
+    "uri": "/api{http.request.uri}"
+  }
+]

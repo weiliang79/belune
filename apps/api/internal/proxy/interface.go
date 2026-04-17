@@ -6,10 +6,12 @@ import (
 )
 
 // RouteFeature represents a middleware feature applied to a route.
+// Config is kept as raw JSON so it can be validated against a typed schema
+// via ParseFeatureConfig at the route-builder boundary.
 type RouteFeature struct {
-	Type    string         `json:"type"`    // basic_auth, redirect, headers, ip_allowlist, rate_limit
-	Config  map[string]any `json:"config"`
-	Enabled bool           `json:"enabled"`
+	Type    string          `json:"type"`    // basic_auth, redirect, headers, ip_allowlist, rate_limit
+	Config  json.RawMessage `json:"config"`
+	Enabled bool            `json:"enabled"`
 }
 
 // RouteConfig describes a reverse-proxy route with optional TLS and middleware.

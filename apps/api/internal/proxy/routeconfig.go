@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log/slog"
 
 	"github.com/ungweiliang/selfhost-paas/internal/store/generated"
 )
@@ -18,15 +17,9 @@ func BuildRouteConfig(domain generated.Domain, containerName string, features []
 
 	var routeFeatures []RouteFeature
 	for _, f := range features {
-		var cfg map[string]any
-		if len(f.Config) > 0 {
-			if err := json.Unmarshal(f.Config, &cfg); err != nil {
-				slog.Debug("failed to unmarshal route feature config", "feature_type", f.FeatureType, "error", err)
-			}
-		}
 		routeFeatures = append(routeFeatures, RouteFeature{
 			Type:    f.FeatureType,
-			Config:  cfg,
+			Config:  json.RawMessage(f.Config),
 			Enabled: f.Enabled,
 		})
 	}

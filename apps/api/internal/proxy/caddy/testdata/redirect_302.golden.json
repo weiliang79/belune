@@ -1,0 +1,27 @@
+[
+  {
+    "handler": "subroute",
+    "routes": [
+      {
+        "handle": [
+          {
+            "handler": "static_response",
+            "headers": {
+              "Location": [
+                "https://example.com/moved"
+              ]
+            },
+            "status_code": "302"
+          }
+        ],
+        "match": [
+          {
+            "path": [
+              "/temp"
+            ]
+          }
+        ]
+      }
+    ]
+  }
+]

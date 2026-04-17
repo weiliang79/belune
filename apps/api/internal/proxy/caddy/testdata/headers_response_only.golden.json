@@ -1,0 +1,12 @@
+[
+  {
+    "handler": "headers",
+    "response": {
+      "set": {
+        "X-Frame-Options": [
+          "DENY"
+        ]
+      }
+    }
+  }
+]

@@ -1,0 +1,27 @@
+[
+  {
+    "handler": "subroute",
+    "routes": [
+      {
+        "handle": [
+          {
+            "handler": "static_response",
+            "headers": {
+              "Location": [
+                "/new"
+              ]
+            },
+            "status_code": "301"
+          }
+        ],
+        "match": [
+          {
+            "path": [
+              "/old"
+            ]
+          }
+        ]
+      }
+    ]
+  }
+]

@@ -301,13 +301,9 @@ func (h *Handler) loadRouteFeatures(r *http.Request, domainID pgtype.UUID) []pro
 	}
 	var features []proxy.RouteFeature
 	for _, f := range dbFeatures {
-		var cfg map[string]any
-		if len(f.Config) > 0 {
-			json.Unmarshal(f.Config, &cfg)
-		}
 		features = append(features, proxy.RouteFeature{
 			Type:    f.FeatureType,
-			Config:  cfg,
+			Config:  json.RawMessage(f.Config),
 			Enabled: f.Enabled,
 		})
 	}
@@ -365,6 +361,11 @@ func (h *Handler) UpsertRouteFeature(w http.ResponseWriter, r *http.Request) {
 
 	if !validFeatureTypes[req.FeatureType] {
 		writeError(w, http.StatusBadRequest, "invalid feature_type: must be basic_auth, redirect, headers, ip_allowlist, or rate_limit")
+		return
+	}
+
+	if _, err := proxy.ParseFeatureConfig(req.FeatureType, req.Config); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 

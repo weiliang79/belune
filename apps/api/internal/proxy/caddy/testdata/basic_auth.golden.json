@@ -1,0 +1,15 @@
+[
+  {
+    "handler": "authentication",
+    "providers": {
+      "http_basic": {
+        "accounts": [
+          {
+            "password": "$2a$10$abcdef",
+            "username": "alice"
+          }
+        ]
+      }
+    }
+  }
+]

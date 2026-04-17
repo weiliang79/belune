@@ -10,6 +10,10 @@ import (
 	"net/http"
 )
 
+// SetupTLS error handling: transport-level failures are wrapped with
+// ErrCaddyUnreachable so the service layer can tell "Caddy is down" apart
+// from "Caddy rejected the config".
+
 // tlsAutomationPolicy represents a Caddy TLS automation policy.
 type tlsAutomationPolicy struct {
 	Subjects []string     `json:"subjects"`
@@ -101,16 +105,19 @@ func (c *Client) addTLSPolicy(ctx context.Context, policy tlsAutomationPolicy) e
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		slog.Warn("caddy: failed to add TLS policy (caddy may not be running)", "error", err)
-		return nil
+		if isTransportError(err) {
+			return fmt.Errorf("%w: %v", ErrCaddyUnreachable, err)
+		}
+		return fmt.Errorf("add TLS policy: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= 400 {
 		respBody, _ := io.ReadAll(resp.Body)
-		slog.Warn("caddy: add TLS policy returned error", "status", resp.StatusCode, "body", string(respBody))
+		return fmt.Errorf("add TLS policy: HTTP %d: %s", resp.StatusCode, string(respBody))
 	}
 
+	slog.Info("caddy: TLS policy added", "subjects", policy.Subjects)
 	return nil
 }
 
@@ -130,15 +137,18 @@ func (c *Client) loadManualCert(ctx context.Context, cert tlsManualCert) error {
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		slog.Warn("caddy: failed to load manual cert (caddy may not be running)", "error", err)
-		return nil
+		if isTransportError(err) {
+			return fmt.Errorf("%w: %v", ErrCaddyUnreachable, err)
+		}
+		return fmt.Errorf("load manual cert: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= 400 {
 		respBody, _ := io.ReadAll(resp.Body)
-		slog.Warn("caddy: load manual cert returned error", "status", resp.StatusCode, "body", string(respBody))
+		return fmt.Errorf("load manual cert: HTTP %d: %s", resp.StatusCode, string(respBody))
 	}
 
+	slog.Info("caddy: manual cert loaded", "tags", cert.Tags)
 	return nil
 }

@@ -4,13 +4,38 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
+	"net/url"
+	"strings"
 
 	"github.com/ungweiliang/selfhost-paas/internal/proxy"
 )
+
+// ErrCaddyUnreachable is returned when the Caddy admin API cannot be contacted
+// (DNS miss, connection refused, timeout). Callers at the service layer can
+// treat this as "degraded in dev" while real schema / validation errors
+// continue to surface as regular errors.
+var ErrCaddyUnreachable = errors.New("caddy admin API unreachable")
+
+// isTransportError returns true for network-level failures that should surface
+// as ErrCaddyUnreachable. Schema errors from Caddy come back as HTTP 4xx/5xx
+// responses, so those are handled separately.
+func isTransportError(err error) bool {
+	if err == nil {
+		return false
+	}
+	var urlErr *url.Error
+	if errors.As(err, &urlErr) {
+		return true
+	}
+	var netErr net.Error
+	return errors.As(err, &netErr)
+}
 
 // caddyMatcher is a generic Caddy matcher with arbitrary fields.
 type caddyMatcher map[string]any
@@ -89,10 +114,16 @@ func (c *Client) InitCatchAll(ctx context.Context) {
 
 func (c *Client) AddRoute(ctx context.Context, cfg proxy.RouteConfig) error {
 	// Remove any existing route for this hostname first to prevent duplicates.
-	c.RemoveRoute(ctx, cfg.Hostname)
+	// Ignore "not found" — normal on fresh routes.
+	if err := c.RemoveRoute(ctx, cfg.Hostname); err != nil && !errors.Is(err, ErrCaddyUnreachable) {
+		slog.Debug("caddy: pre-remove returned non-fatal error", "hostname", cfg.Hostname, "error", err)
+	}
 
 	// Build the handler chain: feature handlers first, then reverse_proxy as the terminal handler.
-	handlers := buildFeatureHandlers(cfg)
+	handlers, err := buildFeatureHandlers(cfg)
+	if err != nil {
+		return fmt.Errorf("build handlers: %w", err)
+	}
 
 	// Reverse proxy is always the last handler.
 	handlers = append(handlers, newReverseProxyHandle([]caddyUpstream{{Dial: targetToDial(cfg.TargetURL)}}))
@@ -128,8 +159,8 @@ func (c *Client) AddRoute(ctx context.Context, cfg proxy.RouteConfig) error {
 	}
 
 	// Append the domain route (order doesn't matter here; moveCatchAllToEnd fixes it).
-	url := fmt.Sprintf("%s/config/apps/http/servers/srv0/routes", c.adminURL)
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
+	appendURL := fmt.Sprintf("%s/config/apps/http/servers/srv0/routes", c.adminURL)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, appendURL, bytes.NewReader(body))
 	if err != nil {
 		return fmt.Errorf("create request: %w", err)
 	}
@@ -137,22 +168,29 @@ func (c *Client) AddRoute(ctx context.Context, cfg proxy.RouteConfig) error {
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		slog.Warn("caddy add route failed (caddy may not be running)", "error", err, "hostname", cfg.Hostname)
-		return nil // Non-fatal: caddy might not be running in dev
+		if isTransportError(err) {
+			return fmt.Errorf("%w: %v", ErrCaddyUnreachable, err)
+		}
+		return fmt.Errorf("caddy add route: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= 400 {
 		respBody, _ := io.ReadAll(resp.Body)
-		slog.Warn("caddy add route returned error", "status", resp.StatusCode, "body", string(respBody))
+		return fmt.Errorf("caddy add route: HTTP %d: %s", resp.StatusCode, string(respBody))
 	}
 
 	// Ensure the catch-all stays last so it doesn't shadow this new domain route.
-	c.moveCatchAllToEnd(ctx)
+	if err := c.moveCatchAllToEnd(ctx); err != nil {
+		return fmt.Errorf("reorder catch-all: %w", err)
+	}
 
 	// Configure TLS if needed.
 	if cfg.TLS {
 		if err := c.SetupTLS(ctx, cfg.Hostname, cfg.SSLMode, cfg.CertPath, cfg.KeyPath); err != nil {
+			// TLS provisioning is best-effort: the route itself is live, so we
+			// log rather than unwind. Callers can still observe the error via
+			// future cert-status polling once implemented.
 			slog.Warn("caddy: TLS setup failed", "hostname", cfg.Hostname, "error", err)
 		}
 	}
@@ -162,120 +200,174 @@ func (c *Client) AddRoute(ctx context.Context, cfg proxy.RouteConfig) error {
 }
 
 // buildFeatureHandlers translates RouteFeatures into Caddy handler JSON.
-func buildFeatureHandlers(cfg proxy.RouteConfig) []caddyHandle {
+// Feature configs are parsed through proxy.ParseFeatureConfig so any
+// malformed payload is dropped with a warning rather than rendered as a
+// broken Caddy config.
+func buildFeatureHandlers(cfg proxy.RouteConfig) ([]caddyHandle, error) {
 	var handlers []caddyHandle
 
 	for _, f := range cfg.Features {
 		if !f.Enabled {
 			continue
 		}
-		switch f.Type {
-		case "basic_auth":
-			// Config expected: {"username": "...", "hashed_password": "..."}
-			username, _ := f.Config["username"].(string)
-			hashedPw, _ := f.Config["hashed_password"].(string)
-			if username != "" && hashedPw != "" {
-				handlers = append(handlers, caddyHandle{
-					"handler": "authentication",
-					"providers": map[string]any{
-						"http_basic": map[string]any{
-							"accounts": []map[string]string{{
-								"username": username,
-								"password": hashedPw,
-							}},
-						},
+		parsed, err := proxy.ParseFeatureConfig(f.Type, f.Config)
+		if err != nil {
+			slog.Warn("caddy: skipping invalid route feature", "type", f.Type, "error", err)
+			continue
+		}
+
+		switch c := parsed.(type) {
+		case *proxy.BasicAuthConfig:
+			handlers = append(handlers, caddyHandle{
+				"handler": "authentication",
+				"providers": map[string]any{
+					"http_basic": map[string]any{
+						"accounts": []map[string]string{{
+							"username": c.Username,
+							"password": c.HashedPassword,
+						}},
 					},
-				})
-			}
+				},
+			})
 
-		case "headers":
-			// Config expected: {"response": {"set": {"X-Custom": ["value"]}}}
-			if resp, ok := f.Config["response"]; ok {
-				handlers = append(handlers, caddyHandle{
-					"handler":  "headers",
-					"response": resp,
-				})
+		case *proxy.HeadersConfig:
+			h := caddyHandle{"handler": "headers"}
+			if c.Request != nil {
+				h["request"] = headerOpsToMap(c.Request)
 			}
+			if c.Response != nil {
+				h["response"] = headerOpsToMap(c.Response)
+			}
+			handlers = append(handlers, h)
 
-		case "ip_allowlist":
-			// Config expected: {"ranges": ["192.168.1.0/24", "10.0.0.0/8"]}
-			// IP allowlist is applied as a matcher on a subroute that returns 403.
-			if ranges, ok := f.Config["ranges"].([]any); ok && len(ranges) > 0 {
-				var rangeStrs []string
-				for _, r := range ranges {
-					if s, ok := r.(string); ok {
-						rangeStrs = append(rangeStrs, s)
-					}
-				}
-				handlers = append(handlers, caddyHandle{
-					"handler": "subroute",
-					"routes": []map[string]any{{
-						"match": []caddyMatcher{{"not": []caddyMatcher{{"remote_ip": map[string]any{"ranges": rangeStrs}}}}},
-						"handle": []caddyHandle{{
-							"handler":     "static_response",
-							"status_code": "403",
-							"body":        "Forbidden",
-						}},
+		case *proxy.IPAllowlistConfig:
+			handlers = append(handlers, caddyHandle{
+				"handler": "subroute",
+				"routes": []map[string]any{{
+					"match": []caddyMatcher{{"not": []caddyMatcher{{"remote_ip": map[string]any{"ranges": c.Ranges}}}}},
+					"handle": []caddyHandle{{
+						"handler":     "static_response",
+						"status_code": "403",
+						"body":        "Forbidden",
 					}},
-				})
-			}
+				}},
+			})
 
-		case "redirect":
-			// Config expected: {"from": "/old", "to": "/new", "status_code": 301}
-			from, _ := f.Config["from"].(string)
-			to, _ := f.Config["to"].(string)
-			statusCode := "301"
-			if sc, ok := f.Config["status_code"]; ok {
-				statusCode = fmt.Sprintf("%v", sc)
-			}
-			if from != "" && to != "" {
-				handlers = append(handlers, caddyHandle{
-					"handler": "subroute",
-					"routes": []map[string]any{{
-						"match": []caddyMatcher{{"path": []string{from}}},
-						"handle": []caddyHandle{{
-							"handler":     "static_response",
-							"headers":     map[string][]string{"Location": {to}},
-							"status_code": statusCode,
-						}},
+		case *proxy.RedirectConfig:
+			handlers = append(handlers, caddyHandle{
+				"handler": "subroute",
+				"routes": []map[string]any{{
+					"match": []caddyMatcher{{"path": []string{c.From}}},
+					"handle": []caddyHandle{{
+						"handler":     "static_response",
+						"headers":     map[string][]string{"Location": {c.To}},
+						"status_code": fmt.Sprintf("%d", c.StatusCode),
 					}},
-				})
-			}
+				}},
+			})
 
-		case "rate_limit":
+		case *proxy.RateLimitConfig:
 			// Rate limiting requires a Caddy module — log for now.
-			slog.Info("rate_limit feature configured but requires caddy-rate-limit module", "config", f.Config)
+			slog.Info("rate_limit feature configured but requires caddy-rate-limit module", "rate", c.Rate)
 		}
 	}
 
 	// Append advanced config handlers if provided.
 	if len(cfg.AdvancedConfig) > 0 {
-		var advHandlers []caddyHandle
-		if err := json.Unmarshal(cfg.AdvancedConfig, &advHandlers); err != nil {
-			slog.Warn("failed to parse advanced_config as handlers", "error", err)
-		} else {
-			handlers = append(handlers, advHandlers...)
+		advHandlers, err := parseAdvancedConfig(cfg.AdvancedConfig)
+		if err != nil {
+			return nil, err
 		}
+		handlers = append(handlers, advHandlers...)
 	}
 
-	return handlers
+	return handlers, nil
+}
+
+// headerOpsToMap converts the typed HeaderOps to the map shape Caddy expects.
+// Nil sub-fields are omitted so the resulting JSON stays compact.
+func headerOpsToMap(ops *proxy.HeaderOps) map[string]any {
+	m := map[string]any{}
+	if len(ops.Set) > 0 {
+		m["set"] = ops.Set
+	}
+	if len(ops.Add) > 0 {
+		m["add"] = ops.Add
+	}
+	if len(ops.Delete) > 0 {
+		m["delete"] = ops.Delete
+	}
+	return m
+}
+
+// advancedHandlerAllowlist lists Caddy handler modules that are safe to expose
+// through the per-domain AdvancedConfig field. Anything outside this list is
+// rejected so user-supplied JSON cannot attach arbitrary modules (e.g. a
+// reverse_proxy that routes to an attacker-controlled upstream).
+var advancedHandlerAllowlist = map[string]struct{}{
+	"headers":     {},
+	"rewrite":     {},
+	"redir":       {},
+	"handle_path": {},
+	"subroute":    {},
+	"authentication": {}, // scoped to http_basic by parser below
+}
+
+// parseAdvancedConfig validates user-supplied AdvancedConfig JSON. The input
+// must decode to a JSON array of Caddy handlers ([]caddyHandle). Each handler
+// must declare a "handler" key from the allowlist. Errors list every
+// disallowed handler so the user sees the full diagnosis in one round trip.
+func parseAdvancedConfig(raw []byte) ([]caddyHandle, error) {
+	var handlers []caddyHandle
+	if err := json.Unmarshal(raw, &handlers); err != nil {
+		return nil, fmt.Errorf("advanced_config: expected a JSON array of handlers: %w", err)
+	}
+	var bad []string
+	for i, h := range handlers {
+		name, _ := h["handler"].(string)
+		if name == "" {
+			bad = append(bad, fmt.Sprintf("#%d: missing \"handler\" key", i))
+			continue
+		}
+		if _, ok := advancedHandlerAllowlist[name]; !ok {
+			bad = append(bad, fmt.Sprintf("#%d: %q is not allowed", i, name))
+		}
+	}
+	if len(bad) > 0 {
+		return nil, fmt.Errorf("advanced_config: disallowed handlers: %s", strings.Join(bad, "; "))
+	}
+	return handlers, nil
 }
 
 func (c *Client) RemoveRoute(ctx context.Context, hostname string) error {
 	routeID := fmt.Sprintf("route-%s", hostname)
-	url := fmt.Sprintf("%s/id/%s", c.adminURL, routeID)
+	deleteURL := fmt.Sprintf("%s/id/%s", c.adminURL, routeID)
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, url, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, deleteURL, nil)
 	if err != nil {
 		return fmt.Errorf("create request: %w", err)
 	}
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		slog.Warn("caddy remove route failed", "error", err)
-		return nil
+		if isTransportError(err) {
+			return fmt.Errorf("%w: %v", ErrCaddyUnreachable, err)
+		}
+		return fmt.Errorf("caddy remove route: %w", err)
 	}
 	defer resp.Body.Close()
+
+	// 404 / 500 "unknown object" is treated as success — the route is gone,
+	// which is exactly what the caller asked for. Any other 4xx/5xx is an error.
+	if resp.StatusCode >= 400 {
+		respBody, _ := io.ReadAll(resp.Body)
+		bodyStr := string(respBody)
+		if resp.StatusCode == http.StatusNotFound || strings.Contains(bodyStr, "unknown object") {
+			slog.Debug("caddy: route not found on delete", "hostname", hostname)
+			return nil
+		}
+		return fmt.Errorf("caddy remove route: HTTP %d: %s", resp.StatusCode, bodyStr)
+	}
 
 	slog.Info("caddy route removed", "hostname", hostname)
 	return nil
@@ -326,35 +418,74 @@ func (c *Client) ListRoutes(ctx context.Context) ([]proxy.RouteConfig, error) {
 	return result, nil
 }
 
-// moveCatchAllToEnd deletes the catch-all route by its known @id and re-appends
-// it so it always evaluates after all domain-specific routes.
-func (c *Client) moveCatchAllToEnd(ctx context.Context) {
-	deleteURL := fmt.Sprintf("%s/id/%s", c.adminURL, catchAllRouteID)
-	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, deleteURL, nil)
-	if err == nil {
-		resp, err := c.httpClient.Do(req)
-		if err == nil {
-			resp.Body.Close()
+// moveCatchAllToEnd rewrites srv0.routes so the catch-all (if any) is the
+// last entry. Uses a single PATCH on the routes array so that two concurrent
+// AddRoute callers cannot observe an interleaved state where the catch-all
+// has been deleted but not yet re-appended.
+func (c *Client) moveCatchAllToEnd(ctx context.Context) error {
+	rawRoutes, err := c.fetchRawRoutes(ctx)
+	if err != nil {
+		if isTransportError(err) {
+			return fmt.Errorf("%w: %v", ErrCaddyUnreachable, err)
 		}
+		return fmt.Errorf("fetch routes: %w", err)
 	}
 
-	route := caddyRoute{
-		ID:     catchAllRouteID,
-		Handle: []caddyHandle{newReverseProxyHandle([]caddyUpstream{{Dial: "localhost:8080"}})},
+	var domainRoutes []json.RawMessage
+	var catchAll json.RawMessage
+	for _, r := range rawRoutes {
+		var probe struct {
+			ID string `json:"@id"`
+		}
+		_ = json.Unmarshal(r, &probe)
+		if probe.ID == catchAllRouteID {
+			catchAll = r
+			continue
+		}
+		domainRoutes = append(domainRoutes, r)
 	}
-	body, _ := json.Marshal(route)
-	appendURL := fmt.Sprintf("%s/config/apps/http/servers/srv0/routes", c.adminURL)
-	req, err = http.NewRequestWithContext(ctx, http.MethodPost, appendURL, bytes.NewReader(body))
+
+	// Synthesise a catch-all if none exists yet (fresh server).
+	if len(catchAll) == 0 {
+		catchAll, err = json.Marshal(caddyRoute{
+			ID:     catchAllRouteID,
+			Handle: []caddyHandle{newReverseProxyHandle([]caddyUpstream{{Dial: "localhost:8080"}})},
+		})
+		if err != nil {
+			return fmt.Errorf("marshal catch-all: %w", err)
+		}
+	}
+	newRoutes := append(domainRoutes, catchAll)
+
+	return c.patchRoutes(ctx, newRoutes)
+}
+
+// patchRoutes replaces the srv0 routes array atomically via a single PATCH.
+func (c *Client) patchRoutes(ctx context.Context, routes []json.RawMessage) error {
+	body, err := json.Marshal(routes)
 	if err != nil {
-		return
+		return fmt.Errorf("marshal routes: %w", err)
+	}
+	patchURL := fmt.Sprintf("%s/config/apps/http/servers/srv0/routes", c.adminURL)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPatch, patchURL, bytes.NewReader(body))
+	if err != nil {
+		return fmt.Errorf("create request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
+
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		slog.Warn("caddy: failed to re-append catch-all", "error", err)
-		return
+		if isTransportError(err) {
+			return fmt.Errorf("%w: %v", ErrCaddyUnreachable, err)
+		}
+		return fmt.Errorf("patch routes: %w", err)
 	}
-	resp.Body.Close()
+	defer resp.Body.Close()
+	if resp.StatusCode >= 400 {
+		respBody, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("patch routes: HTTP %d: %s", resp.StatusCode, string(respBody))
+	}
+	return nil
 }
 
 // fetchRawRoutes returns the current routes as raw JSON messages.
