@@ -32,6 +32,20 @@ tasks:
     dir: '{{.INFRA_DIR}}'
     cmd: docker compose down
 
+  # ─── Observability (opt-in) ──────────────────────────────────
+  # Requires the `paas-infra` network, which `dev:infra` creates.
+  # Prometheus scrapes the API at host.docker.internal:9090 (METRICS_BIND=127.0.0.1:9090).
+
+  observability:up:
+    desc: Start Prometheus + Grafana + Jaeger alongside the main infra stack
+    dir: '{{.INFRA_DIR}}'
+    cmd: docker compose -f compose.observability.yml up -d
+
+  observability:down:
+    desc: Stop the observability stack
+    dir: '{{.INFRA_DIR}}'
+    cmd: docker compose -f compose.observability.yml down
+
   # ─── Build ─────────────────────────────────────────────────────
 
   build:web:

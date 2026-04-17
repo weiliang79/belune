@@ -1,5 +1,10 @@
 {
 	admin 0.0.0.0:2019
+	# Expose Caddy's own runtime metrics at /metrics on the admin API
+	# (scraped by Prometheus in the observability stack).
+	servers {
+		metrics
+	}
 }
 
 # Default site — PaaS dashboard (not logged — internal traffic only)

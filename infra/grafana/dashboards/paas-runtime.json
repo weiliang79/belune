@@ -1,0 +1,107 @@
+{
+  "uid": "paas-runtime",
+  "title": "PaaS Runtime",
+  "tags": ["selfhost-paas"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "time": { "from": "now-1h", "to": "now" },
+  "panels": [
+    {
+      "type": "timeseries",
+      "title": "HTTP requests per second",
+      "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "sum by (pattern) (rate(paas_http_requests_total[5m]))",
+          "legendFormat": "{{pattern}}"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "HTTP p95 latency by pattern",
+      "gridPos": { "x": 12, "y": 0, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum by (pattern, le) (rate(paas_http_request_duration_seconds_bucket[5m])))",
+          "legendFormat": "{{pattern}}"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "HTTP error rate (5xx)",
+      "gridPos": { "x": 0, "y": 8, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "sum by (pattern) (rate(paas_http_requests_total{status=~\"5..\"}[5m]))",
+          "legendFormat": "{{pattern}}"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Asynq queue depth",
+      "gridPos": { "x": 12, "y": 8, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "paas_asynq_queue_size",
+          "legendFormat": "{{queue}}/{{state}}"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Deploy stage p95 (seconds)",
+      "gridPos": { "x": 0, "y": 16, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum by (stage, le) (rate(paas_deploy_stage_duration_seconds_bucket[15m])))",
+          "legendFormat": "{{stage}}"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Deploy failures per hour",
+      "gridPos": { "x": 12, "y": 16, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "sum by (stage) (increase(paas_deploy_stage_duration_seconds_count{status=\"error\"}[1h]))",
+          "legendFormat": "{{stage}}"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Docker ops per second",
+      "gridPos": { "x": 0, "y": 24, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "sum by (op, result) (rate(paas_docker_runtime_operations_total[5m]))",
+          "legendFormat": "{{op}} ({{result}})"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Go runtime — goroutines, heap, GC",
+      "gridPos": { "x": 12, "y": 24, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "expr": "go_goroutines", "legendFormat": "goroutines" },
+        { "expr": "go_memstats_heap_alloc_bytes", "legendFormat": "heap_alloc_bytes" },
+        { "expr": "rate(go_gc_duration_seconds_sum[5m])", "legendFormat": "gc_time_rate" }
+      ]
+    }
+  ]
+}
