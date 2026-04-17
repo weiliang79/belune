@@ -19,6 +19,7 @@ import (
 	"github.com/ungweiliang/selfhost-paas/internal/git"
 	"github.com/ungweiliang/selfhost-paas/internal/naming"
 	"github.com/ungweiliang/selfhost-paas/internal/pkg/buildlog"
+	"github.com/ungweiliang/selfhost-paas/internal/pkg/metrics"
 	"github.com/ungweiliang/selfhost-paas/internal/pkg/redact"
 	"github.com/ungweiliang/selfhost-paas/internal/pkg/tracing"
 	"github.com/ungweiliang/selfhost-paas/internal/proxy"
@@ -193,15 +194,20 @@ func (h *TaskHandler) HandleDeployTask(ctx context.Context, t *asynq.Task) error
 }
 
 // runStage wraps a deploy stage in its own span so per-stage latency and
-// failures are attributable in traces.
+// failures are attributable in traces. Emits a histogram sample per run so
+// operators can track per-stage p95 / success ratios.
 func runStage(ctx context.Context, name string, fn func(context.Context) error) error {
 	ctx, span := tracing.Tracer().Start(ctx, name)
 	defer span.End()
-	if err := fn(ctx); err != nil {
+	start := time.Now()
+	err := fn(ctx)
+	resultLabel := "ok"
+	if err != nil {
+		resultLabel = "error"
 		recordSpanErr(span, err)
-		return err
 	}
-	return nil
+	metrics.RecordDeployStage(name, resultLabel, time.Since(start))
+	return err
 }
 
 // recordSpanErr tags the span as failed and attaches the error.

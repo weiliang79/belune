@@ -13,6 +13,7 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/ungweiliang/selfhost-paas/internal/pkg/metrics"
 	"github.com/ungweiliang/selfhost-paas/internal/proxy"
 )
 
@@ -112,7 +113,8 @@ func (c *Client) InitCatchAll(ctx context.Context) {
 	slog.Info("caddy catch-all route initialised")
 }
 
-func (c *Client) AddRoute(ctx context.Context, cfg proxy.RouteConfig) error {
+func (c *Client) AddRoute(ctx context.Context, cfg proxy.RouteConfig) (err error) {
+	defer func() { metrics.RecordCaddyCall("add_route", err) }()
 	// Remove any existing route for this hostname first to prevent duplicates.
 	// Ignore "not found" — normal on fresh routes.
 	if err := c.RemoveRoute(ctx, cfg.Hostname); err != nil && !errors.Is(err, ErrCaddyUnreachable) {
@@ -339,7 +341,8 @@ func parseAdvancedConfig(raw []byte) ([]caddyHandle, error) {
 	return handlers, nil
 }
 
-func (c *Client) RemoveRoute(ctx context.Context, hostname string) error {
+func (c *Client) RemoveRoute(ctx context.Context, hostname string) (err error) {
+	defer func() { metrics.RecordCaddyCall("remove_route", err) }()
 	routeID := fmt.Sprintf("route-%s", hostname)
 	deleteURL := fmt.Sprintf("%s/id/%s", c.adminURL, routeID)
 
@@ -373,7 +376,8 @@ func (c *Client) RemoveRoute(ctx context.Context, hostname string) error {
 	return nil
 }
 
-func (c *Client) ListRoutes(ctx context.Context) ([]proxy.RouteConfig, error) {
+func (c *Client) ListRoutes(ctx context.Context) (result []proxy.RouteConfig, err error) {
+	defer func() { metrics.RecordCaddyCall("list_routes", err) }()
 	url := fmt.Sprintf("%s/config/apps/http/servers/srv0/routes", c.adminURL)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
@@ -391,7 +395,6 @@ func (c *Client) ListRoutes(ctx context.Context) ([]proxy.RouteConfig, error) {
 		return nil, fmt.Errorf("decode routes: %w", err)
 	}
 
-	var result []proxy.RouteConfig
 	for _, route := range routes {
 		if len(route.Match) > 0 && len(route.Match[0].Host) > 0 {
 			cfg := proxy.RouteConfig{

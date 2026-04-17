@@ -14,13 +14,15 @@ import (
 	"github.com/docker/docker/api/types/network"
 	"github.com/docker/go-connections/nat"
 
+	"github.com/ungweiliang/selfhost-paas/internal/pkg/metrics"
 	"github.com/ungweiliang/selfhost-paas/internal/runtime"
 )
 
 const labelManagedBy = "managed-by"
 const labelValue = "selfhost-paas"
 
-func (c *Client) CreateContainer(ctx context.Context, cfg runtime.ContainerConfig) (string, error) {
+func (c *Client) CreateContainer(ctx context.Context, cfg runtime.ContainerConfig) (id string, err error) {
+	defer func() { metrics.RecordDockerOp("create_container", err) }()
 	// Convert env map to Docker format
 	var env []string
 	for k, v := range cfg.Env {
@@ -94,16 +96,19 @@ func (c *Client) CreateContainer(ctx context.Context, cfg runtime.ContainerConfi
 	return resp.ID, nil
 }
 
-func (c *Client) StartContainer(ctx context.Context, id string) error {
+func (c *Client) StartContainer(ctx context.Context, id string) (err error) {
+	defer func() { metrics.RecordDockerOp("start_container", err) }()
 	return c.cli.ContainerStart(ctx, id, container.StartOptions{})
 }
 
-func (c *Client) StopContainer(ctx context.Context, id string) error {
+func (c *Client) StopContainer(ctx context.Context, id string) (err error) {
+	defer func() { metrics.RecordDockerOp("stop_container", err) }()
 	timeout := 30
 	return c.cli.ContainerStop(ctx, id, container.StopOptions{Timeout: &timeout})
 }
 
-func (c *Client) RemoveContainer(ctx context.Context, id string) error {
+func (c *Client) RemoveContainer(ctx context.Context, id string) (err error) {
+	defer func() { metrics.RecordDockerOp("remove_container", err) }()
 	return c.cli.ContainerRemove(ctx, id, container.RemoveOptions{Force: true})
 }
 

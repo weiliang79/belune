@@ -8,6 +8,7 @@ import (
 	"github.com/go-chi/httprate"
 
 	"github.com/ungweiliang/selfhost-paas/internal/handler"
+	"github.com/ungweiliang/selfhost-paas/internal/pkg/metrics"
 	"github.com/ungweiliang/selfhost-paas/internal/server/middleware"
 	"github.com/ungweiliang/selfhost-paas/internal/service"
 )
@@ -176,6 +177,10 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService,
 				r.Get("/api/requests", h.ListAllRequestLogs)
 				r.Get("/api/audit-logs", h.ListAuditLogs)
 				r.Get("/api/proxy/reconciler", h.GetProxyReconcilerStatus)
+				// Prometheus scrape endpoint. When METRICS_BIND is configured
+				// the metrics are also exposed anonymously on that listener;
+				// this admin-gated copy is for operators browsing via the UI.
+				r.Method("GET", "/metrics", metrics.Handler())
 			})
 		})
 

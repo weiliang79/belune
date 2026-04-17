@@ -8,6 +8,8 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+
+	"github.com/ungweiliang/selfhost-paas/internal/pkg/metrics"
 )
 
 // SetupTLS error handling: transport-level failures are wrapped with
@@ -45,7 +47,8 @@ type tlsManualCert struct {
 	Tags     []string `json:"tags,omitempty"`
 }
 
-func (c *Client) SetupTLS(ctx context.Context, hostname, sslMode, certPath, keyPath string) error {
+func (c *Client) SetupTLS(ctx context.Context, hostname, sslMode, certPath, keyPath string) (err error) {
+	defer func() { metrics.RecordCaddyCall("setup_tls", err) }()
 	switch sslMode {
 	case "", "automatic":
 		// Caddy automatically provisions TLS certificates via ACME.

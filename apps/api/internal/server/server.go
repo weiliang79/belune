@@ -12,6 +12,7 @@ import (
 
 	"github.com/ungweiliang/selfhost-paas/internal/config"
 	"github.com/ungweiliang/selfhost-paas/internal/handler"
+	"github.com/ungweiliang/selfhost-paas/internal/pkg/metrics"
 	"github.com/ungweiliang/selfhost-paas/internal/proxy"
 	"github.com/ungweiliang/selfhost-paas/internal/runtime"
 	"github.com/ungweiliang/selfhost-paas/internal/server/middleware"
@@ -63,6 +64,10 @@ func (s *Server) setupRouter() chi.Router {
 	r.Use(func(next http.Handler) http.Handler {
 		return otelhttp.NewHandler(next, "http.request")
 	})
+	// Prometheus HTTP counters/histograms. Mounted before the request logger so
+	// latency observations include logger overhead (negligible, simpler to
+	// reason about).
+	r.Use(metrics.HTTPMiddleware)
 	r.Use(middleware.Logger)
 	r.Use(chiMiddleware.Recoverer)
 	if s.cfg.TLS {

@@ -13,9 +13,13 @@ import (
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/filters"
 	imagetypes "github.com/docker/docker/api/types/image"
+
+	"github.com/ungweiliang/selfhost-paas/internal/pkg/metrics"
 )
 
-func (c *Client) PullImage(ctx context.Context, image string) error {
+func (c *Client) PullImage(ctx context.Context, image string) (err error) {
+	defer func() { metrics.RecordDockerOp("pull_image", err) }()
+
 	reader, err := c.cli.ImagePull(ctx, image, imagetypes.PullOptions{})
 	if err != nil {
 		return fmt.Errorf("pull image %s: %w", image, err)

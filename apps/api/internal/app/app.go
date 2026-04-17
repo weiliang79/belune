@@ -24,6 +24,7 @@ import (
 	"github.com/ungweiliang/selfhost-paas/internal/logcollector"
 	"github.com/ungweiliang/selfhost-paas/internal/logtailer"
 	"github.com/ungweiliang/selfhost-paas/internal/migrations"
+	"github.com/ungweiliang/selfhost-paas/internal/pkg/metrics"
 	"github.com/ungweiliang/selfhost-paas/internal/proxy"
 	"github.com/ungweiliang/selfhost-paas/internal/proxy/caddy"
 	"github.com/ungweiliang/selfhost-paas/internal/runtime/docker"
@@ -48,14 +49,16 @@ type App struct {
 	hub          *ws.Hub
 	auditSvc     *service.AuditService
 	termMgr      *terminal.Manager
-	worker       *worker.Worker
-	scheduler    *asynq.Scheduler
-	httpServer   *http.Server
-	reconciler   *proxy.Reconciler
-	logTailer    *logtailer.Tailer
-	logCollector *logcollector.Collector
-	redisAdapter *ws.RedisAdapter
-	eventWatcher *eventwatcher.Watcher
+	worker          *worker.Worker
+	scheduler       *asynq.Scheduler
+	httpServer      *http.Server
+	metricsServer   *http.Server // optional separate listener (METRICS_BIND)
+	asynqInspector  *asynq.Inspector
+	reconciler      *proxy.Reconciler
+	logTailer       *logtailer.Tailer
+	logCollector    *logcollector.Collector
+	redisAdapter    *ws.RedisAdapter
+	eventWatcher    *eventwatcher.Watcher
 }
 
 // New initialises all application dependencies in dependency order.
@@ -88,6 +91,7 @@ func New(cfg *config.Config) (*App, error) {
 		return nil, fmt.Errorf("parse redis URL for asynq: %w", err)
 	}
 	asynqClient := asynq.NewClient(redisOpt)
+	asynqInspector := asynq.NewInspector(redisOpt)
 
 	redisOptions, err := redis.ParseURL(cfg.RedisURL)
 	if err != nil {
@@ -139,6 +143,22 @@ func New(cfg *config.Config) (*App, error) {
 	broadcaster := ws.NewContainerStatusBroadcaster(hub)
 	httpSrv := server.New(cfg, db, queries, asynqClient, dockerClient, caddyClient, reconciler, rdb, hub, auditSvc, termMgr)
 
+	// Optional Prometheus-friendly bind. Serves /metrics without auth on the
+	// configured address (typically loopback). Keeps the main /metrics route
+	// gated behind admin auth for UI browsers.
+	var metricsServer *http.Server
+	if cfg.MetricsBind != "" {
+		mux := http.NewServeMux()
+		mux.Handle("/metrics", metrics.Handler())
+		metricsServer = &http.Server{
+			Addr:              cfg.MetricsBind,
+			Handler:           mux,
+			ReadTimeout:       5 * time.Second,
+			WriteTimeout:      10 * time.Second,
+			ReadHeaderTimeout: 5 * time.Second,
+		}
+	}
+
 	return &App{
 		cfg:          cfg,
 		db:           db,
@@ -159,11 +179,13 @@ func New(cfg *config.Config) (*App, error) {
 			WriteTimeout: 0, // Disabled to support SSE streaming endpoints
 			IdleTimeout:  60 * time.Second,
 		},
-		reconciler:   reconciler,
-		logTailer:    logtailer.New(cfg.AccessLogPath, queries, rdb),
-		logCollector: logcollector.New(dockerClient, queries, rdb),
-		redisAdapter: ws.NewRedisAdapter(rdb, hub),
-		eventWatcher: eventwatcher.New(dockerClient, queries, broadcaster),
+		metricsServer:  metricsServer,
+		asynqInspector: asynqInspector,
+		reconciler:     reconciler,
+		logTailer:      logtailer.New(cfg.AccessLogPath, queries, rdb),
+		logCollector:   logcollector.New(dockerClient, queries, rdb),
+		redisAdapter:   ws.NewRedisAdapter(rdb, hub),
+		eventWatcher:   eventwatcher.New(dockerClient, queries, broadcaster),
 	}, nil
 }
 
@@ -203,6 +225,17 @@ func (a *App) Run(ctx context.Context) error {
 	g.Go(func() error { ws.RunAppMetricsBroadcaster(gctx, a.hub, a.dockerClient, a.queries); return nil })
 	g.Go(func() error { a.eventWatcher.Run(gctx); return nil })
 	g.Go(func() error { a.auditSvc.Run(gctx); return nil })
+	g.Go(func() error { metrics.AsynqQueuePoller(gctx, a.asynqInspector, 15*time.Second); return nil })
+
+	if a.metricsServer != nil {
+		g.Go(func() error {
+			slog.Info("metrics server starting", "addr", a.metricsServer.Addr)
+			if err := a.metricsServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+				return fmt.Errorf("metrics server: %w", err)
+			}
+			return nil
+		})
+	}
 
 	// Shutdown coordinator — triggered when gctx is cancelled (signal or fatal error)
 	g.Go(func() error {
@@ -214,6 +247,11 @@ func (a *App) Run(ctx context.Context) error {
 		defer cancel()
 		if err := a.httpServer.Shutdown(httpCtx); err != nil {
 			slog.Error("http server forced to shutdown", "error", err)
+		}
+		if a.metricsServer != nil {
+			if err := a.metricsServer.Shutdown(httpCtx); err != nil {
+				slog.Error("metrics server forced to shutdown", "error", err)
+			}
 		}
 
 		// Stop the worker (unblocks the worker.Start goroutine above)
@@ -235,6 +273,9 @@ func (a *App) Shutdown(ctx context.Context) error {
 	}
 
 	a.asynqClient.Close()
+	if a.asynqInspector != nil {
+		a.asynqInspector.Close()
+	}
 	a.rdb.Close()
 	a.dockerClient.Close()
 	a.db.Close()

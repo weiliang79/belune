@@ -36,6 +36,12 @@ type Config struct {
 	// Tracing
 	OTLPEndpoint string // OTEL_EXPORTER_OTLP_ENDPOINT; empty = no-op tracer
 	OTLPInsecure bool   // OTEL_EXPORTER_OTLP_INSECURE; default true (loopback collectors)
+
+	// Metrics
+	// MetricsBind, when non-empty, starts a separate HTTP listener that serves
+	// /metrics without auth (Prometheus-friendly). Typically "127.0.0.1:9090".
+	// When empty, /metrics is mounted on the main router behind admin auth.
+	MetricsBind string
 }
 
 func Load() (*Config, error) {
@@ -61,6 +67,8 @@ func Load() (*Config, error) {
 
 		OTLPEndpoint: getEnv("OTEL_EXPORTER_OTLP_ENDPOINT", ""),
 		OTLPInsecure: getEnvBool("OTEL_EXPORTER_OTLP_INSECURE", true),
+
+		MetricsBind: getEnv("METRICS_BIND", ""),
 	}
 
 	if cfg.JWTSecret == "" {
