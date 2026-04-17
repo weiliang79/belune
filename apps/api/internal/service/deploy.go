@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/ungweiliang/selfhost-paas/internal/naming"
+	"github.com/ungweiliang/selfhost-paas/internal/pkg/tracing"
 	"github.com/ungweiliang/selfhost-paas/internal/proxy"
 	"github.com/ungweiliang/selfhost-paas/internal/runtime"
 	"github.com/ungweiliang/selfhost-paas/internal/status"
@@ -43,8 +44,9 @@ func NewDeployService(
 
 // DeployTaskPayload is the JSON payload sent to the deploy worker.
 type DeployTaskPayload struct {
-	ApplicationID string `json:"application_id"`
-	DeploymentID  string `json:"deployment_id"`
+	ApplicationID string            `json:"application_id"`
+	DeploymentID  string            `json:"deployment_id"`
+	TraceCarrier  map[string]string `json:"trace_carrier,omitempty"`
 }
 
 // Deploy creates a deployment record and enqueues the deploy task.
@@ -61,6 +63,7 @@ func (s *DeployService) Deploy(ctx context.Context, applicationID pgtype.UUID) (
 	payload, err := json.Marshal(DeployTaskPayload{
 		ApplicationID: uuidToString(applicationID),
 		DeploymentID:  uuidToString(deployment.ID),
+		TraceCarrier:  tracing.InjectContext(ctx),
 	})
 	if err != nil {
 		return generated.Deployment{}, fmt.Errorf("marshal payload: %w", err)

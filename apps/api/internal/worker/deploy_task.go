@@ -11,12 +11,16 @@ import (
 
 	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5/pgtype"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/ungweiliang/selfhost-paas/internal/build"
 	"github.com/ungweiliang/selfhost-paas/internal/git"
 	"github.com/ungweiliang/selfhost-paas/internal/naming"
 	"github.com/ungweiliang/selfhost-paas/internal/pkg/buildlog"
 	"github.com/ungweiliang/selfhost-paas/internal/pkg/redact"
+	"github.com/ungweiliang/selfhost-paas/internal/pkg/tracing"
 	"github.com/ungweiliang/selfhost-paas/internal/proxy"
 	"github.com/ungweiliang/selfhost-paas/internal/runtime"
 	"github.com/ungweiliang/selfhost-paas/internal/status"
@@ -25,9 +29,10 @@ import (
 )
 
 type deployPayload struct {
-	ApplicationID    string `json:"application_id"`
-	DeploymentID     string `json:"deployment_id"`
-	RollbackImageTag string `json:"rollback_image_tag,omitempty"` // non-empty = skip build, redeploy this image
+	ApplicationID    string            `json:"application_id"`
+	DeploymentID     string            `json:"deployment_id"`
+	RollbackImageTag string            `json:"rollback_image_tag,omitempty"` // non-empty = skip build, redeploy this image
+	TraceCarrier     map[string]string `json:"trace_carrier,omitempty"`      // W3C trace context for span linking across the queue
 }
 
 // deployContext holds all state accumulated across deploy stages.
@@ -57,14 +62,28 @@ func (h *TaskHandler) HandleDeployTask(ctx context.Context, t *asynq.Task) error
 		return fmt.Errorf("unmarshal deploy payload: %w", err)
 	}
 
+	// Restore trace context from the enqueue site so the worker's spans
+	// appear as children of the HTTP handler that triggered this deploy.
+	ctx = tracing.ExtractContext(ctx, payload.TraceCarrier)
+	ctx, rootSpan := tracing.Tracer().Start(ctx, "deploy.run",
+		trace.WithAttributes(
+			attribute.String("application.id", payload.ApplicationID),
+			attribute.String("deployment.id", payload.DeploymentID),
+			attribute.Bool("deploy.is_rollback", payload.RollbackImageTag != ""),
+		),
+	)
+	defer rootSpan.End()
+
 	slog.Info("handling deploy task", "application_id", payload.ApplicationID, "deployment_id", payload.DeploymentID)
 
 	applicationID, err := parseUUID(payload.ApplicationID)
 	if err != nil {
+		recordSpanErr(rootSpan, err)
 		return fmt.Errorf("invalid application_id (permanent): %w: %w", err, asynq.SkipRetry)
 	}
 	deploymentID, err := parseUUID(payload.DeploymentID)
 	if err != nil {
+		recordSpanErr(rootSpan, err)
 		return fmt.Errorf("invalid deployment_id (permanent): %w: %w", err, asynq.SkipRetry)
 	}
 
@@ -74,9 +93,11 @@ func (h *TaskHandler) HandleDeployTask(ctx context.Context, t *asynq.Task) error
 	// retrying instead of clobbering the existing success/failure.
 	existing, err := h.Queries.GetDeployment(ctx, deploymentID)
 	if err != nil {
+		recordSpanErr(rootSpan, err)
 		return fmt.Errorf("fetch deployment (permanent): %w: %w", err, asynq.SkipRetry)
 	}
 	if existing.Status == status.DeploymentSuccess || existing.Status == status.DeploymentFailed {
+		rootSpan.SetAttributes(attribute.String("deploy.skipped_reason", "already_terminal"))
 		slog.Info("deploy task skipped: deployment already terminal",
 			"deployment_id", payload.DeploymentID,
 			"status", existing.Status,
@@ -91,46 +112,76 @@ func (h *TaskHandler) HandleDeployTask(ctx context.Context, t *asynq.Task) error
 	}
 
 	// Stage 1: load application and decrypt env vars — permanent failure if missing
-	if err := h.loadApplication(ctx, dc); err != nil {
+	if err := runStage(ctx, "deploy.load_application", func(ctx context.Context) error {
+		return h.loadApplication(ctx, dc)
+	}); err != nil {
 		h.failDeployment(ctx, dc.deploymentID, fmt.Sprintf("load application: %v", err))
+		recordSpanErr(rootSpan, err)
 		return fmt.Errorf("load application (permanent): %w: %w", err, asynq.SkipRetry)
 	}
 
 	// Stage 2 & 3: idempotent cleanup and network setup — log-only on error
-	h.cleanupExisting(ctx, dc)
-	h.ensureNetworks(ctx, dc)
+	_ = runStage(ctx, "deploy.cleanup_existing", func(ctx context.Context) error {
+		h.cleanupExisting(ctx, dc)
+		return nil
+	})
+	_ = runStage(ctx, "deploy.ensure_networks", func(ctx context.Context) error {
+		h.ensureNetworks(ctx, dc)
+		return nil
+	})
 
 	// Stage 4: build or pull image
-	if err := h.prepareImage(ctx, dc); err != nil {
+	if err := runStage(ctx, "deploy.prepare_image", func(ctx context.Context) error {
+		return h.prepareImage(ctx, dc)
+	}); err != nil {
 		h.failDeployment(ctx, dc.deploymentID, fmt.Sprintf("%v", err))
+		recordSpanErr(rootSpan, err)
 		return err
 	}
 
 	// Stage 5: create and start container — appends a compensator on success
-	if err := h.createAndStart(ctx, dc); err != nil {
+	if err := runStage(ctx, "deploy.create_and_start", func(ctx context.Context) error {
+		return h.createAndStart(ctx, dc)
+	}); err != nil {
 		h.runCompensators(dc)
 		h.failDeployment(ctx, dc.deploymentID, fmt.Sprintf("create container: %v", err))
+		recordSpanErr(rootSpan, err)
 		return fmt.Errorf("create container: %w", err)
 	}
 
 	// Stage 6: optional health check
-	if err := h.checkHealth(ctx, dc); err != nil {
+	if err := runStage(ctx, "deploy.check_health", func(ctx context.Context) error {
+		return h.checkHealth(ctx, dc)
+	}); err != nil {
 		h.runCompensators(dc)
 		h.failDeployment(ctx, dc.deploymentID, fmt.Sprintf("health check failed: %v", err))
+		recordSpanErr(rootSpan, err)
 		return fmt.Errorf("health check: %w", err)
 	}
 
 	// Stage 7: wire proxy routes — appends a compensator per successful AddRoute
-	if err := h.wireProxy(ctx, dc); err != nil {
+	if err := runStage(ctx, "deploy.wire_proxy", func(ctx context.Context) error {
+		return h.wireProxy(ctx, dc)
+	}); err != nil {
 		h.runCompensators(dc)
 		h.failDeployment(ctx, dc.deploymentID, fmt.Sprintf("wire proxy: %v", err))
+		recordSpanErr(rootSpan, err)
 		return fmt.Errorf("wire proxy: %w", err)
 	}
 
 	// Stage 8: atomic finalize — mark deployment success + application running
-	if err := h.finalize(ctx, dc); err != nil {
+	if err := runStage(ctx, "deploy.finalize", func(ctx context.Context) error {
+		return h.finalize(ctx, dc)
+	}); err != nil {
 		slog.Error("failed to commit deploy success status", "application_id", payload.ApplicationID, "error", err)
+		recordSpanErr(rootSpan, err)
 	}
+
+	rootSpan.SetAttributes(
+		attribute.String("container.id", dc.containerID),
+		attribute.String("deploy.commit_sha", dc.commitSHA),
+	)
+	rootSpan.SetStatus(codes.Ok, "deploy completed")
 
 	slog.Info("deploy completed",
 		"application_id", payload.ApplicationID,
@@ -139,6 +190,24 @@ func (h *TaskHandler) HandleDeployTask(ctx context.Context, t *asynq.Task) error
 		"commit", dc.commitSHA,
 	)
 	return nil
+}
+
+// runStage wraps a deploy stage in its own span so per-stage latency and
+// failures are attributable in traces.
+func runStage(ctx context.Context, name string, fn func(context.Context) error) error {
+	ctx, span := tracing.Tracer().Start(ctx, name)
+	defer span.End()
+	if err := fn(ctx); err != nil {
+		recordSpanErr(span, err)
+		return err
+	}
+	return nil
+}
+
+// recordSpanErr tags the span as failed and attaches the error.
+func recordSpanErr(span trace.Span, err error) {
+	span.RecordError(err)
+	span.SetStatus(codes.Error, err.Error())
 }
 
 // loadApplication fetches the application row, maps it, and decrypts env vars.

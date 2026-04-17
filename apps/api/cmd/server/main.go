@@ -11,6 +11,7 @@ import (
 	"github.com/ungweiliang/selfhost-paas/internal/app"
 	"github.com/ungweiliang/selfhost-paas/internal/config"
 	"github.com/ungweiliang/selfhost-paas/internal/pkg/logger"
+	"github.com/ungweiliang/selfhost-paas/internal/pkg/tracing"
 )
 
 func main() {
@@ -26,6 +27,17 @@ func main() {
 	}
 	jsonHandler := slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: logLevel})
 	slog.SetDefault(slog.New(logger.NewRedactHandler(jsonHandler)))
+
+	traceShutdown, err := tracing.Init(context.Background(), tracing.Config{
+		Endpoint:       cfg.OTLPEndpoint,
+		Insecure:       cfg.OTLPInsecure,
+		ServiceName:    "selfhost-paas-api",
+		ServiceVersion: "v0.0.8-alpha",
+	})
+	if err != nil {
+		slog.Error("failed to init tracing", "error", err)
+		os.Exit(1)
+	}
 
 	a, err := app.New(cfg)
 	if err != nil {
@@ -44,5 +56,8 @@ func main() {
 	defer cancel()
 	if err := a.Shutdown(shutdownCtx); err != nil {
 		slog.Error("shutdown error", "error", err)
+	}
+	if err := traceShutdown(shutdownCtx); err != nil {
+		slog.Error("tracing shutdown error", "error", err)
 	}
 }

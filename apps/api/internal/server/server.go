@@ -8,6 +8,7 @@ import (
 	"github.com/go-chi/cors"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 
 	"github.com/ungweiliang/selfhost-paas/internal/config"
 	"github.com/ungweiliang/selfhost-paas/internal/handler"
@@ -57,6 +58,11 @@ func (s *Server) setupRouter() chi.Router {
 	// Global middleware
 	r.Use(chiMiddleware.RequestID)
 	r.Use(chiMiddleware.RealIP)
+	// OTel HTTP server middleware: one span per request plus W3C traceparent
+	// extraction. No-ops when the tracer provider is the default no-op.
+	r.Use(func(next http.Handler) http.Handler {
+		return otelhttp.NewHandler(next, "http.request")
+	})
 	r.Use(middleware.Logger)
 	r.Use(chiMiddleware.Recoverer)
 	if s.cfg.TLS {

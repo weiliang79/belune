@@ -12,6 +12,7 @@ import (
 	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/ungweiliang/selfhost-paas/internal/pkg/tracing"
 	"github.com/ungweiliang/selfhost-paas/internal/server/middleware"
 	"github.com/ungweiliang/selfhost-paas/internal/status"
 	"github.com/ungweiliang/selfhost-paas/internal/store/generated"
@@ -213,6 +214,7 @@ func (h *Handler) RollbackDeployment(w http.ResponseWriter, r *http.Request) {
 		ApplicationID:    applicationID,
 		DeploymentID:     deploymentIDStr,
 		RollbackImageTag: target.ImageTag.String,
+		TraceCarrier:     tracing.InjectContext(r.Context()),
 	})
 	if err != nil {
 		slog.Error("failed to marshal rollback payload", "error", err)

@@ -32,6 +32,10 @@ type Config struct {
 	// Resource limits
 	MaxTerminalSessionsPerUser int // per-user cap on concurrent terminal sessions (default 5)
 	MaxWebSocketConnsPerUser   int // per-user cap on concurrent WebSocket connections (default 20)
+
+	// Tracing
+	OTLPEndpoint string // OTEL_EXPORTER_OTLP_ENDPOINT; empty = no-op tracer
+	OTLPInsecure bool   // OTEL_EXPORTER_OTLP_INSECURE; default true (loopback collectors)
 }
 
 func Load() (*Config, error) {
@@ -54,6 +58,9 @@ func Load() (*Config, error) {
 
 		MaxTerminalSessionsPerUser: getEnvInt("MAX_TERMINAL_SESSIONS_PER_USER", 5),
 		MaxWebSocketConnsPerUser:   getEnvInt("MAX_WEBSOCKET_CONNS_PER_USER", 20),
+
+		OTLPEndpoint: getEnv("OTEL_EXPORTER_OTLP_ENDPOINT", ""),
+		OTLPInsecure: getEnvBool("OTEL_EXPORTER_OTLP_INSECURE", true),
 	}
 
 	if cfg.JWTSecret == "" {

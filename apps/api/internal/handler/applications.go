@@ -13,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/ungweiliang/selfhost-paas/internal/naming"
+	"github.com/ungweiliang/selfhost-paas/internal/pkg/tracing"
 	"github.com/ungweiliang/selfhost-paas/internal/service"
 	"github.com/ungweiliang/selfhost-paas/internal/status"
 	"github.com/ungweiliang/selfhost-paas/internal/store/generated"
@@ -138,9 +139,10 @@ func (h *Handler) ListApplications(w http.ResponseWriter, r *http.Request) {
 }
 
 type deployPayload struct {
-	ApplicationID    string `json:"application_id"`
-	DeploymentID     string `json:"deployment_id"`
-	RollbackImageTag string `json:"rollback_image_tag,omitempty"`
+	ApplicationID    string            `json:"application_id"`
+	DeploymentID     string            `json:"deployment_id"`
+	RollbackImageTag string            `json:"rollback_image_tag,omitempty"`
+	TraceCarrier     map[string]string `json:"trace_carrier,omitempty"`
 }
 
 func (h *Handler) DeployApplication(w http.ResponseWriter, r *http.Request) {
@@ -178,6 +180,7 @@ func (h *Handler) DeployApplication(w http.ResponseWriter, r *http.Request) {
 	payload, err := json.Marshal(deployPayload{
 		ApplicationID: applicationID,
 		DeploymentID:  fmt.Sprintf("%x-%x-%x-%x-%x", deployment.ID.Bytes[0:4], deployment.ID.Bytes[4:6], deployment.ID.Bytes[6:8], deployment.ID.Bytes[8:10], deployment.ID.Bytes[10:16]),
+		TraceCarrier:  tracing.InjectContext(r.Context()),
 	})
 	if err != nil {
 		slog.Error("failed to marshal deploy payload", "error", err)
@@ -456,6 +459,7 @@ func (h *Handler) BuildApplication(w http.ResponseWriter, r *http.Request) {
 	payload, _ := json.Marshal(deployPayload{
 		ApplicationID: applicationID,
 		DeploymentID:  fmt.Sprintf("%x-%x-%x-%x-%x", deployment.ID.Bytes[0:4], deployment.ID.Bytes[4:6], deployment.ID.Bytes[6:8], deployment.ID.Bytes[8:10], deployment.ID.Bytes[10:16]),
+		TraceCarrier:  tracing.InjectContext(r.Context()),
 	})
 
 	task := asynq.NewTask("build", payload)

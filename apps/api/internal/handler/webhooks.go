@@ -17,6 +17,7 @@ import (
 
 	"github.com/ungweiliang/selfhost-paas/internal/deploy"
 	"github.com/ungweiliang/selfhost-paas/internal/git"
+	"github.com/ungweiliang/selfhost-paas/internal/pkg/tracing"
 	"github.com/ungweiliang/selfhost-paas/internal/status"
 	"github.com/ungweiliang/selfhost-paas/internal/store/generated"
 )
@@ -142,6 +143,7 @@ func (h *Handler) HandleWebhookPush(w http.ResponseWriter, r *http.Request) {
 		taskPayload, marshalErr := json.Marshal(deployPayload{
 			ApplicationID: applicationID,
 			DeploymentID:  deploymentID,
+			TraceCarrier:  tracing.InjectContext(r.Context()),
 		})
 		if marshalErr != nil {
 			slog.Error("webhook: failed to marshal deploy payload", "application", app.Name, "error", marshalErr)
