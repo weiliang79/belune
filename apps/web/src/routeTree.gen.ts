@@ -15,6 +15,7 @@ import { Route as AppRouteImport } from './routes/_app'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AppTeamRouteImport } from './routes/_app/team'
 import { Route as AppServerRouteImport } from './routes/_app/server'
+import { Route as AppQuotasRouteImport } from './routes/_app/quotas'
 import { Route as AppGitCredentialsRouteImport } from './routes/_app/git-credentials'
 import { Route as AppDashboardRouteImport } from './routes/_app/dashboard'
 import { Route as AppAuditRouteImport } from './routes/_app/audit'
@@ -65,6 +66,11 @@ const AppTeamRoute = AppTeamRouteImport.update({
 const AppServerRoute = AppServerRouteImport.update({
   id: '/server',
   path: '/server',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppQuotasRoute = AppQuotasRouteImport.update({
+  id: '/quotas',
+  path: '/quotas',
   getParentRoute: () => AppRoute,
 } as any)
 const AppGitCredentialsRoute = AppGitCredentialsRouteImport.update({
@@ -198,6 +204,7 @@ export interface FileRoutesByFullPath {
   '/audit': typeof AppAuditRoute
   '/dashboard': typeof AppDashboardRoute
   '/git-credentials': typeof AppGitCredentialsRoute
+  '/quotas': typeof AppQuotasRoute
   '/server': typeof AppServerRoute
   '/team': typeof AppTeamRoute
   '/projects/$projectId': typeof AppProjectsProjectIdRouteWithChildren
@@ -227,6 +234,7 @@ export interface FileRoutesByTo {
   '/audit': typeof AppAuditRoute
   '/dashboard': typeof AppDashboardRoute
   '/git-credentials': typeof AppGitCredentialsRoute
+  '/quotas': typeof AppQuotasRoute
   '/server': typeof AppServerRoute
   '/team': typeof AppTeamRoute
   '/projects/new': typeof AppProjectsNewRoute
@@ -256,6 +264,7 @@ export interface FileRoutesById {
   '/_app/audit': typeof AppAuditRoute
   '/_app/dashboard': typeof AppDashboardRoute
   '/_app/git-credentials': typeof AppGitCredentialsRoute
+  '/_app/quotas': typeof AppQuotasRoute
   '/_app/server': typeof AppServerRoute
   '/_app/team': typeof AppTeamRoute
   '/_app/projects/$projectId': typeof AppProjectsProjectIdRouteWithChildren
@@ -287,6 +296,7 @@ export interface FileRouteTypes {
     | '/audit'
     | '/dashboard'
     | '/git-credentials'
+    | '/quotas'
     | '/server'
     | '/team'
     | '/projects/$projectId'
@@ -316,6 +326,7 @@ export interface FileRouteTypes {
     | '/audit'
     | '/dashboard'
     | '/git-credentials'
+    | '/quotas'
     | '/server'
     | '/team'
     | '/projects/new'
@@ -344,6 +355,7 @@ export interface FileRouteTypes {
     | '/_app/audit'
     | '/_app/dashboard'
     | '/_app/git-credentials'
+    | '/_app/quotas'
     | '/_app/server'
     | '/_app/team'
     | '/_app/projects/$projectId'
@@ -415,6 +427,13 @@ declare module '@tanstack/react-router' {
       path: '/server'
       fullPath: '/server'
       preLoaderRoute: typeof AppServerRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/quotas': {
+      id: '/_app/quotas'
+      path: '/quotas'
+      fullPath: '/quotas'
+      preLoaderRoute: typeof AppQuotasRouteImport
       parentRoute: typeof AppRoute
     }
     '/_app/git-credentials': {
@@ -636,6 +655,7 @@ interface AppRouteChildren {
   AppAuditRoute: typeof AppAuditRoute
   AppDashboardRoute: typeof AppDashboardRoute
   AppGitCredentialsRoute: typeof AppGitCredentialsRoute
+  AppQuotasRoute: typeof AppQuotasRoute
   AppServerRoute: typeof AppServerRoute
   AppTeamRoute: typeof AppTeamRoute
   AppProjectsProjectIdRoute: typeof AppProjectsProjectIdRouteWithChildren
@@ -650,6 +670,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppAuditRoute: AppAuditRoute,
   AppDashboardRoute: AppDashboardRoute,
   AppGitCredentialsRoute: AppGitCredentialsRoute,
+  AppQuotasRoute: AppQuotasRoute,
   AppServerRoute: AppServerRoute,
   AppTeamRoute: AppTeamRoute,
   AppProjectsProjectIdRoute: AppProjectsProjectIdRouteWithChildren,

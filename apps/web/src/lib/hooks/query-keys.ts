@@ -65,4 +65,8 @@ export const queryKeys = {
     ["audit-logs", params] as const,
   routeFeatures: (projectId: string, applicationId: string, domainId: string) =>
     ["projects", projectId, "applications", applicationId, "domains", domainId, "features"] as const,
+  quotas: {
+    all: ["quotas"] as const,
+    detail: (scope: string, scopeId: string) => ["quotas", scope, scopeId] as const,
+  },
 };

@@ -14,6 +14,7 @@ import (
 	"github.com/ungweiliang/selfhost-paas/internal/handler"
 	"github.com/ungweiliang/selfhost-paas/internal/pkg/metrics"
 	"github.com/ungweiliang/selfhost-paas/internal/proxy"
+	"github.com/ungweiliang/selfhost-paas/internal/quota"
 	"github.com/ungweiliang/selfhost-paas/internal/runtime"
 	"github.com/ungweiliang/selfhost-paas/internal/server/middleware"
 	"github.com/ungweiliang/selfhost-paas/internal/service"
@@ -37,12 +38,13 @@ func New(cfg *config.Config, db *pgxpool.Pool, queries *generated.Queries, asynq
 	projSvc := service.NewProjectService(queries, rt)
 	dbSvc := service.NewDatabaseService(queries, rt)
 	gitCredSvc := service.NewGitCredentialService(queries, cfg.Keyring)
+	quotaSvc := quota.NewService(queries)
 
 	s := &Server{
 		cfg:     cfg,
 		db:      db,
 		auth:    auth,
-		handler: handler.New(cfg, db, queries, asynqClient, rt, pm, reconciler, auth, rdb, appSvc, projSvc, dbSvc, gitCredSvc, hub, auditSvc, termMgr),
+		handler: handler.New(cfg, db, queries, asynqClient, rt, pm, reconciler, auth, rdb, appSvc, projSvc, dbSvc, gitCredSvc, hub, auditSvc, termMgr, quotaSvc),
 	}
 
 	s.router = s.setupRouter()

@@ -1,0 +1,195 @@
+package handler
+
+import (
+	"encoding/json"
+	"net/http"
+
+	"github.com/go-chi/chi/v5"
+	"github.com/jackc/pgx/v5/pgtype"
+
+	"github.com/ungweiliang/selfhost-paas/internal/quota"
+	"github.com/ungweiliang/selfhost-paas/internal/store/generated"
+)
+
+// quotaView is the wire shape returned by the admin quota API. Limits may have
+// nil fields (represented as JSON null) to indicate no cap on that dimension.
+type quotaView struct {
+	Scope   string         `json:"scope"`
+	ScopeID string         `json:"scope_id"`
+	Limits  quota.Limits   `json:"limits"`
+	Usage   quota.Usage    `json:"usage"`
+	Meta    map[string]any `json:"meta,omitempty"`
+}
+
+func (h *Handler) ListQuotas(w http.ResponseWriter, r *http.Request) {
+	if h.quotaSvc == nil {
+		writeError(w, http.StatusServiceUnavailable, "quotas unavailable")
+		return
+	}
+	rows, err := h.queries.ListQuotas(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to list quotas")
+		return
+	}
+
+	views := make([]quotaView, 0, len(rows))
+	for _, row := range rows {
+		v, err := h.buildQuotaView(r, row.Scope, row.ScopeID, quota.LimitsFromRow(row))
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "failed to compute quota usage")
+			return
+		}
+		views = append(views, v)
+	}
+	writeJSON(w, http.StatusOK, views)
+}
+
+func (h *Handler) GetQuota(w http.ResponseWriter, r *http.Request) {
+	if h.quotaSvc == nil {
+		writeError(w, http.StatusServiceUnavailable, "quotas unavailable")
+		return
+	}
+	scope := chi.URLParam(r, "scope")
+	scopeID, ok := parseScopeID(w, chi.URLParam(r, "scopeId"))
+	if !ok {
+		return
+	}
+	if !isValidScope(scope) {
+		writeError(w, http.StatusBadRequest, "scope must be 'user' or 'project'")
+		return
+	}
+	limits, err := h.quotaSvc.LimitsFor(r.Context(), scope, scopeID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to get quota")
+		return
+	}
+	view, err := h.buildQuotaView(r, scope, scopeID, limits)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to compute quota usage")
+		return
+	}
+	writeJSON(w, http.StatusOK, view)
+}
+
+type upsertQuotaRequest struct {
+	MaxApplications *int32   `json:"max_applications"`
+	MaxCPU          *float64 `json:"max_cpu"`
+	MaxMemoryMB     *int64   `json:"max_memory_mb"`
+}
+
+func (h *Handler) UpsertQuota(w http.ResponseWriter, r *http.Request) {
+	if h.quotaSvc == nil {
+		writeError(w, http.StatusServiceUnavailable, "quotas unavailable")
+		return
+	}
+	scope := chi.URLParam(r, "scope")
+	scopeID, ok := parseScopeID(w, chi.URLParam(r, "scopeId"))
+	if !ok {
+		return
+	}
+	if !isValidScope(scope) {
+		writeError(w, http.StatusBadRequest, "scope must be 'user' or 'project'")
+		return
+	}
+
+	var req upsertQuotaRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	limits := quota.Limits{
+		MaxApplications: req.MaxApplications,
+		MaxCPU:          req.MaxCPU,
+		MaxMemoryMB:     req.MaxMemoryMB,
+	}
+	apps, cpu, mem := quota.LimitsToRow(limits)
+
+	row, err := h.queries.UpsertQuota(r.Context(), generated.UpsertQuotaParams{
+		Scope:           scope,
+		ScopeID:         scopeID,
+		MaxApplications: apps,
+		MaxCpu:          cpu,
+		MaxMemoryMb:     mem,
+	})
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to save quota")
+		return
+	}
+	h.audit(r, "upsert_quota", "quota", uuidToString(row.ID), map[string]any{
+		"scope": scope, "scope_id": uuidToString(scopeID),
+	})
+
+	view, err := h.buildQuotaView(r, scope, scopeID, quota.LimitsFromRow(row))
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to compute quota usage")
+		return
+	}
+	writeJSON(w, http.StatusOK, view)
+}
+
+func (h *Handler) DeleteQuota(w http.ResponseWriter, r *http.Request) {
+	if h.quotaSvc == nil {
+		writeError(w, http.StatusServiceUnavailable, "quotas unavailable")
+		return
+	}
+	scope := chi.URLParam(r, "scope")
+	scopeID, ok := parseScopeID(w, chi.URLParam(r, "scopeId"))
+	if !ok {
+		return
+	}
+	if !isValidScope(scope) {
+		writeError(w, http.StatusBadRequest, "scope must be 'user' or 'project'")
+		return
+	}
+	if err := h.queries.DeleteQuota(r.Context(), generated.DeleteQuotaParams{Scope: scope, ScopeID: scopeID}); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to delete quota")
+		return
+	}
+	h.audit(r, "delete_quota", "quota", uuidToString(scopeID), map[string]any{"scope": scope})
+	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
+}
+
+func (h *Handler) buildQuotaView(r *http.Request, scope string, scopeID pgtype.UUID, limits quota.Limits) (quotaView, error) {
+	var usage quota.Usage
+	var err error
+	meta := map[string]any{}
+	switch scope {
+	case quota.ScopeUser:
+		usage, err = h.quotaSvc.UsageForUser(r.Context(), scopeID)
+		if err == nil {
+			if u, lookupErr := h.queries.GetUserByID(r.Context(), scopeID); lookupErr == nil {
+				meta["email"] = u.Email
+				meta["username"] = u.Username
+			}
+		}
+	case quota.ScopeProject:
+		usage, err = h.quotaSvc.UsageForProject(r.Context(), scopeID)
+		if err == nil {
+			if p, lookupErr := h.queries.GetProject(r.Context(), scopeID); lookupErr == nil {
+				meta["name"] = p.Name
+				meta["slug"] = p.Slug
+			}
+		}
+	}
+	if err != nil {
+		return quotaView{}, err
+	}
+	return quotaView{
+		Scope:   scope,
+		ScopeID: uuidToString(scopeID),
+		Limits:  limits,
+		Usage:   usage,
+		Meta:    meta,
+	}, nil
+}
+
+func isValidScope(s string) bool { return s == quota.ScopeUser || s == quota.ScopeProject }
+
+func parseScopeID(w http.ResponseWriter, s string) (pgtype.UUID, bool) {
+	var u pgtype.UUID
+	if err := u.Scan(s); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid scope id")
+		return pgtype.UUID{}, false
+	}
+	return u, true
+}

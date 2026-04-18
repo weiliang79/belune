@@ -87,6 +87,7 @@ export function Sidebar() {
             {navLink("/account", "Account", true)}
             {isAdmin && navLink("/server", "Server")}
             {isAdmin && navLink("/team", "Team")}
+            {isAdmin && navLink("/quotas", "Quotas")}
             {navLink("/git-credentials", "Git Credentials")}
             {isAdmin && navLink("/audit", "Audit Log")}
           </div>

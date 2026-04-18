@@ -11,6 +11,7 @@ import (
 
 	"github.com/ungweiliang/selfhost-paas/internal/config"
 	"github.com/ungweiliang/selfhost-paas/internal/proxy"
+	"github.com/ungweiliang/selfhost-paas/internal/quota"
 	"github.com/ungweiliang/selfhost-paas/internal/runtime"
 	"github.com/ungweiliang/selfhost-paas/internal/server/middleware"
 	"github.com/ungweiliang/selfhost-paas/internal/service"
@@ -48,6 +49,7 @@ type Handler struct {
 	hub         *ws.Hub
 	auditSvc    *service.AuditService
 	termManager *terminal.Manager
+	quotaSvc    *quota.Service
 }
 
 func New(
@@ -67,6 +69,7 @@ func New(
 	hub *ws.Hub,
 	auditSvc *service.AuditService,
 	termMgr *terminal.Manager,
+	quotaSvc *quota.Service,
 ) *Handler {
 	return &Handler{
 		cfg:         cfg,
@@ -85,6 +88,7 @@ func New(
 		hub:         hub,
 		auditSvc:    auditSvc,
 		termManager: termMgr,
+		quotaSvc:    quotaSvc,
 	}
 }
 

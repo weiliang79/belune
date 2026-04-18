@@ -179,6 +179,10 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService,
 				r.Get("/api/requests", h.ListAllRequestLogs)
 				r.Get("/api/audit-logs", h.ListAuditLogs)
 				r.Get("/api/proxy/reconciler", h.GetProxyReconcilerStatus)
+				r.Get("/api/quotas", h.ListQuotas)
+				r.Get("/api/quotas/{scope}/{scopeId}", h.GetQuota)
+				r.Put("/api/quotas/{scope}/{scopeId}", h.UpsertQuota)
+				r.Delete("/api/quotas/{scope}/{scopeId}", h.DeleteQuota)
 				// Prometheus scrape endpoint. When METRICS_BIND is configured
 				// the metrics are also exposed anonymously on that listener;
 				// this admin-gated copy is for operators browsing via the UI.

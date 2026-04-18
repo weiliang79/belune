@@ -14,6 +14,7 @@ import (
 
 	"github.com/ungweiliang/selfhost-paas/internal/naming"
 	"github.com/ungweiliang/selfhost-paas/internal/pkg/tracing"
+	"github.com/ungweiliang/selfhost-paas/internal/quota"
 	"github.com/ungweiliang/selfhost-paas/internal/service"
 	"github.com/ungweiliang/selfhost-paas/internal/status"
 	"github.com/ungweiliang/selfhost-paas/internal/store/generated"
@@ -62,6 +63,18 @@ func (h *Handler) CreateApplication(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		writeError(w, http.StatusNotFound, "project not found")
 		return
+	}
+
+	if h.quotaSvc != nil {
+		if err := h.quotaSvc.CheckApplicationCreate(r.Context(), projectUUID, project.UserID, req.CPULimit, req.MemoryLimit); err != nil {
+			var qe *quota.ExceededError
+			if errors.As(err, &qe) {
+				writeError(w, qe.HTTPStatus(), qe.Error())
+				return
+			}
+			writeError(w, http.StatusInternalServerError, "quota check failed")
+			return
+		}
 	}
 
 	baseSlug := naming.Slugify(req.Name)
