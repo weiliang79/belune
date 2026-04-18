@@ -316,21 +316,6 @@ apps/web/
 
 ---
 
-## Shared Types — `packages/types/`
-
-```
-packages/types/
-├── openapi.yaml              # Single source of truth for API contract
-└── generated/                # Auto-generated from OpenAPI spec
-    ├── go/                   # Go types (used by api)
-    └── ts/                   # TypeScript types (used by web)
-```
-
-This ensures the frontend and backend never drift out of sync.
-Run `task generate:types` to regenerate both from the spec.
-
----
-
 ## Infrastructure — `infra/`
 
 ```

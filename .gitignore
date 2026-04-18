@@ -34,10 +34,6 @@ dist/
 .DS_Store
 
 # Generated
-packages/types/generated/go/*
-packages/types/generated/ts/*
-!packages/types/generated/go/.gitkeep
-!packages/types/generated/ts/.gitkeep
 apps/api/internal/store/generated/*
 !apps/api/internal/store/generated/.gitkeep
 

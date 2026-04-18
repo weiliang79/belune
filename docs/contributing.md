@@ -10,8 +10,7 @@
 ## Project Structure
 
 - `apps/api/` — Go backend
-- `apps/web/` — SvelteKit frontend
-- `packages/types/` — Shared OpenAPI spec
+- `apps/web/` — React (TanStack Router) frontend
 - `infra/` — Docker Compose and Caddy configs
 
 ## Code Style

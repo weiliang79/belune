@@ -1,8 +1,9 @@
 # API Documentation
 
-The API is defined using OpenAPI 3.1. See the spec at:
-
-- [packages/types/openapi.yaml](../packages/types/openapi.yaml)
+The authoritative API surface is the Chi route table in
+[`apps/api/internal/server/routes.go`](../apps/api/internal/server/routes.go).
+A shared OpenAPI spec is intentionally not maintained during alpha — the route
+table and sqlc-generated models are the source of truth.
 
 ## Base URL
 
