@@ -1,5 +1,7 @@
 -- name: ListApplicationsByProject :many
-SELECT * FROM applications WHERE project_id = $1 ORDER BY created_at DESC;
+SELECT * FROM applications
+WHERE project_id = $1 AND parent_application_id IS NULL
+ORDER BY created_at DESC;
 
 -- name: GetApplication :one
 SELECT * FROM applications WHERE id = $1;
@@ -52,3 +54,39 @@ SELECT count(*) FROM applications;
 SELECT p.user_id FROM applications a
 JOIN projects p ON p.id = a.project_id
 WHERE a.id = $1;
+
+-- name: UpdateApplicationPreviewConfig :one
+UPDATE applications SET
+    preview_branch_pattern = $2,
+    preview_domain_template = $3,
+    updated_at = NOW()
+WHERE id = $1
+RETURNING *;
+
+-- name: CreatePreviewApplication :one
+INSERT INTO applications (
+    project_id, name, slug, type,
+    source_repo, source_image, dockerfile_path, build_type,
+    cpu_limit, memory_limit, git_credentials_encrypted, health_check_path,
+    git_credential_id, parent_application_id, branch
+)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+RETURNING *;
+
+-- name: GetPreviewByParentBranch :one
+SELECT * FROM applications
+WHERE parent_application_id = $1 AND branch = $2;
+
+-- name: ListPreviewsByParent :many
+SELECT * FROM applications
+WHERE parent_application_id = $1
+ORDER BY last_activity_at DESC;
+
+-- name: ListStalePreviews :many
+SELECT * FROM applications
+WHERE parent_application_id IS NOT NULL
+  AND last_activity_at < $1;
+
+-- name: TouchApplicationActivity :exec
+UPDATE applications SET last_activity_at = NOW()
+WHERE id = $1;

@@ -1,0 +1,268 @@
+import { createFileRoute } from "@tanstack/react-router";
+import { useState } from "react";
+import { toast } from "sonner";
+import { Loader2 } from "lucide-react";
+
+import { useApplication } from "@/lib/hooks/use-applications";
+import {
+  usePreviews,
+  useUpdatePreviewConfig,
+  useDeletePreview,
+} from "@/lib/hooks/use-previews";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
+import { StatusBadge } from "@/lib/components/status-badge";
+import { formatDate } from "@/lib/utils/format";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+
+export const Route = createFileRoute(
+  "/_app/projects/$projectId/applications/$applicationId/previews",
+)({
+  component: PreviewsPage,
+});
+
+function PreviewsPage() {
+  const { projectId, applicationId } = Route.useParams();
+  const { data: application } = useApplication(projectId, applicationId);
+  const { data: previewsData, isLoading } = usePreviews(projectId, applicationId);
+  const updateConfig = useUpdatePreviewConfig(projectId, applicationId);
+  const deletePreview = useDeletePreview(projectId, applicationId);
+
+  if (application?.parent_application_id) {
+    return (
+      <div className="text-muted-foreground text-sm">
+        This is a preview environment; it cannot host nested previews.
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <ConfigCard
+        application={application}
+        onSave={async (pattern, template) => {
+          await toast.promise(
+            updateConfig.mutateAsync({
+              preview_branch_pattern: pattern,
+              preview_domain_template: template,
+            }),
+            {
+              loading: "Saving...",
+              success: "Preview config saved",
+              error: (err) => err.message,
+            },
+          );
+        }}
+      />
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Active Preview Environments</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {isLoading ? (
+            <div className="space-y-2">
+              {[1, 2].map((i) => (
+                <Skeleton key={i} className="h-10 w-full" />
+              ))}
+            </div>
+          ) : !previewsData?.previews.length ? (
+            <p className="text-muted-foreground text-sm">
+              No preview environments yet. Push a branch matching the pattern
+              to spin one up.
+            </p>
+          ) : (
+            <div className="divide-y text-sm">
+              {previewsData.previews.map((preview) => (
+                <div
+                  key={preview.id}
+                  className="flex items-center justify-between gap-4 py-3"
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="truncate font-medium">
+                        {preview.branch || "unknown"}
+                      </span>
+                      <StatusBadge status={preview.status} />
+                    </div>
+                    {preview.hostname && (
+                      <a
+                        href={`https://${preview.hostname}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-muted-foreground truncate font-mono text-xs hover:underline"
+                      >
+                        {preview.hostname}
+                      </a>
+                    )}
+                    <div className="text-muted-foreground text-xs">
+                      Last activity: {formatDate(preview.last_activity_at)}
+                    </div>
+                  </div>
+                  <AlertDialog>
+                    <AlertDialogTrigger
+                      render={<Button size="sm" variant="outline" />}
+                    >
+                      Delete
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Delete preview?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          This removes the preview container and all its
+                          resources. A subsequent push to{" "}
+                          <span className="font-mono">{preview.branch}</span>{" "}
+                          will recreate it.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction
+                          onClick={() => {
+                            toast.promise(
+                              deletePreview.mutateAsync(preview.id),
+                              {
+                                loading: "Deleting...",
+                                success: "Preview deleted",
+                                error: (err) => err.message,
+                              },
+                            );
+                          }}
+                        >
+                          Delete
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+function ConfigCard({
+  application,
+  onSave,
+}: {
+  application: ReturnType<typeof useApplication>["data"];
+  onSave: (pattern: string, template: string) => Promise<void>;
+}) {
+  const [pattern, setPattern] = useState(application?.preview_branch_pattern ?? "");
+  const [template, setTemplate] = useState(
+    application?.preview_domain_template ?? "",
+  );
+  const [saving, setSaving] = useState(false);
+
+  const enabled = !!(
+    application?.preview_branch_pattern && application?.preview_domain_template
+  );
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center gap-2">
+          <CardTitle>Preview Configuration</CardTitle>
+          <Badge variant={enabled ? "default" : "outline"}>
+            {enabled ? "Enabled" : "Disabled"}
+          </Badge>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <p className="text-muted-foreground text-sm">
+          When a push arrives on a branch matching the pattern (and not the
+          auto-deploy branch), a dedicated preview environment is built and
+          exposed at a templated hostname.
+        </p>
+        <div className="space-y-2">
+          <Label htmlFor="preview-pattern">Branch pattern</Label>
+          <Input
+            id="preview-pattern"
+            placeholder="feature/*"
+            value={pattern}
+            onChange={(e) => setPattern(e.target.value)}
+          />
+          <p className="text-muted-foreground text-xs">
+            Glob-style. Use <span className="font-mono">*</span> for a single
+            segment or <span className="font-mono">**</span> for many (e.g.{" "}
+            <span className="font-mono">feature/**</span>).
+          </p>
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="preview-template">Domain template</Label>
+          <Input
+            id="preview-template"
+            placeholder="{branch}.{app}.preview.example.com"
+            value={template}
+            onChange={(e) => setTemplate(e.target.value)}
+          />
+          <p className="text-muted-foreground text-xs">
+            Must contain <span className="font-mono">{"{branch}"}</span>.{" "}
+            <span className="font-mono">{"{app}"}</span> expands to this
+            application's slug. A wildcard DNS record (e.g.{" "}
+            <span className="font-mono">*.preview.example.com</span>) pointing
+            to this host is required.
+          </p>
+        </div>
+        <div className="flex justify-end gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={async () => {
+              setSaving(true);
+              try {
+                await onSave("", "");
+                setPattern("");
+                setTemplate("");
+              } finally {
+                setSaving(false);
+              }
+            }}
+            disabled={saving || (!pattern && !template)}
+          >
+            Disable
+          </Button>
+          <Button
+            size="sm"
+            onClick={async () => {
+              if (template && !template.includes("{branch}")) {
+                toast.error("Template must contain {branch}");
+                return;
+              }
+              setSaving(true);
+              try {
+                await onSave(pattern, template);
+              } finally {
+                setSaving(false);
+              }
+            }}
+            disabled={saving}
+          >
+            {saving ? (
+              <Loader2 aria-hidden="true" className="h-4 w-4 animate-spin" />
+            ) : (
+              "Save"
+            )}
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}

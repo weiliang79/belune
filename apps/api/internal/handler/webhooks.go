@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -18,6 +19,7 @@ import (
 	"github.com/ungweiliang/selfhost-paas/internal/deploy"
 	"github.com/ungweiliang/selfhost-paas/internal/git"
 	"github.com/ungweiliang/selfhost-paas/internal/pkg/tracing"
+	"github.com/ungweiliang/selfhost-paas/internal/preview"
 	"github.com/ungweiliang/selfhost-paas/internal/status"
 	"github.com/ungweiliang/selfhost-paas/internal/store/generated"
 )
@@ -82,95 +84,45 @@ func (h *Handler) HandleWebhookPush(w http.ResponseWriter, r *http.Request) {
 			autoBranch = app.AutoDeployBranch.String
 		}
 
-		if payload.Branch != autoBranch {
-			slog.Debug("webhook: branch mismatch",
+		if payload.Branch == autoBranch {
+			if h.triggerPushDeploy(r, app, payload.Branch, payload.CommitSHA) {
+				triggered++
+			}
+			continue
+		}
+
+		// Preview path: branch did not match auto_deploy_branch, but may match
+		// a configured preview pattern on this parent app.
+		if !app.PreviewBranchPattern.Valid || app.PreviewBranchPattern.String == "" ||
+			!app.PreviewDomainTemplate.Valid || app.PreviewDomainTemplate.String == "" {
+			slog.Debug("webhook: branch mismatch and no preview config",
 				"application", app.Name,
 				"push_branch", payload.Branch,
 				"auto_deploy_branch", autoBranch,
 			)
 			continue
 		}
-
-		// Create deployment and enqueue task
-		applicationID := uuidToString(app.ID)
-
-		// Dedup duplicate webhook deliveries: same application + commit in the
-		// last WindowPushSeconds reuses the existing deployment instead of
-		// creating a second one. Requires a commit SHA — pushes without one
-		// can't be safely fingerprinted.
-		var idempotencyKey pgtype.Text
-		if payload.CommitSHA != "" {
-			key := deploy.Key(applicationID, "push", payload.CommitSHA)
-			idempotencyKey = pgtype.Text{String: key, Valid: true}
-
-			existing, lookupErr := h.queries.FindRecentDeploymentByIdempotencyKey(r.Context(), generated.FindRecentDeploymentByIdempotencyKeyParams{
-				ApplicationID:  app.ID,
-				IdempotencyKey: idempotencyKey,
-				WindowSeconds:  int32(deploy.WindowPushSeconds),
-			})
-			if lookupErr == nil {
-				slog.Info("webhook: duplicate delivery, reusing existing deployment",
-					"application", app.Name,
-					"commit", payload.CommitSHA,
-					"deployment_id", uuidToString(existing.ID),
-				)
-				continue
-			}
-			if !errors.Is(lookupErr, pgx.ErrNoRows) {
-				// Fail open — a lookup hiccup shouldn't block a legitimate deploy.
-				slog.Warn("webhook: idempotency lookup failed, proceeding",
-					"application", app.Name, "error", lookupErr,
-				)
-			}
+		if !preview.MatchesPattern(app.PreviewBranchPattern.String, payload.Branch) {
+			slog.Debug("webhook: branch does not match preview pattern",
+				"application", app.Name,
+				"push_branch", payload.Branch,
+				"pattern", app.PreviewBranchPattern.String,
+			)
+			continue
 		}
 
-		deployment, err := h.queries.CreateDeployment(r.Context(), generated.CreateDeploymentParams{
-			ApplicationID:  app.ID,
-			Status:         status.DeploymentPending,
-			TriggeredBy:    "push",
-			CommitSha:      pgtype.Text{String: payload.CommitSHA, Valid: payload.CommitSHA != ""},
-			IdempotencyKey: idempotencyKey,
-		})
+		previewApp, err := h.ensurePreviewApp(r.Context(), app, payload.Branch)
 		if err != nil {
-			slog.Error("webhook: failed to create deployment", "application", app.Name, "error", err)
+			slog.Error("webhook: failed to materialize preview app",
+				"parent", app.Name,
+				"branch", payload.Branch,
+				"error", err,
+			)
 			continue
 		}
-
-		deploymentID := fmt.Sprintf("%x-%x-%x-%x-%x",
-			deployment.ID.Bytes[0:4], deployment.ID.Bytes[4:6],
-			deployment.ID.Bytes[6:8], deployment.ID.Bytes[8:10], deployment.ID.Bytes[10:16])
-
-		taskPayload, marshalErr := json.Marshal(deployPayload{
-			ApplicationID: applicationID,
-			DeploymentID:  deploymentID,
-			TraceCarrier:  tracing.InjectContext(r.Context()),
-		})
-		if marshalErr != nil {
-			slog.Error("webhook: failed to marshal deploy payload", "application", app.Name, "error", marshalErr)
-			continue
+		if h.triggerPushDeploy(r, previewApp, payload.Branch, payload.CommitSHA) {
+			triggered++
 		}
-
-		task := asynq.NewTask("deploy", taskPayload)
-		if _, enqErr := h.asynq.Enqueue(task,
-			asynq.Queue("critical"),
-			asynq.Timeout(time.Duration(h.cfg.TaskTimeoutMinutes)*time.Minute),
-			asynq.MaxRetry(3),
-			asynq.TaskID("deploy:"+applicationID),
-		); enqErr != nil {
-			if !errors.Is(enqErr, asynq.ErrTaskIDConflict) {
-				slog.Error("webhook: failed to enqueue deploy", "application", app.Name, "error", enqErr)
-			} else {
-				slog.Debug("webhook: deploy already in progress, skipping", "application", app.Name)
-			}
-			continue
-		}
-
-		slog.Info("webhook: triggered deploy",
-			"application", app.Name,
-			"branch", payload.Branch,
-			"commit", payload.CommitSHA,
-		)
-		triggered++
 	}
 
 	slog.Info("webhook: processing complete", "repo", normalized, "triggered", triggered)
@@ -267,4 +219,160 @@ func extractRepoURL(body []byte, r *http.Request) string {
 func normalizeRepoURL(url string) string {
 	url = strings.TrimSuffix(url, ".git")
 	return strings.ToLower(url)
+}
+
+// triggerPushDeploy creates a deployment row and enqueues the deploy task for
+// a specific application (parent or preview). Returns true when the task was
+// successfully enqueued. Dedups duplicate webhook deliveries by commit SHA.
+func (h *Handler) triggerPushDeploy(r *http.Request, app generated.Application, branch, commitSHA string) bool {
+	applicationID := uuidToString(app.ID)
+
+	var idempotencyKey pgtype.Text
+	if commitSHA != "" {
+		key := deploy.Key(applicationID, "push", commitSHA)
+		idempotencyKey = pgtype.Text{String: key, Valid: true}
+
+		existing, lookupErr := h.queries.FindRecentDeploymentByIdempotencyKey(r.Context(), generated.FindRecentDeploymentByIdempotencyKeyParams{
+			ApplicationID:  app.ID,
+			IdempotencyKey: idempotencyKey,
+			WindowSeconds:  int32(deploy.WindowPushSeconds),
+		})
+		if lookupErr == nil {
+			slog.Info("webhook: duplicate delivery, reusing existing deployment",
+				"application", app.Name,
+				"commit", commitSHA,
+				"deployment_id", uuidToString(existing.ID),
+			)
+			return false
+		}
+		if !errors.Is(lookupErr, pgx.ErrNoRows) {
+			slog.Warn("webhook: idempotency lookup failed, proceeding",
+				"application", app.Name, "error", lookupErr,
+			)
+		}
+	}
+
+	deployment, err := h.queries.CreateDeployment(r.Context(), generated.CreateDeploymentParams{
+		ApplicationID:  app.ID,
+		Status:         status.DeploymentPending,
+		TriggeredBy:    "push",
+		CommitSha:      pgtype.Text{String: commitSHA, Valid: commitSHA != ""},
+		IdempotencyKey: idempotencyKey,
+	})
+	if err != nil {
+		slog.Error("webhook: failed to create deployment", "application", app.Name, "error", err)
+		return false
+	}
+
+	deploymentID := fmt.Sprintf("%x-%x-%x-%x-%x",
+		deployment.ID.Bytes[0:4], deployment.ID.Bytes[4:6],
+		deployment.ID.Bytes[6:8], deployment.ID.Bytes[8:10], deployment.ID.Bytes[10:16])
+
+	taskPayload, marshalErr := json.Marshal(deployPayload{
+		ApplicationID: applicationID,
+		DeploymentID:  deploymentID,
+		TraceCarrier:  tracing.InjectContext(r.Context()),
+	})
+	if marshalErr != nil {
+		slog.Error("webhook: failed to marshal deploy payload", "application", app.Name, "error", marshalErr)
+		return false
+	}
+
+	task := asynq.NewTask("deploy", taskPayload)
+	if _, enqErr := h.asynq.Enqueue(task,
+		asynq.Queue("critical"),
+		asynq.Timeout(time.Duration(h.cfg.TaskTimeoutMinutes)*time.Minute),
+		asynq.MaxRetry(3),
+		asynq.TaskID("deploy:"+applicationID),
+	); enqErr != nil {
+		if !errors.Is(enqErr, asynq.ErrTaskIDConflict) {
+			slog.Error("webhook: failed to enqueue deploy", "application", app.Name, "error", enqErr)
+		} else {
+			slog.Debug("webhook: deploy already in progress, skipping", "application", app.Name)
+		}
+		return false
+	}
+
+	slog.Info("webhook: triggered deploy",
+		"application", app.Name,
+		"branch", branch,
+		"commit", commitSHA,
+	)
+	return true
+}
+
+// ensurePreviewApp returns the preview child app for (parent, branch), creating
+// it and its derived domain on first push. It looks up the parent's project
+// slug + base slug so the created app's container name follows the standard
+// "{projectSlug}-{baseSlug}-{appID[:8]}" shape; a matching Domain row is
+// upserted from the parent's preview_domain_template so the existing deploy
+// worker wires up Caddy automatically.
+func (h *Handler) ensurePreviewApp(ctx context.Context, parent generated.Application, branch string) (generated.Application, error) {
+	parentRow, err := h.queries.GetApplicationWithProjectSlug(ctx, parent.ID)
+	if err != nil {
+		return generated.Application{}, fmt.Errorf("fetch parent: %w", err)
+	}
+	parentBaseSlug := deriveBaseSlug(parentRow.Slug, parentRow.ProjectSlug, uuidToString(parent.ID))
+	if parentBaseSlug == "" {
+		return generated.Application{}, fmt.Errorf("could not derive parent base slug from %q", parentRow.Slug)
+	}
+
+	branchSlug := preview.SlugifyBranch(branch)
+	if branchSlug == "" {
+		return generated.Application{}, fmt.Errorf("branch %q slugifies to empty", branch)
+	}
+
+	child, created, err := h.appService.FindOrCreatePreview(
+		ctx, parent, parentRow.ProjectSlug, parentBaseSlug, branch, branchSlug,
+	)
+	if err != nil {
+		return generated.Application{}, err
+	}
+
+	hostname := preview.RenderDomainTemplate(parent.PreviewDomainTemplate.String, branch, parentBaseSlug)
+	if hostname != "" {
+		if _, derr := h.queries.GetDomainByHostname(ctx, hostname); errors.Is(derr, pgx.ErrNoRows) {
+			if _, cerr := h.queries.CreateDomain(ctx, generated.CreateDomainParams{
+				ApplicationID: child.ID,
+				Hostname:      hostname,
+				SslEnabled:    true,
+				ForceHttps:    true,
+				SslMode:       "automatic",
+			}); cerr != nil {
+				slog.Warn("webhook: failed to create preview domain",
+					"hostname", hostname, "application", child.Name, "error", cerr,
+				)
+			}
+		} else if derr != nil {
+			slog.Warn("webhook: domain lookup failed", "hostname", hostname, "error", derr)
+		}
+	}
+
+	if created {
+		slog.Info("webhook: materialized preview app",
+			"parent", parent.Name,
+			"child", child.Name,
+			"branch", branch,
+			"hostname", hostname,
+		)
+	}
+	return child, nil
+}
+
+// deriveBaseSlug inverts the "{projectSlug}-{baseSlug}-{appID[:8]}" format
+// produced by ApplicationService.Create to recover the base slug.
+func deriveBaseSlug(fullSlug, projectSlug, appID string) string {
+	prefix := projectSlug + "-"
+	if !strings.HasPrefix(fullSlug, prefix) {
+		return ""
+	}
+	remainder := strings.TrimPrefix(fullSlug, prefix)
+	if len(appID) < 8 {
+		return remainder
+	}
+	suffix := "-" + appID[:8]
+	if !strings.HasSuffix(remainder, suffix) {
+		return remainder
+	}
+	return strings.TrimSuffix(remainder, suffix)
 }

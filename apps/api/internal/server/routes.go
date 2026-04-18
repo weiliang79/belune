@@ -141,6 +141,11 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService,
 			r.Get("/api/projects/{projectId}/applications/{applicationId}/cache", h.GetBuildCache)
 			r.Delete("/api/projects/{projectId}/applications/{applicationId}/cache", h.ClearBuildCache)
 
+			// Preview environments: parent config + child list + child delete
+			r.Put("/api/projects/{projectId}/applications/{applicationId}/previews/config", h.UpdatePreviewConfig)
+			r.Get("/api/projects/{projectId}/applications/{applicationId}/previews", h.ListPreviews)
+			r.Delete("/api/projects/{projectId}/applications/{applicationId}/previews/{previewId}", h.DeletePreview)
+
 			// Deployments
 			r.Get("/api/projects/{projectId}/applications/{applicationId}/deployments", h.ListDeployments)
 			r.Get("/api/projects/{projectId}/applications/{applicationId}/deployments/{deploymentId}", h.GetDeployment)

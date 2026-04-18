@@ -115,11 +115,62 @@ func (h *TaskHandler) HandleCleanupTask(ctx context.Context, t *asynq.Task) erro
 	// Remove orphan containers: managed containers with no matching application in DB.
 	h.cleanupOrphanContainers(ctx)
 
+	// Reap idle preview apps. Skipped entirely when targeting a single app
+	// (the caller wanted a narrow cleanup) or when the feature is disabled.
+	if payload.ApplicationID == "" {
+		h.cleanupStalePreviews(ctx)
+	}
+
 	slog.Info("cleanup completed",
 		"applications_processed", len(applications),
 		"deployments_removed", totalRemoved,
 	)
 	return nil
+}
+
+// cleanupStalePreviews deletes preview applications whose last_activity_at is
+// older than PreviewIdleDays. Delegates to ApplicationService.Delete which
+// stops the container and cascades DB rows (domains, env, deployments); Caddy
+// routes are reaped by the proxy reconciler on its next tick.
+func (h *TaskHandler) cleanupStalePreviews(ctx context.Context) {
+	if h.Config == nil || h.Config.PreviewIdleDays <= 0 || h.AppService == nil {
+		return
+	}
+	cutoff := time.Now().Add(-time.Duration(h.Config.PreviewIdleDays) * 24 * time.Hour)
+	stale, err := h.Queries.ListStalePreviews(ctx, pgtype.Timestamptz{Time: cutoff, Valid: true})
+	if err != nil {
+		slog.Warn("preview GC: failed to list stale previews", "error", err)
+		return
+	}
+	if len(stale) == 0 {
+		return
+	}
+
+	removed := 0
+	for _, app := range stale {
+		project, err := h.Queries.GetProject(ctx, app.ProjectID)
+		if err != nil {
+			slog.Warn("preview GC: failed to fetch project",
+				"application_id", formatUUID(app.ID), "error", err,
+			)
+			continue
+		}
+		if err := h.AppService.Delete(ctx, app.ID, project.Slug, app.Slug); err != nil {
+			slog.Warn("preview GC: failed to delete preview",
+				"application", app.Name, "error", err,
+			)
+			continue
+		}
+		slog.Info("preview GC: removed idle preview",
+			"application", app.Name,
+			"branch", app.Branch.String,
+			"last_activity_at", app.LastActivityAt.Time,
+		)
+		removed++
+	}
+	if removed > 0 {
+		slog.Info("preview GC: reaped idle previews", "count", removed, "cutoff_days", h.Config.PreviewIdleDays)
+	}
 }
 
 // cleanupOrphanContainers removes managed containers whose name does not match

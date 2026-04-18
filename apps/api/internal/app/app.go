@@ -114,6 +114,7 @@ func New(cfg *config.Config) (*App, error) {
 	termMgr := terminal.NewManager(cfg.MaxTerminalSessionsPerUser)
 	hub := ws.NewHub(cfg.MaxWebSocketConnsPerUser)
 
+	appSvc := service.NewApplicationService(db, queries, dockerClient, cfg.Keyring)
 	taskHandler := &worker.TaskHandler{
 		Runtime:        dockerClient,
 		Proxy:          caddyClient,
@@ -124,6 +125,7 @@ func New(cfg *config.Config) (*App, error) {
 		RedisClient:    rdb,
 		Config:         cfg,
 		MetricsService: metricsSvc,
+		AppService:     appSvc,
 	}
 
 	w := worker.New(redisOpt, taskHandler)

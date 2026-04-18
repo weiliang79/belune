@@ -368,8 +368,12 @@ func (h *TaskHandler) buildFromGit(ctx context.Context, dc *deployContext) error
 		cloneURL = dc.app.SourceRepo.String
 	}
 
-	slog.Info("cloning repository", "repo", dc.app.SourceRepo.String, "dest", tmpDir)
-	cloneResult, err := git.Clone(buildCtx, cloneURL, tmpDir, "", "")
+	// Previews pin the clone to their branch; parents (branch unset) clone the
+	// default ref. Token is empty here because cloneURL already embeds it when
+	// credentials are present.
+	branch := dc.appRow.Branch.String
+	slog.Info("cloning repository", "repo", dc.app.SourceRepo.String, "dest", tmpDir, "branch", branch)
+	cloneResult, err := git.Clone(buildCtx, cloneURL, tmpDir, branch, "")
 	if err != nil {
 		return fmt.Errorf("git clone: %w", err)
 	}
@@ -534,6 +538,10 @@ func (h *TaskHandler) finalize(ctx context.Context, dc *deployContext) error {
 			ID:     dc.applicationID,
 			Status: status.ApplicationRunning,
 		})
+		// Stamp last_activity_at for preview GC. Doing this on every deploy
+		// (not just previews) keeps the column meaningful if we later extend
+		// idle cleanup to parents too.
+		q.TouchApplicationActivity(ctx, dc.applicationID)
 		return nil
 	})
 }

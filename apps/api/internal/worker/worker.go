@@ -30,6 +30,7 @@ type TaskHandler struct {
 	RedisClient    *redis.Client
 	Config         *config.Config
 	MetricsService *service.MetricsService
+	AppService     *service.ApplicationService
 }
 
 type Worker struct {

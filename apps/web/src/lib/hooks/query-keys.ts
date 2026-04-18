@@ -69,4 +69,8 @@ export const queryKeys = {
     all: ["quotas"] as const,
     detail: (scope: string, scopeId: string) => ["quotas", scope, scopeId] as const,
   },
+  previews: {
+    all: (projectId: string, applicationId: string) =>
+      ["projects", projectId, "applications", applicationId, "previews"] as const,
+  },
 };

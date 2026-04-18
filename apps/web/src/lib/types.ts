@@ -35,6 +35,11 @@ export interface Application {
   webhook_secret: string | null;
   auto_deploy_branch: string | null;
   health_check_path: string | null;
+  parent_application_id: string | null;
+  branch: string | null;
+  preview_branch_pattern: string | null;
+  preview_domain_template: string | null;
+  last_activity_at: string;
   created_at: string;
   updated_at: string;
 }

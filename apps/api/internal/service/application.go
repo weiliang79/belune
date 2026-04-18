@@ -182,3 +182,67 @@ func (s *ApplicationService) Delete(ctx context.Context, appID pgtype.UUID, proj
 
 	return s.queries.DeleteApplication(ctx, appID)
 }
+
+// FindOrCreatePreview returns the preview child for (parent, branch), creating
+// it when missing. Children inherit their parent's source config, build type,
+// resource limits, and git credential linkage, so the existing deploy worker
+// handles them without special casing. The child's slug follows the same
+// "{projectSlug}-{baseSlug}-{appID[:8]}" shape as any other application, where
+// baseSlug = "{parentBaseSlug}-{branchSlug}".
+//
+// parentBaseSlug is the pre-finalization base (before the project prefix was
+// baked in by Create); callers derive it from the parent row's metadata.
+func (s *ApplicationService) FindOrCreatePreview(
+	ctx context.Context,
+	parent generated.Application,
+	projectSlug, parentBaseSlug, branch, branchSlug string,
+) (generated.Application, bool, error) {
+	existing, err := s.queries.GetPreviewByParentBranch(ctx, generated.GetPreviewByParentBranchParams{
+		ParentApplicationID: pgtype.UUID{Bytes: parent.ID.Bytes, Valid: true},
+		Branch:              pgtype.Text{String: branch, Valid: true},
+	})
+	if err == nil {
+		return existing, false, nil
+	}
+
+	previewBaseSlug := fmt.Sprintf("%s-%s", parentBaseSlug, branchSlug)
+
+	var created generated.Application
+	err = store.WithTx(ctx, s.db, func(q *generated.Queries) error {
+		var txErr error
+		created, txErr = q.CreatePreviewApplication(ctx, generated.CreatePreviewApplicationParams{
+			ProjectID:               parent.ProjectID,
+			Name:                    fmt.Sprintf("%s (%s)", parent.Name, branch),
+			Slug:                    previewBaseSlug,
+			Type:                    parent.Type,
+			SourceRepo:              parent.SourceRepo,
+			SourceImage:             parent.SourceImage,
+			DockerfilePath:          parent.DockerfilePath,
+			BuildType:               parent.BuildType,
+			CpuLimit:                parent.CpuLimit,
+			MemoryLimit:             parent.MemoryLimit,
+			GitCredentialsEncrypted: parent.GitCredentialsEncrypted,
+			HealthCheckPath:         parent.HealthCheckPath,
+			GitCredentialID:         parent.GitCredentialID,
+			ParentApplicationID:     pgtype.UUID{Bytes: parent.ID.Bytes, Valid: true},
+			Branch:                  pgtype.Text{String: branch, Valid: true},
+		})
+		if txErr != nil {
+			return txErr
+		}
+		appIDStr := uuidToString(created.ID)
+		finalSlug := fmt.Sprintf("%s-%s-%s", projectSlug, previewBaseSlug, appIDStr[:8])
+		if txErr := q.UpdateApplicationSlug(ctx, generated.UpdateApplicationSlugParams{
+			ID:   created.ID,
+			Slug: finalSlug,
+		}); txErr != nil {
+			return txErr
+		}
+		created.Slug = finalSlug
+		return nil
+	})
+	if err != nil {
+		return generated.Application{}, false, err
+	}
+	return created, true, nil
+}
