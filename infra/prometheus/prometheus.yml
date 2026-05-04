@@ -5,14 +5,15 @@ global:
     service: selfhost-paas
 
 scrape_configs:
-  # PaaS API — scraped via the loopback METRICS_BIND listener. When the API
-  # runs inside Docker under compose.prod.yml, swap host.docker.internal for
-  # the container name `api`.
+  # PaaS API — scraped over the paas-infra Docker network. Works for both
+  # the devcontainer (.devcontainer/docker-compose.yml service `api`) and
+  # the production stack (compose.prod.yml service `api`), since both attach
+  # to `paas-infra` and register `api` as their service alias.
   - job_name: paas-api
     metrics_path: /metrics
     static_configs:
       - targets:
-          - host.docker.internal:9090
+          - api:9090
         labels:
           component: api
 
