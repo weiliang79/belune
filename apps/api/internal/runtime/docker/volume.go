@@ -45,18 +45,40 @@ func (c *Client) CreateCacheVolume(ctx context.Context, name string) error {
 // API (inspect returns -1 unless the daemon was called with ?size=1, which
 // the Docker Go SDK does not expose).
 func (c *Client) VolumeSize(ctx context.Context, name string) (int64, error) {
+	sizes, err := c.VolumeSizes(ctx, []string{name})
+	if err != nil {
+		return 0, err
+	}
+	return sizes[name], nil
+}
+
+// VolumeSizes runs a single DiskUsage call and extracts sizes for each named
+// volume. DiskUsage is O(all volumes on the host); calling it once per
+// lookup in a loop quickly exceeds the request timeout on busy hosts.
+func (c *Client) VolumeSizes(ctx context.Context, names []string) (map[string]int64, error) {
+	out := make(map[string]int64, len(names))
+	if len(names) == 0 {
+		return out, nil
+	}
 	du, err := c.cli.DiskUsage(ctx, types.DiskUsageOptions{
 		Types: []types.DiskUsageObject{types.VolumeObject},
 	})
 	if err != nil {
-		return 0, fmt.Errorf("disk usage: %w", err)
+		return nil, fmt.Errorf("disk usage: %w", err)
+	}
+	want := make(map[string]struct{}, len(names))
+	for _, n := range names {
+		want[n] = struct{}{}
 	}
 	for _, v := range du.Volumes {
-		if v != nil && v.Name == name && v.UsageData != nil {
-			return v.UsageData.Size, nil
+		if v == nil || v.UsageData == nil {
+			continue
+		}
+		if _, ok := want[v.Name]; ok {
+			out[v.Name] = v.UsageData.Size
 		}
 	}
-	return 0, nil
+	return out, nil
 }
 
 func (c *Client) RemoveVolume(ctx context.Context, name string) error {

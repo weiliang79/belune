@@ -142,6 +142,7 @@ export function DomainRow({ projectId, applicationId, domain, onEdit }: Props) {
                     render={
                       <DropdownMenuItem variant="destructive" />
                     }
+                    nativeButton={false}
                   >
                     Remove
                   </AlertDialogTrigger>

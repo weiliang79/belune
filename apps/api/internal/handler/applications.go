@@ -461,14 +461,13 @@ func (h *Handler) GetBuildCache(w http.ResponseWriter, r *http.Request) {
 	buildVol := naming.CNBCacheVolumeName(applicationID)
 	launchVol := naming.CNBLaunchCacheVolumeName(applicationID)
 
-	buildSize, err := h.runtime.VolumeSize(r.Context(), buildVol)
+	sizes, err := h.runtime.VolumeSizes(r.Context(), []string{buildVol, launchVol})
 	if err != nil {
-		slog.Warn("failed to read build cache size", "application_id", applicationID, "error", err)
+		slog.Warn("failed to read cache volume sizes", "application_id", applicationID, "error", err)
 	}
-	launchSize, err := h.runtime.VolumeSize(r.Context(), launchVol)
-	if err != nil {
-		slog.Warn("failed to read launch cache size", "application_id", applicationID, "error", err)
-	}
+
+	buildSize := sizes[buildVol]
+	launchSize := sizes[launchVol]
 
 	writeJSON(w, http.StatusOK, map[string]any{
 		"build_cache_bytes":  buildSize,

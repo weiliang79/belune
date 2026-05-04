@@ -11,8 +11,11 @@
 package metrics
 
 import (
+	"bufio"
 	"context"
 	"errors"
+	"fmt"
+	"net"
 	"net/http"
 	"strconv"
 	"time"
@@ -111,6 +114,25 @@ func (r *statusRecorder) WriteHeader(code int) {
 		r.wroteHeader = true
 	}
 	r.ResponseWriter.WriteHeader(code)
+}
+
+// Hijack delegates to the underlying ResponseWriter so WebSocket upgrades work
+// through this middleware. Without it, the Hijacker interface assertion fails
+// at this wrapper and upgrades surface as "Invalid frame header" in the client.
+func (r *statusRecorder) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	h, ok := r.ResponseWriter.(http.Hijacker)
+	if !ok {
+		return nil, nil, fmt.Errorf("underlying ResponseWriter does not implement http.Hijacker")
+	}
+	return h.Hijack()
+}
+
+// Flush delegates to the underlying ResponseWriter so SSE / streaming handlers
+// can flush through this middleware.
+func (r *statusRecorder) Flush() {
+	if f, ok := r.ResponseWriter.(http.Flusher); ok {
+		f.Flush()
+	}
 }
 
 // RecordDeployStage observes stage duration + status. status is typically

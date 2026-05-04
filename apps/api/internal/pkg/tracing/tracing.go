@@ -74,10 +74,13 @@ func Init(ctx context.Context, cfg Config) (ShutdownFunc, error) {
 		return nil, fmt.Errorf("create OTLP exporter: %w", err)
 	}
 
+	// Pass an empty schema URL on our resource so Merge adopts resource.Default()'s
+	// SchemaURL. Hard-coding a specific semconv version here causes a merge
+	// conflict whenever the OTel SDK bumps its default schema.
 	res, err := resource.Merge(
 		resource.Default(),
 		resource.NewWithAttributes(
-			semconv.SchemaURL,
+			"",
 			semconv.ServiceName(cfg.ServiceName),
 			semconv.ServiceVersion(cfg.ServiceVersion),
 		),

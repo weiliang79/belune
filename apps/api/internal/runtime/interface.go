@@ -70,6 +70,11 @@ type ContainerRuntime interface {
 	// (0, nil) when the volume does not exist. Used to surface per-app cache
 	// usage in the UI.
 	VolumeSize(ctx context.Context, name string) (int64, error)
+	// VolumeSizes reports on-disk sizes for multiple volumes in a single
+	// Docker DiskUsage call. Use this when you need sizes for several volumes
+	// at once — DiskUsage computes sizes for every volume on the host, so
+	// calling VolumeSize N times does N full scans.
+	VolumeSizes(ctx context.Context, names []string) (map[string]int64, error)
 	RemoveVolume(ctx context.Context, name string) error
 	RemoveImage(ctx context.Context, image string) error
 	PruneImages(ctx context.Context) error

@@ -80,6 +80,9 @@ func (m *MockContainerRuntime) CreateCacheVolume(_ context.Context, _ string) er
 func (m *MockContainerRuntime) VolumeSize(_ context.Context, _ string) (int64, error) {
 	return 0, nil
 }
+func (m *MockContainerRuntime) VolumeSizes(_ context.Context, _ []string) (map[string]int64, error) {
+	return map[string]int64{}, nil
+}
 func (m *MockContainerRuntime) RemoveVolume(_ context.Context, _ string) error { return nil }
 func (m *MockContainerRuntime) RemoveImage(_ context.Context, _ string) error    { return nil }
 func (m *MockContainerRuntime) PruneImages(_ context.Context) error  { return nil }
