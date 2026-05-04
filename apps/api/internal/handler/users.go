@@ -3,6 +3,7 @@ package handler
 import (
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -127,6 +128,13 @@ func (h *Handler) UpdateUserRole(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Force the target user to re-login so they pick up the new role: revoke
+	// all their refresh tokens and set the per-user invalidated_after flag so
+	// existing access tokens are rejected on next use.
+	if err := h.auth.RevokeUserSessions(r.Context(), uuid); err != nil {
+		slog.Warn("auth: failed to revoke sessions on role change", "user_id", id, "error", err)
+	}
+
 	h.audit(r, "update_user_role", "user", id, map[string]any{"role": req.Role})
 
 	writeJSON(w, http.StatusOK, updated)
@@ -212,6 +220,14 @@ func (h *Handler) ResetUserPassword(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "failed to reset password")
 		return
 	}
+
+	// Admin-initiated password reset must invalidate every active session for
+	// the target user — they may have been compromised.
+	if err := h.auth.RevokeUserSessions(r.Context(), uuid); err != nil {
+		slog.Warn("auth: failed to revoke sessions on admin password reset", "user_id", id, "error", err)
+	}
+
+	h.audit(r, "reset_user_password", "user", id, nil)
 
 	writeJSON(w, http.StatusOK, map[string]string{"status": "password updated"})
 }

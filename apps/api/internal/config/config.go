@@ -14,7 +14,8 @@ type Config struct {
 	DatabaseURL         string
 	RedisURL            string
 	JWTSecret           string
-	JWTExpiryHours      int
+	JWTExpiryHours      int // access-token TTL in hours (legacy name; default 1)
+	JWTRefreshHours     int // refresh-token TTL in hours (default 168 = 7 days)
 	Keyring             *crypto.Keyring
 	CaddyAdminURL       string
 	AccessLogPath       string
@@ -52,8 +53,9 @@ func Load() (*Config, error) {
 		Port:           getEnvInt("PORT", 8080),
 		DatabaseURL:    getEnv("DATABASE_URL", "postgres://paas:paas@localhost:5432/paas?sslmode=disable"),
 		RedisURL:       getEnv("REDIS_URL", "redis://localhost:6379"),
-		JWTSecret:      getEnv("JWT_SECRET", ""),
-		JWTExpiryHours: getEnvInt("JWT_EXPIRY_HOURS", 24),
+		JWTSecret:       getEnv("JWT_SECRET", ""),
+		JWTExpiryHours:  getEnvInt("JWT_EXPIRY_HOURS", 1),
+		JWTRefreshHours: getEnvInt("JWT_REFRESH_HOURS", 24*7),
 		CaddyAdminURL:  getEnv("CADDY_ADMIN_URL", "http://localhost:2019"),
 		AccessLogPath:  getEnv("ACCESS_LOG_PATH", "../../infra/caddy/logs/access.log"),
 		CORSOrigins:    getEnvList("CORS_ORIGINS", []string{"http://localhost:5173"}),

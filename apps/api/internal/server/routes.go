@@ -58,6 +58,18 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService,
 		r.With(withTimeout(handlerTimeout)).Post("/api/auth/setup", h.Setup)
 		r.With(withTimeout(handlerTimeout)).Get("/api/features", h.GetFeatures)
 
+		// Refresh: cookie-driven, no Auth middleware — but CSRF and rate
+		// limit still apply. 30 req/min per IP is generous enough for normal
+		// SPA usage (one refresh per access expiry) and tight enough that a
+		// stolen refresh cookie cannot be brute-rotated against.
+		r.Group(func(r chi.Router) {
+			r.Use(middleware.CSRF())
+			if !disableRateLimit {
+				r.Use(httprate.LimitByIP(30, time.Minute))
+			}
+			r.With(withTimeout(handlerTimeout)).Post("/api/auth/refresh", h.Refresh)
+		})
+
 		// Webhooks: 30 req/min per IP
 		r.Group(func(r chi.Router) {
 			if !disableRateLimit {

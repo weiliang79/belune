@@ -2,6 +2,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useForm } from "@tanstack/react-form";
 import { z } from "zod";
 import { login, getMe } from "@/lib/api/auth";
+import { ApiError } from "@/lib/api/client";
 import { useAuthStore } from "@/lib/stores/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -34,6 +35,13 @@ function LoginPage() {
         setUser(user);
         navigate({ to: "/dashboard" });
       } catch (e) {
+        if (e instanceof ApiError && e.status === 429 && e.retryAfter) {
+          const mins = Math.ceil(e.retryAfter / 60);
+          setError(
+            `Account temporarily locked due to repeated failed login attempts. Try again in ${mins} minute${mins === 1 ? "" : "s"}.`,
+          );
+          return;
+        }
         setError(e instanceof Error ? e.message : "Login failed");
       }
     },

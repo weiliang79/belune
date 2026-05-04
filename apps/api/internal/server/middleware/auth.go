@@ -26,7 +26,7 @@ func Auth(authService *service.AuthService) func(http.Handler) http.Handler {
 				return
 			}
 
-			claims, err := authService.ValidateToken(tokenString)
+			claims, err := authService.ValidateToken(r.Context(), tokenString)
 			if err != nil {
 				http.Error(w, `{"error":"invalid or expired token"}`, http.StatusUnauthorized)
 				return

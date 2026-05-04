@@ -1,9 +1,12 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
@@ -13,6 +16,9 @@ import (
 	"github.com/ungweiliang/selfhost-paas/internal/service"
 	"github.com/ungweiliang/selfhost-paas/internal/store/generated"
 )
+
+const refreshCookieName = "refresh_token"
+const refreshCookiePath = "/api/auth"
 
 type loginRequest struct {
 	Email    string `json:"email"`
@@ -31,13 +37,75 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result, err := h.auth.Login(r.Context(), req.Email, req.Password)
+	ctx := r.Context()
+	clientIP := middleware.ClientIP(r)
+	userAgent := r.UserAgent()
+
+	// Lockout check is keyed by lowercased email so attackers cannot bypass by
+	// alternating capitalization. We do this *before* DB lookup so that a
+	// locked email gets the same response whether the user exists or not.
+	emailKey := normaliseEmail(req.Email)
+
+	if locked, retryAfter, err := h.auth.CheckLockout(ctx, emailKey); err != nil {
+		slog.Warn("auth: lockout check failed", "error", err)
+	} else if locked {
+		writeLockedResponse(w, retryAfter)
+		return
+	}
+
+	result, err := h.auth.Login(ctx, req.Email, req.Password, userAgent, clientIP)
 	if err != nil {
 		if errors.Is(err, service.ErrInvalidCredentials) {
+			h.recordLoginFailure(ctx, emailKey, clientIP)
+			// Re-check lockout: if this attempt tripped the threshold, return
+			// 429 instead of 401 so the UI surfaces the lockout immediately.
+			if locked, retryAfter, _ := h.auth.CheckLockout(ctx, emailKey); locked {
+				writeLockedResponse(w, retryAfter)
+				return
+			}
 			writeError(w, http.StatusUnauthorized, "invalid email or password")
 			return
 		}
+		slog.Error("auth: login failed", "error", err)
 		writeError(w, http.StatusInternalServerError, "login failed")
+		return
+	}
+
+	// Successful login → clear any stale lockout state for this email.
+	h.auth.ResetLoginAttempts(ctx, emailKey)
+
+	csrfToken, err := middleware.GenerateCSRFToken()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to generate csrf token")
+		return
+	}
+
+	h.setSessionCookies(w, result, csrfToken)
+
+	if h.auditSvc != nil {
+		uid := uuidToString(result.User.ID)
+		h.auditSvc.Log(uid, clientIP, "login", "user", uid, nil)
+	}
+
+	writeJSON(w, http.StatusOK, result)
+}
+
+// Refresh exchanges the refresh-token cookie for a fresh access + refresh
+// pair. No auth middleware: the refresh cookie *is* the credential. CSRF
+// middleware is still applied at the route layer.
+func (h *Handler) Refresh(w http.ResponseWriter, r *http.Request) {
+	cookie, err := r.Cookie(refreshCookieName)
+	if err != nil || cookie.Value == "" {
+		writeError(w, http.StatusUnauthorized, "missing refresh token")
+		return
+	}
+
+	clientIP := middleware.ClientIP(r)
+	result, err := h.auth.Refresh(r.Context(), cookie.Value, r.UserAgent(), clientIP)
+	if err != nil {
+		// Clear the bad cookie so the client doesn't keep retrying with it.
+		h.clearSessionCookies(w)
+		writeError(w, http.StatusUnauthorized, "invalid refresh token")
 		return
 	}
 
@@ -47,7 +115,40 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// HTTP-only JWT cookie — not readable by JS, submitted automatically.
+	h.setSessionCookies(w, result, csrfToken)
+	writeJSON(w, http.StatusOK, result)
+}
+
+func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
+	// Revoke the refresh token (DB) first — survives Redis being down.
+	if cookie, err := r.Cookie(refreshCookieName); err == nil && cookie.Value != "" {
+		if err := h.auth.RevokeRefreshToken(r.Context(), cookie.Value); err != nil {
+			slog.Warn("auth: failed to revoke refresh token on logout", "error", err)
+		}
+	}
+
+	// Blacklist the access token (Redis, best-effort).
+	if tokenString := extractTokenFromRequest(r); tokenString != "" {
+		if err := h.auth.BlacklistToken(r.Context(), tokenString); err != nil {
+			slog.Warn("auth: failed to blacklist access token on logout", "error", err)
+		}
+	}
+
+	h.clearSessionCookies(w)
+
+	h.audit(r, "logout", "user", "", nil)
+
+	writeJSON(w, http.StatusOK, map[string]string{"status": "logged out"})
+}
+
+// setSessionCookies emits the access, refresh, and CSRF cookies for a
+// successful login or refresh. The refresh cookie is scoped to /api/auth so
+// it is never sent to non-auth endpoints — defence-in-depth in case of a
+// rogue endpoint that echoes Cookie headers.
+func (h *Handler) setSessionCookies(w http.ResponseWriter, result *service.LoginResult, csrfToken string) {
+	accessTTL := h.auth.AccessExpiry()
+	refreshTTL := h.auth.RefreshExpiry()
+
 	http.SetCookie(w, &http.Cookie{
 		Name:     "token",
 		Value:    result.Token,
@@ -55,11 +156,21 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		HttpOnly: true,
 		Secure:   h.cfg.SecureCookies,
 		SameSite: http.SameSiteLaxMode,
-		MaxAge:   int(24 * time.Hour / time.Second),
+		MaxAge:   int(accessTTL / time.Second),
 	})
 
-	// CSRF cookie — readable by JS so the frontend can mirror it into
-	// the X-CSRF-Token header for the double-submit check.
+	http.SetCookie(w, &http.Cookie{
+		Name:     refreshCookieName,
+		Value:    result.RefreshToken,
+		Path:     refreshCookiePath,
+		HttpOnly: true,
+		Secure:   h.cfg.SecureCookies,
+		SameSite: http.SameSiteLaxMode,
+		MaxAge:   int(refreshTTL / time.Second),
+	})
+
+	// CSRF cookie covers the longer refresh window so the token doesn't
+	// expire mid-session and break in-flight requests after a refresh.
 	http.SetCookie(w, &http.Cookie{
 		Name:     middleware.CSRFCookieName,
 		Value:    csrfToken,
@@ -67,46 +178,61 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		HttpOnly: false,
 		Secure:   h.cfg.SecureCookies,
 		SameSite: http.SameSiteLaxMode,
-		MaxAge:   int(24 * time.Hour / time.Second),
+		MaxAge:   int(refreshTTL / time.Second),
 	})
-
-	if h.auditSvc != nil {
-		uid := uuidToString(result.User.ID)
-		h.auditSvc.Log(uid, middleware.ClientIP(r), "login", "user", uid, nil)
-	}
-
-	writeJSON(w, http.StatusOK, result)
 }
 
-func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
-	// Blacklist the current token so it can't be reused
-	tokenString := extractTokenFromRequest(r)
-	if tokenString != "" {
-		_ = h.auth.BlacklistToken(r.Context(), tokenString)
+func (h *Handler) clearSessionCookies(w http.ResponseWriter) {
+	http.SetCookie(w, &http.Cookie{
+		Name: "token", Value: "", Path: "/",
+		HttpOnly: true, Secure: h.cfg.SecureCookies,
+		SameSite: http.SameSiteLaxMode, MaxAge: -1,
+	})
+	http.SetCookie(w, &http.Cookie{
+		Name: refreshCookieName, Value: "", Path: refreshCookiePath,
+		HttpOnly: true, Secure: h.cfg.SecureCookies,
+		SameSite: http.SameSiteLaxMode, MaxAge: -1,
+	})
+	http.SetCookie(w, &http.Cookie{
+		Name: middleware.CSRFCookieName, Value: "", Path: "/",
+		HttpOnly: false, Secure: h.cfg.SecureCookies,
+		SameSite: http.SameSiteLaxMode, MaxAge: -1,
+	})
+}
+
+func (h *Handler) recordLoginFailure(ctx context.Context, emailKey, clientIP string) {
+	// Audit *before* writing the failure counter so the audit row exists even
+	// if the lockout write fails.
+	if h.auditSvc != nil {
+		h.auditSvc.Log("", clientIP, "login_failed", "user", emailKey, map[string]any{"email": emailKey})
 	}
+	if _, _, err := h.auth.RecordFailedLogin(ctx, emailKey); err != nil {
+		slog.Warn("auth: failed to record login failure", "error", err)
+	}
+}
 
-	http.SetCookie(w, &http.Cookie{
-		Name:     "token",
-		Value:    "",
-		Path:     "/",
-		HttpOnly: true,
-		Secure:   h.cfg.SecureCookies,
-		SameSite: http.SameSiteLaxMode,
-		MaxAge:   -1,
+func writeLockedResponse(w http.ResponseWriter, retryAfter time.Duration) {
+	secs := int(retryAfter.Seconds())
+	if secs < 1 {
+		secs = 1
+	}
+	w.Header().Set("Retry-After", strconv.Itoa(secs))
+	writeJSON(w, http.StatusTooManyRequests, map[string]any{
+		"error":       "account temporarily locked due to repeated failed login attempts",
+		"retry_after": secs,
 	})
-	http.SetCookie(w, &http.Cookie{
-		Name:     middleware.CSRFCookieName,
-		Value:    "",
-		Path:     "/",
-		HttpOnly: false,
-		Secure:   h.cfg.SecureCookies,
-		SameSite: http.SameSiteLaxMode,
-		MaxAge:   -1,
-	})
+}
 
-	h.audit(r, "logout", "user", "", nil)
-
-	writeJSON(w, http.StatusOK, map[string]string{"status": "logged out"})
+func normaliseEmail(s string) string {
+	out := make([]byte, 0, len(s))
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if c >= 'A' && c <= 'Z' {
+			c += 'a' - 'A'
+		}
+		out = append(out, c)
+	}
+	return string(out)
 }
 
 // extractTokenFromRequest extracts the JWT from Authorization header or cookie.
@@ -205,7 +331,6 @@ func (h *Handler) ChangeOwnPassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get current user from DB to verify current password
 	var userID pgtype.UUID
 	userID.Scan(middleware.UserIDFromContext(r.Context()))
 
@@ -234,6 +359,15 @@ func (h *Handler) ChangeOwnPassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Self-service password change revokes other sessions but keeps the
+	// caller's current cookie working; their access token is still valid for
+	// up to AccessExpiry, after which their next refresh attempt will fail
+	// because all refresh tokens were revoked. Acceptable trade-off: we don't
+	// have to forge a new refresh token here.
+	if err := h.auth.RevokeUserSessions(r.Context(), userID); err != nil {
+		slog.Warn("auth: failed to revoke sessions on password change", "error", err)
+	}
+
 	writeJSON(w, http.StatusOK, map[string]string{"status": "password updated"})
 }
 
@@ -255,7 +389,6 @@ func (h *Handler) Setup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// POST — create first admin user
 	if !required {
 		writeError(w, http.StatusConflict, "setup already completed")
 		return

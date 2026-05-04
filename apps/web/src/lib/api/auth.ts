@@ -12,6 +12,15 @@ export function logout() {
   return api.post<void>("/auth/logout");
 }
 
+export function refreshSession() {
+  return api.post<{
+    token: string;
+    refresh_token: string;
+    expires_in: number;
+    user: User;
+  }>("/auth/refresh");
+}
+
 export function getMe() {
   return api.get<User>("/auth/me");
 }

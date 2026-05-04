@@ -31,6 +31,11 @@ func resetDB(t *testing.T) {
 	t.Helper()
 	err := testutil.TruncateAll(context.Background(), env.Pool)
 	require.NoError(t, err)
+	// Flush in-memory Redis so JWT blacklists and invalidated-after flags
+	// don't leak between tests.
+	if env.RedisSrv != nil {
+		env.RedisSrv.FlushAll()
+	}
 	// Reset mock state
 	env.Runtime.StopCalls = nil
 	env.Runtime.RemoveCalls = nil
@@ -155,12 +160,12 @@ func TestChangePassword(t *testing.T) {
 
 func TestJWTExpiryHoursConfigured(t *testing.T) {
 	resetDB(t)
-	// Test server is configured with JWTExpiryHours=0 (defaults to 24 in service, but config field is 0 here)
-	// We verify the token exp is roughly now + 24 hours (within a 60s window).
+	// v0.0.9-alpha: access tokens default to 1h (refresh tokens cover the
+	// gap). The test server passes JWTExpiryHours=0 so the service applies
+	// its 1h fallback.
 	token := env.SetupAdmin(t, "admin@test.com", "password123")
 	require.NotEmpty(t, token)
 
-	// Decode JWT payload (second segment, base64url-encoded JSON)
 	parts := strings.Split(token, ".")
 	require.Len(t, parts, 3, "JWT must have 3 parts")
 
@@ -174,9 +179,8 @@ func TestJWTExpiryHoursConfigured(t *testing.T) {
 	require.True(t, ok, "exp claim must be present")
 
 	expTime := time.Unix(int64(exp), 0)
-	expectedExpiry := time.Now().Add(24 * time.Hour)
+	expectedExpiry := time.Now().Add(1 * time.Hour)
 
-	// Allow ±60s tolerance for test execution time
 	assert.WithinDuration(t, expectedExpiry, expTime, 60*time.Second,
-		"token expiry should be approximately 24 hours from now")
+		"token expiry should be approximately 1 hour from now")
 }
