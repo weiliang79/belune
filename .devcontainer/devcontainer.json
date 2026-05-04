@@ -5,6 +5,12 @@
   "workspaceFolder": "/workspaces/selfhost-paas",
   "initializeCommand": "mkdir -p /var/tmp/paas-builds && docker network create paas-infra 2>/dev/null || true",
   "forwardPorts": [8080],
+  "portsAttributes": {
+    "9090": {
+      "label": "api-metrics (internal)",
+      "onAutoForward": "ignore"
+    }
+  },
   "postCreateCommand": "bash /workspaces/selfhost-paas/.devcontainer/post-create.sh",
   "customizations": {
     "vscode": {

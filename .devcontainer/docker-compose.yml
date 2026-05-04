@@ -6,6 +6,11 @@ services:
       - ..:/workspaces/selfhost-paas:cached
       - /var/run/docker.sock:/var/run/docker.sock
       - /var/tmp/paas-builds:/var/tmp/paas-builds
+      # Cache Go state across container rebuilds — module downloads, build
+      # cache, and `go install` binaries (air, dlv, migrate, etc.).
+      - go-mod-cache:/home/vscode/go/pkg/mod
+      - go-build-cache:/home/vscode/.cache/go-build
+      - go-bin-cache:/home/vscode/go/bin
     environment:
       DATABASE_URL: postgres://paas:paas@postgres:5432/paas?sslmode=disable
       REDIS_URL: redis://redis:6379
@@ -13,6 +18,9 @@ services:
       BUILDKIT_HOST: tcp://buildkit:1234
       TMPDIR: /var/tmp/paas-builds
       PORT: "8080"
+      METRICS_BIND: 0.0.0.0:9090
+      OTEL_EXPORTER_OTLP_ENDPOINT: jaeger:4318
+      OTEL_EXPORTER_OTLP_INSECURE: true
     env_file:
       - ../.env
     networks:
@@ -23,6 +31,11 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+
+volumes:
+  go-mod-cache:
+  go-build-cache:
+  go-bin-cache:
 
 networks:
   paas-infra:
