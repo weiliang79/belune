@@ -24,6 +24,19 @@ type ContainerConfig struct {
 	CPULimit        float64 // CPU cores (0 = unlimited, e.g. 0.5 = half a core)
 	MemoryLimit     int64   // bytes (0 = unlimited, e.g. 536870912 = 512 MB)
 	HealthCheckPath string  // HTTP path for health polling after deploy (e.g. /healthz); empty = skip
+
+	// Security hardening — applied as-is to the Docker HostConfig. Defaults
+	// (zero-value) preserve legacy permissive behaviour so this struct can be
+	// embedded by managed-database provisioning that has different needs.
+	//
+	// For user app containers, deploy_task.go fills these with:
+	//   CapDrop=["ALL"], SecurityOpt=["no-new-privileges"], ReadonlyRootfs=true,
+	//   Tmpfs={"/tmp":"", "/run":""}
+	CapDrop        []string          // capabilities to drop (e.g. "ALL")
+	CapAdd         []string          // capabilities to add back (e.g. "NET_BIND_SERVICE")
+	SecurityOpt    []string          // security options (e.g. "no-new-privileges")
+	ReadonlyRootfs bool              // when true, container rootfs is read-only
+	Tmpfs          map[string]string // path → mount options (empty options OK)
 }
 
 type ContainerInfo struct {

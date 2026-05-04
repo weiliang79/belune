@@ -71,10 +71,15 @@ func (c *Client) CreateContainer(ctx context.Context, cfg runtime.ContainerConfi
 			Labels:       labels,
 		},
 		&container.HostConfig{
-			PortBindings:  portBindings,
-			Binds:         binds,
-			RestartPolicy: container.RestartPolicy{Name: "unless-stopped"},
-			Resources:     resources,
+			PortBindings:   portBindings,
+			Binds:          binds,
+			RestartPolicy:  container.RestartPolicy{Name: "unless-stopped"},
+			Resources:      resources,
+			CapDrop:        cfg.CapDrop,
+			CapAdd:         cfg.CapAdd,
+			SecurityOpt:    cfg.SecurityOpt,
+			ReadonlyRootfs: cfg.ReadonlyRootfs,
+			Tmpfs:          cfg.Tmpfs,
 		},
 		&network.NetworkingConfig{
 			EndpointsConfig: func() map[string]*network.EndpointSettings {

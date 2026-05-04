@@ -3,6 +3,7 @@ package docker
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	networktypes "github.com/docker/docker/api/types/network"
 
@@ -39,9 +40,21 @@ func (c *Client) RemoveNetwork(ctx context.Context, name string) error {
 	return c.cli.NetworkRemove(ctx, name)
 }
 
+// ConnectContainerToNetwork attaches a container to a Docker network. The
+// operation is idempotent — if the container is already attached to the
+// network, the call is a no-op rather than an error. This matters because
+// Caddy is attached to per-project networks on every deploy and we should
+// not surface "endpoint already exists" warnings for the steady state.
 func (c *Client) ConnectContainerToNetwork(ctx context.Context, containerID, networkName string) (err error) {
 	defer func() { metrics.RecordDockerOp("connect_network", err) }()
 	if err = c.cli.NetworkConnect(ctx, networkName, containerID, nil); err != nil {
+		// Docker returns 403 with a message containing "already exists" when
+		// the endpoint is already wired up. errdefs would be cleaner but a
+		// plain string match avoids pulling in another import for a single
+		// check.
+		if strings.Contains(err.Error(), "already exists") {
+			return nil
+		}
 		return fmt.Errorf("connect container %s to network %s: %w", containerID, networkName, err)
 	}
 	return nil

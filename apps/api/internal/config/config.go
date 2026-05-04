@@ -18,6 +18,7 @@ type Config struct {
 	JWTRefreshHours     int // refresh-token TTL in hours (default 168 = 7 days)
 	Keyring             *crypto.Keyring
 	CaddyAdminURL       string
+	CaddyContainerName  string // Docker container name/ID for Caddy; used to attach it to per-project networks
 	AccessLogPath       string
 	CORSOrigins         []string
 	SecureCookies       bool
@@ -56,7 +57,8 @@ func Load() (*Config, error) {
 		JWTSecret:       getEnv("JWT_SECRET", ""),
 		JWTExpiryHours:  getEnvInt("JWT_EXPIRY_HOURS", 1),
 		JWTRefreshHours: getEnvInt("JWT_REFRESH_HOURS", 24*7),
-		CaddyAdminURL:  getEnv("CADDY_ADMIN_URL", "http://localhost:2019"),
+		CaddyAdminURL:      getEnv("CADDY_ADMIN_URL", "http://localhost:2019"),
+		CaddyContainerName: getEnv("CADDY_CONTAINER_NAME", "infra-caddy-1"),
 		AccessLogPath:  getEnv("ACCESS_LOG_PATH", "../../infra/caddy/logs/access.log"),
 		CORSOrigins:    getEnvList("CORS_ORIGINS", []string{"http://localhost:5173"}),
 		SecureCookies:  getEnvBool("SECURE_COOKIES", false),

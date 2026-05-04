@@ -280,14 +280,26 @@ func (h *TaskHandler) cleanupExisting(ctx context.Context, dc *deployContext) {
 	}
 }
 
-// ensureNetworks creates the project-scoped and shared infra networks (idempotent).
+// ensureNetworks creates the project-scoped network and attaches Caddy to it
+// so the reverse proxy can reach this project's containers. Both operations
+// are idempotent.
+//
+// v0.0.9-alpha Phase 2: stopped attaching app containers to the shared
+// `paas-infra` network. Apps in different projects can no longer see each
+// other on the Docker network plane. Caddy still bridges them by joining
+// each project network on demand.
 func (h *TaskHandler) ensureNetworks(ctx context.Context, dc *deployContext) {
 	projectNetwork := naming.ProjectNetworkName(dc.appRow.ProjectSlug)
 	if err := h.Runtime.CreateNetwork(ctx, projectNetwork); err != nil {
 		slog.Debug("could not create project network (may already exist)", "network", projectNetwork, "error", err)
 	}
-	if err := h.Runtime.CreateNetwork(ctx, "paas-infra"); err != nil {
-		slog.Debug("could not create paas-infra network (may already exist)", "error", err)
+	if name := h.Config.CaddyContainerName; name != "" {
+		if err := h.Runtime.ConnectContainerToNetwork(ctx, name, projectNetwork); err != nil {
+			// Caddy may legitimately be on a different orchestration plane
+			// (e.g. running on the host, not in Docker). Warn rather than
+			// fail — the deploy itself can still succeed.
+			slog.Warn("could not attach caddy to project network", "caddy", name, "network", projectNetwork, "error", err)
+		}
 	}
 }
 
@@ -438,6 +450,18 @@ func (h *TaskHandler) createAndStart(ctx context.Context, dc *deployContext) err
 		CPULimit:        dc.app.CpuLimit,
 		MemoryLimit:     dc.app.MemoryLimit,
 		HealthCheckPath: dc.app.HealthCheckPath.String,
+		// Security hardening (v0.0.9-alpha Phase 2): drop all capabilities,
+		// disallow privilege escalation, and run with a read-only rootfs +
+		// tmpfs for the conventional writable paths. Apps that need more
+		// can request specific capabilities back via CapAdd in a future
+		// per-app config; default-deny is safer for the average user.
+		CapDrop:        []string{"ALL"},
+		SecurityOpt:    []string{"no-new-privileges"},
+		ReadonlyRootfs: true,
+		Tmpfs: map[string]string{
+			"/tmp": "",
+			"/run": "",
+		},
 	})
 	if err != nil {
 		return fmt.Errorf("create container: %w", err)
@@ -449,10 +473,9 @@ func (h *TaskHandler) createAndStart(ctx context.Context, dc *deployContext) err
 		return fmt.Errorf("start container: %w", err)
 	}
 
-	// Connect to shared infra network so Caddy can reach the container
-	if err := h.Runtime.ConnectContainerToNetwork(ctx, containerID, "paas-infra"); err != nil {
-		slog.Warn("could not connect container to paas-infra network", "container", containerID, "error", err)
-	}
+	// No paas-infra cross-attach: project network isolation (v0.0.9 Phase 2).
+	// Caddy was attached to the project network in ensureNetworks above so
+	// it can already reach this container by hostname.
 
 	dc.containerID = containerID
 

@@ -101,17 +101,18 @@ func (h *TaskHandler) HandleProvisionDBTask(ctx context.Context, t *asynq.Task) 
 		return fmt.Errorf("unsupported database type: %s", db.Type)
 	}
 
-	// Ensure project-scoped network exists for DB–app communication (idempotent)
+	// Ensure project-scoped network exists for DB–app communication (idempotent).
+	// Fall-back to paas-infra was removed in v0.0.9 Phase 2 to keep tenant
+	// isolation invariant — a database without a project network has nowhere
+	// safe to land.
 	project, err := h.Queries.GetProject(ctx, db.ProjectID)
 	if err != nil {
-		slog.Warn("failed to get project for network setup, using paas-infra fallback", "error", err)
+		h.failDatabase(ctx, dbID, fmt.Sprintf("get project: %v", err))
+		return fmt.Errorf("get project for network setup: %w", err)
 	}
-	projectNetwork := "paas-infra"
-	if project.Slug != "" {
-		projectNetwork = naming.ProjectNetworkName(project.Slug)
-		if netErr := h.Runtime.CreateNetwork(ctx, projectNetwork); netErr != nil {
-			slog.Debug("could not create project network (may already exist)", "network", projectNetwork, "error", netErr)
-		}
+	projectNetwork := naming.ProjectNetworkName(project.Slug)
+	if netErr := h.Runtime.CreateNetwork(ctx, projectNetwork); netErr != nil {
+		slog.Debug("could not create project network (may already exist)", "network", projectNetwork, "error", netErr)
 	}
 
 	// Pull the image
