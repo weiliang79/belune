@@ -38,6 +38,13 @@ type Config struct {
 	// Preview environments
 	PreviewIdleDays int // days after which idle preview apps are garbage-collected (default 7; 0 disables)
 
+	// SkipMigrations is the runtime kill-switch for auto-migration. Set
+	// PAAS_SKIP_MIGRATIONS=true to bring the API up without running pending
+	// migrations — useful when an in-progress migration left the schema in a
+	// state the operator wants to repair manually before letting the next
+	// version of the binary touch it.
+	SkipMigrations bool
+
 	// Tracing
 	OTLPEndpoint string // OTEL_EXPORTER_OTLP_ENDPOINT; empty = no-op tracer
 	OTLPInsecure bool   // OTEL_EXPORTER_OTLP_INSECURE; default true (loopback collectors)
@@ -73,6 +80,8 @@ func Load() (*Config, error) {
 		MaxWebSocketConnsPerUser:   getEnvInt("MAX_WEBSOCKET_CONNS_PER_USER", 20),
 
 		PreviewIdleDays: getEnvInt("PREVIEW_IDLE_DAYS", 7),
+
+		SkipMigrations: getEnvBool("PAAS_SKIP_MIGRATIONS", false),
 
 		OTLPEndpoint: getEnv("OTEL_EXPORTER_OTLP_ENDPOINT", ""),
 		OTLPInsecure: getEnvBool("OTEL_EXPORTER_OTLP_INSECURE", true),

@@ -70,7 +70,9 @@ func New(cfg *config.Config) (*App, error) {
 		return nil, fmt.Errorf("connect to database: %w", err)
 	}
 
-	if err := store.RunMigrations(cfg.DatabaseURL, migrations.Files); err != nil {
+	if cfg.SkipMigrations {
+		slog.Warn("PAAS_SKIP_MIGRATIONS=true — auto-migration disabled, schema may be ahead or behind binary expectations")
+	} else if err := store.RunMigrations(cfg.DatabaseURL, migrations.Files); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("run migrations: %w", err)
 	}

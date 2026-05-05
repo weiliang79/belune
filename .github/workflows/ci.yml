@@ -31,6 +31,40 @@ jobs:
       - name: Test
         run: go test -short ./...
 
+  migrations:
+    name: Migrations (fresh DB)
+    runs-on: ubuntu-latest
+    needs: backend
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: paas
+          POSTGRES_PASSWORD: paas
+          POSTGRES_DB: paas
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U paas"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    defaults:
+      run:
+        working-directory: apps/api
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: apps/api/go.mod
+          cache-dependency-path: apps/api/go.sum
+
+      - name: Apply all migrations on a fresh database
+        env:
+          DATABASE_URL: postgres://paas:paas@localhost:5432/paas?sslmode=disable
+        run: go run ./cmd/migrate-check
+
   frontend:
     name: Frontend (TypeScript)
     runs-on: ubuntu-latest
@@ -59,7 +93,7 @@ jobs:
   docker-build:
     name: Docker build (smoke test)
     runs-on: ubuntu-latest
-    needs: [backend, frontend]
+    needs: [backend, frontend, migrations]
     if: github.event_name == 'push'
 
     steps:
