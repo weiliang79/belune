@@ -23,6 +23,13 @@ import (
 
 const labelApplicationID = "application-id"
 
+// maxConcurrentWatchers caps how many container log streams the collector
+// will track concurrently. Each watcher holds a Docker log stream + a
+// goroutine, so an unbounded set could exhaust file descriptors on a host
+// running hundreds of containers. The cap is intentionally generous: typical
+// single-host PaaS instances run dozens of apps, not hundreds.
+const maxConcurrentWatchers = 200
+
 // Collector watches running containers and persists their logs.
 type Collector struct {
 	runtime    runtime.ContainerRuntime
@@ -30,6 +37,7 @@ type Collector struct {
 	rdb        *redis.Client
 	mu         sync.Mutex
 	watchers   map[string]context.CancelFunc // containerID → cancel
+	maxWatch   int
 	batchSize  int
 	flushEvery time.Duration
 }
@@ -41,6 +49,7 @@ func New(rt runtime.ContainerRuntime, queries *generated.Queries, rdb *redis.Cli
 		queries:    queries,
 		rdb:        rdb,
 		watchers:   make(map[string]context.CancelFunc),
+		maxWatch:   maxConcurrentWatchers,
 		batchSize:  50,
 		flushEvery: 2 * time.Second,
 	}
@@ -93,14 +102,21 @@ func (c *Collector) sync(ctx context.Context) {
 
 		c.mu.Lock()
 		_, watching := c.watchers[ctr.ID]
+		atCap := !watching && len(c.watchers) >= c.maxWatch
+		var watchCtx context.Context
+		var cancel context.CancelFunc
+		if !watching && !atCap {
+			watchCtx, cancel = context.WithCancel(ctx)
+			c.watchers[ctr.ID] = cancel
+		}
 		c.mu.Unlock()
 
+		if atCap {
+			slog.Warn("log collector: watcher cap reached, skipping container",
+				"container", ctr.Name, "cap", c.maxWatch)
+			continue
+		}
 		if !watching {
-			watchCtx, cancel := context.WithCancel(ctx)
-			c.mu.Lock()
-			c.watchers[ctr.ID] = cancel
-			c.mu.Unlock()
-
 			ctrCopy := ctr
 			go func() {
 				defer func() {
@@ -258,7 +274,11 @@ func (c *Collector) watchContainer(ctx context.Context, ctr runtime.ContainerInf
 					break drainLoop
 				}
 			}
-			flush(context.Background())
+			// Use a bounded shutdown context so the final flush cannot hang
+			// indefinitely on a slow DB while the collector is exiting.
+			flushCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			flush(flushCtx)
+			cancel()
 			return
 		}
 	}

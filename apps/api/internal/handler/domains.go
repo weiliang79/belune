@@ -248,11 +248,11 @@ func (h *Handler) UpdateDomain(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Rebuild proxy route: remove old hostname, add new config
-	if oldDomain.Hostname != req.Hostname {
-		_ = h.proxy.RemoveRoute(r.Context(), oldDomain.Hostname)
-	} else {
-		_ = h.proxy.RemoveRoute(r.Context(), req.Hostname)
+	// Rebuild proxy route: remove old hostname (which may equal new), then
+	// AddRoute below installs the fresh config. Failure here is logged but
+	// non-fatal — a stale route is preferable to a 500 on the update endpoint.
+	if err := h.proxy.RemoveRoute(r.Context(), oldDomain.Hostname); err != nil {
+		slog.Warn("update domain: failed to remove stale proxy route", "hostname", oldDomain.Hostname, "error", err)
 	}
 
 	// Resolve container name and port for the proxy route
@@ -441,8 +441,10 @@ func (h *Handler) rebuildDomainRoute(r *http.Request, domainID pgtype.UUID) {
 	appIDStr := uuidToString(domain.ApplicationID)
 	containerName := naming.ContainerName(row.ProjectSlug, row.Slug, appIDStr)
 
-	_ = h.proxy.RemoveRoute(r.Context(), domain.Hostname)
-	_ = h.proxy.AddRoute(r.Context(), proxy.RouteConfig{
+	if err := h.proxy.RemoveRoute(r.Context(), domain.Hostname); err != nil {
+		slog.Warn("rebuildDomainRoute: failed to remove proxy route", "hostname", domain.Hostname, "error", err)
+	}
+	if err := h.proxy.AddRoute(r.Context(), proxy.RouteConfig{
 		Hostname:       domain.Hostname,
 		TargetURL:      fmt.Sprintf("http://%s:%d", containerName, port),
 		TLS:            domain.SslEnabled,
@@ -453,7 +455,9 @@ func (h *Handler) rebuildDomainRoute(r *http.Request, domainID pgtype.UUID) {
 		KeyPath:        domain.KeyPath.String,
 		Features:       features,
 		AdvancedConfig: domain.AdvancedConfig,
-	})
+	}); err != nil {
+		slog.Warn("rebuildDomainRoute: failed to add proxy route", "hostname", domain.Hostname, "error", err)
+	}
 }
 
 func (h *Handler) RemoveDomain(w http.ResponseWriter, r *http.Request) {

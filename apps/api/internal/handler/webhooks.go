@@ -56,10 +56,15 @@ func (h *Handler) HandleWebhookPush(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if len(applications) == 0 {
-		// Also try with .git suffix
-		applications, _ = h.queries.ListApplicationsBySourceRepo(r.Context(), pgtype.Text{
+		// Also try with .git suffix — some webhook providers preserve the
+		// trailing .git that we strip during normalisation.
+		var fallbackErr error
+		applications, fallbackErr = h.queries.ListApplicationsBySourceRepo(r.Context(), pgtype.Text{
 			String: normalized + ".git", Valid: true,
 		})
+		if fallbackErr != nil {
+			slog.Warn("webhook: .git suffix fallback query failed", "repo", normalized, "error", fallbackErr)
+		}
 	}
 
 	if len(applications) == 0 {

@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -121,6 +122,12 @@ func (h *Handler) HandleTerminalWebSocket(w http.ResponseWriter, r *http.Request
 		slog.Error("terminal ws: accept failed", "error", err)
 		return
 	}
+	// Tie both directions to a shared cancellation. Whichever side exits
+	// first (WS closed, exec stream closed, request cancelled) cancels the
+	// other so the input goroutine cannot outlive the handler.
+	ctx, cancel := context.WithCancel(r.Context())
+	defer cancel()
+
 	defer func() {
 		conn.Close(websocket.StatusNormalClosure, "")
 		startedAt := s.CreatedAt
@@ -132,10 +139,9 @@ func (h *Handler) HandleTerminalWebSocket(w http.ResponseWriter, r *http.Request
 		})
 	}()
 
-	ctx := r.Context()
-
 	// ws → exec stdin: read from WebSocket and write to container
 	go func() {
+		defer cancel()
 		defer s.Close()
 		for {
 			var msg termMsg

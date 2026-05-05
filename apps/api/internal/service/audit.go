@@ -4,13 +4,34 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
+	"regexp"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/ungweiliang/selfhost-paas/internal/pkg/redact"
 	"github.com/ungweiliang/selfhost-paas/internal/store/generated"
 )
 
-const auditBufferSize = 256
+const (
+	auditBufferSize = 256
+	// auditEnqueueTimeout caps how long Log() will wait for buffer space
+	// before falling back to a direct DB insert. Keeps the caller from
+	// blocking the request indefinitely under back-pressure.
+	auditEnqueueTimeout = 50 * time.Millisecond
+	// auditDrainTimeout bounds the synchronous drain when Run() exits so
+	// shutdown doesn't hang on a slow database.
+	auditDrainTimeout = 5 * time.Second
+	// auditSyncInsertTimeout bounds direct-insert fallbacks invoked from
+	// Log() when the buffer is full.
+	auditSyncInsertTimeout = 2 * time.Second
+)
+
+// sensitiveDetailKey matches map keys that should never be persisted in
+// audit_logs.details. Match is case-insensitive on the whole key. Compared
+// against keys, not values — value-side scrubbing is handled by redact.Error
+// applied to free-text strings.
+var sensitiveDetailKey = regexp.MustCompile(`(?i)password|token|secret|credential|signature|api[_-]?key|webhook[_-]?secret|authorization|cookie`)
 
 // auditEntry is an internal type for the buffered channel.
 type auditEntry struct {
@@ -47,14 +68,21 @@ func (s *AuditService) Run(ctx context.Context) {
 			}
 			s.insert(ctx, entry)
 		case <-ctx.Done():
-			// Drain remaining entries
+			// Drain remaining entries on a bounded shutdown context so a
+			// stalled DB cannot hold up process exit indefinitely.
+			drainCtx, cancel := context.WithTimeout(context.Background(), auditDrainTimeout)
+			defer cancel()
 			for {
 				select {
 				case entry, ok := <-s.ch:
 					if !ok {
 						return
 					}
-					s.insert(context.Background(), entry)
+					s.insert(drainCtx, entry)
+				case <-drainCtx.Done():
+					slog.Warn("audit: drain timeout exceeded, dropping remaining entries",
+						"buffered", len(s.ch))
+					return
 				default:
 					return
 				}
@@ -87,7 +115,14 @@ func (s *AuditService) insert(ctx context.Context, entry auditEntry) {
 	}
 }
 
-// Log sends an audit entry to the buffered channel (non-blocking).
+// Log sends an audit entry to the buffered channel.
+//
+// Back-pressure handling: a non-blocking send is tried first; if the buffer
+// is full, the caller waits up to auditEnqueueTimeout for space; if still
+// full, the entry is written synchronously to the DB on a bounded context.
+// Audit entries must never silently disappear, so a slow consumer turns into
+// caller back-pressure rather than data loss.
+//
 // Caller provides userID and ipAddress directly (avoids import cycle with middleware).
 func (s *AuditService) Log(userID, ipAddress, action, resourceType, resourceID string, details map[string]any) {
 	entry := auditEntry{
@@ -95,13 +130,56 @@ func (s *AuditService) Log(userID, ipAddress, action, resourceType, resourceID s
 		Action:       action,
 		ResourceType: resourceType,
 		ResourceID:   resourceID,
-		Details:      details,
+		Details:      redactDetails(details),
 		IPAddress:    ipAddress,
 	}
 
 	select {
 	case s.ch <- entry:
+		return
 	default:
-		slog.Warn("audit: channel full, dropping entry", "action", action)
 	}
+
+	// Buffer full — wait briefly for space before falling back.
+	timer := time.NewTimer(auditEnqueueTimeout)
+	defer timer.Stop()
+	select {
+	case s.ch <- entry:
+		return
+	case <-timer.C:
+	}
+
+	// Fallback: synchronous write so the audit record is preserved.
+	slog.Warn("audit: channel full, writing synchronously", "action", action)
+	ctx, cancel := context.WithTimeout(context.Background(), auditSyncInsertTimeout)
+	defer cancel()
+	s.insert(ctx, entry)
+}
+
+// redactDetails returns a deep-copy of details with sensitive keys masked
+// and free-text string values run through redact.Error so any embedded
+// credentials in URLs / headers are scrubbed before persistence.
+//
+// Redaction happens at write time (not just at log time) so the audit_logs
+// table itself is safe to dump or replicate without re-leaking secrets.
+func redactDetails(in map[string]any) map[string]any {
+	if in == nil {
+		return nil
+	}
+	out := make(map[string]any, len(in))
+	for k, v := range in {
+		if sensitiveDetailKey.MatchString(k) {
+			out[k] = "[REDACTED]"
+			continue
+		}
+		switch tv := v.(type) {
+		case string:
+			out[k] = redact.Error(tv)
+		case map[string]any:
+			out[k] = redactDetails(tv)
+		default:
+			out[k] = v
+		}
+	}
+	return out
 }

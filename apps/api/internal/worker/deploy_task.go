@@ -468,8 +468,15 @@ func (h *TaskHandler) createAndStart(ctx context.Context, dc *deployContext) err
 	}
 
 	if err := h.Runtime.StartContainer(ctx, containerID); err != nil {
-		// Container created but not started — remove it before returning
-		h.Runtime.RemoveContainer(context.Background(), containerID)
+		// Container created but not started — remove it before returning. Use a
+		// fresh bounded context: the parent ctx may already be cancelled or
+		// near-deadline, and we don't want cleanup to be skipped because of it.
+		cleanCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		if rmErr := h.Runtime.RemoveContainer(cleanCtx, containerID); rmErr != nil {
+			slog.Warn("createAndStart: failed to remove container after start failure",
+				"container", containerID, "error", rmErr)
+		}
+		cancel()
 		return fmt.Errorf("start container: %w", err)
 	}
 
