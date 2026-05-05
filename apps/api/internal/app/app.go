@@ -27,6 +27,7 @@ import (
 	"github.com/ungweiliang/selfhost-paas/internal/pkg/metrics"
 	"github.com/ungweiliang/selfhost-paas/internal/proxy"
 	"github.com/ungweiliang/selfhost-paas/internal/proxy/caddy"
+	"github.com/ungweiliang/selfhost-paas/internal/quota"
 	"github.com/ungweiliang/selfhost-paas/internal/runtime/docker"
 	"github.com/ungweiliang/selfhost-paas/internal/server"
 	"github.com/ungweiliang/selfhost-paas/internal/service"
@@ -115,6 +116,7 @@ func New(cfg *config.Config) (*App, error) {
 	hub := ws.NewHub(cfg.MaxWebSocketConnsPerUser)
 
 	appSvc := service.NewApplicationService(db, queries, dockerClient, cfg.Keyring)
+	quotaSvc := quota.NewService(queries)
 	taskHandler := &worker.TaskHandler{
 		Runtime:        dockerClient,
 		Proxy:          caddyClient,
@@ -126,6 +128,7 @@ func New(cfg *config.Config) (*App, error) {
 		Config:         cfg,
 		MetricsService: metricsSvc,
 		AppService:     appSvc,
+		QuotaService:   quotaSvc,
 	}
 
 	w := worker.New(redisOpt, taskHandler)

@@ -14,6 +14,7 @@ import (
 	"github.com/ungweiliang/selfhost-paas/internal/config"
 	"github.com/ungweiliang/selfhost-paas/internal/pkg/crypto"
 	"github.com/ungweiliang/selfhost-paas/internal/proxy"
+	"github.com/ungweiliang/selfhost-paas/internal/quota"
 	"github.com/ungweiliang/selfhost-paas/internal/runtime"
 	"github.com/ungweiliang/selfhost-paas/internal/service"
 	"github.com/ungweiliang/selfhost-paas/internal/store/generated"
@@ -31,6 +32,7 @@ type TaskHandler struct {
 	Config         *config.Config
 	MetricsService *service.MetricsService
 	AppService     *service.ApplicationService
+	QuotaService   *quota.Service
 }
 
 type Worker struct {

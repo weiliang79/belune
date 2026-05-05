@@ -104,6 +104,35 @@ func (s *Service) UsageForUser(ctx context.Context, userID pgtype.UUID) (Usage, 
 	return Usage{Applications: count, CPU: sums.CpuTotal, MemoryBytes: sums.MemoryTotalBytes}, nil
 }
 
+// CheckCurrentUsage verifies that the current aggregate usage for the project
+// and owning user is within their configured limits. Unlike
+// CheckApplicationCreate, it adds no delta: it answers "is the existing
+// fleet still inside quota?" — used by the deploy worker as defence in depth
+// after a quota was tightened post-creation.
+func (s *Service) CheckCurrentUsage(ctx context.Context, projectID, userID pgtype.UUID) error {
+	projLimits, err := s.LimitsFor(ctx, ScopeProject, projectID)
+	if err != nil {
+		return err
+	}
+	projUsage, err := s.UsageForProject(ctx, projectID)
+	if err != nil {
+		return err
+	}
+	if err := checkDelta(ScopeProject, projLimits, projUsage, 0, 0, 0); err != nil {
+		return err
+	}
+
+	userLimits, err := s.LimitsFor(ctx, ScopeUser, userID)
+	if err != nil {
+		return err
+	}
+	userUsage, err := s.UsageForUser(ctx, userID)
+	if err != nil {
+		return err
+	}
+	return checkDelta(ScopeUser, userLimits, userUsage, 0, 0, 0)
+}
+
 // CheckApplicationCreate validates that adding an application with the given
 // cpu/memory request would not exceed either the project or the owning user's
 // quota. A zero cpuDelta or memoryDelta still consumes one application slot.

@@ -104,6 +104,11 @@ func (h *Handler) UpsertQuota(w http.ResponseWriter, r *http.Request) {
 	}
 	apps, cpu, mem := quota.LimitsToRow(limits)
 
+	// Capture the previous limits so the audit row records the diff. A
+	// missing prior row means this upsert is creating the quota for the
+	// first time; we record it as nil-valued in 'old'.
+	oldLimits, _ := h.quotaSvc.LimitsFor(r.Context(), scope, scopeID)
+
 	row, err := h.queries.UpsertQuota(r.Context(), generated.UpsertQuotaParams{
 		Scope:           scope,
 		ScopeID:         scopeID,
@@ -116,7 +121,10 @@ func (h *Handler) UpsertQuota(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.audit(r, "upsert_quota", "quota", uuidToString(row.ID), map[string]any{
-		"scope": scope, "scope_id": uuidToString(scopeID),
+		"scope":    scope,
+		"scope_id": uuidToString(scopeID),
+		"old":      auditLimits(oldLimits),
+		"new":      auditLimits(limits),
 	})
 
 	view, err := h.buildQuotaView(r, scope, scopeID, quota.LimitsFromRow(row))
@@ -141,12 +149,40 @@ func (h *Handler) DeleteQuota(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "scope must be 'user' or 'project'")
 		return
 	}
+	// Capture limits before deletion so the audit row preserves what was
+	// removed (the row itself is gone from the DB after this call).
+	prior, _ := h.quotaSvc.LimitsFor(r.Context(), scope, scopeID)
+
 	if err := h.queries.DeleteQuota(r.Context(), generated.DeleteQuotaParams{Scope: scope, ScopeID: scopeID}); err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to delete quota")
 		return
 	}
-	h.audit(r, "delete_quota", "quota", uuidToString(scopeID), map[string]any{"scope": scope})
+	h.audit(r, "delete_quota", "quota", uuidToString(scopeID), map[string]any{
+		"scope": scope,
+		"old":   auditLimits(prior),
+	})
 	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
+}
+
+// auditLimits flattens quota.Limits into a JSON-friendly map. Nil pointers
+// become nil values so the audit row clearly distinguishes "no cap" (null)
+// from "cap of 0" (the actual integer).
+func auditLimits(l quota.Limits) map[string]any {
+	out := map[string]any{
+		"max_applications": nil,
+		"max_cpu":          nil,
+		"max_memory_mb":    nil,
+	}
+	if l.MaxApplications != nil {
+		out["max_applications"] = *l.MaxApplications
+	}
+	if l.MaxCPU != nil {
+		out["max_cpu"] = *l.MaxCPU
+	}
+	if l.MaxMemoryMB != nil {
+		out["max_memory_mb"] = *l.MaxMemoryMB
+	}
+	return out
 }
 
 func (h *Handler) buildQuotaView(r *http.Request, scope string, scopeID pgtype.UUID, limits quota.Limits) (quotaView, error) {

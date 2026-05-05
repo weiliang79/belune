@@ -121,6 +121,19 @@ func (h *TaskHandler) HandleDeployTask(ctx context.Context, t *asynq.Task) error
 		return fmt.Errorf("load application (permanent): %w: %w", err, asynq.SkipRetry)
 	}
 
+	// Stage 1.5: defence-in-depth quota check. Quotas are validated at
+	// application-creation time, but limits may have been tightened since,
+	// or new previews may have pushed the parent's project over its cap. We
+	// verify *current* aggregate usage is still within scope here so a
+	// shrunken quota stops further deploys instead of silently overflowing.
+	if err := runStage(ctx, "deploy.check_quota", func(ctx context.Context) error {
+		return h.checkDeployQuota(ctx, dc)
+	}); err != nil {
+		h.failDeployment(ctx, dc.deploymentID, fmt.Sprintf("quota check: %v", err))
+		recordSpanErr(rootSpan, err)
+		return fmt.Errorf("quota check (permanent): %w: %w", err, asynq.SkipRetry)
+	}
+
 	// Stage 2 & 3: idempotent cleanup and network setup — log-only on error
 	_ = runStage(ctx, "deploy.cleanup_existing", func(ctx context.Context) error {
 		h.cleanupExisting(ctx, dc)
@@ -501,6 +514,24 @@ func (h *TaskHandler) createAndStart(ctx context.Context, dc *deployContext) err
 		}
 	})
 	return nil
+}
+
+// checkDeployQuota re-verifies project + owning-user quota right before a
+// deploy proceeds. Skipped silently when no quota service is wired (tests).
+// Quota errors are permanent for this deploy: retrying would not help, the
+// admin must adjust limits or the user must shrink their fleet.
+func (h *TaskHandler) checkDeployQuota(ctx context.Context, dc *deployContext) error {
+	if h.QuotaService == nil {
+		return nil
+	}
+	userID, err := h.Queries.GetApplicationOwnerUserID(ctx, dc.applicationID)
+	if err != nil {
+		// Owner lookup failure shouldn't block deploys — log and proceed.
+		slog.Warn("quota: failed to resolve application owner, skipping check",
+			"application_id", dc.payload.ApplicationID, "error", err)
+		return nil
+	}
+	return h.QuotaService.CheckCurrentUsage(ctx, dc.app.ProjectID, userID)
 }
 
 // healthVerifyTimeout is the upper bound for post-deploy probing.

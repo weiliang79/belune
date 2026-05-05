@@ -327,6 +327,31 @@ func (h *Handler) ensurePreviewApp(ctx context.Context, parent generated.Applica
 		return generated.Application{}, fmt.Errorf("branch %q slugifies to empty", branch)
 	}
 
+	// Quota gate: previews count toward the parent project's caps. If this
+	// branch already has a preview row, FindOrCreatePreview will return it
+	// without creating, so we only validate when materialising a *new* one.
+	if _, lookupErr := h.queries.GetPreviewByParentBranch(ctx, generated.GetPreviewByParentBranchParams{
+		ParentApplicationID: pgtype.UUID{Bytes: parent.ID.Bytes, Valid: true},
+		Branch:              pgtype.Text{String: branch, Valid: true},
+	}); errors.Is(lookupErr, pgx.ErrNoRows) {
+		if h.quotaSvc != nil {
+			project, perr := h.queries.GetProject(ctx, parent.ProjectID)
+			if perr != nil {
+				return generated.Application{}, fmt.Errorf("fetch project for preview quota: %w", perr)
+			}
+			if qerr := h.quotaSvc.CheckApplicationCreate(ctx, parent.ProjectID, project.UserID, parent.CpuLimit, parent.MemoryLimit); qerr != nil {
+				return generated.Application{}, qerr
+			}
+		}
+	} else if lookupErr != nil {
+		// Treat lookup failures as "let FindOrCreatePreview decide" — it
+		// will surface the same error if it persists. We don't want a
+		// transient DB blip to bypass the quota check.
+		slog.Warn("webhook: preview lookup failed before quota check",
+			"parent", parent.Name, "branch", branch, "error", lookupErr,
+		)
+	}
+
 	child, created, err := h.appService.FindOrCreatePreview(
 		ctx, parent, parentRow.ProjectSlug, parentBaseSlug, branch, branchSlug,
 	)
