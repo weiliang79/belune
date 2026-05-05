@@ -180,10 +180,10 @@ function TerminalPage() {
         <TerminalSquare className="text-muted-foreground h-4 w-4" />
         <Select
           value={shell}
-          onValueChange={setShell}
+          onValueChange={(v) => v && setShell(v)}
           disabled={isConnected || isConnecting}
         >
-          <SelectTrigger className="w-28 h-8 text-sm">
+          <SelectTrigger className="w-28 h-8 text-sm" aria-label="Shell">
             <SelectValue placeholder="Shell" />
           </SelectTrigger>
           <SelectContent>
@@ -214,7 +214,10 @@ function TerminalPage() {
           </Button>
         )}
 
-        <span className={`text-xs ${
+        <span
+          role="status"
+          aria-live="polite"
+          className={`text-xs ${
           isConnected ? "text-green-500" :
           isConnecting ? "text-yellow-500" :
           connState === "error" ? "text-destructive" :
@@ -231,6 +234,8 @@ function TerminalPage() {
       {/* Terminal area */}
       <div
         ref={containerRef}
+        role="application"
+        aria-label="Application shell terminal"
         className="flex-1 overflow-hidden rounded border border-zinc-800 bg-zinc-950"
         style={{ minHeight: 0 }}
       />

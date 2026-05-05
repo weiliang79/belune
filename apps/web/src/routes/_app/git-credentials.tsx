@@ -1,5 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
+import { useForm, useStore } from "@tanstack/react-form";
+import { z } from "zod";
 import { RouteError } from "@/lib/components/route-error";
 import {
   useGitCredentials,
@@ -218,116 +220,171 @@ function CredentialForm({
   credential: GitCredential | null;
   onSuccess: () => void;
 }) {
-  const [name, setName] = useState(credential?.name ?? "");
-  const [provider, setProvider] = useState(credential?.provider ?? "github");
-  const [token, setToken] = useState("");
-  const [username, setUsername] = useState(credential?.username ?? "");
   const createCred = useCreateGitCredential();
   const updateCred = useUpdateGitCredential();
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!name.trim()) {
-      toast.error("Name is required");
-      return;
-    }
-    if (!credential && !token.trim()) {
-      toast.error("Token is required");
-      return;
-    }
+  const form = useForm({
+    defaultValues: {
+      name: credential?.name ?? "",
+      provider: credential?.provider ?? "github",
+      token: "",
+      username: credential?.username ?? "",
+    },
+    onSubmit: async ({ value }) => {
+      const name = value.name.trim();
+      const token = value.token.trim();
+      const username = value.username.trim();
+      if (credential) {
+        toast.promise(
+          updateCred
+            .mutateAsync({
+              id: credential.id,
+              name,
+              provider: value.provider,
+              token: token || undefined,
+              username,
+            })
+            .then(onSuccess),
+          {
+            loading: "Updating...",
+            success: "Credential updated",
+            error: (err) => err.message,
+          },
+        );
+      } else {
+        toast.promise(
+          createCred
+            .mutateAsync({
+              name,
+              provider: value.provider,
+              token,
+              username,
+            })
+            .then(onSuccess),
+          {
+            loading: "Creating...",
+            success: "Credential created",
+            error: (err) => err.message,
+          },
+        );
+      }
+    },
+  });
 
-    if (credential) {
-      toast.promise(
-        updateCred
-          .mutateAsync({
-            id: credential.id,
-            name: name.trim(),
-            provider,
-            token: token.trim() || undefined,
-            username: username.trim(),
-          })
-          .then(onSuccess),
-        {
-          loading: "Updating...",
-          success: "Credential updated",
-          error: (err) => err.message,
-        },
-      );
-    } else {
-      toast.promise(
-        createCred
-          .mutateAsync({
-            name: name.trim(),
-            provider,
-            token: token.trim(),
-            username: username.trim(),
-          })
-          .then(onSuccess),
-        {
-          loading: "Creating...",
-          success: "Credential created",
-          error: (err) => err.message,
-        },
-      );
-    }
-  };
+  const provider = useStore(form.store, (s) => s.values.provider);
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
-      <div className="space-y-2">
-        <Label>Name</Label>
-        <Input
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="e.g. My GitHub Token"
-        />
-      </div>
-      <div className="space-y-2">
-        <Label>Provider</Label>
-        <Select value={provider} onValueChange={setProvider}>
-          <SelectTrigger>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {PROVIDERS.map((p) => (
-              <SelectItem key={p.value} value={p.value}>
-                {p.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-      <div className="space-y-2">
-        <Label>Token / Password</Label>
-        <Input
-          type="password"
-          value={token}
-          onChange={(e) => setToken(e.target.value)}
-          placeholder={credential ? "Leave empty to keep current" : "Personal access token"}
-          className="font-mono"
-        />
-      </div>
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        form.handleSubmit();
+      }}
+      className="space-y-4"
+    >
+      <form.Field
+        name="name"
+        validators={{
+          onChange: z.string().trim().min(1, "Name is required"),
+        }}
+        children={(field) => (
+          <div className="space-y-2">
+            <Label>Name</Label>
+            <Input
+              value={field.state.value}
+              onBlur={field.handleBlur}
+              onChange={(e) => field.handleChange(e.target.value)}
+              placeholder="e.g. My GitHub Token"
+            />
+            {field.state.meta.errors.length > 0 && (
+              <p className="text-destructive text-sm">
+                {typeof field.state.meta.errors[0] === "string"
+                  ? field.state.meta.errors[0]
+                  : field.state.meta.errors[0]?.message}
+              </p>
+            )}
+          </div>
+        )}
+      />
+      <form.Field
+        name="provider"
+        children={(field) => (
+          <div className="space-y-2">
+            <Label>Provider</Label>
+            <Select
+              value={field.state.value}
+              onValueChange={(v) => v && field.handleChange(v as typeof field.state.value)}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {PROVIDERS.map((p) => (
+                  <SelectItem key={p.value} value={p.value}>
+                    {p.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+      />
+      <form.Field
+        name="token"
+        validators={{
+          onChange: credential
+            ? z.string()
+            : z.string().trim().min(1, "Token is required"),
+        }}
+        children={(field) => (
+          <div className="space-y-2">
+            <Label>Token / Password</Label>
+            <Input
+              type="password"
+              value={field.state.value}
+              onBlur={field.handleBlur}
+              onChange={(e) => field.handleChange(e.target.value)}
+              placeholder={
+                credential
+                  ? "Leave empty to keep current"
+                  : "Personal access token"
+              }
+              className="font-mono"
+            />
+            {field.state.meta.errors.length > 0 && (
+              <p className="text-destructive text-sm">
+                {typeof field.state.meta.errors[0] === "string"
+                  ? field.state.meta.errors[0]
+                  : field.state.meta.errors[0]?.message}
+              </p>
+            )}
+          </div>
+        )}
+      />
       {(provider === "bitbucket" || provider === "generic") && (
-        <div className="space-y-2">
-          <Label>Username</Label>
-          <Input
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-            placeholder="Username for authentication"
-          />
-        </div>
+        <form.Field
+          name="username"
+          children={(field) => (
+            <div className="space-y-2">
+              <Label>Username</Label>
+              <Input
+                value={field.state.value}
+                onBlur={field.handleBlur}
+                onChange={(e) => field.handleChange(e.target.value)}
+                placeholder="Username for authentication"
+              />
+            </div>
+          )}
+        />
       )}
-      <Button
-        type="submit"
-        disabled={createCred.isPending || updateCred.isPending}
-        className="w-full"
-      >
-        {createCred.isPending || updateCred.isPending
-          ? "Saving..."
-          : credential
-            ? "Update"
-            : "Create"}
-      </Button>
+      <form.Subscribe
+        selector={(s) => s.isSubmitting}
+        children={(isSubmitting) => (
+          <Button type="submit" disabled={isSubmitting} className="w-full">
+            {isSubmitting ? "Saving..." : credential ? "Update" : "Create"}
+          </Button>
+        )}
+      />
     </form>
   );
 }

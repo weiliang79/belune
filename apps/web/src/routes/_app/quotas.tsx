@@ -1,6 +1,8 @@
 import { useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { toast } from "sonner";
+import { useForm, useStore } from "@tanstack/react-form";
+import { z } from "zod";
 import { RouteError } from "@/lib/components/route-error";
 import { useQuotas, useUpsertQuota, useDeleteQuota } from "@/lib/hooks/use-quotas";
 import { useUsers } from "@/lib/hooks/use-users";
@@ -221,6 +223,26 @@ function UsageCell({
   );
 }
 
+// Quota fields are stored as strings ("" = unlimited) and parsed at submit
+// time. Validators run on the string input directly so they fit TanStack
+// Form's StandardSchemaV1 contract; numeric coercion happens after .refine.
+const optionalInt = z
+  .string()
+  .refine((v) => v === "" || /^\d+$/.test(v), {
+    message: "must be a non-negative integer or blank",
+  });
+const optionalNumber = z
+  .string()
+  .refine((v) => v === "" || (!isNaN(Number(v)) && Number(v) >= 0), {
+    message: "must be a non-negative number or blank",
+  });
+
+function parseLimit(value: string | number): number | null {
+  if (value === "" || value === null || value === undefined) return null;
+  const n = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
 function QuotaDialog({
   open,
   onOpenChange,
@@ -234,54 +256,50 @@ function QuotaDialog({
   const { data: users } = useUsers();
   const { data: projects } = useProjects();
 
-  const [scope, setScope] = useState<QuotaScope>(existing?.scope ?? "user");
-  const [scopeId, setScopeId] = useState(existing?.scope_id ?? "");
-  const [maxApps, setMaxApps] = useState(
-    existing?.limits.max_applications != null ? String(existing.limits.max_applications) : "",
-  );
-  const [maxCpu, setMaxCpu] = useState(
-    existing?.limits.max_cpu != null ? String(existing.limits.max_cpu) : "",
-  );
-  const [maxMemMb, setMaxMemMb] = useState(
-    existing?.limits.max_memory_mb != null ? String(existing.limits.max_memory_mb) : "",
-  );
+  const form = useForm({
+    defaultValues: {
+      scope: (existing?.scope ?? "user") as QuotaScope,
+      scopeId: existing?.scope_id ?? "",
+      maxApps:
+        existing?.limits.max_applications != null
+          ? String(existing.limits.max_applications)
+          : "",
+      maxCpu:
+        existing?.limits.max_cpu != null ? String(existing.limits.max_cpu) : "",
+      maxMemMb:
+        existing?.limits.max_memory_mb != null
+          ? String(existing.limits.max_memory_mb)
+          : "",
+    },
+    onSubmit: async ({ value }) => {
+      const limits: QuotaLimits = {
+        max_applications: parseLimit(value.maxApps),
+        max_cpu: parseLimit(value.maxCpu),
+        max_memory_mb: parseLimit(value.maxMemMb),
+      };
+      toast.promise(
+        upsert
+          .mutateAsync({ scope: value.scope, scopeId: value.scopeId, limits })
+          .then(() => onOpenChange(false)),
+        {
+          loading: "Saving quota...",
+          success: "Quota saved",
+          error: (err) => err.message,
+        },
+      );
+    },
+  });
 
+  const scope = useStore(form.store, (s) => s.values.scope);
   const targetOptions = useMemo(() => {
     if (scope === "user") {
       return (users ?? []).map((u) => ({ id: u.id, label: u.email }));
     }
-    return (projects ?? []).map((p) => ({ id: p.id, label: `${p.name} (${p.slug})` }));
+    return (projects ?? []).map((p) => ({
+      id: p.id,
+      label: `${p.name} (${p.slug})`,
+    }));
   }, [scope, users, projects]);
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!scopeId) {
-      toast.error("Pick a target");
-      return;
-    }
-    const limits: QuotaLimits = {
-      max_applications: maxApps === "" ? null : Number.parseInt(maxApps, 10),
-      max_cpu: maxCpu === "" ? null : Number.parseFloat(maxCpu),
-      max_memory_mb: maxMemMb === "" ? null : Number.parseInt(maxMemMb, 10),
-    };
-    if (
-      (limits.max_applications != null && !Number.isFinite(limits.max_applications)) ||
-      (limits.max_cpu != null && !Number.isFinite(limits.max_cpu)) ||
-      (limits.max_memory_mb != null && !Number.isFinite(limits.max_memory_mb))
-    ) {
-      toast.error("Limits must be numbers");
-      return;
-    }
-
-    toast.promise(
-      upsert.mutateAsync({ scope, scopeId, limits }).then(() => onOpenChange(false)),
-      {
-        loading: "Saving quota...",
-        success: "Quota saved",
-        error: (err) => err.message,
-      },
-    );
-  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -292,76 +310,154 @@ function QuotaDialog({
             Leave a field blank to remove that cap (unlimited).
           </DialogDescription>
         </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            form.handleSubmit();
+          }}
+          className="space-y-4"
+        >
           {!existing && (
             <>
-              <div className="space-y-2">
-                <Label htmlFor="scope">Scope</Label>
-                <Select value={scope} onValueChange={(v) => { setScope(v as QuotaScope); setScopeId(""); }}>
-                  <SelectTrigger id="scope">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="user">User</SelectItem>
-                    <SelectItem value="project">Project</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="target">Target</Label>
-                <Select value={scopeId} onValueChange={(v) => setScopeId(v ?? "")}>
-                  <SelectTrigger id="target">
-                    <SelectValue placeholder={`Pick a ${scope}`} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {targetOptions.map((o) => (
-                      <SelectItem key={o.id} value={o.id}>
-                        {o.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+              <form.Field
+                name="scope"
+                children={(field) => (
+                  <div className="space-y-2">
+                    <Label htmlFor="scope">Scope</Label>
+                    <Select
+                      value={field.state.value}
+                      onValueChange={(v) => {
+                        field.handleChange(v as QuotaScope);
+                        form.setFieldValue("scopeId", "");
+                      }}
+                    >
+                      <SelectTrigger id="scope">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="user">User</SelectItem>
+                        <SelectItem value="project">Project</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+              />
+              <form.Field
+                name="scopeId"
+                validators={{ onChange: z.string().min(1, "Pick a target") }}
+                children={(field) => (
+                  <div className="space-y-2">
+                    <Label htmlFor="target">Target</Label>
+                    <Select
+                      value={field.state.value}
+                      onValueChange={(v) => field.handleChange(v ?? "")}
+                    >
+                      <SelectTrigger id="target">
+                        <SelectValue placeholder={`Pick a ${scope}`} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {targetOptions.map((o) => (
+                          <SelectItem key={o.id} value={o.id}>
+                            {o.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {field.state.meta.errors.length > 0 && (
+                      <p className="text-destructive text-sm">
+                        {typeof field.state.meta.errors[0] === "string"
+                          ? field.state.meta.errors[0]
+                          : field.state.meta.errors[0]?.message}
+                      </p>
+                    )}
+                  </div>
+                )}
+              />
             </>
           )}
-          <div className="space-y-2">
-            <Label htmlFor="max-apps">Max Applications</Label>
-            <Input
-              id="max-apps"
-              type="number"
-              min="0"
-              value={maxApps}
-              onChange={(e) => setMaxApps(e.target.value)}
-              placeholder="unlimited"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="max-cpu">Max CPU (cores)</Label>
-            <Input
-              id="max-cpu"
-              type="number"
-              min="0"
-              step="0.1"
-              value={maxCpu}
-              onChange={(e) => setMaxCpu(e.target.value)}
-              placeholder="unlimited"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="max-mem">Max Memory (MB)</Label>
-            <Input
-              id="max-mem"
-              type="number"
-              min="0"
-              value={maxMemMb}
-              onChange={(e) => setMaxMemMb(e.target.value)}
-              placeholder="unlimited"
-            />
-          </div>
+          <form.Field
+            name="maxApps"
+            validators={{ onChange: optionalInt }}
+            children={(field) => (
+              <div className="space-y-2">
+                <Label htmlFor="max-apps">Max Applications</Label>
+                <Input
+                  id="max-apps"
+                  type="number"
+                  min="0"
+                  value={field.state.value}
+                  onChange={(e) => field.handleChange(e.target.value)}
+                  placeholder="unlimited"
+                />
+                {field.state.meta.errors.length > 0 && (
+                  <p className="text-destructive text-sm">
+                    {typeof field.state.meta.errors[0] === "string"
+                      ? field.state.meta.errors[0]
+                      : field.state.meta.errors[0]?.message}
+                  </p>
+                )}
+              </div>
+            )}
+          />
+          <form.Field
+            name="maxCpu"
+            validators={{ onChange: optionalNumber }}
+            children={(field) => (
+              <div className="space-y-2">
+                <Label htmlFor="max-cpu">Max CPU (cores)</Label>
+                <Input
+                  id="max-cpu"
+                  type="number"
+                  min="0"
+                  step="0.1"
+                  value={field.state.value}
+                  onChange={(e) => field.handleChange(e.target.value)}
+                  placeholder="unlimited"
+                />
+                {field.state.meta.errors.length > 0 && (
+                  <p className="text-destructive text-sm">
+                    {typeof field.state.meta.errors[0] === "string"
+                      ? field.state.meta.errors[0]
+                      : field.state.meta.errors[0]?.message}
+                  </p>
+                )}
+              </div>
+            )}
+          />
+          <form.Field
+            name="maxMemMb"
+            validators={{ onChange: optionalInt }}
+            children={(field) => (
+              <div className="space-y-2">
+                <Label htmlFor="max-mem">Max Memory (MB)</Label>
+                <Input
+                  id="max-mem"
+                  type="number"
+                  min="0"
+                  value={field.state.value}
+                  onChange={(e) => field.handleChange(e.target.value)}
+                  placeholder="unlimited"
+                />
+                {field.state.meta.errors.length > 0 && (
+                  <p className="text-destructive text-sm">
+                    {typeof field.state.meta.errors[0] === "string"
+                      ? field.state.meta.errors[0]
+                      : field.state.meta.errors[0]?.message}
+                  </p>
+                )}
+              </div>
+            )}
+          />
           <DialogFooter>
-            <Button type="submit" disabled={upsert.isPending}>
-              {upsert.isPending ? "Saving..." : "Save Quota"}
-            </Button>
+            <form.Subscribe
+              selector={(s) => s.isSubmitting}
+              children={(isSubmitting) => (
+                <Button type="submit" disabled={isSubmitting}>
+                  {isSubmitting ? "Saving..." : "Save Quota"}
+                </Button>
+              )}
+            />
           </DialogFooter>
         </form>
       </DialogContent>

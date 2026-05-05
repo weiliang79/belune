@@ -86,16 +86,20 @@ function PreviewsPage() {
               to spin one up.
             </p>
           ) : (
-            <div className="divide-y text-sm">
-              {previewsData.previews.map((preview) => (
+            <div role="list" aria-label="Preview environments" className="divide-y text-sm">
+              {previewsData.previews.map((preview) => {
+                const branchLabel = preview.branch || "unknown";
+                return (
                 <div
                   key={preview.id}
+                  role="listitem"
+                  aria-label={`Preview environment for branch ${branchLabel}`}
                   className="flex items-center justify-between gap-4 py-3"
                 >
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
                       <span className="truncate font-medium">
-                        {preview.branch || "unknown"}
+                        {branchLabel}
                       </span>
                       <StatusBadge status={preview.status} />
                     </div>
@@ -104,6 +108,7 @@ function PreviewsPage() {
                         href={`https://${preview.hostname}`}
                         target="_blank"
                         rel="noopener noreferrer"
+                        aria-label={`Open ${branchLabel} preview at ${preview.hostname} in a new tab`}
                         className="text-muted-foreground truncate font-mono text-xs hover:underline"
                       >
                         {preview.hostname}
@@ -115,7 +120,13 @@ function PreviewsPage() {
                   </div>
                   <AlertDialog>
                     <AlertDialogTrigger
-                      render={<Button size="sm" variant="outline" />}
+                      render={
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          aria-label={`Delete preview for branch ${branchLabel}`}
+                        />
+                      }
                     >
                       Delete
                     </AlertDialogTrigger>
@@ -149,7 +160,8 @@ function PreviewsPage() {
                     </AlertDialogContent>
                   </AlertDialog>
                 </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </CardContent>

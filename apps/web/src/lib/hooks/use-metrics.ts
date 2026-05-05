@@ -58,7 +58,7 @@ export function useHostMetricsStream(enabled: boolean) {
 }
 
 export function useAppMetricsStream(
-  projectId: string,
+  _projectId: string,
   applicationId: string,
   enabled: boolean,
 ) {

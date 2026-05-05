@@ -89,7 +89,8 @@ function LogsPage() {
     if (!data || typeof data !== "object") return;
     const obj = data as { stream?: string; message?: string };
     if (typeof obj.message !== "string") return;
-    const stream = obj.stream === "stderr" ? "stderr" : "stdout";
+    const stream: "stdout" | "stderr" =
+      obj.stream === "stderr" ? "stderr" : "stdout";
 
     // Apply live-side stream filter
     if (streamFilter && stream !== streamFilter) return;

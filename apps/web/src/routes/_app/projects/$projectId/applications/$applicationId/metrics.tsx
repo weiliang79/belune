@@ -103,8 +103,14 @@ function AppChart({
   color?: string;
   formatter: (value: number) => string;
 }) {
+  const last = data.length > 0 ? data[data.length - 1] : null;
+  const lastValue = last
+    ? (last[dataKey as keyof AppMetricPoint] as number | null)
+    : null;
+  const summary =
+    lastValue == null ? "No data yet" : `Latest ${title}: ${formatter(lastValue)}`;
   return (
-    <div>
+    <div role="region" aria-label={title}>
       <p className="mb-2 text-sm font-medium">{title}</p>
       <UPlotAreaChart
         timestamps={data.map((p) => new Date(p.recorded_at).getTime())}
@@ -116,6 +122,9 @@ function AppChart({
         xFormatter={(ts) => formatTime(ts)}
         height={200}
       />
+      <span className="sr-only" aria-live="polite">
+        {summary}
+      </span>
     </div>
   );
 }

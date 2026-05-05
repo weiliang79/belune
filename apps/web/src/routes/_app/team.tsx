@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
+import { useForm } from "@tanstack/react-form";
+import { z } from "zod";
 import { RouteError } from "@/lib/components/route-error";
 import { toast } from "sonner";
 import { useAuthStore } from "@/lib/stores/auth";
@@ -232,37 +234,30 @@ function CreateUserDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [role, setRole] = useState("member");
   const createUser = useCreateUser();
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-
-    if (!email || !password) {
-      toast.error("Email and password are required");
-      return;
-    }
-    if (password.length < 8) {
-      toast.error("Password must be at least 8 characters");
-      return;
-    }
-
-    toast.promise(
-      createUser.mutateAsync({ email, password, role }).then(() => {
-        setEmail("");
-        setPassword("");
-        setRole("member");
-        onOpenChange(false);
-      }),
-      {
-        loading: "Creating user...",
-        success: "User created",
-        error: (err) => err.message,
-      },
-    );
-  };
+  const form = useForm({
+    defaultValues: { email: "", password: "", role: "member" },
+    onSubmit: async ({ value }) => {
+      toast.promise(
+        createUser
+          .mutateAsync({
+            email: value.email,
+            password: value.password,
+            role: value.role,
+          })
+          .then(() => {
+            form.reset();
+            onOpenChange(false);
+          }),
+        {
+          loading: "Creating user...",
+          success: "User created",
+          error: (err) => err.message,
+        },
+      );
+    },
+  });
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -273,52 +268,107 @@ function CreateUserDialog({
             Create a new user account for your team.
           </DialogDescription>
         </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="email">Email</Label>
-            <Input
-              id="email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="user@example.com"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="password">Password</Label>
-            <Input
-              id="password"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="At least 8 characters"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="role">Role</Label>
-            <div className="flex gap-2">
-              <Button
-                type="button"
-                variant={role === "member" ? "default" : "outline"}
-                size="sm"
-                onClick={() => setRole("member")}
-              >
-                Member
-              </Button>
-              <Button
-                type="button"
-                variant={role === "admin" ? "default" : "outline"}
-                size="sm"
-                onClick={() => setRole("admin")}
-              >
-                Admin
-              </Button>
-            </div>
-          </div>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            form.handleSubmit();
+          }}
+          className="space-y-4"
+        >
+          <form.Field
+            name="email"
+            validators={{
+              onChange: z.string().email("Email is required"),
+            }}
+            children={(field) => (
+              <div className="space-y-2">
+                <Label htmlFor="email">Email</Label>
+                <Input
+                  id="email"
+                  type="email"
+                  value={field.state.value}
+                  onBlur={field.handleBlur}
+                  onChange={(e) => field.handleChange(e.target.value)}
+                  placeholder="user@example.com"
+                />
+                {field.state.meta.errors.length > 0 && (
+                  <p className="text-destructive text-sm">
+                    {typeof field.state.meta.errors[0] === "string"
+                      ? field.state.meta.errors[0]
+                      : field.state.meta.errors[0]?.message}
+                  </p>
+                )}
+              </div>
+            )}
+          />
+          <form.Field
+            name="password"
+            validators={{
+              onChange: z
+                .string()
+                .min(8, "Password must be at least 8 characters"),
+            }}
+            children={(field) => (
+              <div className="space-y-2">
+                <Label htmlFor="password">Password</Label>
+                <Input
+                  id="password"
+                  type="password"
+                  value={field.state.value}
+                  onBlur={field.handleBlur}
+                  onChange={(e) => field.handleChange(e.target.value)}
+                  placeholder="At least 8 characters"
+                />
+                {field.state.meta.errors.length > 0 && (
+                  <p className="text-destructive text-sm">
+                    {typeof field.state.meta.errors[0] === "string"
+                      ? field.state.meta.errors[0]
+                      : field.state.meta.errors[0]?.message}
+                  </p>
+                )}
+              </div>
+            )}
+          />
+          <form.Field
+            name="role"
+            children={(field) => (
+              <div className="space-y-2">
+                <Label htmlFor="role">Role</Label>
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    variant={
+                      field.state.value === "member" ? "default" : "outline"
+                    }
+                    size="sm"
+                    onClick={() => field.handleChange("member")}
+                  >
+                    Member
+                  </Button>
+                  <Button
+                    type="button"
+                    variant={
+                      field.state.value === "admin" ? "default" : "outline"
+                    }
+                    size="sm"
+                    onClick={() => field.handleChange("admin")}
+                  >
+                    Admin
+                  </Button>
+                </div>
+              </div>
+            )}
+          />
           <DialogFooter>
-            <Button type="submit" disabled={createUser.isPending}>
-              {createUser.isPending ? "Creating..." : "Create User"}
-            </Button>
+            <form.Subscribe
+              selector={(s) => s.isSubmitting}
+              children={(isSubmitting) => (
+                <Button type="submit" disabled={isSubmitting}>
+                  {isSubmitting ? "Creating..." : "Create User"}
+                </Button>
+              )}
+            />
           </DialogFooter>
         </form>
       </DialogContent>
@@ -337,29 +387,26 @@ function ResetPasswordDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
-  const [password, setPassword] = useState("");
   const resetPassword = useResetUserPassword();
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-
-    if (password.length < 8) {
-      toast.error("Password must be at least 8 characters");
-      return;
-    }
-
-    toast.promise(
-      resetPassword.mutateAsync({ userId, password }).then(() => {
-        setPassword("");
-        onOpenChange(false);
-      }),
-      {
-        loading: "Resetting password...",
-        success: `Password reset for ${email}`,
-        error: (err) => err.message,
-      },
-    );
-  };
+  const form = useForm({
+    defaultValues: { password: "" },
+    onSubmit: async ({ value }) => {
+      toast.promise(
+        resetPassword
+          .mutateAsync({ userId, password: value.password })
+          .then(() => {
+            form.reset();
+            onOpenChange(false);
+          }),
+        {
+          loading: "Resetting password...",
+          success: `Password reset for ${email}`,
+          error: (err) => err.message,
+        },
+      );
+    },
+  });
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -370,21 +417,51 @@ function ResetPasswordDialog({
             Set a new password for {email}.
           </DialogDescription>
         </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="new-password">New Password</Label>
-            <Input
-              id="new-password"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="At least 8 characters"
-            />
-          </div>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            form.handleSubmit();
+          }}
+          className="space-y-4"
+        >
+          <form.Field
+            name="password"
+            validators={{
+              onChange: z
+                .string()
+                .min(8, "Password must be at least 8 characters"),
+            }}
+            children={(field) => (
+              <div className="space-y-2">
+                <Label htmlFor="new-password">New Password</Label>
+                <Input
+                  id="new-password"
+                  type="password"
+                  value={field.state.value}
+                  onBlur={field.handleBlur}
+                  onChange={(e) => field.handleChange(e.target.value)}
+                  placeholder="At least 8 characters"
+                />
+                {field.state.meta.errors.length > 0 && (
+                  <p className="text-destructive text-sm">
+                    {typeof field.state.meta.errors[0] === "string"
+                      ? field.state.meta.errors[0]
+                      : field.state.meta.errors[0]?.message}
+                  </p>
+                )}
+              </div>
+            )}
+          />
           <DialogFooter>
-            <Button type="submit" disabled={resetPassword.isPending}>
-              {resetPassword.isPending ? "Resetting..." : "Reset Password"}
-            </Button>
+            <form.Subscribe
+              selector={(s) => s.isSubmitting}
+              children={(isSubmitting) => (
+                <Button type="submit" disabled={isSubmitting}>
+                  {isSubmitting ? "Resetting..." : "Reset Password"}
+                </Button>
+              )}
+            />
           </DialogFooter>
         </form>
       </DialogContent>
