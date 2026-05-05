@@ -129,6 +129,55 @@ func (h *Handler) GetApplication(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, app)
 }
 
+// GetApplicationHealth returns the most recent post-deploy health probe
+// result. The probe runs as the final stage of HandleDeployTask and writes
+// to deployments.health_status; this endpoint is a read-only view of that
+// row. Status values:
+//
+//   - passing | failing  — deploy probe outcome
+//   - skipped            — app has no health_check_path configured
+//   - pending            — no deploy has run yet (no row found)
+func (h *Handler) GetApplicationHealth(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "applicationId")
+	var uuid pgtype.UUID
+	if err := uuid.Scan(id); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid application id")
+		return
+	}
+
+	if !h.canAccessApplication(r, uuid) {
+		writeError(w, http.StatusForbidden, "access denied")
+		return
+	}
+
+	row, err := h.queries.GetLatestApplicationHealth(r.Context(), uuid)
+	if err != nil {
+		// pgx.ErrNoRows here means the application has no deployments yet;
+		// surface that as a "pending" state rather than a 404 so the UI can
+		// distinguish "never deployed" from "app missing".
+		writeJSON(w, http.StatusOK, map[string]any{
+			"status":  "pending",
+			"message": "no deployments yet",
+		})
+		return
+	}
+
+	status := row.HealthStatus.String
+	if !row.HealthStatus.Valid || status == "" {
+		status = "pending"
+	}
+	resp := map[string]any{
+		"deployment_id":  row.ID,
+		"deploy_status":  row.Status,
+		"status":         status,
+		"message":        row.HealthMessage.String,
+	}
+	if row.HealthCheckedAt.Valid {
+		resp["checked_at"] = row.HealthCheckedAt.Time
+	}
+	writeJSON(w, http.StatusOK, resp)
+}
+
 func (h *Handler) ListApplications(w http.ResponseWriter, r *http.Request) {
 	projectID := chi.URLParam(r, "projectId")
 	var projectUUID pgtype.UUID

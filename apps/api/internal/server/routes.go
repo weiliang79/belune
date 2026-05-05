@@ -162,6 +162,9 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService,
 			r.Get("/api/projects/{projectId}/applications/{applicationId}/deployments", h.ListDeployments)
 			r.Get("/api/projects/{projectId}/applications/{applicationId}/deployments/{deploymentId}", h.GetDeployment)
 
+			// Latest post-deploy health-probe result
+			r.Get("/api/projects/{projectId}/applications/{applicationId}/health", h.GetApplicationHealth)
+
 			// Terminal session creation (exec is short; websocket tunnel is in the WS group)
 			r.Post("/api/projects/{projectId}/applications/{applicationId}/terminal", h.CreateTerminalSession)
 

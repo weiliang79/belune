@@ -37,6 +37,20 @@ UPDATE deployments SET build_logs = $2 WHERE id = $1;
 -- name: UpdateDeploymentImageTag :exec
 UPDATE deployments SET image_tag = $2 WHERE id = $1;
 
+-- name: UpdateDeploymentHealth :exec
+UPDATE deployments
+   SET health_status     = $2,
+       health_message    = $3,
+       health_checked_at = NOW()
+ WHERE id = $1;
+
+-- name: GetLatestApplicationHealth :one
+SELECT id, status, health_status, health_message, health_checked_at, started_at, finished_at
+  FROM deployments
+ WHERE application_id = $1
+ ORDER BY started_at DESC
+ LIMIT 1;
+
 -- name: ListOldDeployments :many
 SELECT * FROM deployments WHERE application_id = $1 ORDER BY started_at DESC OFFSET $2;
 

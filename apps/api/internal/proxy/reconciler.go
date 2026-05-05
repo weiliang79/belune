@@ -191,7 +191,7 @@ func (r *Reconciler) buildExpected(ctx context.Context) ([]RouteConfig, error) {
 		}
 
 		for _, domain := range domains {
-			cfg, err := BuildRouteConfigFromDB(ctx, r.queries, domain, containerName)
+			cfg, err := BuildRouteConfigFromDB(ctx, r.queries, domain, containerName, app.HealthCheckPath.String)
 			if err != nil {
 				slog.Warn("proxy reconciler: failed to build route config", "hostname", domain.Hostname, "error", err)
 				continue

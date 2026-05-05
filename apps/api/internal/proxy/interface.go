@@ -16,16 +16,17 @@ type RouteFeature struct {
 
 // RouteConfig describes a reverse-proxy route with optional TLS and middleware.
 type RouteConfig struct {
-	Hostname       string          `json:"hostname"`
-	TargetURL      string          `json:"target_url"`
-	TLS            bool            `json:"tls"`
-	ForceHTTPS     bool            `json:"force_https"`
-	SSLMode        string          `json:"ssl_mode"`        // automatic, dns_challenge, custom, off
-	SSLProvider    string          `json:"ssl_provider"`    // e.g. cloudflare
-	CertPath       string          `json:"cert_path"`       // for custom SSL mode
-	KeyPath        string          `json:"key_path"`        // for custom SSL mode
-	Features       []RouteFeature  `json:"features"`        // middleware features
-	AdvancedConfig json.RawMessage `json:"advanced_config"` // raw Caddy JSON for power users
+	Hostname        string          `json:"hostname"`
+	TargetURL       string          `json:"target_url"`
+	TLS             bool            `json:"tls"`
+	ForceHTTPS      bool            `json:"force_https"`
+	SSLMode         string          `json:"ssl_mode"`          // automatic, dns_challenge, custom, off
+	SSLProvider     string          `json:"ssl_provider"`      // e.g. cloudflare
+	CertPath        string          `json:"cert_path"`         // for custom SSL mode
+	KeyPath         string          `json:"key_path"`          // for custom SSL mode
+	Features        []RouteFeature  `json:"features"`          // middleware features
+	AdvancedConfig  json.RawMessage `json:"advanced_config"`   // raw Caddy JSON for power users
+	HealthCheckPath string          `json:"health_check_path"` // optional path Caddy probes for upstream liveness
 }
 
 // ProxyManager abstracts reverse proxy operations.

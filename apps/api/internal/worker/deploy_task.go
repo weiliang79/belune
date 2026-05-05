@@ -150,17 +150,7 @@ func (h *TaskHandler) HandleDeployTask(ctx context.Context, t *asynq.Task) error
 		return fmt.Errorf("create container: %w", err)
 	}
 
-	// Stage 6: optional health check
-	if err := runStage(ctx, "deploy.check_health", func(ctx context.Context) error {
-		return h.checkHealth(ctx, dc)
-	}); err != nil {
-		h.runCompensators(dc)
-		h.failDeployment(ctx, dc.deploymentID, fmt.Sprintf("health check failed: %v", err))
-		recordSpanErr(rootSpan, err)
-		return fmt.Errorf("health check: %w", err)
-	}
-
-	// Stage 7: wire proxy routes — appends a compensator per successful AddRoute
+	// Stage 6: wire proxy routes — appends a compensator per successful AddRoute
 	if err := runStage(ctx, "deploy.wire_proxy", func(ctx context.Context) error {
 		return h.wireProxy(ctx, dc)
 	}); err != nil {
@@ -168,6 +158,20 @@ func (h *TaskHandler) HandleDeployTask(ctx context.Context, t *asynq.Task) error
 		h.failDeployment(ctx, dc.deploymentID, fmt.Sprintf("wire proxy: %v", err))
 		recordSpanErr(rootSpan, err)
 		return fmt.Errorf("wire proxy: %w", err)
+	}
+
+	// Stage 7: post-route health verification — polls the container's health
+	// endpoint (direct, not via Caddy) for up to 2 minutes. A pass marks the
+	// deployment healthy; a fail rolls back via compensators so a broken
+	// build never silently replaces a working one. Apps with no
+	// HealthCheckPath skip this stage and are recorded as 'skipped'.
+	if err := runStage(ctx, "deploy.verify_health", func(ctx context.Context) error {
+		return h.verifyHealth(ctx, dc)
+	}); err != nil {
+		h.runCompensators(dc)
+		h.failDeployment(ctx, dc.deploymentID, fmt.Sprintf("health check failed: %v", err))
+		recordSpanErr(rootSpan, err)
+		return fmt.Errorf("health check: %w", err)
 	}
 
 	// Stage 8: atomic finalize — mark deployment success + application running
@@ -499,26 +503,66 @@ func (h *TaskHandler) createAndStart(ctx context.Context, dc *deployContext) err
 	return nil
 }
 
-// checkHealth polls the container's health endpoint if configured.
-func (h *TaskHandler) checkHealth(ctx context.Context, dc *deployContext) error {
+// healthVerifyTimeout is the upper bound for post-deploy probing.
+const healthVerifyTimeout = 2 * time.Minute
+
+// Health status values persisted on the deployments row.
+const (
+	healthStatusPassing = "passing"
+	healthStatusFailing = "failing"
+	healthStatusSkipped = "skipped"
+)
+
+// verifyHealth probes the container's health endpoint after the proxy is
+// wired. The probe targets the container hostname directly (Docker network)
+// rather than going through Caddy — Caddy's own active health checks are a
+// pass-through observability layer wired separately into the route config.
+//
+// Result is persisted to deployments.health_status so the API/UI can render
+// the latest probe outcome without re-running it. A failed probe is fatal:
+// the caller invokes compensators so the bad container/route do not replace
+// the working ones.
+func (h *TaskHandler) verifyHealth(ctx context.Context, dc *deployContext) error {
 	if !dc.app.HealthCheckPath.Valid || dc.app.HealthCheckPath.String == "" {
+		h.recordHealth(ctx, dc.deploymentID, healthStatusSkipped, "no health_check_path configured")
 		return nil
 	}
 
-	// Load domains to resolve the container port
-	domains, err := h.Queries.ListDomainsByApplication(ctx, dc.applicationID)
-	if err != nil {
-		slog.Warn("failed to list domains for health check port resolution", "application_id", dc.payload.ApplicationID, "error", err)
+	// dc.domains is populated by wireProxy; it should always be set here,
+	// but fall back to a fresh fetch in case the stage ordering changes.
+	domains := dc.domains
+	if domains == nil {
+		fetched, err := h.Queries.ListDomainsByApplication(ctx, dc.applicationID)
+		if err != nil {
+			slog.Warn("verifyHealth: failed to list domains for port resolution",
+				"application_id", dc.payload.ApplicationID, "error", err)
+		}
+		domains = fetched
 	}
-	dc.domains = domains
 
 	healthURL := fmt.Sprintf("http://%s:%d%s", dc.containerName, resolveContainerPort(domains), dc.app.HealthCheckPath.String)
-	slog.Info("waiting for container health check", "url", healthURL)
-	if err := pollHealthCheck(ctx, healthURL, 60*time.Second); err != nil {
+	slog.Info("verifying container health", "url", healthURL, "timeout", healthVerifyTimeout)
+
+	if err := pollHealthCheck(ctx, healthURL, healthVerifyTimeout); err != nil {
+		h.recordHealth(ctx, dc.deploymentID, healthStatusFailing, err.Error())
 		return err
 	}
-	slog.Info("container health check passed", "container", dc.containerName)
+	h.recordHealth(ctx, dc.deploymentID, healthStatusPassing, "")
+	slog.Info("container health verified", "container", dc.containerName)
 	return nil
+}
+
+// recordHealth writes the probe result to the deployments row. Failures are
+// logged but never propagated — the deploy outcome is already represented by
+// the caller's return value.
+func (h *TaskHandler) recordHealth(ctx context.Context, deploymentID pgtype.UUID, status, message string) {
+	if err := h.Queries.UpdateDeploymentHealth(ctx, generated.UpdateDeploymentHealthParams{
+		ID:            deploymentID,
+		HealthStatus:  pgtype.Text{String: status, Valid: true},
+		HealthMessage: pgtype.Text{String: message, Valid: message != ""},
+	}); err != nil {
+		slog.Warn("verifyHealth: failed to persist health status", "status", status, "error", err)
+	}
 }
 
 // wireProxy adds a Caddy route for each domain. On success it appends a compensator
@@ -534,7 +578,7 @@ func (h *TaskHandler) wireProxy(ctx context.Context, dc *deployContext) error {
 	}
 
 	for _, domain := range dc.domains {
-		cfg, err := proxy.BuildRouteConfigFromDB(ctx, h.Queries, domain, dc.containerName)
+		cfg, err := proxy.BuildRouteConfigFromDB(ctx, h.Queries, domain, dc.containerName, dc.app.HealthCheckPath.String)
 		if err != nil {
 			return fmt.Errorf("build route config for %s: %w", domain.Hostname, err)
 		}

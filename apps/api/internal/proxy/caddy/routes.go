@@ -62,12 +62,27 @@ type caddyUpstream struct {
 	Dial string `json:"dial"`
 }
 
-// newReverseProxyHandle creates a reverse_proxy handler.
-func newReverseProxyHandle(upstreams []caddyUpstream) caddyHandle {
-	return caddyHandle{
+// newReverseProxyHandle creates a reverse_proxy handler. If healthCheckPath
+// is non-empty, an active upstream health check is configured so Caddy itself
+// will mark the upstream unhealthy on consecutive 5xx responses — separate
+// from the deploy-time verification probe, which gates whether a deploy ever
+// goes live in the first place.
+func newReverseProxyHandle(upstreams []caddyUpstream, healthCheckPath string) caddyHandle {
+	h := caddyHandle{
 		"handler":   "reverse_proxy",
 		"upstreams": upstreams,
 	}
+	if healthCheckPath != "" {
+		h["health_checks"] = map[string]any{
+			"active": map[string]any{
+				"uri":           healthCheckPath,
+				"interval":      "30s",
+				"timeout":       "5s",
+				"expect_status": 2,
+			},
+		}
+	}
+	return h
 }
 
 // InitCatchAll must be called once at startup. It normalises the routes list so
@@ -105,7 +120,7 @@ func (c *Client) InitCatchAll(ctx context.Context) {
 	// Re-append catch-all with known @id at the end.
 	catchAllJSON, _ := json.Marshal(caddyRoute{
 		ID:     catchAllRouteID,
-		Handle: []caddyHandle{newReverseProxyHandle([]caddyUpstream{{Dial: "localhost:8080"}})},
+		Handle: []caddyHandle{newReverseProxyHandle([]caddyUpstream{{Dial: "localhost:8080"}}, "")},
 	})
 	newRoutes := append(domainRoutes, catchAllJSON)
 
@@ -128,7 +143,10 @@ func (c *Client) AddRoute(ctx context.Context, cfg proxy.RouteConfig) (err error
 	}
 
 	// Reverse proxy is always the last handler.
-	handlers = append(handlers, newReverseProxyHandle([]caddyUpstream{{Dial: targetToDial(cfg.TargetURL)}}))
+	handlers = append(handlers, newReverseProxyHandle(
+		[]caddyUpstream{{Dial: targetToDial(cfg.TargetURL)}},
+		cfg.HealthCheckPath,
+	))
 
 	// If ForceHTTPS is enabled, prepend an HTTP→HTTPS redirect subroute.
 	if cfg.ForceHTTPS && cfg.SSLMode != "off" {
@@ -452,7 +470,7 @@ func (c *Client) moveCatchAllToEnd(ctx context.Context) error {
 	if len(catchAll) == 0 {
 		catchAll, err = json.Marshal(caddyRoute{
 			ID:     catchAllRouteID,
-			Handle: []caddyHandle{newReverseProxyHandle([]caddyUpstream{{Dial: "localhost:8080"}})},
+			Handle: []caddyHandle{newReverseProxyHandle([]caddyUpstream{{Dial: "localhost:8080"}}, "")},
 		})
 		if err != nil {
 			return fmt.Errorf("marshal catch-all: %w", err)
