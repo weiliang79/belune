@@ -58,6 +58,19 @@ func (h *Handler) ForgotPassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Per-email rate limit: 3 reset requests per hour. Return 200 to avoid enumeration.
+	if h.rdb != nil {
+		rlKey := "pw_reset:" + normaliseEmail(req.Email)
+		count, _ := h.rdb.Incr(ctx, rlKey).Result()
+		if count == 1 {
+			h.rdb.Expire(ctx, rlKey, time.Hour)
+		}
+		if count > 3 {
+			writeJSON(w, http.StatusOK, map[string]string{"status": "if the email exists you will receive a reset link"})
+			return
+		}
+	}
+
 	// Invalidate any outstanding tokens for this user.
 	if err := h.queries.InvalidateUserPasswordResetTokens(ctx, user.ID); err != nil {
 		slog.WarnContext(ctx, "forgot-password: failed to invalidate prior tokens", "error", err)
@@ -71,8 +84,7 @@ func (h *Handler) ForgotPassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	expiresAt := pgtype.Timestamptz{}
-	expiresAt.Scan(time.Now().Add(passwordResetTTL))
+	expiresAt := pgtype.Timestamptz{Time: time.Now().Add(passwordResetTTL), Valid: true}
 
 	if _, err := h.queries.CreatePasswordResetToken(ctx, generated.CreatePasswordResetTokenParams{
 		UserID:    user.ID,
@@ -101,10 +113,10 @@ func (h *Handler) ForgotPassword(w http.ResponseWriter, r *http.Request) {
 		"FirstName": firstName,
 		"ResetURL":  resetURL,
 	})
-	if err == nil {
-		if _, err := h.asynq.Enqueue(task); err != nil {
-			slog.WarnContext(ctx, "forgot-password: failed to enqueue email", "error", err)
-		}
+	if err != nil {
+		slog.WarnContext(ctx, "forgot-password: failed to build email task", "error", err)
+	} else if _, err := h.asynq.Enqueue(task); err != nil {
+		slog.WarnContext(ctx, "forgot-password: failed to enqueue email", "error", err)
 	}
 
 	if h.auditSvc != nil {
