@@ -84,6 +84,7 @@ func (w *Worker) Start() error {
 		return nil
 	})
 	mux.HandleFunc(TypeEmailSend, w.handler.HandleEmailSendTask)
+	mux.HandleFunc(TypeAuthTokenCleanup, w.handler.HandleAuthTokenCleanup)
 
 	slog.Info("starting worker server")
 	return w.server.Start(mux)
@@ -108,7 +109,13 @@ func (w *Worker) StartScheduler() (*asynq.Scheduler, error) {
 		return nil, err
 	}
 
-	slog.Info("starting scheduler (cleanup: 24h, retention: 24h)")
+	// Hourly auth-token cleanup: expired password-reset tokens (+ invitations in Phase 3).
+	authCleanupTask := asynq.NewTask(TypeAuthTokenCleanup, nil)
+	if _, err := scheduler.Register("@every 1h", authCleanupTask, asynq.Queue("low")); err != nil {
+		return nil, err
+	}
+
+	slog.Info("starting scheduler (cleanup: 24h, retention: 24h, auth-token-cleanup: 1h)")
 	if err := scheduler.Start(); err != nil {
 		return nil, err
 	}

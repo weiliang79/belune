@@ -151,7 +151,7 @@ func New(cfg *config.Config) (*App, error) {
 	}
 
 	broadcaster := ws.NewContainerStatusBroadcaster(hub)
-	httpSrv := server.New(cfg, db, queries, asynqClient, dockerClient, caddyClient, reconciler, rdb, hub, auditSvc, termMgr)
+	httpSrv := server.New(cfg, db, queries, asynqClient, dockerClient, caddyClient, reconciler, rdb, hub, auditSvc, termMgr, emailSvc)
 
 	// Optional Prometheus-friendly bind. Serves /metrics without auth on the
 	// configured address (typically loopback). Keeps the main /metrics route

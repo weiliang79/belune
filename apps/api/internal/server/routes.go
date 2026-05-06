@@ -70,6 +70,20 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService,
 			r.With(withTimeout(handlerTimeout)).Post("/api/auth/refresh", h.Refresh)
 		})
 
+		// Password reset: forgot-password 3/hour by IP; reset-password 10/min by IP.
+		r.Group(func(r chi.Router) {
+			if !disableRateLimit {
+				r.Use(httprate.LimitByIP(3, time.Hour))
+			}
+			r.With(withTimeout(handlerTimeout)).Post("/api/auth/forgot-password", h.ForgotPassword)
+		})
+		r.Group(func(r chi.Router) {
+			if !disableRateLimit {
+				r.Use(httprate.LimitByIP(10, time.Minute))
+			}
+			r.With(withTimeout(handlerTimeout)).Post("/api/auth/reset-password", h.ResetPassword)
+		})
+
 		// Webhooks: 30 req/min per IP
 		r.Group(func(r chi.Router) {
 			if !disableRateLimit {
