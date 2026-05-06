@@ -150,6 +150,18 @@ type HostMetric struct {
 	RecordedAt  pgtype.Timestamptz `json:"recorded_at"`
 }
 
+type Invitation struct {
+	ID              pgtype.UUID        `json:"id"`
+	Email           string             `json:"email"`
+	Role            string             `json:"role"`
+	TokenHash       string             `json:"token_hash"`
+	InvitedByUserID pgtype.UUID        `json:"invited_by_user_id"`
+	ExpiresAt       pgtype.Timestamptz `json:"expires_at"`
+	AcceptedAt      pgtype.Timestamptz `json:"accepted_at"`
+	AcceptedUserID  pgtype.UUID        `json:"accepted_user_id"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+}
+
 type LoginAttempt struct {
 	Email         string             `json:"email"`
 	FailedCount   int32              `json:"failed_count"`

@@ -382,6 +382,13 @@ func (s *AuthService) AccessExpiry() time.Duration { return s.accessExpiry }
 // handler when setting the refresh cookie MaxAge.
 func (s *AuthService) RefreshExpiry() time.Duration { return s.refreshExpiry }
 
+// LoginUser issues a JWT + refresh token pair for a user whose identity has
+// already been established by the caller (e.g. accept-invitation flow where
+// the password was just set). Skips credential verification.
+func (s *AuthService) LoginUser(ctx context.Context, user generated.User, userAgent, ip string) (*LoginResult, error) {
+	return s.issueSession(ctx, user, userAgent, ip)
+}
+
 // issueSession generates a JWT + refresh token pair, persists the refresh
 // token, and returns the bundle. Shared by Login and Refresh.
 func (s *AuthService) issueSession(ctx context.Context, user generated.User, userAgent, ip string) (*LoginResult, error) {

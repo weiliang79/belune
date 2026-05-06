@@ -84,6 +84,20 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService,
 			r.With(withTimeout(handlerTimeout)).Post("/api/auth/reset-password", h.ResetPassword)
 		})
 
+		// Invitation acceptance: peek 30/min by IP; accept 10/min by IP.
+		r.Group(func(r chi.Router) {
+			if !disableRateLimit {
+				r.Use(httprate.LimitByIP(30, time.Minute))
+			}
+			r.With(withTimeout(handlerTimeout)).Get("/api/auth/invitation", h.GetInvitation)
+		})
+		r.Group(func(r chi.Router) {
+			if !disableRateLimit {
+				r.Use(httprate.LimitByIP(10, time.Minute))
+			}
+			r.With(withTimeout(handlerTimeout)).Post("/api/auth/accept-invitation", h.AcceptInvitation)
+		})
+
 		// Webhooks: 30 req/min per IP
 		r.Group(func(r chi.Router) {
 			if !disableRateLimit {
@@ -133,8 +147,11 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService,
 						r.Use(httprate.LimitByIP(10, time.Minute))
 					}
 					r.Post("/api/users", h.CreateUser)
+					r.Post("/api/users/invite", h.InviteUser)
 					r.Put("/api/users/{userId}/password", h.ResetUserPassword)
 				})
+				r.Get("/api/users/invitations", h.ListPendingInvitations)
+				r.Delete("/api/users/invitations/{invitationId}", h.RevokeInvitation)
 			})
 
 			// Git credentials

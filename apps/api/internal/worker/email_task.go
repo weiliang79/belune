@@ -48,11 +48,14 @@ func (h *TaskHandler) HandleEmailSendTask(ctx context.Context, t *asynq.Task) er
 	return nil
 }
 
-// HandleAuthTokenCleanup deletes expired password-reset tokens (and, in Phase 3,
-// invitation tokens). Safe to run frequently — DELETE WHERE is cheap on small tables.
+// HandleAuthTokenCleanup deletes expired password-reset and invitation tokens.
+// Safe to run frequently — DELETE WHERE is cheap on small tables.
 func (h *TaskHandler) HandleAuthTokenCleanup(ctx context.Context, _ *asynq.Task) error {
 	if err := h.Queries.DeleteExpiredPasswordResetTokens(ctx); err != nil {
 		return fmt.Errorf("delete expired password reset tokens: %w", err)
+	}
+	if err := h.Queries.DeleteExpiredInvitations(ctx); err != nil {
+		return fmt.Errorf("delete expired invitations: %w", err)
 	}
 	return nil
 }

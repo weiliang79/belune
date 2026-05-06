@@ -32,7 +32,13 @@ type createUserRequest struct {
 	Username string `json:"username"`
 }
 
+// CreateUser creates a user with an admin-supplied plaintext password.
+// Deprecated: prefer POST /api/users/invite — the invitation flow avoids
+// transmitting plaintext passwords out-of-band.
 func (h *Handler) CreateUser(w http.ResponseWriter, r *http.Request) {
+	slog.Warn("CreateUser: deprecated endpoint called — use POST /api/users/invite instead",
+		"remote_addr", r.RemoteAddr)
+
 	var req createUserRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request body")
