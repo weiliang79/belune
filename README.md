@@ -2,7 +2,19 @@
 
 A self-hosted Platform-as-a-Service for deploying applications with automatic builds, custom domains, and managed databases.
 
-## Prerequisites
+## Install (production)
+
+One-command install on a fresh Linux host:
+
+```bash
+curl -sSL https://raw.githubusercontent.com/ungweiliang/selfhost-paas/main/scripts/install.sh | bash
+```
+
+Then follow [`docs/runbooks/install.md`](docs/runbooks/install.md) for DNS,
+TLS, the systemd unit, and a smoke-test deploy. The full config reference
+lives in [`.env.defaults`](.env.defaults).
+
+## Prerequisites (development)
 
 - Go 1.23+
 - Node.js 20+

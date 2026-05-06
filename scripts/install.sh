@@ -42,7 +42,7 @@ info "Docker version: ${DOCKER_VERSION}"
 # ── Create install directory ───────────────────────────────────────────────────
 
 info "Creating install directory at ${INSTALL_DIR}..."
-mkdir -p "${INSTALL_DIR}/infra/caddy/sites"
+mkdir -p "${INSTALL_DIR}/infra/caddy/sites" "${INSTALL_DIR}/infra/systemd"
 cd "${INSTALL_DIR}"
 
 # ── Download Compose + Caddy configs ──────────────────────────────────────────
@@ -54,6 +54,12 @@ curl -sSfL "${RAW_URL}/infra/docker-compose.prod.yml" -o docker-compose.yml
 
 info "Downloading Caddyfile..."
 curl -sSfL "${RAW_URL}/infra/caddy/Caddyfile.template" -o infra/caddy/Caddyfile.template
+
+info "Downloading .env.defaults reference..."
+curl -sSfL "${RAW_URL}/.env.defaults" -o .env.defaults
+
+info "Downloading systemd unit..."
+curl -sSfL "${RAW_URL}/infra/systemd/paas.service" -o infra/systemd/paas.service
 
 # ── Generate .env ──────────────────────────────────────────────────────────────
 
@@ -115,6 +121,36 @@ until curl -sf http://localhost:8080/healthz >/dev/null 2>&1; do
   fi
 done
 
+# ── Optional: install systemd unit so the stack starts on reboot ──────────────
+
+# Only attempt this when systemd is the init system AND we're running as
+# root. Anywhere else (macOS dev, rootless install) we just print the
+# manual instructions and move on.
+if [[ -d /run/systemd/system ]] && [[ ${EUID:-$(id -u)} -eq 0 ]]; then
+  if [[ ! -f /etc/systemd/system/paas.service ]]; then
+    info "Installing paas.service systemd unit..."
+    # Patch WorkingDirectory if the operator chose a non-default path. The
+    # bundled unit hard-codes /opt/paas; sed-rewrite it in place rather than
+    # shipping a templated file users would have to render themselves.
+    if [[ "${INSTALL_DIR}" != "/opt/paas" ]]; then
+      sed "s|^WorkingDirectory=.*|WorkingDirectory=${INSTALL_DIR}|" \
+        infra/systemd/paas.service > /etc/systemd/system/paas.service
+    else
+      cp infra/systemd/paas.service /etc/systemd/system/paas.service
+    fi
+    systemctl daemon-reload
+    systemctl enable paas.service >/dev/null 2>&1 || true
+    success "paas.service installed and enabled (auto-starts on reboot)."
+  else
+    info "/etc/systemd/system/paas.service already exists — skipping."
+  fi
+else
+  info "Skipping systemd install (not root or non-systemd host)."
+  info "To enable auto-start on reboot:"
+  info "  sudo cp ${INSTALL_DIR}/infra/systemd/paas.service /etc/systemd/system/"
+  info "  sudo systemctl daemon-reload && sudo systemctl enable --now paas.service"
+fi
+
 # ── Done ──────────────────────────────────────────────────────────────────────
 
 echo ""
@@ -126,4 +162,9 @@ echo "  Install dir: ${INSTALL_DIR}"
 echo ""
 echo "  Open http://localhost in your browser to finish setup."
 echo "  Logs: cd ${INSTALL_DIR} && docker compose logs -f"
+echo ""
+echo "  Next steps (DNS, TLS, first deploy):"
+echo "    https://github.com/${GITHUB_REPO}/blob/main/docs/runbooks/install.md"
+echo ""
+echo "  Full config reference: ${INSTALL_DIR}/.env.defaults"
 echo ""
