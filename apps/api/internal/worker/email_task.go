@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log/slog"
 
 	"github.com/hibiken/asynq"
 )
@@ -39,14 +38,6 @@ func (h *TaskHandler) HandleEmailSendTask(ctx context.Context, t *asynq.Task) er
 	var p EmailSendPayload
 	if err := json.Unmarshal(t.Payload(), &p); err != nil {
 		return fmt.Errorf("unmarshal email task payload: %w", err)
-	}
-
-	if h.EmailService == nil {
-		slog.WarnContext(ctx, "email task: no email service configured, skipping",
-			"template_id", p.TemplateID,
-			"to", p.To,
-		)
-		return nil
 	}
 
 	// Vars is decoded as map[string]any from JSON — pass directly to template renderer.

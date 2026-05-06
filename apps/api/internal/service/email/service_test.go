@@ -42,8 +42,19 @@ func TestTemplates_PasswordReset(t *testing.T) {
 		"ResetURL":  "https://paas.example.com/reset-password?token=abc123",
 	}
 
-	// Use SendTemplate in log-only mode to exercise rendering without SMTP.
-	err := svc.SendTemplate(context.Background(), "password_reset", "alice@example.com", vars)
+	subject, textBody, htmlBody, err := svc.Render("password_reset", vars)
+	require.NoError(t, err)
+
+	assert.Equal(t, "Reset your password", subject)
+	assert.Contains(t, textBody, "Alice")
+	assert.Contains(t, textBody, "https://paas.example.com/reset-password?token=abc123")
+	assert.Contains(t, textBody, "30 minutes")
+	assert.Contains(t, htmlBody, "Reset your password")
+	assert.Contains(t, htmlBody, "https://paas.example.com/reset-password?token=abc123")
+	assert.Contains(t, htmlBody, "no-referrer")
+
+	// Verify round-trip through log-only send doesn't error.
+	err = svc.SendTemplate(context.Background(), "password_reset", "alice@example.com", vars)
 	require.NoError(t, err)
 }
 
@@ -55,7 +66,18 @@ func TestTemplates_UserInvitation(t *testing.T) {
 		"InviteURL": "https://paas.example.com/accept-invite?token=xyz789",
 	}
 
-	err := svc.SendTemplate(context.Background(), "user_invitation", "new@example.com", vars)
+	subject, textBody, htmlBody, err := svc.Render("user_invitation", vars)
+	require.NoError(t, err)
+
+	assert.Equal(t, "You've been invited to Self-Hosted PaaS", subject)
+	assert.Contains(t, textBody, "operator")
+	assert.Contains(t, textBody, "https://paas.example.com/accept-invite?token=xyz789")
+	assert.Contains(t, textBody, "7 days")
+	assert.Contains(t, htmlBody, "operator")
+	assert.Contains(t, htmlBody, "https://paas.example.com/accept-invite?token=xyz789")
+	assert.Contains(t, htmlBody, "no-referrer")
+
+	err = svc.SendTemplate(context.Background(), "user_invitation", "new@example.com", vars)
 	require.NoError(t, err)
 }
 
@@ -70,8 +92,37 @@ func TestTemplates_AlertDeployFailed(t *testing.T) {
 		"ErrorMessage": "container exited with code 1",
 	}
 
-	err := svc.SendTemplate(context.Background(), "alert_deploy_failed", "owner@example.com", vars)
+	subject, textBody, htmlBody, err := svc.Render("alert_deploy_failed", vars)
 	require.NoError(t, err)
+
+	assert.Equal(t, "Deployment failed", subject)
+	assert.Contains(t, textBody, "my-app")
+	assert.Contains(t, textBody, "my-project")
+	assert.Contains(t, textBody, "deploy-uuid-123")
+	assert.Contains(t, textBody, "container exited with code 1")
+	assert.Contains(t, htmlBody, "my-app")
+	assert.Contains(t, htmlBody, "deploy-uuid-123")
+	assert.Contains(t, htmlBody, "container exited with code 1")
+}
+
+func TestTemplates_AlertDeployFailed_NoError(t *testing.T) {
+	// ErrorMessage omitted — conditional block must not render the error row.
+	svc := email.New(logOnlyCfg())
+
+	vars := map[string]any{
+		"AppName":      "my-app",
+		"ProjectName":  "my-project",
+		"DeploymentID": "deploy-uuid-123",
+		"FailedAt":     "2026-05-06T12:00:00Z",
+		"ErrorMessage": "",
+	}
+
+	_, textBody, htmlBody, err := svc.Render("alert_deploy_failed", vars)
+	require.NoError(t, err)
+
+	assert.NotContains(t, textBody, "Error:")
+	// The conditional error row must be absent when ErrorMessage is empty.
+	assert.NotContains(t, htmlBody, ">Error<")
 }
 
 func TestTemplates_AlertBuildFailed(t *testing.T) {
@@ -82,11 +133,18 @@ func TestTemplates_AlertBuildFailed(t *testing.T) {
 		"ProjectName":  "my-project",
 		"BuildID":      "build-uuid-456",
 		"FailedAt":     "2026-05-06T12:00:00Z",
-		"ErrorMessage": "",
+		"ErrorMessage": "dockerfile parse error",
 	}
 
-	err := svc.SendTemplate(context.Background(), "alert_build_failed", "owner@example.com", vars)
+	subject, textBody, htmlBody, err := svc.Render("alert_build_failed", vars)
 	require.NoError(t, err)
+
+	assert.Equal(t, "Build failed", subject)
+	assert.Contains(t, textBody, "my-app")
+	assert.Contains(t, textBody, "build-uuid-456")
+	assert.Contains(t, textBody, "dockerfile parse error")
+	assert.Contains(t, htmlBody, "build-uuid-456")
+	assert.Contains(t, htmlBody, "dockerfile parse error")
 }
 
 func TestTemplates_AlertQuotaThreshold(t *testing.T) {
@@ -99,8 +157,16 @@ func TestTemplates_AlertQuotaThreshold(t *testing.T) {
 		"ThresholdPercent": 80,
 	}
 
-	err := svc.SendTemplate(context.Background(), "alert_quota_threshold", "owner@example.com", vars)
+	subject, textBody, htmlBody, err := svc.Render("alert_quota_threshold", vars)
 	require.NoError(t, err)
+
+	assert.Equal(t, "Quota threshold reached", subject)
+	assert.Contains(t, textBody, "my-project")
+	assert.Contains(t, textBody, "applications")
+	assert.Contains(t, textBody, "82")
+	assert.Contains(t, textBody, "80")
+	assert.Contains(t, htmlBody, "my-project")
+	assert.Contains(t, htmlBody, "82")
 }
 
 func TestTemplates_UnknownTemplate(t *testing.T) {
@@ -111,7 +177,6 @@ func TestTemplates_UnknownTemplate(t *testing.T) {
 }
 
 func TestNew_WarnOnMissingPublicBaseURL(t *testing.T) {
-	// No panic — just a WARN in slog. Service should be constructed and be usable.
 	cfg := &config.Config{
 		SMTPHost:      "smtp.example.com",
 		SMTPPort:      587,

@@ -54,6 +54,12 @@ func (s *Service) PublicURL() string {
 	return s.cfg.PublicBaseURL
 }
 
+// Render executes a named template with vars and returns (subject, textBody, htmlBody).
+// Useful for tests and future debugging surfaces.
+func (s *Service) Render(templateID string, vars any) (subject, textBody, htmlBody string, err error) {
+	return renderTemplate(templateID, vars)
+}
+
 // SendTemplate renders the named template with vars and sends it to addr.
 // Always called from the async email task — never from a hot path.
 func (s *Service) SendTemplate(ctx context.Context, templateID, addr string, vars any) error {
@@ -66,7 +72,7 @@ func (s *Service) SendTemplate(ctx context.Context, templateID, addr string, var
 		To:       addr,
 		Subject:  subject,
 		TextBody: textBody,
-		HTMLBody:  htmlBody,
+		HTMLBody: htmlBody,
 	})
 }
 
