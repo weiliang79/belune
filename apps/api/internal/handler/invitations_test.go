@@ -26,7 +26,7 @@ func extractInvitationToken(t *testing.T, taskIndex int) string {
 	parsed, err := url.Parse(acceptURL)
 	require.NoError(t, err)
 	token := parsed.Query().Get("token")
-	require.NotEmpty(t, token, "token query param must be present in AcceptURL")
+	require.NotEmpty(t, token, "token query param must be present in InviteURL")
 	return token
 }
 
@@ -50,10 +50,9 @@ func TestInviteUser_AdminCanInvite(t *testing.T) {
 
 func TestInviteUser_RequiresAdmin(t *testing.T) {
 	resetDB(t)
-	env.SetupAdmin(t, "admin@test.com", "password123")
+	adminToken := env.SetupAdmin(t, "admin@test.com", "password123")
 
 	// Create a second non-admin user via the deprecated endpoint.
-	adminToken := env.LoginAs(t, "admin@test.com", "password123")
 	resp := env.DoRequest(t, "POST", "/api/users", map[string]string{
 		"email":    "member@test.com",
 		"password": "password123",

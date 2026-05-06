@@ -25,6 +25,29 @@ type inviteUserRequest struct {
 	Role  string `json:"role"`
 }
 
+// invitationResponse is the safe public view of an invitation row — omits token_hash.
+type invitationResponse struct {
+	ID              pgtype.UUID        `json:"id"`
+	Email           string             `json:"email"`
+	Role            string             `json:"role"`
+	InvitedByUserID pgtype.UUID        `json:"invited_by_user_id"`
+	ExpiresAt       pgtype.Timestamptz `json:"expires_at"`
+	AcceptedAt      pgtype.Timestamptz `json:"accepted_at"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+}
+
+func toInvitationResponse(inv generated.Invitation) invitationResponse {
+	return invitationResponse{
+		ID:              inv.ID,
+		Email:           inv.Email,
+		Role:            inv.Role,
+		InvitedByUserID: inv.InvitedByUserID,
+		ExpiresAt:       inv.ExpiresAt,
+		AcceptedAt:      inv.AcceptedAt,
+		CreatedAt:       inv.CreatedAt,
+	}
+}
+
 // InviteUser generates an invitation token, stores the invitation, and
 // enqueues the invitation email. Admin-only.
 // POST /api/users/invite
@@ -110,7 +133,7 @@ func (h *Handler) InviteUser(w http.ResponseWriter, r *http.Request) {
 		h.auditSvc.Log(inviterID, clientIP, "invitation_sent", "invitation", uuidToString(inv.ID), nil)
 	}
 
-	writeJSON(w, http.StatusCreated, inv)
+	writeJSON(w, http.StatusCreated, toInvitationResponse(inv))
 }
 
 // ListPendingInvitations returns all active (non-expired, non-accepted) invitations.
@@ -122,7 +145,11 @@ func (h *Handler) ListPendingInvitations(w http.ResponseWriter, r *http.Request)
 		writeError(w, http.StatusInternalServerError, "failed to list invitations")
 		return
 	}
-	writeJSON(w, http.StatusOK, invs)
+	out := make([]invitationResponse, len(invs))
+	for i, inv := range invs {
+		out[i] = toInvitationResponse(inv)
+	}
+	writeJSON(w, http.StatusOK, out)
 }
 
 // RevokeInvitation deletes a pending invitation. Admin-only.
@@ -271,7 +298,9 @@ func (h *Handler) AcceptInvitation(w http.ResponseWriter, r *http.Request) {
 		ID:             inv.ID,
 		AcceptedUserID: pgtype.UUID{Bytes: user.ID.Bytes, Valid: true},
 	}); err != nil {
-		slog.WarnContext(ctx, "accept-invitation: failed to mark invitation accepted", "error", err)
+		slog.ErrorContext(ctx, "accept-invitation: failed to mark invitation accepted", "error", err)
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
 	}
 
 	result, err := h.auth.LoginUser(ctx, user, r.UserAgent(), clientIP)
