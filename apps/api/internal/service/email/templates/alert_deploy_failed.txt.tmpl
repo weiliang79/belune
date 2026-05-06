@@ -1,0 +1,14 @@
+Deployment failed for application "{{.AppName}}" in project "{{.ProjectName}}".
+
+Details:
+  Application: {{.AppName}}
+  Project:     {{.ProjectName}}
+  Deployment:  {{.DeploymentID}}
+  Failed at:   {{.FailedAt}}
+{{- if .ErrorMessage}}
+  Error:       {{.ErrorMessage}}
+{{- end}}
+
+View the deployment logs in your dashboard for more details.
+
+— Self-Hosted PaaS

@@ -54,6 +54,20 @@ type Config struct {
 	// /metrics without auth (Prometheus-friendly). Typically "127.0.0.1:9090".
 	// When empty, /metrics is mounted on the main router behind admin auth.
 	MetricsBind string
+
+	// Public base URL — required when SMTP is configured; used to construct
+	// links in outbound emails (password reset, invitations).
+	PublicBaseURL string
+
+	// SMTP configuration for outbound email. All fields are optional; when
+	// SMTPHost is empty the email service writes to slog instead of dialing.
+	SMTPHost      string
+	SMTPPort      int    // default 587
+	SMTPUser      string
+	SMTPPassword  string
+	SMTPFromEmail string
+	SMTPFromName  string // default "Self-Hosted PaaS"
+	SMTPTLSMode   string // none | starttls | tls (default: starttls)
 }
 
 func Load() (*Config, error) {
@@ -87,6 +101,16 @@ func Load() (*Config, error) {
 		OTLPInsecure: getEnvBool("OTEL_EXPORTER_OTLP_INSECURE", true),
 
 		MetricsBind: getEnv("METRICS_BIND", ""),
+
+		PublicBaseURL: getEnv("PUBLIC_BASE_URL", ""),
+
+		SMTPHost:      getEnv("SMTP_HOST", ""),
+		SMTPPort:      getEnvInt("SMTP_PORT", 587),
+		SMTPUser:      getEnv("SMTP_USER", ""),
+		SMTPPassword:  getEnv("SMTP_PASSWORD", ""),
+		SMTPFromEmail: getEnv("SMTP_FROM_EMAIL", ""),
+		SMTPFromName:  getEnv("SMTP_FROM_NAME", "Self-Hosted PaaS"),
+		SMTPTLSMode:   getEnv("SMTP_TLS_MODE", "starttls"),
 	}
 
 	if cfg.JWTSecret == "" {

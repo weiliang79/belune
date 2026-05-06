@@ -1,0 +1,14 @@
+Build failed for application "{{.AppName}}" in project "{{.ProjectName}}".
+
+Details:
+  Application: {{.AppName}}
+  Project:     {{.ProjectName}}
+  Build:       {{.BuildID}}
+  Failed at:   {{.FailedAt}}
+{{- if .ErrorMessage}}
+  Error:       {{.ErrorMessage}}
+{{- end}}
+
+View the build logs in your dashboard for more details.
+
+— Self-Hosted PaaS

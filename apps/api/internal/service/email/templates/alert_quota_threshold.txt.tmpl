@@ -1,0 +1,12 @@
+Resource quota alert for project "{{.ProjectName}}".
+
+Your project has reached {{.UsagePercent}}% of its quota limit for {{.QuotaType}}.
+
+Details:
+  Project:    {{.ProjectName}}
+  Quota type: {{.QuotaType}}
+  Usage:      {{.UsagePercent}}% (threshold: {{.ThresholdPercent}}%)
+
+Review your resource usage in the dashboard to avoid hitting the hard limit.
+
+— Self-Hosted PaaS

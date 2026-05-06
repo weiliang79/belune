@@ -31,6 +31,7 @@ import (
 	"github.com/ungweiliang/selfhost-paas/internal/runtime/docker"
 	"github.com/ungweiliang/selfhost-paas/internal/server"
 	"github.com/ungweiliang/selfhost-paas/internal/service"
+	"github.com/ungweiliang/selfhost-paas/internal/service/email"
 	"github.com/ungweiliang/selfhost-paas/internal/store"
 	"github.com/ungweiliang/selfhost-paas/internal/store/generated"
 	"github.com/ungweiliang/selfhost-paas/internal/terminal"
@@ -119,6 +120,7 @@ func New(cfg *config.Config) (*App, error) {
 
 	appSvc := service.NewApplicationService(db, queries, dockerClient, cfg.Keyring)
 	quotaSvc := quota.NewService(queries)
+	emailSvc := email.New(cfg)
 	taskHandler := &worker.TaskHandler{
 		Runtime:        dockerClient,
 		Proxy:          caddyClient,
@@ -131,6 +133,7 @@ func New(cfg *config.Config) (*App, error) {
 		MetricsService: metricsSvc,
 		AppService:     appSvc,
 		QuotaService:   quotaSvc,
+		EmailService:   emailSvc,
 	}
 
 	w := worker.New(redisOpt, taskHandler)

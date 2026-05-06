@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"></head>
+<body style="font-family:sans-serif;max-width:560px;margin:40px auto;color:#1a1a1a">
+  <h2 style="color:#dc2626">Deployment failed</h2>
+  <p>A deployment has failed for <strong>{{.AppName}}</strong> in project <strong>{{.ProjectName}}</strong>.</p>
+  <table style="width:100%;border-collapse:collapse;margin:24px 0;font-size:0.875rem">
+    <tr><td style="padding:6px 0;color:#6b7280;width:120px">Application</td><td><strong>{{.AppName}}</strong></td></tr>
+    <tr><td style="padding:6px 0;color:#6b7280">Project</td><td>{{.ProjectName}}</td></tr>
+    <tr><td style="padding:6px 0;color:#6b7280">Deployment</td><td style="font-family:monospace;font-size:0.75rem">{{.DeploymentID}}</td></tr>
+    <tr><td style="padding:6px 0;color:#6b7280">Failed at</td><td>{{.FailedAt}}</td></tr>
+    {{- if .ErrorMessage}}
+    <tr><td style="padding:6px 0;color:#6b7280">Error</td><td style="color:#dc2626">{{.ErrorMessage}}</td></tr>
+    {{- end}}
+  </table>
+  <p style="font-size:0.875rem;color:#6b7280">Check the deployment logs in your dashboard for more details.</p>
+  <hr style="border:none;border-top:1px solid #e5e7eb;margin:24px 0">
+  <p style="font-size:0.75rem;color:#9ca3af">Self-Hosted PaaS</p>
+</body>
+</html>

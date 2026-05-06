@@ -17,6 +17,7 @@ import (
 	"github.com/ungweiliang/selfhost-paas/internal/quota"
 	"github.com/ungweiliang/selfhost-paas/internal/runtime"
 	"github.com/ungweiliang/selfhost-paas/internal/service"
+	"github.com/ungweiliang/selfhost-paas/internal/service/email"
 	"github.com/ungweiliang/selfhost-paas/internal/store/generated"
 )
 
@@ -33,6 +34,7 @@ type TaskHandler struct {
 	MetricsService *service.MetricsService
 	AppService     *service.ApplicationService
 	QuotaService   *quota.Service
+	EmailService   *email.Service
 }
 
 type Worker struct {
@@ -81,6 +83,7 @@ func (w *Worker) Start() error {
 		w.handler.HandleRetentionCleanup(ctx)
 		return nil
 	})
+	mux.HandleFunc(TypeEmailSend, w.handler.HandleEmailSendTask)
 
 	slog.Info("starting worker server")
 	return w.server.Start(mux)

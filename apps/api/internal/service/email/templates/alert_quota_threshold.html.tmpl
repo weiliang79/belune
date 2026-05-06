@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"></head>
+<body style="font-family:sans-serif;max-width:560px;margin:40px auto;color:#1a1a1a">
+  <h2 style="color:#d97706">Quota threshold reached</h2>
+  <p>Project <strong>{{.ProjectName}}</strong> has reached <strong>{{.UsagePercent}}%</strong> of its quota for <strong>{{.QuotaType}}</strong>.</p>
+  <table style="width:100%;border-collapse:collapse;margin:24px 0;font-size:0.875rem">
+    <tr><td style="padding:6px 0;color:#6b7280;width:120px">Project</td><td><strong>{{.ProjectName}}</strong></td></tr>
+    <tr><td style="padding:6px 0;color:#6b7280">Quota type</td><td>{{.QuotaType}}</td></tr>
+    <tr><td style="padding:6px 0;color:#6b7280">Current usage</td><td><strong>{{.UsagePercent}}%</strong></td></tr>
+    <tr><td style="padding:6px 0;color:#6b7280">Alert threshold</td><td>{{.ThresholdPercent}}%</td></tr>
+  </table>
+  <p style="font-size:0.875rem;color:#6b7280">Review your resource usage in the dashboard to avoid hitting the hard limit.</p>
+  <hr style="border:none;border-top:1px solid #e5e7eb;margin:24px 0">
+  <p style="font-size:0.75rem;color:#9ca3af">Self-Hosted PaaS</p>
+</body>
+</html>
