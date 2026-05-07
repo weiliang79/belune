@@ -102,6 +102,29 @@ if [[ -n "${BACKUP_ENCRYPTION_KEY}" ]]; then
   success "Encrypted archive: ${ARCHIVE}"
 fi
 
+# ── Remote upload (optional) ──────────────────────────────────────────────────
+
+BACKUP_REMOTE_ENABLED="${BACKUP_REMOTE_ENABLED:-}"
+if [[ -z "${BACKUP_REMOTE_ENABLED}" && -f "${INSTALL_DIR}/.env" ]]; then
+  BACKUP_REMOTE_ENABLED=$(grep '^BACKUP_REMOTE_ENABLED=' "${INSTALL_DIR}/.env" 2>/dev/null \
+    | cut -d= -f2- | tr -d '"' || true)
+fi
+
+if [[ "${BACKUP_REMOTE_ENABLED}" == "true" ]]; then
+  UPLOAD_BIN="${INSTALL_DIR}/bin/paas-backup-upload"
+  if [[ ! -x "${UPLOAD_BIN}" ]]; then
+    die "paas-backup-upload not found at ${UPLOAD_BIN}. Re-run update.sh to extract it."
+  fi
+  info "Uploading ${ARCHIVE} to remote storage..."
+  # Source .env so all BACKUP_S3_* variables are available to the helper.
+  set -a
+  # shellcheck source=/dev/null
+  [[ -f "${INSTALL_DIR}/.env" ]] && source "${INSTALL_DIR}/.env"
+  set +a
+  "${UPLOAD_BIN}" "${ARCHIVE}"
+  success "Remote upload complete."
+fi
+
 echo ""
 success "Backup complete: ${ARCHIVE}"
 echo ""

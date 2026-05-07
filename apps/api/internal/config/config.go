@@ -68,6 +68,19 @@ type Config struct {
 	SMTPFromEmail string
 	SMTPFromName  string // default "Self-Hosted PaaS"
 	SMTPTLSMode   string // none | starttls | tls (default: starttls)
+
+	// Backup remote storage. When BackupRemoteEnabled is false all BACKUP_S3_*
+	// fields are ignored and backup.sh writes local archives only.
+	BackupRemoteEnabled bool
+	BackupS3Endpoint    string // empty = AWS; set for MinIO/B2/R2/Wasabi
+	BackupS3Region      string // default "us-east-1"
+	BackupS3Bucket      string
+	BackupS3AccessKey   string
+	BackupS3SecretKey   string
+	BackupS3Prefix      string // key prefix inside the bucket (default "paas/")
+	BackupS3UseSSL      bool   // default true
+	BackupRetainDays    int    // delete objects older than N days (default 30)
+	BackupRetainCount   int    // always keep the N most-recent objects (default 14)
 }
 
 func Load() (*Config, error) {
@@ -111,6 +124,17 @@ func Load() (*Config, error) {
 		SMTPFromEmail: getEnv("SMTP_FROM_EMAIL", ""),
 		SMTPFromName:  getEnv("SMTP_FROM_NAME", "Self-Hosted PaaS"),
 		SMTPTLSMode:   getEnv("SMTP_TLS_MODE", "starttls"),
+
+		BackupRemoteEnabled: getEnvBool("BACKUP_REMOTE_ENABLED", false),
+		BackupS3Endpoint:    getEnv("BACKUP_S3_ENDPOINT", ""),
+		BackupS3Region:      getEnv("BACKUP_S3_REGION", "us-east-1"),
+		BackupS3Bucket:      getEnv("BACKUP_S3_BUCKET", ""),
+		BackupS3AccessKey:   getEnv("BACKUP_S3_ACCESS_KEY", ""),
+		BackupS3SecretKey:   getEnv("BACKUP_S3_SECRET_KEY", ""),
+		BackupS3Prefix:      getEnv("BACKUP_S3_PREFIX", "paas/"),
+		BackupS3UseSSL:      getEnvBool("BACKUP_S3_USE_SSL", true),
+		BackupRetainDays:    getEnvInt("BACKUP_RETAIN_DAYS", 30),
+		BackupRetainCount:   getEnvInt("BACKUP_RETAIN_COUNT", 14),
 	}
 
 	if cfg.JWTSecret == "" {

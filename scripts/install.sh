@@ -108,6 +108,19 @@ docker pull "${IMAGE}" 2>/dev/null || info "Image pull failed — will attempt l
 info "Starting services..."
 docker compose up -d
 
+# ── Extract helper binaries ────────────────────────────────────────────────────
+
+# Copy paas-backup-upload out of the API image so backup.sh can run it on the
+# host without requiring a running container. Re-extracted on every update.
+mkdir -p "${INSTALL_DIR}/bin"
+info "Extracting paas-backup-upload helper..."
+docker run --rm --entrypoint="" "${IMAGE}" \
+  cat /usr/local/bin/paas-backup-upload \
+  > "${INSTALL_DIR}/bin/paas-backup-upload" 2>/dev/null \
+  && chmod +x "${INSTALL_DIR}/bin/paas-backup-upload" \
+  && success "paas-backup-upload installed at ${INSTALL_DIR}/bin/paas-backup-upload." \
+  || info "paas-backup-upload not found in image — remote backup upload will not be available."
+
 # ── Wait for health ────────────────────────────────────────────────────────────
 
 info "Waiting for PaaS to become ready..."

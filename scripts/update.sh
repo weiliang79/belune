@@ -30,6 +30,18 @@ docker pull "${PAAS_IMAGE}"
 info "Restarting paas container..."
 docker compose up -d --no-deps paas
 
+# ── Re-extract helper binaries ─────────────────────────────────────────────────
+
+PAAS_IMAGE=$(grep 'PAAS_IMAGE' .env 2>/dev/null | cut -d= -f2 || echo "ghcr.io/ungweiliang/selfhost-paas:latest")
+mkdir -p "${INSTALL_DIR}/bin"
+info "Re-extracting paas-backup-upload helper..."
+docker run --rm --entrypoint="" "${PAAS_IMAGE}" \
+  cat /usr/local/bin/paas-backup-upload \
+  > "${INSTALL_DIR}/bin/paas-backup-upload" 2>/dev/null \
+  && chmod +x "${INSTALL_DIR}/bin/paas-backup-upload" \
+  && success "paas-backup-upload updated." \
+  || info "paas-backup-upload not found in image — skipping."
+
 # ── Wait for health ────────────────────────────────────────────────────────────
 
 info "Waiting for PaaS to become ready..."
