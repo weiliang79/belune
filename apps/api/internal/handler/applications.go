@@ -10,6 +10,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/hibiken/asynq"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/ungweiliang/selfhost-paas/internal/naming"
@@ -105,7 +106,7 @@ func (h *Handler) CreateApplication(w http.ResponseWriter, r *http.Request) {
 
 	h.audit(r, "create_application", "application", uuidToString(app.ID), map[string]any{"name": req.Name, "project_id": projectID})
 
-	h.maybeEnqueueQuotaAlert(r, projectUUID)
+	h.maybeEnqueueQuotaAlert(r, projectUUID, project.UserID)
 
 	writeJSON(w, http.StatusCreated, app)
 }
@@ -622,7 +623,7 @@ func (h *Handler) BuildApplication(w http.ResponseWriter, r *http.Request) {
 
 // isNotFound returns true when err is a pgx no-rows sentinel (quota prefs table miss).
 func isNotFound(err error) bool {
-	return err != nil && err.Error() == "no rows in result set"
+	return errors.Is(err, pgx.ErrNoRows)
 }
 
 // newAlertQuotaTask builds the asynq email task for a quota threshold alert.
@@ -637,17 +638,12 @@ func newAlertQuotaTask(toEmail, projectName string, usagePct, threshold int) (*a
 
 // maybeEnqueueQuotaAlert checks the project's quota usage after an app is created
 // and enqueues an alert email if the owner's threshold has been crossed.
-func (h *Handler) maybeEnqueueQuotaAlert(r *http.Request, projectID pgtype.UUID) {
+func (h *Handler) maybeEnqueueQuotaAlert(r *http.Request, projectID, ownerUserID pgtype.UUID) {
 	if h.quotaSvc == nil || h.asynq == nil {
 		return
 	}
 
-	project, err := h.queries.GetProject(r.Context(), projectID)
-	if err != nil {
-		return
-	}
-
-	ownerPrefs, err := h.queries.GetAlertPreferences(r.Context(), project.UserID)
+	ownerPrefs, err := h.queries.GetAlertPreferences(r.Context(), ownerUserID)
 	threshold := 80
 	if err == nil {
 		if !ownerPrefs.QuotaThreshold {

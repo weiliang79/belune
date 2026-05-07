@@ -15,7 +15,7 @@ import (
 // usage %, and enqueues a quota-threshold alert email when the rising-edge
 // condition is met for the project owner's configured threshold.
 func (h *TaskHandler) HandleQuotaThresholdSweep(ctx context.Context, _ *asynq.Task) error {
-	if h.QuotaService == nil || h.EmailService == nil {
+	if h.QuotaService == nil || h.EmailService == nil || h.Enqueuer == nil {
 		return nil
 	}
 
