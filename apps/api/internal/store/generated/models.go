@@ -13,7 +13,6 @@ type BackupRun struct {
 	StartedAt  pgtype.Timestamptz `json:"started_at"`
 	FinishedAt pgtype.Timestamptz `json:"finished_at"`
 	Status     string             `json:"status"`
-	LocalPath  string             `json:"local_path"`
 	RemoteKey  pgtype.Text        `json:"remote_key"`
 	SizeBytes  int64              `json:"size_bytes"`
 	Error      pgtype.Text        `json:"error"`

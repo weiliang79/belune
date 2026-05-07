@@ -81,6 +81,9 @@ type Config struct {
 	BackupS3UseSSL      bool   // default true
 	BackupRetainDays    int    // delete objects older than N days (default 30)
 	BackupRetainCount   int    // always keep the N most-recent objects (default 14)
+	// Path to backup.sh reachable from the API process. Defaults to
+	// $PAAS_DIR/scripts/backup.sh (falls back to /opt/paas/scripts/backup.sh).
+	BackupScriptPath string
 }
 
 func Load() (*Config, error) {
@@ -135,6 +138,7 @@ func Load() (*Config, error) {
 		BackupS3UseSSL:      getEnvBool("BACKUP_S3_USE_SSL", true),
 		BackupRetainDays:    getEnvInt("BACKUP_RETAIN_DAYS", 30),
 		BackupRetainCount:   getEnvInt("BACKUP_RETAIN_COUNT", 14),
+		BackupScriptPath:    getEnv("BACKUP_SCRIPT_PATH", paasDir()+"/scripts/backup.sh"),
 	}
 
 	if cfg.JWTSecret == "" {
@@ -156,6 +160,14 @@ func Load() (*Config, error) {
 	cfg.Keyring = keyring
 
 	return cfg, nil
+}
+
+// paasDir returns the PaaS install directory, used to derive default paths.
+func paasDir() string {
+	if dir := os.Getenv("PAAS_DIR"); dir != "" {
+		return dir
+	}
+	return "/opt/paas"
 }
 
 func getEnv(key, fallback string) string {

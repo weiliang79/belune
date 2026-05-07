@@ -97,6 +97,17 @@ func (h *Handler) GetBackupStatus(w http.ResponseWriter, r *http.Request) {
 
 // TriggerBackupRun enqueues a TypeBackupNow task.
 func (h *Handler) TriggerBackupRun(w http.ResponseWriter, r *http.Request) {
+	// Reject if a backup is already in progress to avoid concurrent archive writes.
+	last, err := h.queries.GetLastBackupRun(r.Context())
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		writeError(w, http.StatusInternalServerError, "failed to check backup status")
+		return
+	}
+	if err == nil && last.Status == "running" {
+		writeError(w, http.StatusConflict, "a backup is already in progress")
+		return
+	}
+
 	task := asynq.NewTask(worker.TypeBackupNow, nil)
 	if _, err := h.asynq.Enqueue(task, asynq.Queue("low")); err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to enqueue backup task")

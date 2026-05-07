@@ -14,13 +14,14 @@ import (
 	"github.com/ungweiliang/selfhost-paas/internal/store/generated"
 )
 
-const defaultBackupScriptPath = "/opt/paas/scripts/backup.sh"
-
 // HandleBackupNowTask shells out to backup.sh and records the result in
 // backup_runs. The task does not retry on failure — a second run is
 // triggered by the user or the daily timer.
 func (h *TaskHandler) HandleBackupNowTask(ctx context.Context, t *asynq.Task) error {
-	scriptPath := defaultBackupScriptPath
+	scriptPath := "/opt/paas/scripts/backup.sh"
+	if h.Config != nil && h.Config.BackupScriptPath != "" {
+		scriptPath = h.Config.BackupScriptPath
+	}
 
 	var run generated.BackupRun
 	if h.Queries != nil {
@@ -91,7 +92,6 @@ func (h *TaskHandler) finaliseRun(ctx context.Context, id pgtype.UUID, errMsg st
 		ID:         id,
 		FinishedAt: pgtype.Timestamptz{Time: time.Now(), Valid: true},
 		Status:     status,
-		LocalPath:  "",
 		RemoteKey:  pgtype.Text{},
 		SizeBytes:  0,
 		Error:      errText,

@@ -13,7 +13,7 @@ import (
 
 const insertBackupRun = `-- name: InsertBackupRun :one
 INSERT INTO backup_runs DEFAULT VALUES
-RETURNING id, started_at, finished_at, status, local_path, remote_key, size_bytes, error
+RETURNING id, started_at, finished_at, status, remote_key, size_bytes, error
 `
 
 func (q *Queries) InsertBackupRun(ctx context.Context) (BackupRun, error) {
@@ -24,7 +24,6 @@ func (q *Queries) InsertBackupRun(ctx context.Context) (BackupRun, error) {
 		&i.StartedAt,
 		&i.FinishedAt,
 		&i.Status,
-		&i.LocalPath,
 		&i.RemoteKey,
 		&i.SizeBytes,
 		&i.Error,
@@ -36,10 +35,9 @@ const updateBackupRun = `-- name: UpdateBackupRun :exec
 UPDATE backup_runs
 SET finished_at = $2,
     status      = $3,
-    local_path  = $4,
-    remote_key  = $5,
-    size_bytes  = $6,
-    error       = $7
+    remote_key  = $4,
+    size_bytes  = $5,
+    error       = $6
 WHERE id = $1
 `
 
@@ -47,7 +45,6 @@ type UpdateBackupRunParams struct {
 	ID         pgtype.UUID        `json:"id"`
 	FinishedAt pgtype.Timestamptz `json:"finished_at"`
 	Status     string             `json:"status"`
-	LocalPath  string             `json:"local_path"`
 	RemoteKey  pgtype.Text        `json:"remote_key"`
 	SizeBytes  int64              `json:"size_bytes"`
 	Error      pgtype.Text        `json:"error"`
@@ -58,7 +55,6 @@ func (q *Queries) UpdateBackupRun(ctx context.Context, arg UpdateBackupRunParams
 		arg.ID,
 		arg.FinishedAt,
 		arg.Status,
-		arg.LocalPath,
 		arg.RemoteKey,
 		arg.SizeBytes,
 		arg.Error,
@@ -67,7 +63,7 @@ func (q *Queries) UpdateBackupRun(ctx context.Context, arg UpdateBackupRunParams
 }
 
 const listBackupRuns = `-- name: ListBackupRuns :many
-SELECT id, started_at, finished_at, status, local_path, remote_key, size_bytes, error
+SELECT id, started_at, finished_at, status, remote_key, size_bytes, error
 FROM backup_runs
 ORDER BY started_at DESC
 LIMIT $1
@@ -87,7 +83,6 @@ func (q *Queries) ListBackupRuns(ctx context.Context, limit int32) ([]BackupRun,
 			&i.StartedAt,
 			&i.FinishedAt,
 			&i.Status,
-			&i.LocalPath,
 			&i.RemoteKey,
 			&i.SizeBytes,
 			&i.Error,
@@ -103,7 +98,7 @@ func (q *Queries) ListBackupRuns(ctx context.Context, limit int32) ([]BackupRun,
 }
 
 const getLastSucceededBackupRun = `-- name: GetLastSucceededBackupRun :one
-SELECT id, started_at, finished_at, status, local_path, remote_key, size_bytes, error
+SELECT id, started_at, finished_at, status, remote_key, size_bytes, error
 FROM backup_runs
 WHERE status = 'succeeded'
 ORDER BY finished_at DESC
@@ -118,7 +113,6 @@ func (q *Queries) GetLastSucceededBackupRun(ctx context.Context) (BackupRun, err
 		&i.StartedAt,
 		&i.FinishedAt,
 		&i.Status,
-		&i.LocalPath,
 		&i.RemoteKey,
 		&i.SizeBytes,
 		&i.Error,
@@ -127,7 +121,7 @@ func (q *Queries) GetLastSucceededBackupRun(ctx context.Context) (BackupRun, err
 }
 
 const getLastBackupRun = `-- name: GetLastBackupRun :one
-SELECT id, started_at, finished_at, status, local_path, remote_key, size_bytes, error
+SELECT id, started_at, finished_at, status, remote_key, size_bytes, error
 FROM backup_runs
 ORDER BY started_at DESC
 LIMIT 1
@@ -141,7 +135,6 @@ func (q *Queries) GetLastBackupRun(ctx context.Context) (BackupRun, error) {
 		&i.StartedAt,
 		&i.FinishedAt,
 		&i.Status,
-		&i.LocalPath,
 		&i.RemoteKey,
 		&i.SizeBytes,
 		&i.Error,

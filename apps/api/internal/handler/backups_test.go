@@ -68,6 +68,25 @@ func TestBackupEndpoints_RequireAdmin(t *testing.T) {
 	assert.Equal(t, http.StatusForbidden, env.DoRequest(t, "POST", "/api/backups/run", nil, testutil.AuthHeader(memberToken)).StatusCode)
 }
 
+func TestTriggerBackupRun_ConflictWhenRunning(t *testing.T) {
+	resetDB(t)
+	token := env.SetupAdmin(t, "admin@test.com", "password123")
+
+	// First trigger queues successfully (no running row yet).
+	resp := env.DoRequest(t, "POST", "/api/backups/run", nil, testutil.AuthHeader(token))
+	require.Equal(t, http.StatusAccepted, resp.StatusCode)
+
+	// Simulate a 'running' record by directly inserting one via the DB.
+	// The asynq task starts async, so we insert the record manually here
+	// to test the guard logic directly without waiting for the worker.
+	_, err := env.Pool.Exec(t.Context(), `INSERT INTO backup_runs (status) VALUES ('running')`)
+	require.NoError(t, err)
+
+	// Second trigger while one is running → 409.
+	resp = env.DoRequest(t, "POST", "/api/backups/run", nil, testutil.AuthHeader(token))
+	assert.Equal(t, http.StatusConflict, resp.StatusCode)
+}
+
 func TestBackupEndpoints_RequireAuth(t *testing.T) {
 	resetDB(t)
 
