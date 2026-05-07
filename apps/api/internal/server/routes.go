@@ -155,6 +155,11 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService,
 				})
 				r.Get("/api/users/invitations", h.ListPendingInvitations)
 				r.Delete("/api/users/invitations/{invitationId}", h.RevokeInvitation)
+
+				// Backup management
+				r.Get("/api/backups", h.ListBackupRuns)
+				r.Get("/api/backups/status", h.GetBackupStatus)
+				r.Post("/api/backups/run", h.TriggerBackupRun)
 			})
 
 			// Git credentials

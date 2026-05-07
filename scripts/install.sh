@@ -157,11 +157,31 @@ if [[ -d /run/systemd/system ]] && [[ ${EUID:-$(id -u)} -eq 0 ]]; then
   else
     info "/etc/systemd/system/paas.service already exists — skipping."
   fi
+
+  # ── Backup timer ──────────────────────────────────────────────────────────────
+  if [[ ! -f /etc/systemd/system/paas-backup.timer ]]; then
+    info "Installing paas-backup.service and paas-backup.timer..."
+    if [[ "${INSTALL_DIR}" != "/opt/paas" ]]; then
+      sed "s|/opt/paas|${INSTALL_DIR}|g" \
+        infra/systemd/paas-backup.service > /etc/systemd/system/paas-backup.service
+    else
+      cp infra/systemd/paas-backup.service /etc/systemd/system/paas-backup.service
+    fi
+    cp infra/systemd/paas-backup.timer /etc/systemd/system/paas-backup.timer
+    systemctl daemon-reload
+    systemctl enable --now paas-backup.timer >/dev/null 2>&1 || true
+    success "paas-backup.timer installed and enabled (daily backups at 02:00)."
+  else
+    info "/etc/systemd/system/paas-backup.timer already exists — skipping."
+  fi
 else
   info "Skipping systemd install (not root or non-systemd host)."
   info "To enable auto-start on reboot:"
   info "  sudo cp ${INSTALL_DIR}/infra/systemd/paas.service /etc/systemd/system/"
   info "  sudo systemctl daemon-reload && sudo systemctl enable --now paas.service"
+  info "To enable daily backups:"
+  info "  sudo cp ${INSTALL_DIR}/infra/systemd/paas-backup.{service,timer} /etc/systemd/system/"
+  info "  sudo systemctl daemon-reload && sudo systemctl enable --now paas-backup.timer"
 fi
 
 # ── Done ──────────────────────────────────────────────────────────────────────

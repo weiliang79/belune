@@ -17,6 +17,7 @@ import (
 	"github.com/ungweiliang/selfhost-paas/internal/quota"
 	"github.com/ungweiliang/selfhost-paas/internal/runtime"
 	"github.com/ungweiliang/selfhost-paas/internal/service"
+	"github.com/ungweiliang/selfhost-paas/internal/service/backup"
 	"github.com/ungweiliang/selfhost-paas/internal/service/email"
 	"github.com/ungweiliang/selfhost-paas/internal/store/generated"
 )
@@ -46,6 +47,7 @@ type TaskHandler struct {
 	AppService     *service.ApplicationService
 	QuotaService   *quota.Service
 	EmailService   *email.Service
+	BackupService  *backup.Service
 	AuditLog       auditLogger
 	Enqueuer       TaskEnqueuer
 }
@@ -99,6 +101,8 @@ func (w *Worker) Start() error {
 	mux.HandleFunc(TypeEmailSend, w.handler.HandleEmailSendTask)
 	mux.HandleFunc(TypeAuthTokenCleanup, w.handler.HandleAuthTokenCleanup)
 	mux.HandleFunc(TypeQuotaThresholdSweep, w.handler.HandleQuotaThresholdSweep)
+	mux.HandleFunc(TypeBackupNow, w.handler.HandleBackupNowTask)
+	mux.HandleFunc(TypeBackupRotate, w.handler.HandleBackupRotateTask)
 
 	slog.Info("starting worker server")
 	return w.server.Start(mux)
@@ -135,7 +139,13 @@ func (w *Worker) StartScheduler() (*asynq.Scheduler, error) {
 		return nil, err
 	}
 
-	slog.Info("starting scheduler (cleanup: 24h, retention: 24h, auth-token-cleanup: 1h, quota-sweep: 6h)")
+	// Backup rotation daily — deletes remote objects beyond the retention policy.
+	backupRotateTask := asynq.NewTask(TypeBackupRotate, nil)
+	if _, err := scheduler.Register("@every 24h", backupRotateTask, asynq.Queue("low")); err != nil {
+		return nil, err
+	}
+
+	slog.Info("starting scheduler (cleanup: 24h, retention: 24h, auth-token-cleanup: 1h, quota-sweep: 6h, backup-rotate: 24h)")
 	if err := scheduler.Start(); err != nil {
 		return nil, err
 	}

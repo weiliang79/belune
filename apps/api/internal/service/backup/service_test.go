@@ -159,3 +159,46 @@ func TestBackupService_DeleteMissingKeyIsNoError(t *testing.T) {
 	err := svc.Delete(ctx, []string{"paas/nonexistent.tar.gz"})
 	assert.NoError(t, err)
 }
+
+func TestSelectForDeletion(t *testing.T) {
+	now := time.Date(2026, 1, 31, 12, 0, 0, 0, time.UTC)
+
+	// Objects sorted oldest-first (as List returns them).
+	objects := []backup.BackupObject{
+		{Key: "backup-1", LastModified: now.AddDate(0, 0, -60)}, // 60 days old
+		{Key: "backup-2", LastModified: now.AddDate(0, 0, -45)}, // 45 days old
+		{Key: "backup-3", LastModified: now.AddDate(0, 0, -20)}, // 20 days old, within retainDays
+		{Key: "backup-4", LastModified: now.AddDate(0, 0, -10)}, // always-keep (count)
+		{Key: "backup-5", LastModified: now.AddDate(0, 0, -1)},  // always-keep (count)
+	}
+
+	t.Run("deletes old beyond count", func(t *testing.T) {
+		// retainDays=30, retainCount=2 → always keep backup-4, backup-5
+		// backup-1 (60d) and backup-2 (45d) are older than 30d → delete
+		// backup-3 (20d) is within 30d → keep
+		keys := backup.SelectForDeletion(objects, now, 30, 2)
+		assert.Equal(t, []string{"backup-1", "backup-2"}, keys)
+	})
+
+	t.Run("retainCount protects recent objects regardless of age", func(t *testing.T) {
+		// retainCount=5 → all 5 objects always kept
+		keys := backup.SelectForDeletion(objects, now, 1, 5)
+		assert.Empty(t, keys)
+	})
+
+	t.Run("retainDays=0 equivalent to immediate deletion", func(t *testing.T) {
+		// retainDays=0 → all objects older than now deleted (all 3 candidates)
+		keys := backup.SelectForDeletion(objects, now, 0, 2)
+		assert.Equal(t, []string{"backup-1", "backup-2", "backup-3"}, keys)
+	})
+
+	t.Run("empty list returns nil", func(t *testing.T) {
+		keys := backup.SelectForDeletion(nil, now, 30, 3)
+		assert.Nil(t, keys)
+	})
+
+	t.Run("retainCount larger than list keeps everything", func(t *testing.T) {
+		keys := backup.SelectForDeletion(objects[:2], now, 1, 10)
+		assert.Empty(t, keys)
+	})
+}

@@ -1,0 +1,16 @@
+[Unit]
+Description=Self-Hosted PaaS — nightly backup
+Documentation=https://github.com/ungweiliang/selfhost-paas/blob/main/docs/runbooks/backup-storage.md
+After=docker.service paas.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/paas
+ExecStart=/bin/bash /opt/paas/scripts/backup.sh
+
+# Allow up to 10 minutes for large databases.
+TimeoutStartSec=600
+
+[Install]
+WantedBy=multi-user.target

@@ -8,6 +8,17 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type BackupRun struct {
+	ID         pgtype.UUID        `json:"id"`
+	StartedAt  pgtype.Timestamptz `json:"started_at"`
+	FinishedAt pgtype.Timestamptz `json:"finished_at"`
+	Status     string             `json:"status"`
+	LocalPath  string             `json:"local_path"`
+	RemoteKey  pgtype.Text        `json:"remote_key"`
+	SizeBytes  int64              `json:"size_bytes"`
+	Error      pgtype.Text        `json:"error"`
+}
+
 type AlertPreference struct {
 	UserID                pgtype.UUID `json:"user_id"`
 	DeployFailures        bool        `json:"deploy_failures"`

@@ -159,6 +159,54 @@ func (s *Service) EnsureBucket(ctx context.Context) error {
 	return nil
 }
 
+// SelectForDeletion returns the keys that should be deleted under the given
+// retention policy. objects must be sorted oldest-first (as returned by List).
+// The retainCount newest objects are always kept regardless of age. Beyond
+// that, objects whose LastModified is older than retainDays days are deleted.
+func SelectForDeletion(objects []BackupObject, now time.Time, retainDays, retainCount int) []string {
+	if len(objects) == 0 {
+		return nil
+	}
+
+	// keepFrom is the index of the first object in the "always keep" tail.
+	keepFrom := len(objects) - retainCount
+	if keepFrom < 0 {
+		keepFrom = 0
+	}
+
+	cutoff := now.AddDate(0, 0, -retainDays)
+
+	var toDelete []string
+	for i, obj := range objects {
+		if i >= keepFrom {
+			break
+		}
+		if obj.LastModified.Before(cutoff) {
+			toDelete = append(toDelete, obj.Key)
+		}
+	}
+	return toDelete
+}
+
+// Rotate applies the retention policy: deletes remote objects that are beyond
+// BackupRetainCount AND older than BackupRetainDays. Returns the deleted keys.
+func (s *Service) Rotate(ctx context.Context) ([]string, error) {
+	objects, err := s.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	keys := SelectForDeletion(objects, time.Now(), s.cfg.BackupRetainDays, s.cfg.BackupRetainCount)
+	if len(keys) == 0 {
+		return nil, nil
+	}
+
+	if err := s.Delete(ctx, keys); err != nil {
+		return nil, err
+	}
+	return keys, nil
+}
+
 // init lazily constructs the minio client on first use.
 func (s *Service) init() error {
 	if s.client != nil {
