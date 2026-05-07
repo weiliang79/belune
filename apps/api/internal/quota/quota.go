@@ -9,12 +9,23 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/ungweiliang/selfhost-paas/internal/store/generated"
 )
+
+const alertHysteresis = 10 // pp below threshold before resetting alert state
+
+// ThresholdAlert is returned by MaybeAlertProjectThreshold when a quota
+// threshold alert should be sent. CurrentPercent is the rounded usage %.
+type ThresholdAlert struct {
+	ProjectID      pgtype.UUID
+	CurrentPercent int
+	Threshold      int
+}
 
 const (
 	ScopeUser    = "user"
@@ -218,3 +229,73 @@ func LimitsToRow(l Limits) (pgtype.Int4, pgtype.Float8, pgtype.Int8) {
 
 // LimitsFromRow re-exports the internal conversion for tests / handlers.
 func LimitsFromRow(row generated.Quota) Limits { return limitsFromRow(row) }
+
+// MaybeAlertProjectThreshold checks whether the project's application-count
+// usage has crossed threshold (rising-edge). Returns a non-nil *ThresholdAlert
+// when an alert should be sent; nil when no alert is needed.
+//
+// threshold is the user-configured percent (1–100); pass 80 as the default.
+// The function updates quota_alert_state so duplicate alerts are suppressed
+// and hysteresis is enforced (state resets when usage drops ≥10pp below threshold).
+func (s *Service) MaybeAlertProjectThreshold(ctx context.Context, projectID pgtype.UUID, threshold int) (*ThresholdAlert, error) {
+	limits, err := s.LimitsFor(ctx, ScopeProject, projectID)
+	if err != nil {
+		return nil, fmt.Errorf("get project limits: %w", err)
+	}
+	if limits.MaxApplications == nil {
+		return nil, nil // no application cap — nothing to alert on
+	}
+
+	usage, err := s.UsageForProject(ctx, projectID)
+	if err != nil {
+		return nil, fmt.Errorf("get project usage: %w", err)
+	}
+
+	currentPercent := int(usage.Applications * 100 / int64(*limits.MaxApplications))
+
+	state, err := s.q.GetQuotaAlertState(ctx, generated.GetQuotaAlertStateParams{
+		Scope:   ScopeProject,
+		ScopeID: projectID,
+	})
+	lastPercent := 0
+	if err == nil {
+		lastPercent = int(state.LastAlertedPercent)
+	} else if !errors.Is(err, pgx.ErrNoRows) {
+		return nil, fmt.Errorf("get quota alert state: %w", err)
+	}
+
+	fire, reset := evalThreshold(lastPercent, threshold, currentPercent, alertHysteresis)
+
+	if fire || reset {
+		newPercent := int32(currentPercent)
+		if reset {
+			newPercent = 0
+		}
+		if upsertErr := s.q.UpsertQuotaAlertState(ctx, generated.UpsertQuotaAlertStateParams{
+			Scope:              ScopeProject,
+			ScopeID:            projectID,
+			LastAlertedAt:      pgtype.Timestamptz{Time: time.Now(), Valid: true},
+			LastAlertedPercent: newPercent,
+		}); upsertErr != nil {
+			return nil, fmt.Errorf("update quota alert state: %w", upsertErr)
+		}
+	}
+
+	if fire {
+		return &ThresholdAlert{
+			ProjectID:      projectID,
+			CurrentPercent: currentPercent,
+			Threshold:      threshold,
+		}, nil
+	}
+	return nil, nil
+}
+
+// evalThreshold implements the rising-edge + hysteresis alert logic.
+// fire: lastPercent < threshold ≤ currentPercent (first crossing)
+// reset: currentPercent ≤ threshold-hysteresis (dropped far enough to re-arm)
+func evalThreshold(lastPercent, threshold, currentPercent, hysteresis int) (fire, reset bool) {
+	fire = lastPercent < threshold && currentPercent >= threshold
+	reset = !fire && currentPercent <= threshold-hysteresis
+	return
+}

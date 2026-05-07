@@ -90,3 +90,17 @@ WHERE parent_application_id IS NOT NULL
 -- name: TouchApplicationActivity :exec
 UPDATE applications SET last_activity_at = NOW()
 WHERE id = $1;
+
+-- name: GetDeploymentOwnerInfo :one
+SELECT u.id AS user_id, u.email, u.first_name, a.name AS app_name, p.name AS project_name
+FROM deployments d
+JOIN applications a ON a.id = d.application_id
+JOIN projects p ON p.id = a.project_id
+JOIN users u ON u.id = p.user_id
+WHERE d.id = $1;
+
+-- name: GetProjectOwnerInfo :one
+SELECT u.id AS user_id, u.email, u.first_name, p.name AS project_name
+FROM projects p
+JOIN users u ON u.id = p.user_id
+WHERE p.id = $1;

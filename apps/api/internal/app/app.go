@@ -134,6 +134,8 @@ func New(cfg *config.Config) (*App, error) {
 		AppService:     appSvc,
 		QuotaService:   quotaSvc,
 		EmailService:   emailSvc,
+		AuditLog:       auditSvc,
+		Enqueuer:       asynqClient,
 	}
 
 	w := worker.New(redisOpt, taskHandler)

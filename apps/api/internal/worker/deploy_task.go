@@ -116,7 +116,7 @@ func (h *TaskHandler) HandleDeployTask(ctx context.Context, t *asynq.Task) error
 	if err := runStage(ctx, "deploy.load_application", func(ctx context.Context) error {
 		return h.loadApplication(ctx, dc)
 	}); err != nil {
-		h.failDeployment(ctx, dc.deploymentID, fmt.Sprintf("load application: %v", err))
+		h.failDeployment(ctx, dc.deploymentID, "deploy", fmt.Sprintf("load application: %v", err))
 		recordSpanErr(rootSpan, err)
 		return fmt.Errorf("load application (permanent): %w: %w", err, asynq.SkipRetry)
 	}
@@ -129,7 +129,7 @@ func (h *TaskHandler) HandleDeployTask(ctx context.Context, t *asynq.Task) error
 	if err := runStage(ctx, "deploy.check_quota", func(ctx context.Context) error {
 		return h.checkDeployQuota(ctx, dc)
 	}); err != nil {
-		h.failDeployment(ctx, dc.deploymentID, fmt.Sprintf("quota check: %v", err))
+		h.failDeployment(ctx, dc.deploymentID, "deploy", fmt.Sprintf("quota check: %v", err))
 		recordSpanErr(rootSpan, err)
 		return fmt.Errorf("quota check (permanent): %w: %w", err, asynq.SkipRetry)
 	}
@@ -148,7 +148,7 @@ func (h *TaskHandler) HandleDeployTask(ctx context.Context, t *asynq.Task) error
 	if err := runStage(ctx, "deploy.prepare_image", func(ctx context.Context) error {
 		return h.prepareImage(ctx, dc)
 	}); err != nil {
-		h.failDeployment(ctx, dc.deploymentID, fmt.Sprintf("%v", err))
+		h.failDeployment(ctx, dc.deploymentID, "deploy", fmt.Sprintf("%v", err))
 		recordSpanErr(rootSpan, err)
 		return err
 	}
@@ -158,7 +158,7 @@ func (h *TaskHandler) HandleDeployTask(ctx context.Context, t *asynq.Task) error
 		return h.createAndStart(ctx, dc)
 	}); err != nil {
 		h.runCompensators(dc)
-		h.failDeployment(ctx, dc.deploymentID, fmt.Sprintf("create container: %v", err))
+		h.failDeployment(ctx, dc.deploymentID, "deploy", fmt.Sprintf("create container: %v", err))
 		recordSpanErr(rootSpan, err)
 		return fmt.Errorf("create container: %w", err)
 	}
@@ -168,7 +168,7 @@ func (h *TaskHandler) HandleDeployTask(ctx context.Context, t *asynq.Task) error
 		return h.wireProxy(ctx, dc)
 	}); err != nil {
 		h.runCompensators(dc)
-		h.failDeployment(ctx, dc.deploymentID, fmt.Sprintf("wire proxy: %v", err))
+		h.failDeployment(ctx, dc.deploymentID, "deploy", fmt.Sprintf("wire proxy: %v", err))
 		recordSpanErr(rootSpan, err)
 		return fmt.Errorf("wire proxy: %w", err)
 	}
@@ -182,7 +182,7 @@ func (h *TaskHandler) HandleDeployTask(ctx context.Context, t *asynq.Task) error
 		return h.verifyHealth(ctx, dc)
 	}); err != nil {
 		h.runCompensators(dc)
-		h.failDeployment(ctx, dc.deploymentID, fmt.Sprintf("health check failed: %v", err))
+		h.failDeployment(ctx, dc.deploymentID, "deploy", fmt.Sprintf("health check failed: %v", err))
 		recordSpanErr(rootSpan, err)
 		return fmt.Errorf("health check: %w", err)
 	}
@@ -658,7 +658,7 @@ func (h *TaskHandler) runCompensators(dc *deployContext) {
 	}
 }
 
-func (h *TaskHandler) failDeployment(ctx context.Context, deploymentID pgtype.UUID, errMsg string) {
+func (h *TaskHandler) failDeployment(ctx context.Context, deploymentID pgtype.UUID, kind, errMsg string) {
 	retried, _ := asynq.GetRetryCount(ctx)
 	maxRetry, _ := asynq.GetMaxRetry(ctx)
 
@@ -666,6 +666,7 @@ func (h *TaskHandler) failDeployment(ctx context.Context, deploymentID pgtype.UU
 
 	slog.Error("deployment failed",
 		"deployment_id", fmt.Sprintf("%v", deploymentID),
+		"kind", kind,
 		"error", safeMsg,
 		"retry", retried,
 		"max_retry", maxRetry,
@@ -677,6 +678,64 @@ func (h *TaskHandler) failDeployment(ctx context.Context, deploymentID pgtype.UU
 			Status:       status.DeploymentFailed,
 			ErrorMessage: pgtype.Text{String: safeMsg, Valid: true},
 		})
+		h.maybeAlertDeploymentFailed(ctx, deploymentID, kind, safeMsg)
+	}
+}
+
+// maybeAlertDeploymentFailed fires a failure alert email if the deployment owner has alerts enabled.
+func (h *TaskHandler) maybeAlertDeploymentFailed(ctx context.Context, deploymentID pgtype.UUID, kind, errMsg string) {
+	if h.EmailService == nil || h.Enqueuer == nil {
+		return
+	}
+
+	ownerInfo, err := h.Queries.GetDeploymentOwnerInfo(ctx, deploymentID)
+	if err != nil {
+		slog.Warn("alert: failed to fetch deployment owner info", "deployment_id", fmt.Sprintf("%v", deploymentID), "error", err)
+		return
+	}
+
+	prefs, err := h.Queries.GetAlertPreferences(ctx, ownerInfo.UserID)
+	if err != nil && !isNoRows(err) {
+		slog.Warn("alert: failed to fetch alert preferences", "user_id", fmt.Sprintf("%v", ownerInfo.UserID), "error", err)
+		return
+	}
+
+	// Apply defaults when no row: deploy_failures and build_failures both default to true.
+	alertEnabled := true
+	if err == nil {
+		switch kind {
+		case "build":
+			alertEnabled = prefs.BuildFailures
+		default:
+			alertEnabled = prefs.DeployFailures
+		}
+	}
+	if !alertEnabled {
+		return
+	}
+
+	templateName := "alert_deploy_failed"
+	if kind == "build" {
+		templateName = "alert_build_failed"
+	}
+
+	vars := map[string]any{
+		"AppName":      ownerInfo.AppName,
+		"ProjectName":  ownerInfo.ProjectName,
+		"DeploymentID": fmt.Sprintf("%v", deploymentID),
+		"ErrorMessage": errMsg,
+	}
+	if kind == "build" {
+		vars["BuildID"] = fmt.Sprintf("%v", deploymentID)
+	}
+
+	task, err := NewEmailSendTask(templateName, ownerInfo.Email, vars)
+	if err != nil {
+		slog.Warn("alert: failed to build email task", "error", err)
+		return
+	}
+	if _, err := h.Enqueuer.Enqueue(task); err != nil {
+		slog.Warn("alert: failed to enqueue failure alert email", "error", err)
 	}
 }
 

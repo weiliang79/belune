@@ -50,7 +50,7 @@ func (h *TaskHandler) HandleBuildTask(ctx context.Context, t *asynq.Task) error 
 	// Fetch application details with project slug
 	appRow, err := h.Queries.GetApplicationWithProjectSlug(ctx, applicationID)
 	if err != nil {
-		h.failDeployment(ctx, deploymentID, fmt.Sprintf("fetch application: %v", err))
+		h.failDeployment(ctx, deploymentID, "build", fmt.Sprintf("fetch application: %v", err))
 		return fmt.Errorf("get application (permanent): %w: %w", err, asynq.SkipRetry)
 	}
 	app := generated.Application{
@@ -74,7 +74,7 @@ func (h *TaskHandler) HandleBuildTask(ctx context.Context, t *asynq.Task) error 
 	// Clone the repository
 	tmpDir, err := os.MkdirTemp("", "paas-build-*")
 	if err != nil {
-		h.failDeployment(ctx, deploymentID, fmt.Sprintf("create temp dir: %v", err))
+		h.failDeployment(ctx, deploymentID, "build", fmt.Sprintf("create temp dir: %v", err))
 		return fmt.Errorf("create temp dir: %w", err)
 	}
 	defer func() {
@@ -99,7 +99,7 @@ func (h *TaskHandler) HandleBuildTask(ctx context.Context, t *asynq.Task) error 
 	slog.Info("cloning repository", "repo", app.SourceRepo.String, "dest", tmpDir)
 	cloneResult, err := git.Clone(buildCtx, app.SourceRepo.String, tmpDir, "", gitToken)
 	if err != nil {
-		h.failDeployment(ctx, deploymentID, fmt.Sprintf("git clone: %v", err))
+		h.failDeployment(ctx, deploymentID, "build", fmt.Sprintf("git clone: %v", err))
 		return fmt.Errorf("git clone: %w", err)
 	}
 	slog.Info("cloned repository", "commit", cloneResult.CommitSHA)
@@ -150,7 +150,7 @@ func (h *TaskHandler) HandleBuildTask(ctx context.Context, t *asynq.Task) error 
 	logWriter.Flush()
 	pub.Close(ctx)
 	if err != nil {
-		h.failDeployment(ctx, deploymentID, fmt.Sprintf("build: %v", err))
+		h.failDeployment(ctx, deploymentID, "build", fmt.Sprintf("build: %v", err))
 		return fmt.Errorf("build: %w", err)
 	}
 

@@ -8,6 +8,14 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type AlertPreference struct {
+	UserID                pgtype.UUID `json:"user_id"`
+	DeployFailures        bool        `json:"deploy_failures"`
+	BuildFailures         bool        `json:"build_failures"`
+	QuotaThreshold        bool        `json:"quota_threshold"`
+	QuotaThresholdPercent int32       `json:"quota_threshold_percent"`
+}
+
 type Application struct {
 	ID                      pgtype.UUID        `json:"id"`
 	ProjectID               pgtype.UUID        `json:"project_id"`
@@ -207,6 +215,13 @@ type Quota struct {
 	MaxMemoryMb     pgtype.Int8        `json:"max_memory_mb"`
 	CreatedAt       pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+}
+
+type QuotaAlertState struct {
+	Scope              string             `json:"scope"`
+	ScopeID            pgtype.UUID        `json:"scope_id"`
+	LastAlertedAt      pgtype.Timestamptz `json:"last_alerted_at"`
+	LastAlertedPercent int32              `json:"last_alerted_percent"`
 }
 
 type RefreshToken struct {

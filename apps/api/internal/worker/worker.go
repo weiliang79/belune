@@ -21,6 +21,17 @@ import (
 	"github.com/ungweiliang/selfhost-paas/internal/store/generated"
 )
 
+// auditLogger is the narrow interface the worker needs to emit audit entries.
+type auditLogger interface {
+	Log(userID, ip, action, resourceType, resourceID string, details map[string]any)
+}
+
+// TaskEnqueuer is the narrow interface used by worker tasks that need to
+// enqueue follow-on work (e.g. sending alert emails from async tasks).
+type TaskEnqueuer interface {
+	Enqueue(task *asynq.Task, opts ...asynq.Option) (*asynq.TaskInfo, error)
+}
+
 // TaskHandler holds dependencies needed by async task handlers.
 type TaskHandler struct {
 	Runtime        runtime.ContainerRuntime
@@ -35,6 +46,8 @@ type TaskHandler struct {
 	AppService     *service.ApplicationService
 	QuotaService   *quota.Service
 	EmailService   *email.Service
+	AuditLog       auditLogger
+	Enqueuer       TaskEnqueuer
 }
 
 type Worker struct {
@@ -85,6 +98,7 @@ func (w *Worker) Start() error {
 	})
 	mux.HandleFunc(TypeEmailSend, w.handler.HandleEmailSendTask)
 	mux.HandleFunc(TypeAuthTokenCleanup, w.handler.HandleAuthTokenCleanup)
+	mux.HandleFunc(TypeQuotaThresholdSweep, w.handler.HandleQuotaThresholdSweep)
 
 	slog.Info("starting worker server")
 	return w.server.Start(mux)
@@ -109,13 +123,19 @@ func (w *Worker) StartScheduler() (*asynq.Scheduler, error) {
 		return nil, err
 	}
 
-	// Hourly auth-token cleanup: expired password-reset tokens (+ invitations in Phase 3).
+	// Hourly auth-token cleanup: expired password-reset and invitation tokens.
 	authCleanupTask := asynq.NewTask(TypeAuthTokenCleanup, nil)
 	if _, err := scheduler.Register("@every 1h", authCleanupTask, asynq.Queue("low")); err != nil {
 		return nil, err
 	}
 
-	slog.Info("starting scheduler (cleanup: 24h, retention: 24h, auth-token-cleanup: 1h)")
+	// Quota threshold sweep every 6h — walks all projects and fires alerts.
+	quotaSweepTask := asynq.NewTask(TypeQuotaThresholdSweep, nil)
+	if _, err := scheduler.Register("@every 6h", quotaSweepTask, asynq.Queue("low")); err != nil {
+		return nil, err
+	}
+
+	slog.Info("starting scheduler (cleanup: 24h, retention: 24h, auth-token-cleanup: 1h, quota-sweep: 6h)")
 	if err := scheduler.Start(); err != nil {
 		return nil, err
 	}

@@ -134,6 +134,9 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService,
 			r.Put("/api/auth/password", h.ChangeOwnPassword)
 			r.Put("/api/auth/profile", h.UpdateProfile)
 
+			r.Get("/api/account/alert-preferences", h.GetAlertPreferences)
+			r.Put("/api/account/alert-preferences", h.UpdateAlertPreferences)
+
 			// Admin-only routes
 			r.Group(func(r chi.Router) {
 				r.Use(middleware.RequireRole("admin"))

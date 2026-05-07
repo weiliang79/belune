@@ -18,6 +18,7 @@ import (
 	"github.com/ungweiliang/selfhost-paas/internal/service"
 	"github.com/ungweiliang/selfhost-paas/internal/status"
 	"github.com/ungweiliang/selfhost-paas/internal/store/generated"
+	"github.com/ungweiliang/selfhost-paas/internal/worker"
 )
 
 type createApplicationRequest struct {
@@ -103,6 +104,8 @@ func (h *Handler) CreateApplication(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.audit(r, "create_application", "application", uuidToString(app.ID), map[string]any{"name": req.Name, "project_id": projectID})
+
+	h.maybeEnqueueQuotaAlert(r, projectUUID)
 
 	writeJSON(w, http.StatusCreated, app)
 }
@@ -615,4 +618,62 @@ func (h *Handler) BuildApplication(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusAccepted, deployment)
+}
+
+// isNotFound returns true when err is a pgx no-rows sentinel (quota prefs table miss).
+func isNotFound(err error) bool {
+	return err != nil && err.Error() == "no rows in result set"
+}
+
+// newAlertQuotaTask builds the asynq email task for a quota threshold alert.
+func newAlertQuotaTask(toEmail, projectName string, usagePct, threshold int) (*asynq.Task, error) {
+	return worker.NewEmailSendTask("alert_quota_threshold", toEmail, map[string]any{
+		"ProjectName":      projectName,
+		"QuotaType":        "applications",
+		"UsagePercent":     usagePct,
+		"ThresholdPercent": threshold,
+	})
+}
+
+// maybeEnqueueQuotaAlert checks the project's quota usage after an app is created
+// and enqueues an alert email if the owner's threshold has been crossed.
+func (h *Handler) maybeEnqueueQuotaAlert(r *http.Request, projectID pgtype.UUID) {
+	if h.quotaSvc == nil || h.asynq == nil {
+		return
+	}
+
+	project, err := h.queries.GetProject(r.Context(), projectID)
+	if err != nil {
+		return
+	}
+
+	ownerPrefs, err := h.queries.GetAlertPreferences(r.Context(), project.UserID)
+	threshold := 80
+	if err == nil {
+		if !ownerPrefs.QuotaThreshold {
+			return
+		}
+		threshold = int(ownerPrefs.QuotaThresholdPercent)
+	} else if !isNotFound(err) {
+		return
+	}
+
+	alert, err := h.quotaSvc.MaybeAlertProjectThreshold(r.Context(), projectID, threshold)
+	if err != nil || alert == nil {
+		return
+	}
+
+	ownerInfo, err := h.queries.GetProjectOwnerInfo(r.Context(), projectID)
+	if err != nil {
+		return
+	}
+
+	task, err := newAlertQuotaTask(ownerInfo.Email, ownerInfo.ProjectName, alert.CurrentPercent, alert.Threshold)
+	if err != nil {
+		slog.Warn("quota alert: failed to build email task", "error", err)
+		return
+	}
+	if _, err := h.asynq.Enqueue(task); err != nil {
+		slog.Warn("quota alert: failed to enqueue email task", "error", err)
+	}
 }
