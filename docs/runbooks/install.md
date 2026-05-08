@@ -127,6 +127,33 @@ docker compose -f /opt/paas/docker-compose.yml exec postgres \
 
 ---
 
+## 6a. Configure SMTP (recommended)
+
+SMTP unlocks three features: password-reset emails, user invitations, and alert
+notifications. Without it the platform works but team onboarding requires the
+admin to set passwords manually.
+
+See [`smtp.md`](./smtp.md) for the full setup guide. Minimum required vars:
+
+```env
+PUBLIC_BASE_URL=https://paas.example.com
+SMTP_HOST=smtp.example.com
+SMTP_PORT=587
+SMTP_USER=...
+SMTP_PASSWORD=...
+```
+
+---
+
+## 6b. Invite additional team members
+
+Once SMTP is configured, invite team members from **Settings → Team → Invite
+by Email**. They receive a link to set their own password — no manual password
+distribution needed. Invitations expire after 7 days; resend from the same
+Pending Invitations table if needed.
+
+---
+
 ## 7. Sample deploy (smoke test)
 
 Confirm the platform end-to-end with a static container:
@@ -145,17 +172,28 @@ If anything sticks in `pending` or `building`, see
 
 ## 8. Backups
 
-Backups are not enabled by default. The `scripts/backup.sh` helper takes a
-`pg_dump` of the `paas` database plus the encrypted secrets needed to
-decrypt env vars, then writes a tarball to a directory you choose.
+The platform includes a built-in backup scheduler that runs `scripts/backup.sh`
+on a daily schedule (default 02:00 UTC) and enforces a rotation policy. No
+external cron job is required.
 
-Schedule via cron (or a systemd timer) once you're past the smoke-test
-stage:
+**Defaults** (active with no configuration):
+- Daily local backup to `PAAS_DIR/backups/` (i.e. `/opt/paas/backups/`).
+- Keeps the last 14 backups **and** any backup newer than 30 days — whichever
+  retains more.
 
-```sh
-# /etc/cron.d/paas-backup
-0 3 * * * root /opt/paas/scripts/backup.sh /var/backups/paas >> /var/log/paas-backup.log 2>&1
+**Enable remote (S3-compatible) upload** for off-host durability:
+
+```env
+BACKUP_REMOTE_ENABLED=true
+BACKUP_S3_ENDPOINT=            # empty = AWS S3; or e.g. s3.us-west-004.backblazeb2.com
+BACKUP_S3_REGION=us-east-1
+BACKUP_S3_BUCKET=my-paas-backups
+BACKUP_S3_ACCESS_KEY=...
+BACKUP_S3_SECRET_KEY=...
 ```
+
+The status of the last backup run — and a "Run Backup Now" trigger — is
+visible in the dashboard under **Settings → Backups** (admin only).
 
 Restore drill (do this at least once before you need it for real):
 [`disaster-recovery.md`](./disaster-recovery.md).
@@ -177,6 +215,8 @@ to be restarted — `update.sh` only bounces the `paas` container.
 
 ## 10. Where to go next
 
+- [`smtp.md`](./smtp.md) — configure outbound email for password-reset, invitations, and alerts.
+- [`alerts.md`](./alerts.md) — per-user alert preferences (deploy/build failures, quota thresholds).
 - [`key-rotation.md`](./key-rotation.md) — rotate `ENCRYPTION_KEY` without losing data.
 - [`scaling.md`](./scaling.md) — vertical / horizontal headroom and resource caps.
 - [`troubleshooting.md`](./troubleshooting.md) — first stop when something is wrong.

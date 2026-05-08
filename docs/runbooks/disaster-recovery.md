@@ -18,12 +18,23 @@ These targets assume a recent backup exists and a replacement host is available.
 
 ## Backup strategy
 
-Run `scripts/backup.sh` on a schedule (cron or systemd timer). The archive contains:
+The platform runs `scripts/backup.sh` on a built-in daily schedule (default
+02:00 UTC) with automatic rotation. Archives contain:
 - Full Postgres SQL dump
 - Caddy TLS data (certificates + config)
 - `.env` file
 
-Recommended schedule: daily backups, retained for 30 days. Store backups off-host (S3, B2, rsync to another server).
+**Local backups** are written to `PAAS_DIR/backups/` (default
+`/opt/paas/backups/`) and rotated according to `BACKUP_RETAIN_DAYS` (30) and
+`BACKUP_RETAIN_COUNT` (14).
+
+**Remote backups** (recommended for production) upload each archive to
+S3-compatible object storage automatically. Enable with `BACKUP_REMOTE_ENABLED=true`
+and the `BACKUP_S3_*` variables — see [`install.md` § 8](./install.md#8-backups)
+for the full variable list.
+
+Backup status and a manual trigger are available in the dashboard under
+**Settings → Backups**.
 
 ### Encrypted backups
 
@@ -143,15 +154,24 @@ tar -xzf paas-backup-<timestamp>.tar.gz --strip-components=1 '*/postgres.sql' -O
 
 ---
 
-## Backup retention policy (example cron)
+## Backup retention policy
 
-```cron
-# Run backup daily at 02:00 UTC, keep last 30 archives
-0 2 * * * /opt/paas/scripts/backup.sh /opt/paas/backups >> /var/log/paas-backup.log 2>&1
-0 3 * * * find /opt/paas/backups -name 'paas-backup-*.tar.gz*' -mtime +30 -delete
+Rotation is handled automatically by the built-in scheduler. The defaults keep
+the 14 most recent backups and any backup newer than 30 days (whichever is
+more). Override in `.env`:
+
+```env
+BACKUP_RETAIN_DAYS=30
+BACKUP_RETAIN_COUNT=14
 ```
 
-Off-host sync example (rclone to S3-compatible storage):
+For S3 remote backups the same policy applies to objects in the configured
+bucket prefix — old objects are deleted automatically after each successful run.
+
+If you need to trigger a one-off backup outside the schedule, either use the
+**Settings → Backups → Run Backup Now** button in the dashboard or run the
+script directly:
+
 ```bash
-rclone sync /opt/paas/backups remote:my-paas-backups --min-age 1h
+bash /opt/paas/scripts/backup.sh
 ```
