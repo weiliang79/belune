@@ -6,6 +6,8 @@ export function useBackupRuns() {
   return useQuery({
     queryKey: queryKeys.backups.runs,
     queryFn: listBackupRuns,
+    refetchInterval: (query) =>
+      query.state.data?.[0]?.status === "running" ? 5000 : false,
   });
 }
 

@@ -20,12 +20,17 @@ export const Route = createFileRoute("/forgot-password")({
 
 function ForgotPasswordPage() {
   const [submitted, setSubmitted] = useState(false);
+  const [submitError, setSubmitError] = useState("");
 
   const form = useForm({
     defaultValues: { email: "" },
     onSubmit: async ({ value }) => {
-      await forgotPassword(value.email);
-      setSubmitted(true);
+      try {
+        await forgotPassword(value.email);
+        setSubmitted(true);
+      } catch {
+        setSubmitError("Something went wrong. Please try again.");
+      }
     },
   });
 
@@ -82,6 +87,9 @@ function ForgotPasswordPage() {
                   </div>
                 )}
               />
+              {submitError && (
+                <p className="text-destructive text-sm">{submitError}</p>
+              )}
               <form.Subscribe
                 selector={(s) => s.isSubmitting}
                 children={(isSubmitting) => (

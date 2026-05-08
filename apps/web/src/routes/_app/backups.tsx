@@ -44,6 +44,8 @@ function BackupsPage() {
   const { data: runs, isLoading: runsLoading } = useBackupRuns();
   const trigger = useTriggerBackup();
 
+  const isRunning = runs?.[0]?.status === "running";
+
   const handleTrigger = () => {
     toast.promise(trigger.mutateAsync(), {
       loading: "Queueing backup…",
@@ -61,8 +63,8 @@ function BackupsPage() {
             Database and configuration backups.
           </p>
         </div>
-        <Button onClick={handleTrigger} disabled={trigger.isPending}>
-          {trigger.isPending ? "Queueing…" : "Run Backup Now"}
+        <Button onClick={handleTrigger} disabled={trigger.isPending || isRunning}>
+          {isRunning ? "Backup in progress…" : trigger.isPending ? "Queueing…" : "Run Backup Now"}
         </Button>
       </div>
 
