@@ -120,19 +120,25 @@ jobs:
           go-version-file: apps/api/go.mod
           cache-dependency-path: apps/api/go.sum
 
+      - name: Install PostgreSQL 16 client
+        run: |
+          sudo apt-get install -y --no-install-recommends postgresql-client-16 2>/dev/null \
+            || sudo apt-get install -y --no-install-recommends postgresql-client
+
       - name: Apply migrations (baseline)
         env:
           DATABASE_URL: postgres://paas:paas@localhost:5432/paas?sslmode=disable
         run: go run ./cmd/migrate-check
 
       - name: Seed representative rows
+        # PGPASSWORD is the fixed CI-only service container password — intentional plaintext.
         env:
           PGPASSWORD: paas
         run: |
           psql -h localhost -U paas -d paas \
             -c "INSERT INTO settings (key, value) VALUES ('restore_drill_marker', 'phase7') ON CONFLICT (key) DO NOTHING;"
           psql -h localhost -U paas -d paas \
-            -c "INSERT INTO users (email, password_hash, role, username, first_name, last_name) VALUES ('drill@example.com', 'x', 'admin', 'drill', 'Drill', 'User');"
+            -c "INSERT INTO users (email, password_hash, role, username, first_name, last_name) VALUES ('drill@example.com', '\$2a\$10\$aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'admin', 'drill', 'Drill', 'User');"
 
       - name: Dump database
         env:
