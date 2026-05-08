@@ -1,9 +1,8 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useForm } from "@tanstack/react-form";
 import { z } from "zod";
-import { login, getMe } from "@/lib/api/auth";
+import { resetPassword } from "@/lib/api/auth";
 import { ApiError } from "@/lib/api/client";
-import { useAuthStore } from "@/lib/stores/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -16,43 +15,58 @@ import {
 } from "@/components/ui/card";
 import { useState } from "react";
 
-export const Route = createFileRoute("/login")({
-  component: LoginPage,
+export const Route = createFileRoute("/reset-password")({
+  component: ResetPasswordPage,
+  validateSearch: (search: Record<string, unknown>) => ({
+    token: typeof search.token === "string" ? search.token : "",
+  }),
 });
 
-function LoginPage() {
+function ResetPasswordPage() {
+  const { token } = Route.useSearch();
   const navigate = useNavigate();
-  const setUser = useAuthStore((s) => s.setUser);
   const [error, setError] = useState("");
 
   const form = useForm({
-    defaultValues: { email: "", password: "" },
+    defaultValues: { password: "", confirm: "" },
     onSubmit: async ({ value }) => {
+      if (value.password !== value.confirm) {
+        setError("Passwords do not match");
+        return;
+      }
       setError("");
       try {
-        await login(value.email, value.password);
-        const user = await getMe();
-        setUser(user);
-        navigate({ to: "/dashboard" });
+        await resetPassword(token, value.password);
+        navigate({ to: "/login" });
       } catch (e) {
-        if (e instanceof ApiError && e.status === 429 && e.retryAfter) {
-          const mins = Math.ceil(e.retryAfter / 60);
-          setError(
-            `Account temporarily locked due to repeated failed login attempts. Try again in ${mins} minute${mins === 1 ? "" : "s"}.`,
-          );
-          return;
-        }
-        setError(e instanceof Error ? e.message : "Login failed");
+        setError(e instanceof ApiError ? e.message : "Reset failed");
       }
     },
   });
+
+  if (!token) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <Card className="w-full max-w-sm">
+          <CardContent className="pt-6">
+            <p className="text-destructive text-sm">
+              Invalid or missing reset token.{" "}
+              <Link to="/forgot-password" className="underline">
+                Request a new one.
+              </Link>
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="flex min-h-screen items-center justify-center">
       <Card className="w-full max-w-sm">
         <CardHeader>
-          <CardTitle className="text-2xl">Login</CardTitle>
-          <CardDescription>Sign in to your PaaS dashboard</CardDescription>
+          <CardTitle className="text-2xl">Reset password</CardTitle>
+          <CardDescription>Choose a new password for your account.</CardDescription>
         </CardHeader>
         <CardContent>
           <form
@@ -69,72 +83,57 @@ function LoginPage() {
               </div>
             )}
             <form.Field
-              name="email"
+              name="password"
               validators={{
-                onChange: z.string().email("Valid email required"),
+                onChange: z.string().min(8, "At least 8 characters required"),
               }}
               children={(field) => (
                 <div className="space-y-2">
-                  <Label htmlFor="email">Email</Label>
+                  <Label htmlFor="password">New password</Label>
                   <Input
-                    id="email"
-                    type="email"
-                    placeholder="admin@example.com"
+                    id="password"
+                    type="password"
+                    placeholder="At least 8 characters"
                     value={field.state.value}
                     onBlur={field.handleBlur}
                     onChange={(e) => field.handleChange(e.target.value)}
                   />
                   {field.state.meta.errors.length > 0 && (
                     <p className="text-destructive text-sm">
-                      {typeof field.state.meta.errors[0] === 'string' ? field.state.meta.errors[0] : field.state.meta.errors[0]?.message}
+                      {typeof field.state.meta.errors[0] === "string"
+                        ? field.state.meta.errors[0]
+                        : field.state.meta.errors[0]?.message}
                     </p>
                   )}
                 </div>
               )}
             />
             <form.Field
-              name="password"
+              name="confirm"
               validators={{
-                onChange: z.string().min(1, "Password is required"),
+                onChange: z.string().min(1, "Please confirm your password"),
               }}
               children={(field) => (
                 <div className="space-y-2">
-                  <Label htmlFor="password">Password</Label>
+                  <Label htmlFor="confirm">Confirm password</Label>
                   <Input
-                    id="password"
+                    id="confirm"
                     type="password"
                     value={field.state.value}
                     onBlur={field.handleBlur}
                     onChange={(e) => field.handleChange(e.target.value)}
                   />
-                  {field.state.meta.errors.length > 0 && (
-                    <p className="text-destructive text-sm">
-                      {typeof field.state.meta.errors[0] === 'string' ? field.state.meta.errors[0] : field.state.meta.errors[0]?.message}
-                    </p>
-                  )}
                 </div>
               )}
             />
             <form.Subscribe
               selector={(s) => s.isSubmitting}
               children={(isSubmitting) => (
-                <Button
-                  type="submit"
-                  className="w-full"
-                  disabled={isSubmitting}
-                >
-                  {isSubmitting ? "Signing in..." : "Sign in"}
+                <Button type="submit" className="w-full" disabled={isSubmitting}>
+                  {isSubmitting ? "Resetting..." : "Reset password"}
                 </Button>
               )}
             />
-            <div className="text-center">
-              <Link
-                to="/forgot-password"
-                className="text-muted-foreground text-sm underline"
-              >
-                Forgot password?
-              </Link>
-            </div>
           </form>
         </CardContent>
       </Card>

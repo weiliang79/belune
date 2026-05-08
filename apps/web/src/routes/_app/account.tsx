@@ -4,6 +4,7 @@ import { RouteError } from "@/lib/components/route-error";
 import { toast } from "sonner";
 import { useAuthStore } from "@/lib/stores/auth";
 import { useChangeOwnPassword, useUpdateProfile } from "@/lib/hooks/use-users";
+import { useAlertPreferences, useUpdateAlertPreferences } from "@/lib/hooks/use-alert-preferences";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -44,6 +45,7 @@ function SettingsPage() {
 
       <ProfileCard />
       <ChangePasswordCard />
+      <AlertPreferencesCard />
     </div>
   );
 }
@@ -192,5 +194,142 @@ function ChangePasswordCard() {
         </form>
       </CardContent>
     </Card>
+  );
+}
+
+function AlertPreferencesCard() {
+  const { data: prefs, isLoading } = useAlertPreferences();
+  const update = useUpdateAlertPreferences();
+
+  const [local, setLocal] = useState<{
+    deploy_failures: boolean;
+    build_failures: boolean;
+    quota_threshold: boolean;
+    quota_threshold_percent: number;
+  } | null>(null);
+
+  const current = local ?? prefs ?? {
+    deploy_failures: true,
+    build_failures: true,
+    quota_threshold: true,
+    quota_threshold_percent: 80,
+  };
+
+  const toggle = (key: "deploy_failures" | "build_failures" | "quota_threshold") => {
+    setLocal({ ...current, [key]: !current[key] });
+  };
+
+  const handleSave = () => {
+    toast.promise(
+      update.mutateAsync(current).then(() => setLocal(null)),
+      {
+        loading: "Saving…",
+        success: "Alert preferences saved",
+        error: (err) => err.message,
+      },
+    );
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Alert Preferences</CardTitle>
+      </CardHeader>
+      <CardContent>
+        {isLoading ? (
+          <div className="space-y-3">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="bg-muted h-8 animate-pulse rounded" />
+            ))}
+          </div>
+        ) : (
+          <div className="space-y-4">
+            <PreferenceRow
+              label="Deploy failures"
+              description="Email when a deployment fails."
+              checked={current.deploy_failures}
+              onToggle={() => toggle("deploy_failures")}
+            />
+            <PreferenceRow
+              label="Build failures"
+              description="Email when a build fails."
+              checked={current.build_failures}
+              onToggle={() => toggle("build_failures")}
+            />
+            <PreferenceRow
+              label="Quota threshold"
+              description="Email when resource usage exceeds the threshold."
+              checked={current.quota_threshold}
+              onToggle={() => toggle("quota_threshold")}
+            />
+            {current.quota_threshold && (
+              <div className="flex items-center gap-3 pl-1">
+                <Label htmlFor="quota-pct" className="text-sm">
+                  Alert at
+                </Label>
+                <Input
+                  id="quota-pct"
+                  type="number"
+                  min={1}
+                  max={100}
+                  value={current.quota_threshold_percent}
+                  onChange={(e) =>
+                    setLocal({
+                      ...current,
+                      quota_threshold_percent: Number(e.target.value),
+                    })
+                  }
+                  className="w-20"
+                />
+                <span className="text-muted-foreground text-sm">% usage</span>
+              </div>
+            )}
+            <Button
+              size="sm"
+              onClick={handleSave}
+              disabled={update.isPending || local === null}
+            >
+              {update.isPending ? "Saving…" : "Save"}
+            </Button>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function PreferenceRow({
+  label,
+  description,
+  checked,
+  onToggle,
+}: {
+  label: string;
+  description: string;
+  checked: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <div className="flex items-center justify-between">
+      <div>
+        <p className="text-sm font-medium">{label}</p>
+        <p className="text-muted-foreground text-xs">{description}</p>
+      </div>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={checked}
+        onClick={onToggle}
+        className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+          checked ? "bg-primary" : "bg-input"
+        }`}
+      >
+        <span
+          className={`pointer-events-none inline-block h-4 w-4 rounded-full bg-background shadow-lg transition-transform ${
+            checked ? "translate-x-4" : "translate-x-0"
+          }`}
+        />
+      </button>
+    </div>
   );
 }

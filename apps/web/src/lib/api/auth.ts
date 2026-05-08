@@ -36,3 +36,11 @@ export function setup(email: string, password: string, username?: string) {
 export function updateProfile(data: { username: string; first_name: string; last_name: string }) {
   return api.put<User>("/auth/profile", data);
 }
+
+export function forgotPassword(email: string) {
+  return api.post<{ status: string }>("/auth/forgot-password", { email });
+}
+
+export function resetPassword(token: string, new_password: string) {
+  return api.post<void>("/auth/reset-password", { token, new_password });
+}

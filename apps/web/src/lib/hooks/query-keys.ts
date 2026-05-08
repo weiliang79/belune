@@ -73,4 +73,10 @@ export const queryKeys = {
     all: (projectId: string, applicationId: string) =>
       ["projects", projectId, "applications", applicationId, "previews"] as const,
   },
+  backups: {
+    runs: ["backups", "runs"] as const,
+    status: ["backups", "status"] as const,
+  },
+  alertPreferences: ["alert-preferences"] as const,
+  invitations: ["invitations"] as const,
 };

@@ -12,6 +12,7 @@ import {
   useDeleteUser,
   useResetUserPassword,
 } from "@/lib/hooks/use-users";
+import { useInvitations, useInviteUser, useRevokeInvitation } from "@/lib/hooks/use-invitations";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -60,6 +61,7 @@ function TeamSettingsPage() {
   const { data: users, isLoading } = useUsers();
 
   const [createOpen, setCreateOpen] = useState(false);
+  const [inviteOpen, setInviteOpen] = useState(false);
   const [resetPasswordUser, setResetPasswordUser] = useState<{
     id: string;
     email: string;
@@ -81,9 +83,14 @@ function TeamSettingsPage() {
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle>Team Members</CardTitle>
-          <Button size="sm" onClick={() => setCreateOpen(true)}>
-            Add User
-          </Button>
+          <div className="flex gap-2">
+            <Button size="sm" variant="outline" onClick={() => setInviteOpen(true)}>
+              Invite by Email
+            </Button>
+            <Button size="sm" onClick={() => setCreateOpen(true)}>
+              Add User
+            </Button>
+          </div>
         </CardHeader>
         <CardContent>
           {isLoading ? (
@@ -128,7 +135,10 @@ function TeamSettingsPage() {
         </CardContent>
       </Card>
 
+      <PendingInvitationsCard />
+
       <CreateUserDialog open={createOpen} onOpenChange={setCreateOpen} />
+      <InviteUserDialog open={inviteOpen} onOpenChange={setInviteOpen} />
 
       {resetPasswordUser && (
         <ResetPasswordDialog
@@ -516,5 +526,184 @@ function DeleteUserDialog({
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
+  );
+}
+
+function PendingInvitationsCard() {
+  const { data: invitations, isLoading } = useInvitations();
+  const revoke = useRevokeInvitation();
+
+  if (!isLoading && (!invitations || invitations.length === 0)) return null;
+
+  const handleRevoke = (id: string, email: string) => {
+    toast.promise(revoke.mutateAsync(id), {
+      loading: "Revoking invitation…",
+      success: `Invitation for ${email} revoked`,
+      error: (err) => err.message,
+    });
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Pending Invitations</CardTitle>
+      </CardHeader>
+      <CardContent>
+        {isLoading ? (
+          <div className="space-y-3">
+            {[1, 2].map((i) => (
+              <div key={i} className="bg-muted h-10 animate-pulse rounded" />
+            ))}
+          </div>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Email</TableHead>
+                <TableHead>Role</TableHead>
+                <TableHead>Expires</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {invitations?.map((inv) => (
+                <TableRow key={inv.id}>
+                  <TableCell className="font-medium">{inv.email}</TableCell>
+                  <TableCell>
+                    <Badge variant={inv.role === "admin" ? "default" : "secondary"}>
+                      {inv.role}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="text-muted-foreground text-sm">
+                    {new Date(inv.expires_at).toLocaleDateString()}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleRevoke(inv.id, inv.email)}
+                      disabled={revoke.isPending}
+                    >
+                      Revoke
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function InviteUserDialog({
+  open,
+  onOpenChange,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const inviteUser = useInviteUser();
+
+  const form = useForm({
+    defaultValues: { email: "", role: "member" },
+    onSubmit: async ({ value }) => {
+      toast.promise(
+        inviteUser
+          .mutateAsync({ email: value.email, role: value.role })
+          .then(() => {
+            form.reset();
+            onOpenChange(false);
+          }),
+        {
+          loading: "Sending invitation…",
+          success: "Invitation sent",
+          error: (err) => err.message,
+        },
+      );
+    },
+  });
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Invite User</DialogTitle>
+          <DialogDescription>
+            Send an email invitation with a sign-up link.
+          </DialogDescription>
+        </DialogHeader>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            form.handleSubmit();
+          }}
+          className="space-y-4"
+        >
+          <form.Field
+            name="email"
+            validators={{ onChange: z.string().email("Email is required") }}
+            children={(field) => (
+              <div className="space-y-2">
+                <Label htmlFor="invite-email">Email</Label>
+                <Input
+                  id="invite-email"
+                  type="email"
+                  value={field.state.value}
+                  onBlur={field.handleBlur}
+                  onChange={(e) => field.handleChange(e.target.value)}
+                  placeholder="user@example.com"
+                />
+                {field.state.meta.errors.length > 0 && (
+                  <p className="text-destructive text-sm">
+                    {typeof field.state.meta.errors[0] === "string"
+                      ? field.state.meta.errors[0]
+                      : field.state.meta.errors[0]?.message}
+                  </p>
+                )}
+              </div>
+            )}
+          />
+          <form.Field
+            name="role"
+            children={(field) => (
+              <div className="space-y-2">
+                <Label>Role</Label>
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    variant={field.state.value === "member" ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => field.handleChange("member")}
+                  >
+                    Member
+                  </Button>
+                  <Button
+                    type="button"
+                    variant={field.state.value === "admin" ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => field.handleChange("admin")}
+                  >
+                    Admin
+                  </Button>
+                </div>
+              </div>
+            )}
+          />
+          <DialogFooter>
+            <form.Subscribe
+              selector={(s) => s.isSubmitting}
+              children={(isSubmitting) => (
+                <Button type="submit" disabled={isSubmitting}>
+                  {isSubmitting ? "Sending…" : "Send Invitation"}
+                </Button>
+              )}
+            />
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }

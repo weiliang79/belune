@@ -207,3 +207,38 @@ export interface AuditLog {
   created_at: string;
   user_email?: string;
 }
+
+export interface Invitation {
+  id: string;
+  email: string;
+  role: string;
+  invited_by_user_id: string;
+  expires_at: string;
+  accepted_at: string | null;
+  created_at: string;
+}
+
+export interface BackupRun {
+  id: string;
+  started_at: string;
+  finished_at: string | null;
+  status: "running" | "succeeded" | "failed";
+  remote_key: string | null;
+  size_bytes: number;
+  error: string | null;
+}
+
+export interface BackupStatus {
+  last_succeeded_at: string | null;
+  last_attempted_at: string | null;
+  last_error: string | null;
+  remote_enabled: boolean;
+  retention: { days: number; count: number };
+}
+
+export interface AlertPreferences {
+  deploy_failures: boolean;
+  build_failures: boolean;
+  quota_threshold: boolean;
+  quota_threshold_percent: number;
+}
