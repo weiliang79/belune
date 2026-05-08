@@ -90,10 +90,90 @@ jobs:
       - name: Lint
         run: npm run lint
 
+  restore-drill:
+    name: Restore drill
+    runs-on: ubuntu-latest
+    needs: [backend, migrations]
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: paas
+          POSTGRES_PASSWORD: paas
+          POSTGRES_DB: paas
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U paas"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    defaults:
+      run:
+        working-directory: apps/api
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: apps/api/go.mod
+          cache-dependency-path: apps/api/go.sum
+
+      - name: Apply migrations (baseline)
+        env:
+          DATABASE_URL: postgres://paas:paas@localhost:5432/paas?sslmode=disable
+        run: go run ./cmd/migrate-check
+
+      - name: Seed representative rows
+        env:
+          PGPASSWORD: paas
+        run: |
+          psql -h localhost -U paas -d paas \
+            -c "INSERT INTO settings (key, value) VALUES ('restore_drill_marker', 'phase7') ON CONFLICT (key) DO NOTHING;"
+          psql -h localhost -U paas -d paas \
+            -c "INSERT INTO users (email, password_hash, role, username, first_name, last_name) VALUES ('drill@example.com', 'x', 'admin', 'drill', 'Drill', 'User');"
+
+      - name: Dump database
+        env:
+          PGPASSWORD: paas
+        run: pg_dump -h localhost -U paas paas > /tmp/paas-drill.sql
+
+      - name: Drop and recreate database
+        env:
+          PGPASSWORD: paas
+        run: |
+          psql -h localhost -U paas -d postgres -c "DROP DATABASE paas;"
+          psql -h localhost -U paas -d postgres -c "CREATE DATABASE paas;"
+
+      - name: Restore from dump
+        env:
+          PGPASSWORD: paas
+        run: psql -h localhost -U paas -d paas < /tmp/paas-drill.sql
+
+      - name: Re-apply migrations (must be idempotent no-op)
+        env:
+          DATABASE_URL: postgres://paas:paas@localhost:5432/paas?sslmode=disable
+        run: go run ./cmd/migrate-check
+
+      - name: Verify seeded rows survived round-trip
+        env:
+          PGPASSWORD: paas
+        run: |
+          SETTING=$(psql -h localhost -U paas -d paas -t -A \
+            -c "SELECT value FROM settings WHERE key = 'restore_drill_marker';")
+          [ "${SETTING}" = "phase7" ] || { echo "FAIL: settings row missing after restore"; exit 1; }
+
+          COUNT=$(psql -h localhost -U paas -d paas -t -A \
+            -c "SELECT COUNT(*) FROM users WHERE email = 'drill@example.com';")
+          [ "${COUNT}" = "1" ] || { echo "FAIL: user row missing after restore"; exit 1; }
+
+          echo "Restore drill passed: all rows survived the round-trip."
+
   docker-build:
     name: Docker build (smoke test)
     runs-on: ubuntu-latest
-    needs: [backend, frontend, migrations]
+    needs: [backend, frontend, migrations, restore-drill]
     if: github.event_name == 'push'
 
     steps:
