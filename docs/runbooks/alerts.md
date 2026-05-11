@@ -39,10 +39,12 @@ Preferences are per-user and take effect immediately — no restart required.
 
 ---
 
-## 3. Admin view
+## 3. Alert scope
 
-Admins receive alerts scoped to all projects on the platform. Regular members
-receive alerts only for projects they own or are a member of.
+All alerts (deploy failures, build failures, quota threshold) are sent to the
+**project owner** — the user who owns the project that triggered the event.
+Admin role does not automatically grant platform-wide alert coverage; admins
+receive alerts only for projects they own.
 
 There is no global on/off switch for alerts — individual users opt in or out.
 If a user has no email address on file, alerts for that user are silently
@@ -70,4 +72,4 @@ resource bars on the project dashboard.
 | No alert emails received | Verify SMTP is configured and working (`smtp.md` § 5) |
 | Preferences not saving | Check browser console for API errors; confirm the API is reachable |
 | Alert fires too frequently | Increase `quota_threshold_percent` in Account preferences |
-| Admin gets alerts for all projects unexpectedly | Expected behaviour — admins are scoped platform-wide |
+| Admin not receiving alerts for all projects | Expected — alerts go to the project owner only, not all admins |

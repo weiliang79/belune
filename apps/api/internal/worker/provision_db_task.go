@@ -3,6 +3,7 @@ package worker
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 
@@ -29,7 +30,7 @@ func (h *TaskHandler) HandleProvisionDBTask(ctx context.Context, t *asynq.Task) 
 
 	dbID, err := parseUUID(payload.DatabaseID)
 	if err != nil {
-		return fmt.Errorf("invalid database_id (permanent): %w: %w", err, asynq.SkipRetry)
+		return errors.Join(fmt.Errorf("invalid database_id (permanent): %w", err), asynq.SkipRetry)
 	}
 
 	db, err := h.Queries.GetDatabase(ctx, dbID)

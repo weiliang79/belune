@@ -3,6 +3,7 @@ package worker
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
@@ -39,7 +40,7 @@ func (h *TaskHandler) HandleCleanupTask(ctx context.Context, t *asynq.Task) erro
 	if payload.ApplicationID != "" {
 		appID, err := parseUUID(payload.ApplicationID)
 		if err != nil {
-			return fmt.Errorf("invalid application_id (permanent): %w: %w", err, asynq.SkipRetry)
+			return errors.Join(fmt.Errorf("invalid application_id (permanent): %w", err), asynq.SkipRetry)
 		}
 		app, err := h.Queries.GetApplication(ctx, appID)
 		if err != nil {

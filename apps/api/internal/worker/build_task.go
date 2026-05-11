@@ -3,6 +3,7 @@ package worker
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -34,11 +35,11 @@ func (h *TaskHandler) HandleBuildTask(ctx context.Context, t *asynq.Task) error 
 
 	applicationID, err := parseUUID(payload.ApplicationID)
 	if err != nil {
-		return fmt.Errorf("invalid application_id (permanent): %w: %w", err, asynq.SkipRetry)
+		return errors.Join(fmt.Errorf("invalid application_id (permanent): %w", err), asynq.SkipRetry)
 	}
 	deploymentID, err := parseUUID(payload.DeploymentID)
 	if err != nil {
-		return fmt.Errorf("invalid deployment_id (permanent): %w: %w", err, asynq.SkipRetry)
+		return errors.Join(fmt.Errorf("invalid deployment_id (permanent): %w", err), asynq.SkipRetry)
 	}
 
 	// Update deployment status to building
@@ -51,7 +52,7 @@ func (h *TaskHandler) HandleBuildTask(ctx context.Context, t *asynq.Task) error 
 	appRow, err := h.Queries.GetApplicationWithProjectSlug(ctx, applicationID)
 	if err != nil {
 		h.failDeployment(ctx, deploymentID, "build", fmt.Sprintf("fetch application: %v", err))
-		return fmt.Errorf("get application (permanent): %w: %w", err, asynq.SkipRetry)
+		return errors.Join(fmt.Errorf("get application (permanent): %w", err), asynq.SkipRetry)
 	}
 	app := generated.Application{
 		ID: appRow.ID, ProjectID: appRow.ProjectID, Name: appRow.Name,

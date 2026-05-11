@@ -3,6 +3,7 @@ package worker
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -80,12 +81,12 @@ func (h *TaskHandler) HandleDeployTask(ctx context.Context, t *asynq.Task) error
 	applicationID, err := parseUUID(payload.ApplicationID)
 	if err != nil {
 		recordSpanErr(rootSpan, err)
-		return fmt.Errorf("invalid application_id (permanent): %w: %w", err, asynq.SkipRetry)
+		return errors.Join(fmt.Errorf("invalid application_id (permanent): %w", err), asynq.SkipRetry)
 	}
 	deploymentID, err := parseUUID(payload.DeploymentID)
 	if err != nil {
 		recordSpanErr(rootSpan, err)
-		return fmt.Errorf("invalid deployment_id (permanent): %w: %w", err, asynq.SkipRetry)
+		return errors.Join(fmt.Errorf("invalid deployment_id (permanent): %w", err), asynq.SkipRetry)
 	}
 
 	// Defense-in-depth: if the deployment row is already in a terminal state,
@@ -95,7 +96,7 @@ func (h *TaskHandler) HandleDeployTask(ctx context.Context, t *asynq.Task) error
 	existing, err := h.Queries.GetDeployment(ctx, deploymentID)
 	if err != nil {
 		recordSpanErr(rootSpan, err)
-		return fmt.Errorf("fetch deployment (permanent): %w: %w", err, asynq.SkipRetry)
+		return errors.Join(fmt.Errorf("fetch deployment (permanent): %w", err), asynq.SkipRetry)
 	}
 	if existing.Status == status.DeploymentSuccess || existing.Status == status.DeploymentFailed {
 		rootSpan.SetAttributes(attribute.String("deploy.skipped_reason", "already_terminal"))
@@ -118,7 +119,7 @@ func (h *TaskHandler) HandleDeployTask(ctx context.Context, t *asynq.Task) error
 	}); err != nil {
 		h.failDeployment(ctx, dc.deploymentID, "deploy", fmt.Sprintf("load application: %v", err))
 		recordSpanErr(rootSpan, err)
-		return fmt.Errorf("load application (permanent): %w: %w", err, asynq.SkipRetry)
+		return errors.Join(fmt.Errorf("load application (permanent): %w", err), asynq.SkipRetry)
 	}
 
 	// Stage 1.5: defence-in-depth quota check. Quotas are validated at
@@ -131,7 +132,7 @@ func (h *TaskHandler) HandleDeployTask(ctx context.Context, t *asynq.Task) error
 	}); err != nil {
 		h.failDeployment(ctx, dc.deploymentID, "deploy", fmt.Sprintf("quota check: %v", err))
 		recordSpanErr(rootSpan, err)
-		return fmt.Errorf("quota check (permanent): %w: %w", err, asynq.SkipRetry)
+		return errors.Join(fmt.Errorf("quota check (permanent): %w", err), asynq.SkipRetry)
 	}
 
 	// Stage 2 & 3: idempotent cleanup and network setup — log-only on error

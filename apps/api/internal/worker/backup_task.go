@@ -2,10 +2,12 @@ package worker
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
 	"os/exec"
+	"strings"
 	"time"
 
 	"github.com/hibiken/asynq"
@@ -34,8 +36,8 @@ func (h *TaskHandler) HandleBackupNowTask(ctx context.Context, t *asynq.Task) er
 
 	if _, err := os.Stat(scriptPath); os.IsNotExist(err) {
 		msg := fmt.Sprintf("backup script not found at %s; use 'systemctl start paas-backup.service' instead", scriptPath)
-		h.finaliseRun(ctx, run.ID, msg)
-		return fmt.Errorf("%s: %w", msg, asynq.SkipRetry)
+		h.finaliseRun(ctx, run.ID, 0, pgtype.Text{}, msg)
+		return errors.Join(fmt.Errorf(msg), asynq.SkipRetry)
 	}
 
 	cmd := exec.CommandContext(ctx, "bash", scriptPath)
@@ -43,12 +45,27 @@ func (h *TaskHandler) HandleBackupNowTask(ctx context.Context, t *asynq.Task) er
 
 	if execErr != nil {
 		errMsg := fmt.Sprintf("%v\n%s", execErr, string(out))
-		h.finaliseRun(ctx, run.ID, errMsg)
-		return fmt.Errorf("backup script failed: %w: %w", execErr, asynq.SkipRetry)
+		h.finaliseRun(ctx, run.ID, 0, pgtype.Text{}, errMsg)
+		return errors.Join(fmt.Errorf("backup script failed: %w", execErr), asynq.SkipRetry)
 	}
 
 	slog.Info("backup_now: script completed successfully", "output_bytes", len(out))
-	h.finaliseRun(ctx, run.ID, "")
+
+	archivePath, remoteKeyStr := parseBackupOutput(string(out))
+	var sizeBytes int64
+	if archivePath != "" {
+		if info, err := os.Stat(archivePath); err == nil {
+			sizeBytes = info.Size()
+		} else {
+			slog.Warn("backup_now: could not stat archive", "path", archivePath, "error", err)
+		}
+	}
+	remoteKey := pgtype.Text{}
+	if remoteKeyStr != "" {
+		remoteKey = pgtype.Text{String: remoteKeyStr, Valid: true}
+	}
+
+	h.finaliseRun(ctx, run.ID, sizeBytes, remoteKey, "")
 	return nil
 }
 
@@ -76,7 +93,7 @@ func (h *TaskHandler) HandleBackupRotateTask(ctx context.Context, t *asynq.Task)
 // finaliseRun updates the backup_run record with the final status and
 // optional error message. Logs and swallows DB errors — the backup itself
 // already succeeded or failed; we don't want a DB hiccup to mask that.
-func (h *TaskHandler) finaliseRun(ctx context.Context, id pgtype.UUID, errMsg string) {
+func (h *TaskHandler) finaliseRun(ctx context.Context, id pgtype.UUID, sizeBytes int64, remoteKey pgtype.Text, errMsg string) {
 	if h.Queries == nil || !id.Valid {
 		return
 	}
@@ -92,10 +109,31 @@ func (h *TaskHandler) finaliseRun(ctx context.Context, id pgtype.UUID, errMsg st
 		ID:         id,
 		FinishedAt: pgtype.Timestamptz{Time: time.Now(), Valid: true},
 		Status:     status,
-		RemoteKey:  pgtype.Text{},
-		SizeBytes:  0,
+		RemoteKey:  remoteKey,
+		SizeBytes:  sizeBytes,
 		Error:      errText,
 	}); err != nil {
 		slog.Warn("backup_now: failed to update run record", "error", err)
 	}
+}
+
+// parseBackupOutput scans combined script output for the local archive path
+// and (optionally) the S3 remote key. Both may be empty if not present.
+//
+// backup.sh's success() emits: "  [ok]    Backup complete: <path>"
+// backup-upload CLI emits:     "uploaded: <key>"
+func parseBackupOutput(output string) (archivePath, remoteKey string) {
+	for _, line := range strings.Split(output, "\n") {
+		line = strings.TrimSpace(line)
+		if after, ok := strings.CutPrefix(line, "[ok]"); ok {
+			after = strings.TrimSpace(after)
+			if p, ok2 := strings.CutPrefix(after, "Backup complete: "); ok2 {
+				archivePath = strings.TrimSpace(p)
+			}
+		}
+		if k, ok := strings.CutPrefix(line, "uploaded: "); ok {
+			remoteKey = strings.TrimSpace(k)
+		}
+	}
+	return
 }
