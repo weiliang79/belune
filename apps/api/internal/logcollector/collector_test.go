@@ -112,7 +112,7 @@ func seedCollectorApp(t *testing.T) generated.Application {
 
 	project, err := testQueries.CreateProject(ctx, generated.CreateProjectParams{
 		Name:   "Collector Project",
-		Slug:   "col-" + suffix[:8],
+		Slug:   "col-" + suffix,
 		UserID: user.ID,
 	})
 	require.NoError(t, err)
@@ -120,7 +120,7 @@ func seedCollectorApp(t *testing.T) generated.Application {
 	app, err := testQueries.CreateApplication(ctx, generated.CreateApplicationParams{
 		ProjectID: project.ID,
 		Name:      "Collector App",
-		Slug:      "col-app-" + suffix[:8],
+		Slug:      "col-app-" + suffix,
 		Type:      "image",
 		BuildType: "image",
 	})
@@ -146,8 +146,7 @@ func TestCollector_Run_ExitsOnCtxCancel(t *testing.T) {
 		c.Run(ctx)
 	}()
 
-	// Allow one sync cycle to complete before cancelling.
-	time.Sleep(20 * time.Millisecond)
+	// Empty container list → Run just waits on ctx.Done; cancel immediately.
 	cancel()
 
 	select {

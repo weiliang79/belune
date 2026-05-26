@@ -10,43 +10,45 @@ import (
 
 func TestValidTransition(t *testing.T) {
 	tests := []struct {
+		name string
 		from string
 		to   string
 		want bool
 	}{
 		// Allowed forward progressions
-		{status.DeploymentPending, status.DeploymentBuilding, true},
-		{status.DeploymentPending, status.DeploymentDeploying, true},
-		{status.DeploymentBuilding, status.DeploymentDeploying, true},
-		{status.DeploymentDeploying, status.DeploymentSuccess, true},
+		{"pending->building", status.DeploymentPending, status.DeploymentBuilding, true},
+		// pending->deploying is intentional: image-type apps skip the build step entirely.
+		{"pending->deploying", status.DeploymentPending, status.DeploymentDeploying, true},
+		{"building->deploying", status.DeploymentBuilding, status.DeploymentDeploying, true},
+		{"deploying->success", status.DeploymentDeploying, status.DeploymentSuccess, true},
 
-		// Any state → failed is always permitted (error catch-all)
-		{status.DeploymentPending, status.DeploymentFailed, true},
-		{status.DeploymentBuilding, status.DeploymentFailed, true},
-		{status.DeploymentDeploying, status.DeploymentFailed, true},
-		{status.DeploymentSuccess, status.DeploymentFailed, true},
-		{status.DeploymentFailed, status.DeploymentFailed, true},
+		// Any state -> failed is always permitted (error catch-all)
+		{"pending->failed", status.DeploymentPending, status.DeploymentFailed, true},
+		{"building->failed", status.DeploymentBuilding, status.DeploymentFailed, true},
+		{"deploying->failed", status.DeploymentDeploying, status.DeploymentFailed, true},
+		{"success->failed", status.DeploymentSuccess, status.DeploymentFailed, true},
+		{"failed->failed", status.DeploymentFailed, status.DeploymentFailed, true},
 
 		// Terminal states must not advance further
-		{status.DeploymentSuccess, status.DeploymentDeploying, false},
-		{status.DeploymentSuccess, status.DeploymentBuilding, false},
-		{status.DeploymentSuccess, status.DeploymentPending, false},
-		{status.DeploymentFailed, status.DeploymentSuccess, false},
-		{status.DeploymentFailed, status.DeploymentDeploying, false},
-		{status.DeploymentFailed, status.DeploymentBuilding, false},
+		{"success->deploying", status.DeploymentSuccess, status.DeploymentDeploying, false},
+		{"success->building", status.DeploymentSuccess, status.DeploymentBuilding, false},
+		{"success->pending", status.DeploymentSuccess, status.DeploymentPending, false},
+		{"failed->success", status.DeploymentFailed, status.DeploymentSuccess, false},
+		{"failed->deploying", status.DeploymentFailed, status.DeploymentDeploying, false},
+		{"failed->building", status.DeploymentFailed, status.DeploymentBuilding, false},
 
 		// No backwards transitions
-		{status.DeploymentDeploying, status.DeploymentBuilding, false},
-		{status.DeploymentDeploying, status.DeploymentPending, false},
-		{status.DeploymentBuilding, status.DeploymentPending, false},
+		{"deploying->building", status.DeploymentDeploying, status.DeploymentBuilding, false},
+		{"deploying->pending", status.DeploymentDeploying, status.DeploymentPending, false},
+		{"building->pending", status.DeploymentBuilding, status.DeploymentPending, false},
 
 		// Unknown from-state
-		{"unknown", status.DeploymentBuilding, false},
-		{"", status.DeploymentBuilding, false},
+		{"unknown->building", "unknown", status.DeploymentBuilding, false},
+		{"empty->building", "", status.DeploymentBuilding, false},
 	}
 
 	for _, tc := range tests {
-		t.Run(tc.from+"→"+tc.to, func(t *testing.T) {
+		t.Run(tc.name, func(t *testing.T) {
 			got := status.ValidTransition(tc.from, tc.to)
 			assert.Equal(t, tc.want, got)
 		})

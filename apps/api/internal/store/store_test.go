@@ -96,6 +96,7 @@ func TestUserCRUD(t *testing.T) {
 	assert.Equal(t, "crud@test.com", byID.Email)
 	assert.Equal(t, "admin", byID.Role)
 	assert.Equal(t, "Ada", byID.FirstName)
+	assert.Equal(t, "Lovelace", byID.LastName)
 
 	byEmail, err := testQueries.GetUserByEmail(ctx, "crud@test.com")
 	require.NoError(t, err, "GetUserByEmail must return the created user")
