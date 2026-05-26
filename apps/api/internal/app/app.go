@@ -100,6 +100,7 @@ func New(cfg *config.Config) (*App, error) {
 
 	redisOptions, err := redis.ParseURL(cfg.RedisURL)
 	if err != nil {
+		asynqInspector.Close()
 		asynqClient.Close()
 		dockerClient.Close()
 		db.Close()
@@ -123,6 +124,8 @@ func New(cfg *config.Config) (*App, error) {
 	quotaSvc := quota.NewService(queries)
 	emailSvc, err := email.New(cfg)
 	if err != nil {
+		rdb.Close()
+		asynqInspector.Close()
 		asynqClient.Close()
 		dockerClient.Close()
 		db.Close()
@@ -276,6 +279,10 @@ func (a *App) Run(ctx context.Context) error {
 		}
 
 		// Stop the worker (no new tasks), then drain in-flight tasks.
+		// Note: the asynq Scheduler is shut down in Shutdown() after g.Wait()
+		// returns. A scheduler tick that fires in this window may enqueue a
+		// task that the stopped processor won't pick up until next start — this
+		// is acceptable (tasks are idempotent and will run on next restart).
 		a.worker.Stop()
 		a.worker.Shutdown()
 
