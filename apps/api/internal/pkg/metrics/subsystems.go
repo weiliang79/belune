@@ -71,10 +71,10 @@ var (
 		Buckets: []float64{1, 5, 15, 30, 60, 120, 300, 600, 1800, 3600},
 	})
 
-	asynqDeadLetterSize = factory.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "paas_asynq_dead_letter_size",
-		Help: "Number of tasks in the dead-letter (archived) queue per queue.",
-	}, []string{"queue"})
+	backupRotateTotal = factory.NewCounterVec(prometheus.CounterOpts{
+		Name: "paas_backup_rotate_total",
+		Help: "Total backup rotation runs by result.",
+	}, []string{"result"})
 )
 
 // RecordSMTPSend observes the SMTP send duration and increments the counter.
@@ -93,8 +93,11 @@ func RecordBackupRun(destination string, err error, d time.Duration) {
 }
 
 // RecordWebhookDelivery observes the end-to-end webhook processing duration.
-func RecordWebhookDelivery(source string, err error, d time.Duration) {
-	webhookDeliveryDuration.WithLabelValues(source, resultLabel(err)).Observe(d.Seconds())
+// The webhook handler always responds 200 regardless of outcome, so result is
+// always "ok" at the call site; the source label ("github"/"gitlab"/"unknown")
+// is the primary dimension for dashboards.
+func RecordWebhookDelivery(source string, d time.Duration) {
+	webhookDeliveryDuration.WithLabelValues(source, "ok").Observe(d.Seconds())
 }
 
 // RecordPasswordResetIssued increments the password reset issued counter.
@@ -118,7 +121,7 @@ func RecordTerminalSessionClosed(d time.Duration) {
 	terminalSessionDuration.Observe(d.Seconds())
 }
 
-// SetAsynqDeadLetterSize reports the current dead-letter (archived) queue depth for a queue.
-func SetAsynqDeadLetterSize(queue string, size int) {
-	asynqDeadLetterSize.WithLabelValues(queue).Set(float64(size))
+// RecordBackupRotate increments the backup rotation counter.
+func RecordBackupRotate(err error) {
+	backupRotateTotal.WithLabelValues(resultLabel(err)).Inc()
 }

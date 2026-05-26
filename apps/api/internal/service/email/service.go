@@ -75,6 +75,17 @@ func (s *Service) SendTemplate(ctx context.Context, templateID, addr string, var
 		return err
 	}
 
+	// Only instrument when SMTP is actually configured; log-only sends are
+	// cheap no-ops that would skew duration histograms with near-zero values.
+	if s.cfg.SMTPHost == "" {
+		return s.Send(ctx, Message{
+			To:       addr,
+			Subject:  subject,
+			TextBody: textBody,
+			HTMLBody: htmlBody,
+		})
+	}
+
 	start := time.Now()
 	sendErr := s.Send(ctx, Message{
 		To:       addr,

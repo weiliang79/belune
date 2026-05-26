@@ -28,7 +28,7 @@ import (
 func (h *Handler) HandleWebhookPush(w http.ResponseWriter, r *http.Request) {
 	start := time.Now()
 	source := webhookSource(r)
-	defer func() { metrics.RecordWebhookDelivery(source, nil, time.Since(start)) }()
+	defer func() { metrics.RecordWebhookDelivery(source, time.Since(start)) }()
 
 	body, err := io.ReadAll(r.Body)
 	if err != nil {

@@ -35,14 +35,15 @@ func (h *TaskHandler) HandleBackupNowTask(ctx context.Context, t *asynq.Task) er
 		}
 	}
 
+	start := time.Now()
+
 	if _, err := os.Stat(scriptPath); os.IsNotExist(err) {
 		msg := fmt.Sprintf("backup script not found at %s; use 'systemctl start paas-backup.service' instead", scriptPath)
 		h.finaliseRun(ctx, run.ID, 0, pgtype.Text{}, msg)
-		metrics.RecordBackupRun("local", errors.New(msg), 0)
+		metrics.RecordBackupRun("local", errors.New(msg), time.Since(start))
 		return errors.Join(errors.New(msg), asynq.SkipRetry)
 	}
 
-	start := time.Now()
 	cmd := exec.CommandContext(ctx, "bash", scriptPath)
 	out, execErr := cmd.CombinedOutput()
 
@@ -88,6 +89,7 @@ func (h *TaskHandler) HandleBackupRotateTask(ctx context.Context, t *asynq.Task)
 	}
 
 	deleted, err := h.BackupService.Rotate(ctx)
+	metrics.RecordBackupRotate(err)
 	if err != nil {
 		return fmt.Errorf("backup rotate: %w", err)
 	}
