@@ -17,6 +17,7 @@ import (
 	"github.com/ungweiliang/selfhost-paas/internal/config"
 	"github.com/ungweiliang/selfhost-paas/internal/pkg/crypto"
 	"github.com/ungweiliang/selfhost-paas/internal/proxy"
+	"github.com/ungweiliang/selfhost-paas/internal/runtime"
 	"github.com/ungweiliang/selfhost-paas/internal/status"
 	"github.com/ungweiliang/selfhost-paas/internal/store/generated"
 	"github.com/ungweiliang/selfhost-paas/internal/testutil"
@@ -111,7 +112,7 @@ func randomSuffix(t *testing.T) string {
 	return tok[:8]
 }
 
-func newTestHandler(rt *testutil.MockContainerRuntime, pm proxy.ProxyManager) *worker.TaskHandler {
+func newTestHandler(rt runtime.ContainerRuntime, pm proxy.ProxyManager) *worker.TaskHandler {
 	keyring, err := crypto.ParseKeyringEnv("", testutil.TestEncryptionKey, "")
 	if err != nil {
 		panic("build keyring: " + err.Error())
@@ -223,6 +224,18 @@ func TestHandleDeployTask_CompensatesOnProxyFailure(t *testing.T) {
 	assert.Equal(t, status.DeploymentFailed, final.Status)
 }
 
+// createFailRuntime wraps MockContainerRuntime so CreateContainer always fails.
+// Used to drive stage 5 into its failure path without modifying the shared mock.
+type createFailRuntime struct {
+	*testutil.MockContainerRuntime
+	createErr error
+}
+
+func (r *createFailRuntime) CreateContainer(_ context.Context, cfg runtime.ContainerConfig) (string, error) {
+	r.MockContainerRuntime.CreateCalls = append(r.MockContainerRuntime.CreateCalls, cfg)
+	return "", r.createErr
+}
+
 func TestHandleDeployTask_HappyPathSkipsHealthCheck(t *testing.T) {
 	t.Cleanup(func() { _ = testutil.TruncateAll(context.Background(), testPool) })
 
@@ -253,4 +266,67 @@ func TestHandleDeployTask_HappyPathSkipsHealthCheck(t *testing.T) {
 	appRow, err := testQueries.GetApplication(context.Background(), app.ID)
 	require.NoError(t, err)
 	assert.Equal(t, status.ApplicationRunning, appRow.Status)
+}
+
+func TestHandleDeployTask_RollbackUsesProvidedImageTag(t *testing.T) {
+	t.Cleanup(func() { _ = testutil.TruncateAll(context.Background(), testPool) })
+
+	app, dep := seedApp(t)
+
+	rt := &testutil.MockContainerRuntime{}
+	pm := &testutil.MockProxyManager{}
+	h := newTestHandler(rt, pm)
+
+	// Build a payload with a rollback image tag so prepareImage takes the
+	// rollback path and skips the PullImage call entirely.
+	const rollbackTag = "nginx:1.20"
+	payload, err := json.Marshal(map[string]string{
+		"application_id":    uuidString(app.ID),
+		"deployment_id":     uuidString(dep.ID),
+		"rollback_image_tag": rollbackTag,
+	})
+	require.NoError(t, err)
+
+	task := asynq.NewTask("deploy", payload)
+	require.NoError(t, h.HandleDeployTask(context.Background(), task))
+
+	// Container must be created with the rollback image tag — not the app's
+	// configured source image and not a build tag.
+	require.Len(t, rt.CreateCalls, 1, "expected exactly one container creation")
+	assert.Equal(t, rollbackTag, rt.CreateCalls[0].Image,
+		"rollback deploy should use the provided image tag, not the app source image")
+
+	final, err := testQueries.GetDeployment(context.Background(), dep.ID)
+	require.NoError(t, err)
+	assert.Equal(t, status.DeploymentSuccess, final.Status)
+}
+
+func TestHandleDeployTask_CreateContainerFailureMarksDeployFailed(t *testing.T) {
+	t.Cleanup(func() { _ = testutil.TruncateAll(context.Background(), testPool) })
+
+	app, dep := seedApp(t)
+
+	rt := &createFailRuntime{
+		MockContainerRuntime: &testutil.MockContainerRuntime{},
+		createErr:            errors.New("disk full"),
+	}
+	pm := &testutil.MockProxyManager{}
+	h := newTestHandler(rt, pm)
+
+	task := asynq.NewTask("deploy", mustMarshalPayload(t, app.ID, dep.ID))
+	err := h.HandleDeployTask(context.Background(), task)
+
+	// Handler must propagate the error so asynq can retry or dead-letter.
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "create container")
+
+	// No start or proxy calls — the pipeline halted at stage 5.
+	assert.Empty(t, rt.StartCalls, "container should not be started when creation fails")
+	assert.Empty(t, pm.AddedRoutes, "no proxy route should be wired when creation fails")
+
+	// Deployment row must be marked failed (retried=0, maxRetry=0 → failDeployment
+	// writes the failure row immediately).
+	final, err := testQueries.GetDeployment(context.Background(), dep.ID)
+	require.NoError(t, err)
+	assert.Equal(t, status.DeploymentFailed, final.Status)
 }
