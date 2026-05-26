@@ -20,6 +20,7 @@ type MockContainerRuntime struct {
 	RemoveCalls     []string
 	StartCalls      []string
 	CreateCalls     []runtime.ContainerConfig
+	PullCalls       []string // image tags passed to PullImage
 	ListContainers_ []runtime.ContainerInfo
 }
 
@@ -68,7 +69,12 @@ func (m *MockContainerRuntime) ListContainers(_ context.Context) ([]runtime.Cont
 	return m.ListContainers_, nil
 }
 
-func (m *MockContainerRuntime) PullImage(_ context.Context, _ string) error   { return nil }
+func (m *MockContainerRuntime) PullImage(_ context.Context, image string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.PullCalls = append(m.PullCalls, image)
+	return nil
+}
 func (m *MockContainerRuntime) BuildImage(_ context.Context, _, _, _ string) error {
 	return nil
 }

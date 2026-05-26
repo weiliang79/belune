@@ -16,6 +16,9 @@ import (
 const containerTestImage = "busybox:latest"
 
 // newTestDockerClient creates a Client and skips the test if the daemon is unreachable.
+// ListContainers is used as the reachability probe because it is the only method on
+// Client that exercises a real Docker API call without requiring an existing resource
+// (the unexported cli.Ping is not accessible from this test file).
 func newTestDockerClient(t *testing.T) *Client {
 	t.Helper()
 	c, err := New()
@@ -32,7 +35,10 @@ func newTestDockerClient(t *testing.T) *Client {
 	return c
 }
 
-func uniqueContainerName(t *testing.T) string {
+// uniqueTestContainerName returns a random container name for use in container_test.go.
+// Named distinctly from integration_test.go's uniqueName to avoid a compile conflict
+// when both files are compiled together (e.g. if the integration_docker tag is dropped).
+func uniqueTestContainerName(t *testing.T) string {
 	t.Helper()
 	var b [6]byte
 	if _, err := rand.Read(b[:]); err != nil {
@@ -53,7 +59,7 @@ func TestContainerLifecycle(t *testing.T) {
 	// Ensure the test image is present before creating the container.
 	require.NoError(t, c.PullImage(ctx, containerTestImage), "pull %s", containerTestImage)
 
-	name := uniqueContainerName(t)
+	name := uniqueTestContainerName(t)
 	id, err := c.CreateContainer(ctx, runtime.ContainerConfig{
 		Name:   name,
 		Image:  containerTestImage,
@@ -75,6 +81,8 @@ func TestContainerLifecycle(t *testing.T) {
 		if ci.ID == id {
 			found = true
 			assert.Equal(t, "running", ci.Status, "container should be running")
+			assert.Equal(t, labelValue, ci.Labels[labelManagedBy],
+				"CreateContainer must stamp the managed-by label so ListContainers can filter by it")
 		}
 	}
 	assert.True(t, found, "started container should appear in ListContainers")
@@ -91,29 +99,18 @@ func TestContainerLifecycle(t *testing.T) {
 }
 
 // TestCreateContainerUnknownImage verifies that CreateContainer returns an error
-// synchronously when the image does not exist locally. The call must complete
-// promptly without hanging — confirming no background goroutine is leaked on
-// the failure path.
+// when the image does not exist locally. The context deadline acts as the hang
+// guard — if CreateContainer blocks indefinitely the test fails via timeout rather
+// than requiring a separate goroutine + timer.
 func TestCreateContainerUnknownImage(t *testing.T) {
 	c := newTestDockerClient(t)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	done := make(chan struct{})
-	var createErr error
-	go func() {
-		defer close(done)
-		_, createErr = c.CreateContainer(ctx, runtime.ContainerConfig{
-			Name:  uniqueContainerName(t),
-			Image: "paas-nonexistent-image-for-testing-99999:latest",
-		})
-	}()
-
-	select {
-	case <-done:
-		assert.Error(t, createErr, "creating a container with an unknown image should return an error")
-	case <-time.After(10 * time.Second):
-		t.Fatal("CreateContainer did not return within 10s — possible goroutine hang")
-	}
+	_, err := c.CreateContainer(ctx, runtime.ContainerConfig{
+		Name:  uniqueTestContainerName(t),
+		Image: "paas-nonexistent-image-for-testing-99999:latest",
+	})
+	assert.Error(t, err, "creating a container with an unknown image should return an error")
 }

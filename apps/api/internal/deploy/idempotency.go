@@ -26,7 +26,10 @@ const (
 //   - manual   → "" (the time window alone bounds dedup)
 //
 // The key is opaque to the DB — just a fingerprint used for lookup.
+// Fields are separated by NUL bytes (\x00) so that no valid field value
+// (UUID, trigger name, commit SHA, or image tag) can shift a field boundary
+// and produce the same key as a different input combination.
 func Key(applicationID, trigger, discriminator string) string {
-	h := sha256.Sum256([]byte(applicationID + "|" + trigger + "|" + discriminator))
+	h := sha256.Sum256([]byte(applicationID + "\x00" + trigger + "\x00" + discriminator))
 	return hex.EncodeToString(h[:])
 }

@@ -33,11 +33,27 @@ func TestKey_DifferentDiscriminators(t *testing.T) {
 	assert.NotEqual(t, a, b, "different discriminators must produce different keys")
 }
 
-func TestKey_EmptyDiscriminator(t *testing.T) {
-	// manual trigger uses an empty discriminator — key must still be stable
-	a := deploy.Key("app-1", "manual", "")
-	b := deploy.Key("app-1", "manual", "")
-	assert.Equal(t, a, b, "empty discriminator must produce a stable key")
+func TestKey_EmptyDiscriminatorTriggerStillDiscriminates(t *testing.T) {
+	// manual trigger uses an empty discriminator. The trigger field must still
+	// contribute to the key so two different triggers with an empty discriminator
+	// do not collide.
+	push := deploy.Key("app-1", "push", "")
+	manual := deploy.Key("app-1", "manual", "")
+	assert.NotEqual(t, push, manual,
+		"trigger must still discriminate when the discriminator is empty")
+	// Stability: same inputs always produce the same key.
+	assert.Equal(t, manual, deploy.Key("app-1", "manual", ""),
+		"empty discriminator must produce a stable key")
+}
+
+func TestKey_SeparatorCollision(t *testing.T) {
+	// Key concatenates with "|" as the separator. Verify that inputs which
+	// contain the separator character cannot produce an equal key by shifting
+	// field boundaries — i.e. ("app|1","push","abc") ≠ ("app","1|push","abc").
+	a := deploy.Key("app|1", "push", "abc")
+	b := deploy.Key("app", "1|push", "abc")
+	assert.NotEqual(t, a, b,
+		"pipe characters in inputs must not cause field-boundary collisions")
 }
 
 func TestKey_Format(t *testing.T) {

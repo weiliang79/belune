@@ -57,6 +57,17 @@ func (p *failingProxy) RemoveRoute(_ context.Context, _ string) error           
 func (p *failingProxy) SetupTLS(_ context.Context, _, _, _, _ string) error       { return nil }
 func (p *failingProxy) ListRoutes(_ context.Context) ([]proxy.RouteConfig, error) { return nil, nil }
 
+// createFailRuntime wraps MockContainerRuntime so CreateContainer always fails.
+// Used to drive stage 5 into its failure path without modifying the shared mock.
+type createFailRuntime struct {
+	*testutil.MockContainerRuntime
+	createErr error
+}
+
+func (r *createFailRuntime) CreateContainer(_ context.Context, _ runtime.ContainerConfig) (string, error) {
+	return "", r.createErr
+}
+
 // seedApp inserts a user, project, application (image type, no health check),
 // and deployment (status=pending). Optional opts override fields before insert.
 func seedApp(t *testing.T, opts ...func(app *generated.CreateApplicationParams, dep *generated.CreateDeploymentParams)) (generated.Application, generated.Deployment) {
@@ -224,18 +235,6 @@ func TestHandleDeployTask_CompensatesOnProxyFailure(t *testing.T) {
 	assert.Equal(t, status.DeploymentFailed, final.Status)
 }
 
-// createFailRuntime wraps MockContainerRuntime so CreateContainer always fails.
-// Used to drive stage 5 into its failure path without modifying the shared mock.
-type createFailRuntime struct {
-	*testutil.MockContainerRuntime
-	createErr error
-}
-
-func (r *createFailRuntime) CreateContainer(_ context.Context, cfg runtime.ContainerConfig) (string, error) {
-	r.MockContainerRuntime.CreateCalls = append(r.MockContainerRuntime.CreateCalls, cfg)
-	return "", r.createErr
-}
-
 func TestHandleDeployTask_HappyPathSkipsHealthCheck(t *testing.T) {
 	t.Cleanup(func() { _ = testutil.TruncateAll(context.Background(), testPool) })
 
@@ -295,6 +294,9 @@ func TestHandleDeployTask_RollbackUsesProvidedImageTag(t *testing.T) {
 	require.Len(t, rt.CreateCalls, 1, "expected exactly one container creation")
 	assert.Equal(t, rollbackTag, rt.CreateCalls[0].Image,
 		"rollback deploy should use the provided image tag, not the app source image")
+	// PullImage must not be called on the rollback path — the image was already
+	// on the host when it was originally deployed.
+	assert.Empty(t, rt.PullCalls, "rollback should not pull an image from the registry")
 
 	final, err := testQueries.GetDeployment(context.Background(), dep.ID)
 	require.NoError(t, err)
