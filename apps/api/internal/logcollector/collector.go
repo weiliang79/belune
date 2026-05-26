@@ -310,6 +310,7 @@ func (c *Collector) flush(ctx context.Context, appID pgtype.UUID, appIDStr strin
 
 	for _, p := range batch {
 		if err := c.queries.InsertApplicationLog(ctx, p); err != nil {
+			span.RecordError(err)
 			slog.Warn("log collector: failed to insert application log", "error", err)
 			continue
 		}

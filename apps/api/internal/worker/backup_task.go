@@ -38,6 +38,9 @@ func (h *TaskHandler) HandleBackupNowTask(ctx context.Context, t *asynq.Task) er
 		if err != nil {
 			slog.Warn("backup_now: failed to insert run record", "error", err)
 		}
+		if run.ID.Valid {
+			span.SetAttributes(attribute.String("backup.run_id", formatUUID(run.ID)))
+		}
 	}
 
 	start := time.Now()

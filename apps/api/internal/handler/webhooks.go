@@ -56,6 +56,7 @@ func (h *Handler) HandleWebhookPush(w http.ResponseWriter, r *http.Request) {
 
 	// Normalize repo URL for matching
 	normalized := normalizeRepoURL(repoURL)
+	span.SetAttributes(attribute.String("webhook.repo", normalized))
 
 	// Find all applications with this source_repo that have webhooks enabled
 	applications, err := h.queries.ListApplicationsBySourceRepo(r.Context(), pgtype.Text{
@@ -142,10 +143,7 @@ func (h *Handler) HandleWebhookPush(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	span.SetAttributes(
-		attribute.String("webhook.repo", normalized),
-		attribute.Int("webhook.deploys_triggered", triggered),
-	)
+	span.SetAttributes(attribute.Int("webhook.deploys_triggered", triggered))
 	slog.Info("webhook: processing complete", "repo", normalized, "triggered", triggered)
 	w.WriteHeader(http.StatusOK)
 }
