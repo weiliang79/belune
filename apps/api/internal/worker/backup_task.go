@@ -13,6 +13,7 @@ import (
 	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/ungweiliang/selfhost-paas/internal/pkg/metrics"
 	"github.com/ungweiliang/selfhost-paas/internal/store/generated"
 )
 
@@ -37,15 +38,18 @@ func (h *TaskHandler) HandleBackupNowTask(ctx context.Context, t *asynq.Task) er
 	if _, err := os.Stat(scriptPath); os.IsNotExist(err) {
 		msg := fmt.Sprintf("backup script not found at %s; use 'systemctl start paas-backup.service' instead", scriptPath)
 		h.finaliseRun(ctx, run.ID, 0, pgtype.Text{}, msg)
+		metrics.RecordBackupRun("local", errors.New(msg), 0)
 		return errors.Join(errors.New(msg), asynq.SkipRetry)
 	}
 
+	start := time.Now()
 	cmd := exec.CommandContext(ctx, "bash", scriptPath)
 	out, execErr := cmd.CombinedOutput()
 
 	if execErr != nil {
 		errMsg := fmt.Sprintf("%v\n%s", execErr, string(out))
 		h.finaliseRun(ctx, run.ID, 0, pgtype.Text{}, errMsg)
+		metrics.RecordBackupRun("local", execErr, time.Since(start))
 		return errors.Join(fmt.Errorf("backup script failed: %w", execErr), asynq.SkipRetry)
 	}
 
@@ -66,6 +70,12 @@ func (h *TaskHandler) HandleBackupNowTask(ctx context.Context, t *asynq.Task) er
 	}
 
 	h.finaliseRun(ctx, run.ID, sizeBytes, remoteKey, "")
+
+	destination := "local"
+	if remoteKeyStr != "" {
+		destination = "remote"
+	}
+	metrics.RecordBackupRun(destination, nil, time.Since(start))
 	return nil
 }
 

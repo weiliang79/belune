@@ -11,6 +11,51 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const getLastBackupRun = `-- name: GetLastBackupRun :one
+SELECT id, started_at, finished_at, status, remote_key, size_bytes, error
+FROM backup_runs
+ORDER BY started_at DESC
+LIMIT 1
+`
+
+func (q *Queries) GetLastBackupRun(ctx context.Context) (BackupRun, error) {
+	row := q.db.QueryRow(ctx, getLastBackupRun)
+	var i BackupRun
+	err := row.Scan(
+		&i.ID,
+		&i.StartedAt,
+		&i.FinishedAt,
+		&i.Status,
+		&i.RemoteKey,
+		&i.SizeBytes,
+		&i.Error,
+	)
+	return i, err
+}
+
+const getLastSucceededBackupRun = `-- name: GetLastSucceededBackupRun :one
+SELECT id, started_at, finished_at, status, remote_key, size_bytes, error
+FROM backup_runs
+WHERE status = 'succeeded'
+ORDER BY finished_at DESC
+LIMIT 1
+`
+
+func (q *Queries) GetLastSucceededBackupRun(ctx context.Context) (BackupRun, error) {
+	row := q.db.QueryRow(ctx, getLastSucceededBackupRun)
+	var i BackupRun
+	err := row.Scan(
+		&i.ID,
+		&i.StartedAt,
+		&i.FinishedAt,
+		&i.Status,
+		&i.RemoteKey,
+		&i.SizeBytes,
+		&i.Error,
+	)
+	return i, err
+}
+
 const insertBackupRun = `-- name: InsertBackupRun :one
 INSERT INTO backup_runs DEFAULT VALUES
 RETURNING id, started_at, finished_at, status, remote_key, size_bytes, error
@@ -29,6 +74,41 @@ func (q *Queries) InsertBackupRun(ctx context.Context) (BackupRun, error) {
 		&i.Error,
 	)
 	return i, err
+}
+
+const listBackupRuns = `-- name: ListBackupRuns :many
+SELECT id, started_at, finished_at, status, remote_key, size_bytes, error
+FROM backup_runs
+ORDER BY started_at DESC
+LIMIT $1
+`
+
+func (q *Queries) ListBackupRuns(ctx context.Context, limit int32) ([]BackupRun, error) {
+	rows, err := q.db.Query(ctx, listBackupRuns, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []BackupRun{}
+	for rows.Next() {
+		var i BackupRun
+		if err := rows.Scan(
+			&i.ID,
+			&i.StartedAt,
+			&i.FinishedAt,
+			&i.Status,
+			&i.RemoteKey,
+			&i.SizeBytes,
+			&i.Error,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const updateBackupRun = `-- name: UpdateBackupRun :exec
@@ -60,84 +140,4 @@ func (q *Queries) UpdateBackupRun(ctx context.Context, arg UpdateBackupRunParams
 		arg.Error,
 	)
 	return err
-}
-
-const listBackupRuns = `-- name: ListBackupRuns :many
-SELECT id, started_at, finished_at, status, remote_key, size_bytes, error
-FROM backup_runs
-ORDER BY started_at DESC
-LIMIT $1
-`
-
-func (q *Queries) ListBackupRuns(ctx context.Context, limit int32) ([]BackupRun, error) {
-	rows, err := q.db.Query(ctx, listBackupRuns, limit)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []BackupRun
-	for rows.Next() {
-		var i BackupRun
-		if err := rows.Scan(
-			&i.ID,
-			&i.StartedAt,
-			&i.FinishedAt,
-			&i.Status,
-			&i.RemoteKey,
-			&i.SizeBytes,
-			&i.Error,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const getLastSucceededBackupRun = `-- name: GetLastSucceededBackupRun :one
-SELECT id, started_at, finished_at, status, remote_key, size_bytes, error
-FROM backup_runs
-WHERE status = 'succeeded'
-ORDER BY finished_at DESC
-LIMIT 1
-`
-
-func (q *Queries) GetLastSucceededBackupRun(ctx context.Context) (BackupRun, error) {
-	row := q.db.QueryRow(ctx, getLastSucceededBackupRun)
-	var i BackupRun
-	err := row.Scan(
-		&i.ID,
-		&i.StartedAt,
-		&i.FinishedAt,
-		&i.Status,
-		&i.RemoteKey,
-		&i.SizeBytes,
-		&i.Error,
-	)
-	return i, err
-}
-
-const getLastBackupRun = `-- name: GetLastBackupRun :one
-SELECT id, started_at, finished_at, status, remote_key, size_bytes, error
-FROM backup_runs
-ORDER BY started_at DESC
-LIMIT 1
-`
-
-func (q *Queries) GetLastBackupRun(ctx context.Context) (BackupRun, error) {
-	row := q.db.QueryRow(ctx, getLastBackupRun)
-	var i BackupRun
-	err := row.Scan(
-		&i.ID,
-		&i.StartedAt,
-		&i.FinishedAt,
-		&i.Status,
-		&i.RemoteKey,
-		&i.SizeBytes,
-		&i.Error,
-	)
-	return i, err
 }

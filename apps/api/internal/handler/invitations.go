@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/ungweiliang/selfhost-paas/internal/pkg/metrics"
 	"github.com/ungweiliang/selfhost-paas/internal/server/middleware"
 	"github.com/ungweiliang/selfhost-paas/internal/service"
 	"github.com/ungweiliang/selfhost-paas/internal/store/generated"
@@ -112,6 +113,7 @@ func (h *Handler) InviteUser(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "internal error")
 		return
 	}
+	metrics.RecordInvitationIssued()
 
 	baseURL := ""
 	if h.emailSvc != nil {
@@ -302,6 +304,7 @@ func (h *Handler) AcceptInvitation(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "internal error")
 		return
 	}
+	metrics.RecordInvitationAccepted()
 
 	result, err := h.auth.LoginUser(ctx, user, r.UserAgent(), clientIP)
 	if err != nil {

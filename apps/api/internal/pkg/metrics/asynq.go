@@ -55,6 +55,7 @@ func refreshAsynqQueues(ctx context.Context, inspector *asynq.Inspector) {
 		SetAsynqQueueSize(q, "retry", info.Retry)
 		SetAsynqQueueSize(q, "archived", info.Archived)
 		SetAsynqQueueSize(q, "completed", info.Completed)
+		SetAsynqDeadLetterSize(q, info.Archived)
 	}
 	_ = ctx // reserved: asynq.Inspector does not currently accept a ctx
 }

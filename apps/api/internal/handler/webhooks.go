@@ -18,6 +18,7 @@ import (
 
 	"github.com/ungweiliang/selfhost-paas/internal/deploy"
 	"github.com/ungweiliang/selfhost-paas/internal/git"
+	"github.com/ungweiliang/selfhost-paas/internal/pkg/metrics"
 	"github.com/ungweiliang/selfhost-paas/internal/pkg/tracing"
 	"github.com/ungweiliang/selfhost-paas/internal/preview"
 	"github.com/ungweiliang/selfhost-paas/internal/status"
@@ -25,6 +26,10 @@ import (
 )
 
 func (h *Handler) HandleWebhookPush(w http.ResponseWriter, r *http.Request) {
+	start := time.Now()
+	source := webhookSource(r)
+	defer func() { metrics.RecordWebhookDelivery(source, nil, time.Since(start)) }()
+
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		slog.Warn("webhook: failed to read body", "error", err)
@@ -190,6 +195,17 @@ func (h *Handler) UpdateApplicationWebhook(w http.ResponseWriter, r *http.Reques
 	}
 
 	writeJSON(w, http.StatusOK, app)
+}
+
+// webhookSource returns "github", "gitlab", or "unknown" based on request headers.
+func webhookSource(r *http.Request) string {
+	if r.Header.Get("X-GitHub-Event") != "" {
+		return "github"
+	}
+	if r.Header.Get("X-Gitlab-Event") != "" {
+		return "gitlab"
+	}
+	return "unknown"
 }
 
 // extractRepoURL extracts the repository URL from the raw webhook payload

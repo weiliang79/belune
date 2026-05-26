@@ -15,6 +15,7 @@ import (
 	"nhooyr.io/websocket/wsjson"
 
 	"github.com/ungweiliang/selfhost-paas/internal/naming"
+	"github.com/ungweiliang/selfhost-paas/internal/pkg/metrics"
 	"github.com/ungweiliang/selfhost-paas/internal/server/middleware"
 )
 
@@ -82,6 +83,7 @@ func (h *Handler) CreateTerminalSession(w http.ResponseWriter, r *http.Request) 
 		writeError(w, http.StatusTooManyRequests, "terminal session limit reached")
 		return
 	}
+	metrics.RecordTerminalSessionStarted()
 
 	h.audit(r, "terminal.session.started", "application", applicationID, map[string]any{
 		"shell":      shell,
@@ -132,11 +134,13 @@ func (h *Handler) HandleTerminalWebSocket(w http.ResponseWriter, r *http.Request
 		conn.Close(websocket.StatusNormalClosure, "")
 		startedAt := s.CreatedAt
 		h.termManager.Delete(sessionID)
+		duration := time.Since(startedAt)
 		h.auditSvc.Log(s.UserID, middleware.ClientIP(r), "terminal.session.ended", "application", s.ApplicationID, map[string]any{
 			"shell":      s.Shell,
 			"session_id": s.ID,
-			"duration_s": int(time.Since(startedAt).Seconds()),
+			"duration_s": int(duration.Seconds()),
 		})
+		metrics.RecordTerminalSessionClosed(duration)
 	}()
 
 	// ws → exec stdin: read from WebSocket and write to container

@@ -16,6 +16,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"golang.org/x/crypto/bcrypt"
 
+	"github.com/ungweiliang/selfhost-paas/internal/pkg/metrics"
 	"github.com/ungweiliang/selfhost-paas/internal/server/middleware"
 	"github.com/ungweiliang/selfhost-paas/internal/store/generated"
 	"github.com/ungweiliang/selfhost-paas/internal/worker"
@@ -96,6 +97,7 @@ func (h *Handler) ForgotPassword(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "internal error")
 		return
 	}
+	metrics.RecordPasswordResetIssued()
 
 	// Enqueue email asynchronously — never block the request on SMTP.
 	baseURL := ""
@@ -187,6 +189,7 @@ func (h *Handler) ResetPassword(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "internal error")
 		return
 	}
+	metrics.RecordPasswordResetRedeemed()
 
 	// Mark token used before revoking sessions (so partial failures don't leave the token reusable).
 	if err := h.queries.MarkPasswordResetTokenUsed(ctx, record.ID); err != nil {

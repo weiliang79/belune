@@ -12,6 +12,7 @@ import (
 	mail "github.com/wneessen/go-mail"
 
 	"github.com/ungweiliang/selfhost-paas/internal/config"
+	"github.com/ungweiliang/selfhost-paas/internal/pkg/metrics"
 )
 
 // Message represents a single outbound email.
@@ -74,12 +75,15 @@ func (s *Service) SendTemplate(ctx context.Context, templateID, addr string, var
 		return err
 	}
 
-	return s.Send(ctx, Message{
+	start := time.Now()
+	sendErr := s.Send(ctx, Message{
 		To:       addr,
 		Subject:  subject,
 		TextBody: textBody,
 		HTMLBody: htmlBody,
 	})
+	metrics.RecordSMTPSend(templateID, sendErr, time.Since(start))
+	return sendErr
 }
 
 // Send delivers msg via SMTP. If no SMTP host is configured, the rendered
