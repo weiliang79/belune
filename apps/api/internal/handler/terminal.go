@@ -14,8 +14,12 @@ import (
 	"nhooyr.io/websocket"
 	"nhooyr.io/websocket/wsjson"
 
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
+
 	"github.com/ungweiliang/selfhost-paas/internal/naming"
 	"github.com/ungweiliang/selfhost-paas/internal/pkg/metrics"
+	"github.com/ungweiliang/selfhost-paas/internal/pkg/tracing"
 	"github.com/ungweiliang/selfhost-paas/internal/server/middleware"
 )
 
@@ -34,6 +38,10 @@ type termMsg struct {
 // CreateTerminalSession creates a Docker exec session and returns a session ID.
 // POST /api/projects/{projectId}/applications/{applicationId}/terminal
 func (h *Handler) CreateTerminalSession(w http.ResponseWriter, r *http.Request) {
+	ctx, span := tracing.Tracer().Start(r.Context(), "terminal.create")
+	defer span.End()
+	r = r.WithContext(ctx)
+
 	applicationID := chi.URLParam(r, "applicationId")
 	var applicationUUID pgtype.UUID
 	if err := applicationUUID.Scan(applicationID); err != nil {
@@ -84,6 +92,11 @@ func (h *Handler) CreateTerminalSession(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	metrics.RecordTerminalSessionStarted()
+	span.SetAttributes(
+		attribute.String("terminal.session_id", s.ID),
+		attribute.String("terminal.application_id", applicationID),
+		attribute.String("terminal.shell", shell),
+	)
 
 	h.audit(r, "terminal.session.started", "application", applicationID, map[string]any{
 		"shell":      shell,
@@ -124,10 +137,20 @@ func (h *Handler) HandleTerminalWebSocket(w http.ResponseWriter, r *http.Request
 		slog.Error("terminal ws: accept failed", "error", err)
 		return
 	}
+
+	// Start session span after WS accept so it captures the live session duration.
+	sessionCtx, span := tracing.Tracer().Start(r.Context(), "terminal.session",
+		trace.WithAttributes(
+			attribute.String("terminal.session_id", sessionID),
+			attribute.String("terminal.application_id", s.ApplicationID),
+			attribute.String("terminal.shell", s.Shell),
+		),
+	)
+
 	// Tie both directions to a shared cancellation. Whichever side exits
 	// first (WS closed, exec stream closed, request cancelled) cancels the
 	// other so the input goroutine cannot outlive the handler.
-	ctx, cancel := context.WithCancel(r.Context())
+	ctx, cancel := context.WithCancel(sessionCtx)
 	defer cancel()
 
 	defer func() {
@@ -141,6 +164,8 @@ func (h *Handler) HandleTerminalWebSocket(w http.ResponseWriter, r *http.Request
 			"duration_s": int(duration.Seconds()),
 		})
 		metrics.RecordTerminalSessionClosed(duration)
+		span.SetAttributes(attribute.Float64("terminal.duration_seconds", duration.Seconds()))
+		span.End()
 	}()
 
 	// ws → exec stdin: read from WebSocket and write to container

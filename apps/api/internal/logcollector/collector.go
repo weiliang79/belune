@@ -16,7 +16,11 @@ import (
 	"github.com/docker/docker/pkg/stdcopy"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/redis/go-redis/v9"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 
+	"github.com/ungweiliang/selfhost-paas/internal/pkg/tracing"
 	"github.com/ungweiliang/selfhost-paas/internal/runtime"
 	"github.com/ungweiliang/selfhost-paas/internal/store/generated"
 )
@@ -186,12 +190,23 @@ func stripTimestamp(line string) string {
 }
 
 func (c *Collector) watchContainer(ctx context.Context, ctr runtime.ContainerInfo) {
+	ctx, span := tracing.Tracer().Start(ctx, "logcollector.watch",
+		trace.WithAttributes(
+			attribute.String("container.name", ctr.Name),
+			attribute.String("container.id", ctr.ID),
+		),
+	)
+	defer span.End()
+
 	appIDStr := ctr.Labels[labelApplicationID]
 	var appUUID pgtype.UUID
 	if err := appUUID.Scan(appIDStr); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		slog.Warn("log collector: invalid application-id label", "container", ctr.Name, "app_id", appIDStr)
 		return
 	}
+	span.SetAttributes(attribute.String("application.id", appIDStr))
 
 	// Resume from the last recorded log for this application so a restarted
 	// API server (or a brand-new container) doesn't drop early log lines.
@@ -285,6 +300,14 @@ func (c *Collector) watchContainer(ctx context.Context, ctr runtime.ContainerInf
 }
 
 func (c *Collector) flush(ctx context.Context, appID pgtype.UUID, appIDStr string, batch []generated.InsertApplicationLogParams) {
+	ctx, span := tracing.Tracer().Start(ctx, "logcollector.flush",
+		trace.WithAttributes(
+			attribute.String("application.id", appIDStr),
+			attribute.Int("log.batch_size", len(batch)),
+		),
+	)
+	defer span.End()
+
 	for _, p := range batch {
 		if err := c.queries.InsertApplicationLog(ctx, p); err != nil {
 			slog.Warn("log collector: failed to insert application log", "error", err)

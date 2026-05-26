@@ -4,15 +4,22 @@ package email
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"log/slog"
 	"net/url"
+	"strings"
 	"time"
 
 	mail "github.com/wneessen/go-mail"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/ungweiliang/selfhost-paas/internal/config"
 	"github.com/ungweiliang/selfhost-paas/internal/pkg/metrics"
+	"github.com/ungweiliang/selfhost-paas/internal/pkg/tracing"
 )
 
 // Message represents a single outbound email.
@@ -70,30 +77,41 @@ func (s *Service) Render(templateID string, vars any) (subject, textBody, htmlBo
 // SendTemplate renders the named template with vars and sends it to addr.
 // Always called from the async email task — never from a hot path.
 func (s *Service) SendTemplate(ctx context.Context, templateID, addr string, vars any) error {
+	ctx, span := tracing.Tracer().Start(ctx, "email.send",
+		trace.WithAttributes(
+			attribute.String("email.template", templateID),
+			attribute.String("email.recipient_hash", hashRecipient(addr)),
+		),
+	)
+	defer span.End()
+
 	subject, textBody, htmlBody, err := renderTemplate(s.registry, templateID, vars)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return err
+	}
+
+	msg := Message{
+		To:       addr,
+		Subject:  subject,
+		TextBody: textBody,
+		HTMLBody: htmlBody,
 	}
 
 	// Only instrument when SMTP is actually configured; log-only sends are
 	// cheap no-ops that would skew duration histograms with near-zero values.
 	if s.cfg.SMTPHost == "" {
-		return s.Send(ctx, Message{
-			To:       addr,
-			Subject:  subject,
-			TextBody: textBody,
-			HTMLBody: htmlBody,
-		})
+		return s.Send(ctx, msg)
 	}
 
 	start := time.Now()
-	sendErr := s.Send(ctx, Message{
-		To:       addr,
-		Subject:  subject,
-		TextBody: textBody,
-		HTMLBody: htmlBody,
-	})
+	sendErr := s.Send(ctx, msg)
 	metrics.RecordSMTPSend(templateID, sendErr, time.Since(start))
+	if sendErr != nil {
+		span.RecordError(sendErr)
+		span.SetStatus(codes.Error, sendErr.Error())
+	}
 	return sendErr
 }
 
@@ -144,12 +162,24 @@ func (s *Service) Send(ctx context.Context, msg Message) error {
 	dialCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
+	_, smtpSpan := tracing.Tracer().Start(ctx, "email.smtp.send")
+	defer smtpSpan.End()
+
 	if err := client.DialAndSendWithContext(dialCtx, m); err != nil {
+		smtpSpan.RecordError(err)
+		smtpSpan.SetStatus(codes.Error, err.Error())
 		return fmt.Errorf("email: send: %w", err)
 	}
 
 	slog.InfoContext(ctx, "email sent", "to", msg.To, "subject", msg.Subject)
 	return nil
+}
+
+// hashRecipient returns a short SHA-256 hex digest of addr for trace attributes.
+// The full address is never embedded in traces so PII stays out of telemetry.
+func hashRecipient(addr string) string {
+	sum := sha256.Sum256([]byte(strings.ToLower(strings.TrimSpace(addr))))
+	return hex.EncodeToString(sum[:8])
 }
 
 func (s *Service) newClient() (*mail.Client, error) {

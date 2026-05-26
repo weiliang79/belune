@@ -12,8 +12,10 @@ import (
 
 	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5/pgtype"
+	"go.opentelemetry.io/otel/attribute"
 
 	"github.com/ungweiliang/selfhost-paas/internal/pkg/metrics"
+	"github.com/ungweiliang/selfhost-paas/internal/pkg/tracing"
 	"github.com/ungweiliang/selfhost-paas/internal/store/generated"
 )
 
@@ -21,6 +23,9 @@ import (
 // backup_runs. The task does not retry on failure — a second run is
 // triggered by the user or the daily timer.
 func (h *TaskHandler) HandleBackupNowTask(ctx context.Context, t *asynq.Task) error {
+	ctx, span := tracing.Tracer().Start(ctx, "backup.run")
+	defer span.End()
+
 	scriptPath := "/opt/paas/scripts/backup.sh"
 	if h.Config != nil && h.Config.BackupScriptPath != "" {
 		scriptPath = h.Config.BackupScriptPath
@@ -40,8 +45,10 @@ func (h *TaskHandler) HandleBackupNowTask(ctx context.Context, t *asynq.Task) er
 	if _, err := os.Stat(scriptPath); os.IsNotExist(err) {
 		msg := fmt.Sprintf("backup script not found at %s; use 'systemctl start paas-backup.service' instead", scriptPath)
 		h.finaliseRun(ctx, run.ID, 0, pgtype.Text{}, msg)
-		metrics.RecordBackupRun("local", errors.New(msg), time.Since(start))
-		return errors.Join(errors.New(msg), asynq.SkipRetry)
+		notFoundErr := errors.New(msg)
+		metrics.RecordBackupRun("local", notFoundErr, time.Since(start))
+		recordSpanErr(span, notFoundErr)
+		return errors.Join(notFoundErr, asynq.SkipRetry)
 	}
 
 	cmd := exec.CommandContext(ctx, "bash", scriptPath)
@@ -51,6 +58,7 @@ func (h *TaskHandler) HandleBackupNowTask(ctx context.Context, t *asynq.Task) er
 		errMsg := fmt.Sprintf("%v\n%s", execErr, string(out))
 		h.finaliseRun(ctx, run.ID, 0, pgtype.Text{}, errMsg)
 		metrics.RecordBackupRun("local", execErr, time.Since(start))
+		recordSpanErr(span, execErr)
 		return errors.Join(fmt.Errorf("backup script failed: %w", execErr), asynq.SkipRetry)
 	}
 
@@ -77,6 +85,10 @@ func (h *TaskHandler) HandleBackupNowTask(ctx context.Context, t *asynq.Task) er
 		destination = "remote"
 	}
 	metrics.RecordBackupRun(destination, nil, time.Since(start))
+	span.SetAttributes(
+		attribute.String("backup.destination", destination),
+		attribute.Int64("backup.size_bytes", sizeBytes),
+	)
 	return nil
 }
 

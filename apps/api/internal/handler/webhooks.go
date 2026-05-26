@@ -16,6 +16,8 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"go.opentelemetry.io/otel/attribute"
+
 	"github.com/ungweiliang/selfhost-paas/internal/deploy"
 	"github.com/ungweiliang/selfhost-paas/internal/git"
 	"github.com/ungweiliang/selfhost-paas/internal/pkg/metrics"
@@ -26,8 +28,13 @@ import (
 )
 
 func (h *Handler) HandleWebhookPush(w http.ResponseWriter, r *http.Request) {
+	ctx, span := tracing.Tracer().Start(r.Context(), "webhook.push")
+	defer span.End()
+	r = r.WithContext(ctx)
+
 	start := time.Now()
 	source := webhookSource(r)
+	span.SetAttributes(attribute.String("webhook.source", source))
 	defer func() { metrics.RecordWebhookDelivery(source, time.Since(start)) }()
 
 	body, err := io.ReadAll(r.Body)
@@ -135,6 +142,10 @@ func (h *Handler) HandleWebhookPush(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	span.SetAttributes(
+		attribute.String("webhook.repo", normalized),
+		attribute.Int("webhook.deploys_triggered", triggered),
+	)
 	slog.Info("webhook: processing complete", "repo", normalized, "triggered", triggered)
 	w.WriteHeader(http.StatusOK)
 }
