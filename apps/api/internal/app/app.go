@@ -121,7 +121,13 @@ func New(cfg *config.Config) (*App, error) {
 
 	appSvc := service.NewApplicationService(db, queries, dockerClient, cfg.Keyring)
 	quotaSvc := quota.NewService(queries)
-	emailSvc := email.New(cfg)
+	emailSvc, err := email.New(cfg)
+	if err != nil {
+		asynqClient.Close()
+		dockerClient.Close()
+		db.Close()
+		return nil, fmt.Errorf("load email templates: %w", err)
+	}
 	backupSvc := backup.New(cfg)
 	taskHandler := &worker.TaskHandler{
 		Runtime:        dockerClient,
@@ -269,8 +275,9 @@ func (a *App) Run(ctx context.Context) error {
 			}
 		}
 
-		// Stop the worker (unblocks the worker.Start goroutine above)
+		// Stop the worker (no new tasks), then drain in-flight tasks.
 		a.worker.Stop()
+		a.worker.Shutdown()
 
 		return nil
 	})

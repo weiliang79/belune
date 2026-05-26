@@ -25,8 +25,9 @@ func logOnlyCfg() *config.Config {
 }
 
 func TestSend_LogOnly(t *testing.T) {
-	svc := email.New(logOnlyCfg())
-	err := svc.Send(context.Background(), email.Message{
+	svc, err := email.New(logOnlyCfg())
+	require.NoError(t, err)
+	err = svc.Send(context.Background(), email.Message{
 		To:       "user@example.com",
 		Subject:  "Test",
 		TextBody: "Hello",
@@ -35,7 +36,8 @@ func TestSend_LogOnly(t *testing.T) {
 }
 
 func TestTemplates_PasswordReset(t *testing.T) {
-	svc := email.New(logOnlyCfg())
+	svc, err := email.New(logOnlyCfg())
+	require.NoError(t, err)
 
 	vars := map[string]any{
 		"FirstName": "Alice",
@@ -59,7 +61,8 @@ func TestTemplates_PasswordReset(t *testing.T) {
 }
 
 func TestTemplates_UserInvitation(t *testing.T) {
-	svc := email.New(logOnlyCfg())
+	svc, err := email.New(logOnlyCfg())
+	require.NoError(t, err)
 
 	vars := map[string]any{
 		"Role":      "operator",
@@ -82,7 +85,8 @@ func TestTemplates_UserInvitation(t *testing.T) {
 }
 
 func TestTemplates_AlertDeployFailed(t *testing.T) {
-	svc := email.New(logOnlyCfg())
+	svc, err := email.New(logOnlyCfg())
+	require.NoError(t, err)
 
 	vars := map[string]any{
 		"AppName":      "my-app",
@@ -107,7 +111,8 @@ func TestTemplates_AlertDeployFailed(t *testing.T) {
 
 func TestTemplates_AlertDeployFailed_NoError(t *testing.T) {
 	// ErrorMessage omitted — conditional block must not render the error row.
-	svc := email.New(logOnlyCfg())
+	svc, err := email.New(logOnlyCfg())
+	require.NoError(t, err)
 
 	vars := map[string]any{
 		"AppName":      "my-app",
@@ -126,7 +131,8 @@ func TestTemplates_AlertDeployFailed_NoError(t *testing.T) {
 }
 
 func TestTemplates_AlertBuildFailed(t *testing.T) {
-	svc := email.New(logOnlyCfg())
+	svc, err := email.New(logOnlyCfg())
+	require.NoError(t, err)
 
 	vars := map[string]any{
 		"AppName":      "my-app",
@@ -148,7 +154,8 @@ func TestTemplates_AlertBuildFailed(t *testing.T) {
 }
 
 func TestTemplates_AlertQuotaThreshold(t *testing.T) {
-	svc := email.New(logOnlyCfg())
+	svc, err := email.New(logOnlyCfg())
+	require.NoError(t, err)
 
 	vars := map[string]any{
 		"ProjectName":      "my-project",
@@ -170,8 +177,9 @@ func TestTemplates_AlertQuotaThreshold(t *testing.T) {
 }
 
 func TestTemplates_UnknownTemplate(t *testing.T) {
-	svc := email.New(logOnlyCfg())
-	err := svc.SendTemplate(context.Background(), "nonexistent_template", "user@example.com", nil)
+	svc, err := email.New(logOnlyCfg())
+	require.NoError(t, err)
+	err = svc.SendTemplate(context.Background(), "nonexistent_template", "user@example.com", nil)
 	require.Error(t, err)
 	assert.True(t, strings.Contains(err.Error(), "unknown template"), "expected unknown template error, got: %s", err)
 }
@@ -185,11 +193,12 @@ func TestNew_WarnOnMissingPublicBaseURL(t *testing.T) {
 		SMTPTLSMode:   "starttls",
 		PublicBaseURL: "", // missing
 	}
-	svc := email.New(cfg)
+	svc, err := email.New(cfg)
+	require.NoError(t, err)
 	require.NotNil(t, svc)
 
 	// Send must be a no-op (warn + return nil) not a crash.
-	err := svc.Send(context.Background(), email.Message{
+	err = svc.Send(context.Background(), email.Message{
 		To:      "user@example.com",
 		Subject: "Test",
 	})
@@ -205,10 +214,11 @@ func TestNew_WarnOnInvalidPublicBaseURL(t *testing.T) {
 		SMTPTLSMode:   "starttls",
 		PublicBaseURL: "not-a-url",
 	}
-	svc := email.New(cfg)
+	svc, err := email.New(cfg)
+	require.NoError(t, err)
 	require.NotNil(t, svc)
 
-	err := svc.Send(context.Background(), email.Message{
+	err = svc.Send(context.Background(), email.Message{
 		To:      "user@example.com",
 		Subject: "Test",
 	})

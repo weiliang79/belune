@@ -18,11 +18,8 @@ type templateDef struct {
 	htmlTmpl *template.Template
 }
 
-// registry maps template IDs to their parsed definitions.
-var registry map[string]*templateDef
-
-func init() {
-	registry = make(map[string]*templateDef)
+func loadTemplates() (map[string]*templateDef, error) {
+	reg := make(map[string]*templateDef)
 
 	entries := []struct {
 		id      string
@@ -38,34 +35,36 @@ func init() {
 	for _, e := range entries {
 		txtBytes, err := templateFS.ReadFile(fmt.Sprintf("templates/%s.txt.tmpl", e.id))
 		if err != nil {
-			panic(fmt.Sprintf("email: missing text template for %q: %v", e.id, err))
+			return nil, fmt.Errorf("email: missing text template for %q: %w", e.id, err)
 		}
 		htmlBytes, err := templateFS.ReadFile(fmt.Sprintf("templates/%s.html.tmpl", e.id))
 		if err != nil {
-			panic(fmt.Sprintf("email: missing html template for %q: %v", e.id, err))
+			return nil, fmt.Errorf("email: missing html template for %q: %w", e.id, err)
 		}
 
 		txtTmpl, err := texttemplate.New(e.id).Parse(string(txtBytes))
 		if err != nil {
-			panic(fmt.Sprintf("email: parse text template %q: %v", e.id, err))
+			return nil, fmt.Errorf("email: parse text template %q: %w", e.id, err)
 		}
 		htmlTmpl, err := template.New(e.id).Parse(string(htmlBytes))
 		if err != nil {
-			panic(fmt.Sprintf("email: parse html template %q: %v", e.id, err))
+			return nil, fmt.Errorf("email: parse html template %q: %w", e.id, err)
 		}
 
-		registry[e.id] = &templateDef{
+		reg[e.id] = &templateDef{
 			subject:  e.subject,
 			textTmpl: txtTmpl,
 			htmlTmpl: htmlTmpl,
 		}
 	}
+
+	return reg, nil
 }
 
 // renderTemplate executes a registered template with the given data.
 // Returns subject, text body, and HTML body.
-func renderTemplate(id string, data any) (subject, textBody, htmlBody string, err error) {
-	def, ok := registry[id]
+func renderTemplate(reg map[string]*templateDef, id string, data any) (subject, textBody, htmlBody string, err error) {
+	def, ok := reg[id]
 	if !ok {
 		return "", "", "", fmt.Errorf("email: unknown template %q", id)
 	}

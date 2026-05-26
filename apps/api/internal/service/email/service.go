@@ -25,15 +25,21 @@ type Message struct {
 
 // Service sends emails via SMTP or logs them when no SMTP host is configured.
 type Service struct {
-	cfg     *config.Config
-	baseURL *url.URL // parsed PUBLIC_BASE_URL; nil if absent/unparseable
+	cfg      *config.Config
+	baseURL  *url.URL // parsed PUBLIC_BASE_URL; nil if absent/unparseable
+	registry map[string]*templateDef
 }
 
-// New constructs an email Service from cfg.
-// Startup-time validation: if SMTP is configured but PUBLIC_BASE_URL is
-// empty or unparseable, a WARN is logged; sending will be refused at runtime.
-func New(cfg *config.Config) *Service {
-	svc := &Service{cfg: cfg}
+// New constructs an email Service from cfg. Returns an error if the embedded
+// templates cannot be parsed — this indicates a broken binary and the caller
+// should log and exit.
+func New(cfg *config.Config) (*Service, error) {
+	reg, err := loadTemplates()
+	if err != nil {
+		return nil, err
+	}
+
+	svc := &Service{cfg: cfg, registry: reg}
 
 	if cfg.SMTPHost != "" {
 		if cfg.PublicBaseURL == "" {
@@ -46,7 +52,7 @@ func New(cfg *config.Config) *Service {
 		}
 	}
 
-	return svc
+	return svc, nil
 }
 
 // PublicURL returns the configured PUBLIC_BASE_URL. Returns "" if not set.
@@ -57,13 +63,13 @@ func (s *Service) PublicURL() string {
 // Render executes a named template with vars and returns (subject, textBody, htmlBody).
 // Useful for tests and future debugging surfaces.
 func (s *Service) Render(templateID string, vars any) (subject, textBody, htmlBody string, err error) {
-	return renderTemplate(templateID, vars)
+	return renderTemplate(s.registry, templateID, vars)
 }
 
 // SendTemplate renders the named template with vars and sends it to addr.
 // Always called from the async email task — never from a hot path.
 func (s *Service) SendTemplate(ctx context.Context, templateID, addr string, vars any) error {
-	subject, textBody, htmlBody, err := renderTemplate(templateID, vars)
+	subject, textBody, htmlBody, err := renderTemplate(s.registry, templateID, vars)
 	if err != nil {
 		return err
 	}

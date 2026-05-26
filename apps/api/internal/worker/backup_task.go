@@ -37,7 +37,7 @@ func (h *TaskHandler) HandleBackupNowTask(ctx context.Context, t *asynq.Task) er
 	if _, err := os.Stat(scriptPath); os.IsNotExist(err) {
 		msg := fmt.Sprintf("backup script not found at %s; use 'systemctl start paas-backup.service' instead", scriptPath)
 		h.finaliseRun(ctx, run.ID, 0, pgtype.Text{}, msg)
-		return errors.Join(fmt.Errorf(msg), asynq.SkipRetry)
+		return errors.Join(errors.New(msg), asynq.SkipRetry)
 	}
 
 	cmd := exec.CommandContext(ctx, "bash", scriptPath)

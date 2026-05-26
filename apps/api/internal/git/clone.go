@@ -4,8 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net"
 	"net/url"
+	"os"
 	"os/exec"
 	"strings"
 )
@@ -39,24 +41,28 @@ var blockedHosts = map[string]struct{}{
 // privateOrLinkLocal lists CIDR ranges we refuse to clone from. Resolved
 // addresses for the repo host are checked against these ranges so a
 // malicious DNS record cannot redirect us into a private network.
-var privateOrLinkLocal = []*net.IPNet{
-	mustCIDR("127.0.0.0/8"),     // loopback v4
-	mustCIDR("10.0.0.0/8"),      // RFC1918
-	mustCIDR("172.16.0.0/12"),   // RFC1918
-	mustCIDR("192.168.0.0/16"),  // RFC1918
-	mustCIDR("169.254.0.0/16"),  // link-local v4 + cloud metadata services
-	mustCIDR("100.64.0.0/10"),   // CGNAT / Tailscale
-	mustCIDR("::1/128"),         // loopback v6
-	mustCIDR("fc00::/7"),        // ULA v6
-	mustCIDR("fe80::/10"),       // link-local v6
-}
+var privateOrLinkLocal []*net.IPNet
 
-func mustCIDR(s string) *net.IPNet {
-	_, n, err := net.ParseCIDR(s)
-	if err != nil {
-		panic("git: bad CIDR " + s + ": " + err.Error())
+func init() {
+	cidrs := []string{
+		"127.0.0.0/8",    // loopback v4
+		"10.0.0.0/8",     // RFC1918
+		"172.16.0.0/12",  // RFC1918
+		"192.168.0.0/16", // RFC1918
+		"169.254.0.0/16", // link-local v4 + cloud metadata services
+		"100.64.0.0/10",  // CGNAT / Tailscale
+		"::1/128",        // loopback v6
+		"fc00::/7",       // ULA v6
+		"fe80::/10",      // link-local v6
 	}
-	return n
+	for _, s := range cidrs {
+		_, n, err := net.ParseCIDR(s)
+		if err != nil {
+			slog.Error("git: bad CIDR in privateOrLinkLocal", "cidr", s, "error", err)
+			os.Exit(1)
+		}
+		privateOrLinkLocal = append(privateOrLinkLocal, n)
+	}
 }
 
 // validateRepoURL performs scheme + host + resolved-IP checks. It is the

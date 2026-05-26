@@ -156,3 +156,9 @@ func (w *Worker) StartScheduler() (*asynq.Scheduler, error) {
 func (w *Worker) Stop() {
 	w.server.Stop()
 }
+
+// Shutdown blocks until all in-flight tasks have completed and the asynq
+// server has fully stopped. Always call after Stop.
+func (w *Worker) Shutdown() {
+	w.server.Shutdown()
+}

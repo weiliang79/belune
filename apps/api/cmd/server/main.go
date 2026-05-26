@@ -32,7 +32,7 @@ func main() {
 		Endpoint:       cfg.OTLPEndpoint,
 		Insecure:       cfg.OTLPInsecure,
 		ServiceName:    "selfhost-paas-api",
-		ServiceVersion: "v0.0.8-alpha",
+		ServiceVersion: "v0.0.11-alpha",
 	})
 	if err != nil {
 		slog.Error("failed to init tracing", "error", err)
