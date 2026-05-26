@@ -35,6 +35,7 @@ func (h *TaskHandler) HandleCleanupTask(ctx context.Context, t *asynq.Task) erro
 	slog.Info("handling cleanup task", "retain_count", payload.RetainCount, "application_id", payload.ApplicationID)
 
 	totalRemoved := 0
+	appsProcessed := 0
 
 	if payload.ApplicationID != "" {
 		// Single-app cleanup: one JOIN query instead of GetApplication + GetProject.
@@ -49,6 +50,7 @@ func (h *TaskHandler) HandleCleanupTask(ctx context.Context, t *asynq.Task) erro
 		if err := h.cleanupAppDeployments(ctx, row.ID, row.Type, row.Slug, row.ProjectSlug, payload.RetainCount, &totalRemoved); err != nil {
 			slog.Warn("cleanup: deployment removal error", "application_id", payload.ApplicationID, "error", err)
 		}
+		appsProcessed = 1
 	} else {
 		// Bulk cleanup: single JOIN query — no per-row GetProject call.
 		rows, err := h.Queries.ListAllApplicationsWithProjectSlug(ctx)
@@ -60,6 +62,7 @@ func (h *TaskHandler) HandleCleanupTask(ctx context.Context, t *asynq.Task) erro
 				slog.Warn("cleanup: deployment removal error", "application_id", formatUUID(row.ID), "error", err)
 			}
 		}
+		appsProcessed = len(rows)
 	}
 
 	// Prune dangling images and volumes
@@ -80,6 +83,7 @@ func (h *TaskHandler) HandleCleanupTask(ctx context.Context, t *asynq.Task) erro
 	}
 
 	slog.Info("cleanup completed",
+		"applications_processed", appsProcessed,
 		"deployments_removed", totalRemoved,
 	)
 	return nil

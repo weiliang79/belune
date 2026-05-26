@@ -27,11 +27,11 @@ func (c *Client) ConfigureAccessLogs(ctx context.Context) error {
 		"logs": map[string]any{
 			loggerName: map[string]any{
 				"writer": map[string]any{
-					"output":       "file",
-					"filename":     caddyLogPath,
-					"roll_size_mb": 100,
-					"roll_keep":    5,
-					"roll_keep_for": 7, // days (= 168 h); caddy/lumberjack unit
+					"output":        "file",
+					"filename":      caddyLogPath,
+					"roll_size_mb":  100,
+					"roll_keep":     5,
+					"roll_keep_days": 7, // verified via `caddy adapt` against caddy:2-alpine
 				},
 				"encoder": map[string]any{
 					"format": "json",
