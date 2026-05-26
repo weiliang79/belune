@@ -34,73 +34,30 @@ func (h *TaskHandler) HandleCleanupTask(ctx context.Context, t *asynq.Task) erro
 
 	slog.Info("handling cleanup task", "retain_count", payload.RetainCount, "application_id", payload.ApplicationID)
 
-	var applications []generated.Application
-	var err error
+	totalRemoved := 0
 
 	if payload.ApplicationID != "" {
+		// Single-app cleanup: one JOIN query instead of GetApplication + GetProject.
 		appID, err := parseUUID(payload.ApplicationID)
 		if err != nil {
 			return errors.Join(fmt.Errorf("invalid application_id (permanent): %w", err), asynq.SkipRetry)
 		}
-		app, err := h.Queries.GetApplication(ctx, appID)
+		row, err := h.Queries.GetApplicationWithProjectSlug(ctx, appID)
 		if err != nil {
 			return fmt.Errorf("get application: %w", err)
 		}
-		applications = []generated.Application{app}
+		if err := h.cleanupAppDeployments(ctx, row.ID, row.Type, row.Slug, row.ProjectSlug, payload.RetainCount, &totalRemoved); err != nil {
+			slog.Warn("cleanup: deployment removal error", "application_id", payload.ApplicationID, "error", err)
+		}
 	} else {
-		applications, err = h.Queries.ListAllApplications(ctx)
+		// Bulk cleanup: single JOIN query — no per-row GetProject call.
+		rows, err := h.Queries.ListAllApplicationsWithProjectSlug(ctx)
 		if err != nil {
 			return fmt.Errorf("list applications: %w", err)
 		}
-	}
-
-	totalRemoved := 0
-
-	for _, app := range applications {
-		applicationIDStr := formatUUID(app.ID)
-		if applicationIDStr == "" {
-			continue
-		}
-
-		// Get project slug for image naming
-		project, err := h.Queries.GetProject(ctx, app.ProjectID)
-		if err != nil {
-			slog.Warn("failed to get project for application", "application_id", applicationIDStr, "error", err)
-			continue
-		}
-
-		// Get deployments beyond the retain count
-		oldDeployments, err := h.Queries.ListOldDeployments(ctx, generated.ListOldDeploymentsParams{
-			ApplicationID: app.ID,
-			Offset:        int32(payload.RetainCount),
-		})
-		if err != nil {
-			slog.Warn("failed to list old deployments", "application_id", applicationIDStr, "error", err)
-			continue
-		}
-
-		for _, dep := range oldDeployments {
-			deploymentIDStr := formatUUID(dep.ID)
-
-			// Try to remove the build image (try both old and new naming)
-			if app.Type == "git" && deploymentIDStr != "" {
-				imageName := naming.ImageTag(project.Slug, app.Slug, applicationIDStr, deploymentIDStr)
-				oldImageName := fmt.Sprintf("paas-%s:%s", applicationIDStr[:8], deploymentIDStr[:8])
-				if err := h.Runtime.RemoveImage(ctx, imageName); err != nil {
-					slog.Debug("could not remove image", "image", imageName, "error", err)
-				} else {
-					slog.Info("removed old image", "image", imageName)
-				}
-				if err := h.Runtime.RemoveImage(ctx, oldImageName); err != nil {
-					slog.Debug("could not remove legacy image", "image", oldImageName, "error", err)
-				}
-			}
-
-			// Delete deployment record
-			if err := h.Queries.DeleteDeployment(ctx, dep.ID); err != nil {
-				slog.Warn("failed to delete deployment", "deployment_id", deploymentIDStr, "error", err)
-			} else {
-				totalRemoved++
+		for _, row := range rows {
+			if err := h.cleanupAppDeployments(ctx, row.ID, row.Type, row.Slug, row.ProjectSlug, payload.RetainCount, &totalRemoved); err != nil {
+				slog.Warn("cleanup: deployment removal error", "application_id", formatUUID(row.ID), "error", err)
 			}
 		}
 	}
@@ -123,9 +80,50 @@ func (h *TaskHandler) HandleCleanupTask(ctx context.Context, t *asynq.Task) erro
 	}
 
 	slog.Info("cleanup completed",
-		"applications_processed", len(applications),
 		"deployments_removed", totalRemoved,
 	)
+	return nil
+}
+
+// cleanupAppDeployments removes images and DB records for deployments of a
+// single application beyond the retain count. It is called for every app in
+// both the single-app and bulk cleanup paths.
+func (h *TaskHandler) cleanupAppDeployments(ctx context.Context, appID pgtype.UUID, appType, appSlug, projectSlug string, retainCount int, totalRemoved *int) error {
+	applicationIDStr := formatUUID(appID)
+	if applicationIDStr == "" {
+		return nil
+	}
+
+	oldDeployments, err := h.Queries.ListOldDeployments(ctx, generated.ListOldDeploymentsParams{
+		ApplicationID: appID,
+		Offset:        int32(retainCount),
+	})
+	if err != nil {
+		return fmt.Errorf("list old deployments: %w", err)
+	}
+
+	for _, dep := range oldDeployments {
+		deploymentIDStr := formatUUID(dep.ID)
+
+		if appType == "git" && deploymentIDStr != "" {
+			imageName := naming.ImageTag(projectSlug, appSlug, applicationIDStr, deploymentIDStr)
+			oldImageName := fmt.Sprintf("paas-%s:%s", applicationIDStr[:8], deploymentIDStr[:8])
+			if err := h.Runtime.RemoveImage(ctx, imageName); err != nil {
+				slog.Debug("could not remove image", "image", imageName, "error", err)
+			} else {
+				slog.Info("removed old image", "image", imageName)
+			}
+			if err := h.Runtime.RemoveImage(ctx, oldImageName); err != nil {
+				slog.Debug("could not remove legacy image", "image", oldImageName, "error", err)
+			}
+		}
+
+		if err := h.Queries.DeleteDeployment(ctx, dep.ID); err != nil {
+			slog.Warn("failed to delete deployment", "deployment_id", deploymentIDStr, "error", err)
+		} else {
+			*totalRemoved++
+		}
+	}
 	return nil
 }
 
@@ -138,7 +136,7 @@ func (h *TaskHandler) cleanupStalePreviews(ctx context.Context) {
 		return
 	}
 	cutoff := time.Now().Add(-time.Duration(h.Config.PreviewIdleDays) * 24 * time.Hour)
-	stale, err := h.Queries.ListStalePreviews(ctx, pgtype.Timestamptz{Time: cutoff, Valid: true})
+	stale, err := h.Queries.ListStalePreviewsWithProjectSlug(ctx, pgtype.Timestamptz{Time: cutoff, Valid: true})
 	if err != nil {
 		slog.Warn("preview GC: failed to list stale previews", "error", err)
 		return
@@ -148,24 +146,17 @@ func (h *TaskHandler) cleanupStalePreviews(ctx context.Context) {
 	}
 
 	removed := 0
-	for _, app := range stale {
-		project, err := h.Queries.GetProject(ctx, app.ProjectID)
-		if err != nil {
-			slog.Warn("preview GC: failed to fetch project",
-				"application_id", formatUUID(app.ID), "error", err,
-			)
-			continue
-		}
-		if err := h.AppService.Delete(ctx, app.ID, project.Slug, app.Slug); err != nil {
+	for _, row := range stale {
+		if err := h.AppService.Delete(ctx, row.ID, row.ProjectSlug, row.Slug); err != nil {
 			slog.Warn("preview GC: failed to delete preview",
-				"application", app.Name, "error", err,
+				"application", row.Name, "error", err,
 			)
 			continue
 		}
 		slog.Info("preview GC: removed idle preview",
-			"application", app.Name,
-			"branch", app.Branch.String,
-			"last_activity_at", app.LastActivityAt.Time,
+			"application", row.Name,
+			"branch", row.Branch.String,
+			"last_activity_at", row.LastActivityAt.Time,
 		)
 		removed++
 	}
@@ -186,26 +177,22 @@ func (h *TaskHandler) cleanupOrphanContainers(ctx context.Context) {
 		return
 	}
 
-	// Build set of all valid container names from the database.
-	allApps, err := h.Queries.ListAllApplications(ctx)
+	// Build set of all valid container names from the database (single JOIN query).
+	allApps, err := h.Queries.ListAllApplicationsWithProjectSlug(ctx)
 	if err != nil {
 		slog.Warn("orphan cleanup: failed to list applications", "error", err)
 		return
 	}
 
 	known := make(map[string]bool, len(allApps))
-	for _, app := range allApps {
-		appIDStr := formatUUID(app.ID)
+	for _, row := range allApps {
+		appIDStr := formatUUID(row.ID)
 		if appIDStr == "" {
 			continue
 		}
-		project, err := h.Queries.GetProject(ctx, app.ProjectID)
-		if err != nil {
-			continue
-		}
-		known[naming.ContainerName(project.Slug, app.Slug, appIDStr)] = true
+		known[naming.ContainerName(row.ProjectSlug, row.Slug, appIDStr)] = true
 		// Also mark old naming formats so we don't delete legacy containers.
-		known[naming.IntermediateContainerName(project.Slug, appIDStr)] = true
+		known[naming.IntermediateContainerName(row.ProjectSlug, appIDStr)] = true
 		known[naming.OldContainerName(appIDStr)] = true
 	}
 

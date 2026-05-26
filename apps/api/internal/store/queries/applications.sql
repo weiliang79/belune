@@ -87,6 +87,18 @@ SELECT * FROM applications
 WHERE parent_application_id IS NOT NULL
   AND last_activity_at < $1;
 
+-- name: ListAllApplicationsWithProjectSlug :many
+SELECT a.*, p.slug as project_slug
+FROM applications a
+JOIN projects p ON p.id = a.project_id;
+
+-- name: ListStalePreviewsWithProjectSlug :many
+SELECT a.*, p.slug as project_slug
+FROM applications a
+JOIN projects p ON p.id = a.project_id
+WHERE a.parent_application_id IS NOT NULL
+  AND a.last_activity_at < $1;
+
 -- name: TouchApplicationActivity :exec
 UPDATE applications SET last_activity_at = NOW()
 WHERE id = $1;

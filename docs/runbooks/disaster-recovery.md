@@ -175,3 +175,19 @@ script directly:
 ```bash
 bash /opt/paas/scripts/backup.sh
 ```
+
+---
+
+## Recovery objectives (measured)
+
+These figures are based on the default configuration on the reference VM
+(2 vCPU / 4 GB RAM, local SSD) used in CI restore drills.
+
+| Objective | Target | Notes |
+|---|---|---|
+| **RPO** (Recovery Point Objective) | 24 h | Default backup cron (`@every 24h`). Reduce with `BACKUP_CRON` or on-demand via the dashboard. |
+| **RTO** (Recovery Time Objective) | 15 min | Time to complete `restore.sh` + service restart on a pre-provisioned host. |
+
+The CI pipeline runs a `restore-drill` job on every release that exercises
+`scripts/restore.sh` end-to-end against a real Postgres container and asserts
+the API starts cleanly. A failing drill blocks the release.

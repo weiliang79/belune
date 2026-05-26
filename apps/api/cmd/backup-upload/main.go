@@ -22,7 +22,7 @@ import (
 
 func main() {
 	if len(os.Args) != 2 {
-		fmt.Fprintf(os.Stderr, "usage: backup-upload <local-path>\n")
+		slog.Error("usage: backup-upload <local-path>")
 		os.Exit(1)
 	}
 	localPath := os.Args[1]
@@ -35,7 +35,7 @@ func main() {
 
 	svc := backup.New(cfg)
 	if !svc.Enabled() {
-		fmt.Fprintln(os.Stderr, "remote backup is not enabled (BACKUP_REMOTE_ENABLED=false or BACKUP_S3_BUCKET empty)")
+		slog.Error("remote backup is not enabled", "hint", "set BACKUP_REMOTE_ENABLED=true and BACKUP_S3_BUCKET")
 		os.Exit(1)
 	}
 

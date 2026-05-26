@@ -40,9 +40,36 @@ func (h *Handler) HealthCheck(w http.ResponseWriter, r *http.Request) {
 		checks["docker"] = fmt.Sprintf("ok (%d containers)", len(containers))
 	}
 
+	// Caddy admin API — only checked when the proxy implements Ping.
+	if pinger, ok := h.proxy.(interface {
+		Ping(context.Context) error
+	}); ok {
+		if err := pinger.Ping(ctx); err != nil {
+			checks["caddy"] = "unhealthy: " + err.Error()
+		} else {
+			checks["caddy"] = "ok"
+		}
+	}
+
+	// Encryption keyring — round-trip exercise to verify ENCRYPTION_KEY_CURRENT.
+	if h.cfg.Keyring != nil {
+		ct, err := h.cfg.Keyring.Encrypt([]byte("healthz"))
+		if err != nil {
+			checks["keyring"] = "unhealthy: encrypt: " + err.Error()
+		} else if pt, err := h.cfg.Keyring.Decrypt(ct); err != nil {
+			checks["keyring"] = "unhealthy: decrypt: " + err.Error()
+		} else if string(pt) != "healthz" {
+			checks["keyring"] = "unhealthy: roundtrip mismatch"
+		} else {
+			checks["keyring"] = "ok"
+		}
+	}
+
 	healthy := checks["database"] == "ok" &&
 		(checks["redis"] == "ok" || checks["redis"] == "not configured") &&
-		strings.HasPrefix(checks["docker"], "ok")
+		strings.HasPrefix(checks["docker"], "ok") &&
+		(checks["caddy"] == "" || checks["caddy"] == "ok") &&
+		(checks["keyring"] == "" || checks["keyring"] == "ok")
 
 	status := http.StatusOK
 	if !healthy {

@@ -2,6 +2,7 @@ package caddy
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"net/http"
 	"strings"
@@ -53,4 +54,21 @@ func New(adminURL string) *Client {
 		adminURL:   adminURL,
 		httpClient: httpClient,
 	}
+}
+
+// Ping checks that the Caddy admin API is reachable and responding.
+func (c *Client) Ping(ctx context.Context) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.adminURL+"/config/", nil)
+	if err != nil {
+		return fmt.Errorf("caddy ping: build request: %w", err)
+	}
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("caddy ping: %w", err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode >= 400 {
+		return fmt.Errorf("caddy ping: HTTP %d", resp.StatusCode)
+	}
+	return nil
 }
