@@ -11,6 +11,11 @@ import (
 // AsynqQueuePoller runs a background ticker that refreshes
 // paas_asynq_queue_size from asynq's Redis-backed inspector.
 //
+// The {state="archived"} label value captures asynq's dead-letter queue
+// (tasks that exhausted all retries). A separate paas_asynq_dead_letter_total
+// gauge is therefore not needed — the archived series in paas_asynq_queue_size
+// already provides that signal.
+//
 // Ownership: the caller owns the inspector and must Close it. Run blocks
 // until ctx is cancelled.
 func AsynqQueuePoller(ctx context.Context, inspector *asynq.Inspector, interval time.Duration) {

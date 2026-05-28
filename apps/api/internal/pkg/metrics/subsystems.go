@@ -31,9 +31,9 @@ var (
 
 	webhookDeliveryDuration = factory.NewHistogramVec(prometheus.HistogramOpts{
 		Name:    "paas_webhook_delivery_duration_seconds",
-		Help:    "End-to-end webhook processing duration by source and result.",
+		Help:    "End-to-end webhook processing duration by source (github/gitlab/unknown).",
 		Buckets: []float64{0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5},
-	}, []string{"source", "result"})
+	}, []string{"source"})
 
 	passwordResetIssued = factory.NewCounter(prometheus.CounterOpts{
 		Name: "paas_password_reset_issued_total",
@@ -93,11 +93,10 @@ func RecordBackupRun(destination string, err error, d time.Duration) {
 }
 
 // RecordWebhookDelivery observes the end-to-end webhook processing duration.
-// The webhook handler always responds 200 regardless of outcome, so result is
-// always "ok" at the call site; the source label ("github"/"gitlab"/"unknown")
-// is the primary dimension for dashboards.
+// source is "github", "gitlab", or "unknown". The handler always returns 200
+// regardless of outcome, so there is no result dimension on this metric.
 func RecordWebhookDelivery(source string, d time.Duration) {
-	webhookDeliveryDuration.WithLabelValues(source, "ok").Observe(d.Seconds())
+	webhookDeliveryDuration.WithLabelValues(source).Observe(d.Seconds())
 }
 
 // RecordPasswordResetIssued increments the password reset issued counter.

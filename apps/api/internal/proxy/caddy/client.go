@@ -57,8 +57,10 @@ func New(adminURL string) *Client {
 }
 
 // Ping checks that the Caddy admin API is reachable and responding.
+// GET / is a lightweight liveness endpoint that returns {"version":"..."} without
+// fetching the full config tree (as GET /config/ would).
 func (c *Client) Ping(ctx context.Context) error {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.adminURL+"/config/", nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.adminURL+"/", nil)
 	if err != nil {
 		return fmt.Errorf("caddy ping: build request: %w", err)
 	}

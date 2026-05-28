@@ -47,9 +47,7 @@ func (h *TaskHandler) HandleCleanupTask(ctx context.Context, t *asynq.Task) erro
 		if err != nil {
 			return fmt.Errorf("get application: %w", err)
 		}
-		if err := h.cleanupAppDeployments(ctx, row.ID, row.Type, row.Slug, row.ProjectSlug, payload.RetainCount, &totalRemoved); err != nil {
-			slog.Warn("cleanup: deployment removal error", "application_id", payload.ApplicationID, "error", err)
-		}
+		h.cleanupAppDeployments(ctx, row.ID, row.Type, row.Slug, row.ProjectSlug, payload.RetainCount, &totalRemoved)
 		appsProcessed = 1
 	} else {
 		// Bulk cleanup: single JOIN query — no per-row GetProject call.
@@ -58,9 +56,7 @@ func (h *TaskHandler) HandleCleanupTask(ctx context.Context, t *asynq.Task) erro
 			return fmt.Errorf("list applications: %w", err)
 		}
 		for _, row := range rows {
-			if err := h.cleanupAppDeployments(ctx, row.ID, row.Type, row.Slug, row.ProjectSlug, payload.RetainCount, &totalRemoved); err != nil {
-				slog.Warn("cleanup: deployment removal error", "application_id", formatUUID(row.ID), "error", err)
-			}
+			h.cleanupAppDeployments(ctx, row.ID, row.Type, row.Slug, row.ProjectSlug, payload.RetainCount, &totalRemoved)
 		}
 		appsProcessed = len(rows)
 	}
@@ -90,12 +86,12 @@ func (h *TaskHandler) HandleCleanupTask(ctx context.Context, t *asynq.Task) erro
 }
 
 // cleanupAppDeployments removes images and DB records for deployments of a
-// single application beyond the retain count. It is called for every app in
-// both the single-app and bulk cleanup paths.
-func (h *TaskHandler) cleanupAppDeployments(ctx context.Context, appID pgtype.UUID, appType, appSlug, projectSlug string, retainCount int, totalRemoved *int) error {
+// single application beyond the retain count. Errors are logged as warnings
+// and never returned — cleanup is best-effort and must not abort sibling apps.
+func (h *TaskHandler) cleanupAppDeployments(ctx context.Context, appID pgtype.UUID, appType, appSlug, projectSlug string, retainCount int, totalRemoved *int) {
 	applicationIDStr := formatUUID(appID)
 	if applicationIDStr == "" {
-		return nil
+		return
 	}
 
 	oldDeployments, err := h.Queries.ListOldDeployments(ctx, generated.ListOldDeploymentsParams{
@@ -103,7 +99,8 @@ func (h *TaskHandler) cleanupAppDeployments(ctx context.Context, appID pgtype.UU
 		Offset:        int32(retainCount),
 	})
 	if err != nil {
-		return fmt.Errorf("list old deployments: %w", err)
+		slog.Warn("cleanup: failed to list old deployments", "application_id", applicationIDStr, "error", err)
+		return
 	}
 
 	for _, dep := range oldDeployments {
@@ -128,7 +125,6 @@ func (h *TaskHandler) cleanupAppDeployments(ctx context.Context, appID pgtype.UU
 			*totalRemoved++
 		}
 	}
-	return nil
 }
 
 // cleanupStalePreviews deletes preview applications whose last_activity_at is
