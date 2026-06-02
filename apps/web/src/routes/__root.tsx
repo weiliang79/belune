@@ -1,6 +1,7 @@
 import { createRootRoute, Outlet, redirect, useRouter } from "@tanstack/react-router";
 import { TanStackRouterDevtools } from "@tanstack/react-router-devtools";
 import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
+import { ThemeProvider } from "next-themes";
 import { Toaster } from "@/components/ui/sonner";
 import { Button } from "@/components/ui/button";
 import { checkSetup, getMe } from "@/lib/api/auth";
@@ -64,7 +65,12 @@ export const Route = createRootRoute({
 
 function RootLayout() {
   return (
-    <>
+    <ThemeProvider
+      attribute="class"
+      defaultTheme="system"
+      enableSystem
+      disableTransitionOnChange
+    >
       <Outlet />
       <Toaster />
       {import.meta.env.DEV && (
@@ -73,6 +79,6 @@ function RootLayout() {
           <ReactQueryDevtools buttonPosition="bottom-left" />
         </>
       )}
-    </>
+    </ThemeProvider>
   );
 }

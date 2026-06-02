@@ -1,4 +1,6 @@
+import { useState } from "react";
 import { createFileRoute, Outlet, redirect } from "@tanstack/react-router";
+import { Menu } from "lucide-react";
 import { Sidebar } from "@/lib/components/layout/sidebar";
 import { useAuthStore } from "@/lib/stores/auth";
 import { useWebSocketStatus } from "@/lib/hooks/use-websocket";
@@ -15,6 +17,7 @@ export const Route = createFileRoute("/_app")({
 
 function AppLayout() {
   const wsStatus = useWebSocketStatus();
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   return (
     <div className="flex h-screen flex-col">
@@ -30,10 +33,33 @@ function AppLayout() {
         </div>
       )}
       <div className="flex min-h-0 flex-1">
-        <Sidebar />
-        <main className="flex-1 overflow-y-auto p-6">
-          <Outlet />
-        </main>
+        {mobileNavOpen && (
+          <div
+            className="fixed inset-0 z-40 bg-black/50 md:hidden"
+            aria-hidden="true"
+            onClick={() => setMobileNavOpen(false)}
+          />
+        )}
+        <Sidebar
+          mobileOpen={mobileNavOpen}
+          onMobileClose={() => setMobileNavOpen(false)}
+        />
+        <div className="flex min-w-0 flex-1 flex-col">
+          <div className="flex h-14 items-center gap-3 border-b px-4 md:hidden">
+            <button
+              type="button"
+              onClick={() => setMobileNavOpen(true)}
+              aria-label="Open navigation"
+              className="hover:opacity-80"
+            >
+              <Menu aria-hidden="true" className="h-5 w-5" />
+            </button>
+            <span className="text-lg font-bold">PaaS</span>
+          </div>
+          <main className="flex-1 overflow-y-auto p-4 md:p-6">
+            <Outlet />
+          </main>
+        </div>
       </div>
     </div>
   );

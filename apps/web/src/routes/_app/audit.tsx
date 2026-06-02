@@ -113,7 +113,7 @@ function AuditLogRow({
       className="cursor-pointer rounded-md border p-3 transition-colors hover:bg-muted/50"
       onClick={() => setExpanded(!expanded)}
     >
-      <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 md:flex-nowrap">
         <span className="text-muted-foreground w-36 shrink-0 text-xs">
           {formatDate(log.created_at)}
         </span>
