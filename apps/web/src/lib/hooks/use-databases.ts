@@ -6,8 +6,10 @@ export function useDatabases(projectId: string) {
   return useQuery({
     queryKey: queryKeys.databases.all(projectId),
     queryFn: () => databasesApi.listDatabases(projectId),
+    // Fast while a database is provisioning; slow floor otherwise so changes
+    // from other sessions still surface without hammering the API.
     refetchInterval: (query) =>
-      query.state.data?.some((d) => d.status === "creating") ? 3000 : false,
+      query.state.data?.some((d) => d.status === "creating") ? 3000 : 30000,
   });
 }
 

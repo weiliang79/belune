@@ -7,12 +7,14 @@ export function usePreviews(projectId: string, applicationId: string) {
   return useQuery({
     queryKey: queryKeys.previews.all(projectId, applicationId),
     queryFn: () => previewsApi.listPreviews(projectId, applicationId),
+    // Fast while a preview is deploying; slow floor otherwise so changes from
+    // other sessions still surface without hammering the API.
     refetchInterval: (query) =>
       query.state.data?.previews?.some((p) =>
         ["pending", "building", "deploying"].includes(p.status),
       )
         ? 3000
-        : false,
+        : 30000,
   });
 }
 

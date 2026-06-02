@@ -172,27 +172,28 @@ function DomainForm({
                 .min(1, "Hostname is required")
                 .regex(HOSTNAME_REGEX, "Invalid hostname format"),
             }}
-            children={(field) => (
-              <div className="space-y-2">
-                <Label htmlFor="hostname">Hostname</Label>
-                <Input
-                  id="hostname"
-                  placeholder="app.example.com"
-                  value={field.state.value}
-                  onBlur={field.handleBlur}
-                  onChange={(e) => field.handleChange(e.target.value)}
-                />
-                {fieldError(field.state.meta.errors) ? (
-                  <p className="text-destructive text-xs">
-                    {fieldError(field.state.meta.errors)}
-                  </p>
-                ) : (
-                  <p className="text-muted-foreground text-xs">
-                    Fully qualified domain. Must resolve to this server.
-                  </p>
-                )}
-              </div>
-            )}
+            children={(field) => {
+              const error = fieldError(field.state.meta.errors);
+              return (
+                <div className="space-y-2">
+                  <Label htmlFor="hostname">Hostname</Label>
+                  <Input
+                    id="hostname"
+                    placeholder="app.example.com"
+                    value={field.state.value}
+                    onBlur={field.handleBlur}
+                    onChange={(e) => field.handleChange(e.target.value)}
+                  />
+                  {error ? (
+                    <p className="text-destructive text-xs">{error}</p>
+                  ) : (
+                    <p className="text-muted-foreground text-xs">
+                      Fully qualified domain. Must resolve to this server.
+                    </p>
+                  )}
+                </div>
+              );
+            }}
           />
           <form.Field
             name="container_port"
@@ -208,31 +209,32 @@ function DomainForm({
                   "Port must be between 1 and 65535",
                 ),
             }}
-            children={(field) => (
-              <div className="space-y-2">
-                <Label htmlFor="port">Container Port</Label>
-                <Input
-                  id="port"
-                  type="number"
-                  min="1"
-                  max="65535"
-                  placeholder="3000"
-                  value={field.state.value}
-                  onBlur={field.handleBlur}
-                  onChange={(e) => field.handleChange(e.target.value)}
-                />
-                {fieldError(field.state.meta.errors) ? (
-                  <p className="text-destructive text-xs">
-                    {fieldError(field.state.meta.errors)}
-                  </p>
-                ) : (
-                  <p className="text-muted-foreground text-xs">
-                    Override the app's default port for this domain. Leave blank
-                    to inherit.
-                  </p>
-                )}
-              </div>
-            )}
+            children={(field) => {
+              const error = fieldError(field.state.meta.errors);
+              return (
+                <div className="space-y-2">
+                  <Label htmlFor="port">Container Port</Label>
+                  <Input
+                    id="port"
+                    type="number"
+                    min="1"
+                    max="65535"
+                    placeholder="3000"
+                    value={field.state.value}
+                    onBlur={field.handleBlur}
+                    onChange={(e) => field.handleChange(e.target.value)}
+                  />
+                  {error ? (
+                    <p className="text-destructive text-xs">{error}</p>
+                  ) : (
+                    <p className="text-muted-foreground text-xs">
+                      Override the app's default port for this domain. Leave
+                      blank to inherit.
+                    </p>
+                  )}
+                </div>
+              );
+            }}
           />
         </TabsContent>
 
@@ -275,23 +277,24 @@ function DomainForm({
                           ? "Certificate path is required"
                           : undefined,
                     }}
-                    children={(field) => (
-                      <div className="space-y-2">
-                        <Label>Certificate Path</Label>
-                        <Input
-                          value={field.state.value}
-                          onBlur={field.handleBlur}
-                          onChange={(e) => field.handleChange(e.target.value)}
-                          placeholder="/path/to/cert.pem"
-                          className="font-mono text-xs"
-                        />
-                        {fieldError(field.state.meta.errors) && (
-                          <p className="text-destructive text-xs">
-                            {fieldError(field.state.meta.errors)}
-                          </p>
-                        )}
-                      </div>
-                    )}
+                    children={(field) => {
+                      const error = fieldError(field.state.meta.errors);
+                      return (
+                        <div className="space-y-2">
+                          <Label>Certificate Path</Label>
+                          <Input
+                            value={field.state.value}
+                            onBlur={field.handleBlur}
+                            onChange={(e) => field.handleChange(e.target.value)}
+                            placeholder="/path/to/cert.pem"
+                            className="font-mono text-xs"
+                          />
+                          {error && (
+                            <p className="text-destructive text-xs">{error}</p>
+                          )}
+                        </div>
+                      );
+                    }}
                   />
                   <form.Field
                     name="key_path"
@@ -303,23 +306,24 @@ function DomainForm({
                           ? "Key path is required"
                           : undefined,
                     }}
-                    children={(field) => (
-                      <div className="space-y-2">
-                        <Label>Key Path</Label>
-                        <Input
-                          value={field.state.value}
-                          onBlur={field.handleBlur}
-                          onChange={(e) => field.handleChange(e.target.value)}
-                          placeholder="/path/to/key.pem"
-                          className="font-mono text-xs"
-                        />
-                        {fieldError(field.state.meta.errors) && (
-                          <p className="text-destructive text-xs">
-                            {fieldError(field.state.meta.errors)}
-                          </p>
-                        )}
-                      </div>
-                    )}
+                    children={(field) => {
+                      const error = fieldError(field.state.meta.errors);
+                      return (
+                        <div className="space-y-2">
+                          <Label>Key Path</Label>
+                          <Input
+                            value={field.state.value}
+                            onBlur={field.handleBlur}
+                            onChange={(e) => field.handleChange(e.target.value)}
+                            placeholder="/path/to/key.pem"
+                            className="font-mono text-xs"
+                          />
+                          {error && (
+                            <p className="text-destructive text-xs">{error}</p>
+                          )}
+                        </div>
+                      );
+                    }}
                   />
                 </div>
               ) : null

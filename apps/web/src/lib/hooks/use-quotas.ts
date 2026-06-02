@@ -5,11 +5,12 @@ import * as quotasApi from "@/lib/api/quotas";
 import type { QuotaLimits, QuotaScope } from "@/lib/api/quotas";
 
 export function useQuotas() {
-  // Quotas are admin config that changes rarely — no background polling;
-  // mutations invalidate this query, and it refetches on window focus.
+  // Quotas are admin config that changes rarely — slow background poll so
+  // edits from other admin sessions surface; mutations also invalidate this.
   return useQuery({
     queryKey: queryKeys.quotas.all,
     queryFn: quotasApi.listQuotas,
+    refetchInterval: 60000,
   });
 }
 

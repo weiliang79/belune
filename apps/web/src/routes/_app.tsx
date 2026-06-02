@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { createFileRoute, Outlet, redirect } from "@tanstack/react-router";
 import { Menu } from "lucide-react";
 import { Sidebar } from "@/lib/components/layout/sidebar";
@@ -18,6 +18,16 @@ export const Route = createFileRoute("/_app")({
 function AppLayout() {
   const wsStatus = useWebSocketStatus();
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+
+  // Close the off-canvas drawer on Escape.
+  useEffect(() => {
+    if (!mobileNavOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMobileNavOpen(false);
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [mobileNavOpen]);
 
   return (
     <div className="flex h-screen flex-col">
