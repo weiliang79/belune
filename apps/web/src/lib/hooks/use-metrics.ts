@@ -42,8 +42,9 @@ export function useHostMetricsStream(enabled: boolean) {
         const cutoff = new Date(Date.now() - STREAM_WINDOW_MS).toISOString();
         return [...prev, point].filter((p) => p.recorded_at >= cutoff);
       });
-    } catch {
-      // ignore
+    } catch (err) {
+      // Per-message parse failure: log without toasting (would spam the stream).
+      console.debug("host metrics stream: failed to parse message", err);
     }
   }, []);
 
@@ -71,8 +72,9 @@ export function useAppMetricsStream(
         const cutoff = new Date(Date.now() - STREAM_WINDOW_MS).toISOString();
         return [...prev, point].filter((p) => p.recorded_at >= cutoff);
       });
-    } catch {
-      // ignore
+    } catch (err) {
+      // Per-message parse failure: log without toasting (would spam the stream).
+      console.debug("app metrics stream: failed to parse message", err);
     }
   }, []);
 

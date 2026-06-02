@@ -6,7 +6,8 @@ export function useDatabases(projectId: string) {
   return useQuery({
     queryKey: queryKeys.databases.all(projectId),
     queryFn: () => databasesApi.listDatabases(projectId),
-    refetchInterval: 5000,
+    refetchInterval: (query) =>
+      query.state.data?.some((d) => d.status === "creating") ? 3000 : false,
   });
 }
 

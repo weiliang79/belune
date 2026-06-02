@@ -7,7 +7,12 @@ export function usePreviews(projectId: string, applicationId: string) {
   return useQuery({
     queryKey: queryKeys.previews.all(projectId, applicationId),
     queryFn: () => previewsApi.listPreviews(projectId, applicationId),
-    refetchInterval: 15000,
+    refetchInterval: (query) =>
+      query.state.data?.previews?.some((p) =>
+        ["pending", "building", "deploying"].includes(p.status),
+      )
+        ? 3000
+        : false,
   });
 }
 
