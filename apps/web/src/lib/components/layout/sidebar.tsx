@@ -20,6 +20,7 @@ import { useSidebarStore } from "@/lib/stores/sidebar";
 import { useIsMobile } from "@/lib/hooks/use-is-mobile";
 import { logout } from "@/lib/api/auth";
 import { BRAND } from "@/lib/brand";
+import { initialsOf } from "@/lib/utils/initials";
 import { cn } from "@/lib/utils";
 
 interface NavItem {
@@ -45,13 +46,6 @@ const SETTINGS_NAV: NavItem[] = [
   { to: "/git-credentials", label: "Git Credentials", Icon: GitBranch },
   { to: "/audit", label: "Audit Log", Icon: ShieldCheck, admin: true },
 ];
-
-function initialsOf(name: string): string {
-  const parts = name.trim().split(/[\s@._-]+/).filter(Boolean);
-  if (parts.length === 0) return "?";
-  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-  return (parts[0][0] + parts[1][0]).toUpperCase();
-}
 
 interface SidebarProps {
   /** Whether the off-canvas drawer is open (mobile only). */
