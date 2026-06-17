@@ -6,6 +6,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { Button } from "@/components/ui/button";
 import { checkSetup, getMe } from "@/lib/api/auth";
 import { useAuthStore } from "@/lib/stores/auth";
+import { useAccentSync } from "@/lib/stores/accent";
 import { ApiError } from "@/lib/api/client";
 
 function RootErrorBoundary({ error }: { error: Error }) {
@@ -64,10 +65,11 @@ export const Route = createRootRoute({
 });
 
 function RootLayout() {
+  useAccentSync();
   return (
     <ThemeProvider
       attribute="class"
-      defaultTheme="system"
+      defaultTheme="dark"
       enableSystem
       disableTransitionOnChange
     >

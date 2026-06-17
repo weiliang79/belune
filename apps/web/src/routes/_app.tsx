@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { createFileRoute, Outlet, redirect } from "@tanstack/react-router";
-import { Menu } from "lucide-react";
 import { Sidebar } from "@/lib/components/layout/sidebar";
+import { Topbar } from "@/lib/components/layout/topbar";
 import { useAuthStore } from "@/lib/stores/auth";
 import { useWebSocketStatus } from "@/lib/hooks/use-websocket";
 
@@ -55,17 +55,7 @@ function AppLayout() {
           onMobileClose={() => setMobileNavOpen(false)}
         />
         <div className="flex min-w-0 flex-1 flex-col">
-          <div className="flex h-14 items-center gap-3 border-b px-4 md:hidden">
-            <button
-              type="button"
-              onClick={() => setMobileNavOpen(true)}
-              aria-label="Open navigation"
-              className="hover:opacity-80"
-            >
-              <Menu aria-hidden="true" className="h-5 w-5" />
-            </button>
-            <span className="text-lg font-bold">PaaS</span>
-          </div>
+          <Topbar onMobileMenu={() => setMobileNavOpen(true)} />
           <main className="flex-1 overflow-y-auto p-4 md:p-6">
             <Outlet />
           </main>

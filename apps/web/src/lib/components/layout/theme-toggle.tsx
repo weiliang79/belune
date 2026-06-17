@@ -7,7 +7,6 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { cn } from "@/lib/utils";
 
 const THEMES = [
   { value: "light", label: "Light", Icon: Sun },
@@ -15,20 +14,14 @@ const THEMES = [
   { value: "system", label: "System", Icon: Monitor },
 ] as const;
 
-export function ThemeToggle({ expanded }: { expanded: boolean }) {
+/** Compact icon-button theme switcher for the top bar. */
+export function ThemeToggle() {
   const { theme, setTheme } = useTheme();
 
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
-        render={
-          <Button
-            variant="ghost"
-            size="sm"
-            className={cn("w-full", expanded ? "justify-start" : "justify-center")}
-            aria-label={!expanded ? "Toggle theme" : undefined}
-          />
-        }
+        render={<Button variant="ghost" size="icon" aria-label="Toggle theme" />}
       >
         {/* Icon crossfades on the `.dark` class set by next-themes — no JS state. */}
         <span className="relative flex h-4 w-4 items-center justify-center">
@@ -41,14 +34,15 @@ export function ThemeToggle({ expanded }: { expanded: boolean }) {
             className="absolute h-4 w-4 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100"
           />
         </span>
-        {expanded && <span className="ml-2">Theme</span>}
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" side="top" className="w-36">
+      <DropdownMenuContent align="end" className="w-36">
         {THEMES.map(({ value, label, Icon }) => (
           <DropdownMenuItem key={value} onClick={() => setTheme(value)}>
             <Icon aria-hidden="true" className="h-4 w-4" />
             {label}
-            {theme === value && <Check aria-hidden="true" className="ml-auto h-4 w-4" />}
+            {theme === value && (
+              <Check aria-hidden="true" className="ml-auto h-4 w-4" />
+            )}
           </DropdownMenuItem>
         ))}
       </DropdownMenuContent>

@@ -1,13 +1,57 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import { useState } from "react";
+import { useState, type ComponentType } from "react";
+import {
+  Folder,
+  Rocket,
+  Activity,
+  User,
+  Server,
+  Users,
+  Gauge,
+  Database,
+  GitBranch,
+  ShieldCheck,
+  LogOut,
+  Loader2,
+  X,
+} from "lucide-react";
 import { useAuthStore } from "@/lib/stores/auth";
 import { useSidebarStore } from "@/lib/stores/sidebar";
 import { useIsMobile } from "@/lib/hooks/use-is-mobile";
 import { logout } from "@/lib/api/auth";
-import { Button } from "@/components/ui/button";
-import { Loader2, X } from "lucide-react";
+import { BRAND } from "@/lib/brand";
 import { cn } from "@/lib/utils";
-import { ThemeToggle } from "./theme-toggle";
+
+interface NavItem {
+  to: string;
+  label: string;
+  Icon: ComponentType<{ className?: string; "aria-hidden"?: boolean }>;
+  admin?: boolean;
+  exact?: boolean;
+}
+
+const HOME_NAV: NavItem[] = [
+  { to: "/projects", label: "Projects", Icon: Folder },
+  { to: "/deployments", label: "Deployments", Icon: Rocket },
+  { to: "/requests", label: "Requests", Icon: Activity, admin: true },
+];
+
+const SETTINGS_NAV: NavItem[] = [
+  { to: "/account", label: "Account", Icon: User, exact: true },
+  { to: "/server", label: "Server", Icon: Server, admin: true },
+  { to: "/team", label: "Team", Icon: Users, admin: true },
+  { to: "/quotas", label: "Quotas", Icon: Gauge, admin: true },
+  { to: "/backups", label: "Backups", Icon: Database, admin: true },
+  { to: "/git-credentials", label: "Git Credentials", Icon: GitBranch },
+  { to: "/audit", label: "Audit Log", Icon: ShieldCheck, admin: true },
+];
+
+function initialsOf(name: string): string {
+  const parts = name.trim().split(/[\s@._-]+/).filter(Boolean);
+  if (parts.length === 0) return "?";
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[1][0]).toUpperCase();
+}
 
 interface SidebarProps {
   /** Whether the off-canvas drawer is open (mobile only). */
@@ -17,7 +61,7 @@ interface SidebarProps {
 }
 
 export function Sidebar({ mobileOpen, onMobileClose }: SidebarProps) {
-  const { isOpen, toggle } = useSidebarStore();
+  const { isOpen } = useSidebarStore();
   const { user, clearUser } = useAuthStore();
   const isMobile = useIsMobile();
   const routerState = useRouterState();
@@ -43,20 +87,52 @@ export function Sidebar({ mobileOpen, onMobileClose }: SidebarProps) {
   const isActive = (to: string, exact = false) =>
     exact ? currentPath === to : currentPath.startsWith(to);
 
-  const navLink = (to: string, label: string, exact = false) => (
-    <Link
-      key={to}
-      to={to as any}
-      onClick={() => isMobile && onMobileClose()}
-      aria-label={!expanded ? label : undefined}
-      className={cn(
-        "hover:bg-sidebar-accent hover:text-sidebar-accent-foreground flex items-center rounded-md px-3 py-2 text-sm font-medium transition-colors",
-        isActive(to, exact) && "bg-sidebar-accent text-sidebar-accent-foreground",
-      )}
-    >
-      {expanded ? label : <span className="sr-only">{label}</span>}
-    </Link>
-  );
+  const navLink = ({ to, label, Icon, exact }: NavItem) => {
+    const active = isActive(to, exact);
+    return (
+      <Link
+        key={to}
+        to={to as never}
+        onClick={() => isMobile && onMobileClose()}
+        aria-label={!expanded ? label : undefined}
+        aria-current={active ? "page" : undefined}
+        title={!expanded ? label : undefined}
+        className={cn(
+          "group flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+          !expanded && "justify-center px-0",
+          active
+            ? "bg-sidebar-accent text-sidebar-accent-foreground"
+            : "text-muted-foreground hover:bg-sidebar-accent/60 hover:text-foreground",
+        )}
+      >
+        <Icon
+          aria-hidden={true}
+          className={cn(
+            "h-[18px] w-[18px] shrink-0 transition-colors",
+            active ? "text-primary" : "text-muted-foreground group-hover:text-foreground",
+          )}
+        />
+        {expanded ? label : <span className="sr-only">{label}</span>}
+      </Link>
+    );
+  };
+
+  const section = (heading: string, items: NavItem[]) => {
+    const visible = items.filter((i) => !i.admin || isAdmin);
+    if (visible.length === 0) return null;
+    return (
+      <div>
+        {expanded && (
+          <p className="text-text-faint mb-1 px-3 text-[10.5px] font-semibold uppercase tracking-wider">
+            {heading}
+          </p>
+        )}
+        <div className="space-y-0.5">{visible.map(navLink)}</div>
+      </div>
+    );
+  };
+
+  const identity = user?.username || user?.email || "User";
 
   return (
     <aside
@@ -70,82 +146,99 @@ export function Sidebar({ mobileOpen, onMobileClose }: SidebarProps) {
         isOpen ? "md:w-64" : "md:w-16",
       )}
     >
-      <div className="flex h-14 items-center justify-between border-b px-4">
-        <button
-          onClick={toggle}
-          aria-label={isOpen ? "Collapse sidebar" : "Expand sidebar"}
-          aria-expanded={isOpen}
-          className="hidden text-lg font-bold hover:opacity-80 md:block"
+      {/* Branding / identity block — static (single-tenant, no org switcher) */}
+      <div
+        className={cn(
+          "flex h-14 items-center gap-2.5 border-b px-4",
+          !expanded && "justify-center px-0",
+        )}
+      >
+        <div
+          aria-hidden="true"
+          className="grid size-8 shrink-0 place-items-center rounded-lg text-white shadow-sm"
+          style={{
+            background: "linear-gradient(140deg, var(--brand), var(--brand-press))",
+          }}
         >
-          {isOpen ? "PaaS" : "P"}
-        </button>
-        <span className="text-lg font-bold md:hidden">PaaS</span>
+          <Rocket className="h-[18px] w-[18px]" />
+        </div>
+        {expanded && (
+          <div className="flex min-w-0 flex-col leading-tight">
+            <span className="truncate text-sm font-semibold">{BRAND.name}</span>
+            <span className="text-text-faint font-mono text-[11px]">
+              {BRAND.version}
+            </span>
+          </div>
+        )}
         <button
           onClick={onMobileClose}
           aria-label="Close navigation"
-          className="hover:opacity-80 md:hidden"
+          className="ml-auto hover:opacity-80 md:hidden"
         >
           <X aria-hidden="true" className="h-5 w-5" />
         </button>
       </div>
 
       <nav className="flex-1 space-y-4 overflow-y-auto p-2">
-        {/* Home section */}
-        <div>
-          {expanded && (
-            <p className="text-muted-foreground mb-1 px-3 text-xs font-semibold uppercase tracking-wider">
-              Home
-            </p>
-          )}
-          <div className="space-y-1">
-            {navLink("/projects", "Projects")}
-            {navLink("/deployments", "Deployments")}
-            {isAdmin && navLink("/requests", "Requests")}
-          </div>
-        </div>
-
-        {/* Settings section */}
-        <div>
-          {expanded && (
-            <p className="text-muted-foreground mb-1 px-3 text-xs font-semibold uppercase tracking-wider">
-              Settings
-            </p>
-          )}
-          <div className="space-y-1">
-            {navLink("/account", "Account", true)}
-            {isAdmin && navLink("/server", "Server")}
-            {isAdmin && navLink("/team", "Team")}
-            {isAdmin && navLink("/quotas", "Quotas")}
-            {isAdmin && navLink("/backups", "Backups")}
-            {navLink("/git-credentials", "Git Credentials")}
-            {isAdmin && navLink("/audit", "Audit Log")}
-          </div>
-        </div>
+        {section("Home", HOME_NAV)}
+        {section("Settings", SETTINGS_NAV)}
       </nav>
 
-      <div className="border-t p-3">
-        {expanded && user && (
-          <div className="text-muted-foreground mb-2 truncate text-xs">
-            {user.username || user.email}
-          </div>
-        )}
-        <ThemeToggle expanded={expanded} />
-        <Button
-          variant="ghost"
-          size="sm"
-          className="w-full justify-start"
-          onClick={handleLogout}
-          disabled={isLoggingOut}
-          aria-label={!expanded ? "Logout" : undefined}
-        >
-          {isLoggingOut ? (
-            <Loader2 aria-hidden="true" className="h-4 w-4 animate-spin" />
-          ) : expanded ? (
-            "Logout"
-          ) : (
-            <span aria-hidden="true">{"→"}</span>
+      {/* Footer — user identity + logout (theme/accent live in the top bar) */}
+      <div className="border-t p-2">
+        <div
+          className={cn(
+            "flex items-center gap-2.5 rounded-md px-2 py-1.5",
+            !expanded && "justify-center px-0",
           )}
-        </Button>
+        >
+          <div
+            aria-hidden="true"
+            className="bg-elev text-foreground grid size-8 shrink-0 place-items-center rounded-full text-xs font-semibold"
+          >
+            {initialsOf(identity)}
+          </div>
+          {expanded && (
+            <div className="flex min-w-0 flex-col leading-tight">
+              <span className="truncate text-sm font-medium">{identity}</span>
+              {user?.email && (
+                <span className="text-text-faint truncate text-xs">
+                  {user.email}
+                </span>
+              )}
+            </div>
+          )}
+          {expanded && (
+            <button
+              onClick={handleLogout}
+              disabled={isLoggingOut}
+              aria-label="Log out"
+              title="Log out"
+              className="text-muted-foreground hover:text-foreground ml-auto shrink-0 rounded-md p-1.5 transition-colors"
+            >
+              {isLoggingOut ? (
+                <Loader2 aria-hidden="true" className="h-4 w-4 animate-spin" />
+              ) : (
+                <LogOut aria-hidden="true" className="h-4 w-4" />
+              )}
+            </button>
+          )}
+        </div>
+        {!expanded && (
+          <button
+            onClick={handleLogout}
+            disabled={isLoggingOut}
+            aria-label="Log out"
+            title="Log out"
+            className="text-muted-foreground hover:text-foreground mt-1 flex w-full justify-center rounded-md p-1.5 transition-colors"
+          >
+            {isLoggingOut ? (
+              <Loader2 aria-hidden="true" className="h-4 w-4 animate-spin" />
+            ) : (
+              <LogOut aria-hidden="true" className="h-4 w-4" />
+            )}
+          </button>
+        )}
       </div>
     </aside>
   );
