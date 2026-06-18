@@ -77,7 +77,13 @@ export function NotificationBell() {
   const handleSelect = (n: Notification) => {
     if (!n.read) markRead.mutate(n.id);
     setOpen(false);
-    if (n.link) navigate({ to: n.link });
+    // `link` is a backend-resolved internal pathname (e.g.
+    // "/projects/<id>/applications/<id>/deployments"). TanStack Router matches
+    // a concrete pathname against the $param route tree (verified), so it can
+    // be passed straight to navigate. Guard against empty/external values.
+    if (n.link?.startsWith("/")) {
+      navigate({ to: n.link });
+    }
   };
 
   return (
