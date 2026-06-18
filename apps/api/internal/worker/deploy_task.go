@@ -195,7 +195,7 @@ func (h *TaskHandler) HandleDeployTask(ctx context.Context, t *asynq.Task) error
 		slog.Error("failed to commit deploy success status", "application_id", payload.ApplicationID, "error", err)
 		recordSpanErr(rootSpan, err)
 	} else {
-		h.notifyDeployment(ctx, dc.deploymentID, status.DeploymentSuccess, "")
+		h.notifyDeployment(ctx, dc.deploymentID, status.DeploymentSuccess, "deploy", "")
 	}
 
 	rootSpan.SetAttributes(
@@ -682,7 +682,7 @@ func (h *TaskHandler) failDeployment(ctx context.Context, deploymentID pgtype.UU
 			ErrorMessage: pgtype.Text{String: safeMsg, Valid: true},
 		})
 		h.maybeAlertDeploymentFailed(ctx, deploymentID, kind, safeMsg)
-		h.notifyDeployment(ctx, deploymentID, status.DeploymentFailed, safeMsg)
+		h.notifyDeployment(ctx, deploymentID, status.DeploymentFailed, kind, safeMsg)
 	}
 }
 
@@ -690,7 +690,11 @@ func (h *TaskHandler) failDeployment(ctx context.Context, deploymentID pgtype.UU
 // terminal deployment outcome. Recipient resolution mirrors the email-alert
 // path (project owner); the link deep-links into the app's Deployments tab.
 // Best-effort and nil-safe — never blocks or fails the deploy path.
-func (h *TaskHandler) notifyDeployment(ctx context.Context, deploymentID pgtype.UUID, outcome, errMsg string) {
+//
+// Gated on the owner's alert preferences, same as the email path: build
+// failures honour build_failures; deploy outcomes (success and deploy failure)
+// honour deploy_failures. Defaults to enabled when no preferences row exists.
+func (h *TaskHandler) notifyDeployment(ctx context.Context, deploymentID pgtype.UUID, outcome, kind, errMsg string) {
 	if h.Notifier == nil {
 		return
 	}
@@ -699,6 +703,21 @@ func (h *TaskHandler) notifyDeployment(ctx context.Context, deploymentID pgtype.
 	if err != nil {
 		slog.Warn("notify: failed to fetch deployment info", "deployment_id", fmt.Sprintf("%v", deploymentID), "error", err)
 		return
+	}
+
+	prefs, prefErr := h.Queries.GetAlertPreferences(ctx, info.UserID)
+	if prefErr != nil && !isNoRows(prefErr) {
+		slog.Warn("notify: failed to fetch alert preferences", "user_id", formatUUID(info.UserID), "error", prefErr)
+		return
+	}
+	if prefErr == nil {
+		enabled := prefs.DeployFailures
+		if outcome == status.DeploymentFailed && kind == "build" {
+			enabled = prefs.BuildFailures
+		}
+		if !enabled {
+			return
+		}
 	}
 
 	var notifType, title, body string
