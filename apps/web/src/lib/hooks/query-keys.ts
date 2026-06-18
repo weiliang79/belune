@@ -8,7 +8,8 @@ export const queryKeys = {
     detail: (id: string) => ["projects", id] as const,
   },
   applications: {
-    all: (projectId: string) => ["projects", projectId, "applications"] as const,
+    all: (projectId: string) =>
+      ["projects", projectId, "applications"] as const,
     detail: (projectId: string, applicationId: string) =>
       ["projects", projectId, "applications", applicationId] as const,
     buildCache: (projectId: string, applicationId: string) =>
@@ -16,7 +17,13 @@ export const queryKeys = {
   },
   deployments: {
     all: (projectId: string, applicationId: string) =>
-      ["projects", projectId, "applications", applicationId, "deployments"] as const,
+      [
+        "projects",
+        projectId,
+        "applications",
+        applicationId,
+        "deployments",
+      ] as const,
     detail: (projectId: string, applicationId: string, deploymentId: string) =>
       [
         "projects",
@@ -29,49 +36,77 @@ export const queryKeys = {
   },
   domains: {
     all: (projectId: string, applicationId: string) =>
-      ["projects", projectId, "applications", applicationId, "domains"] as const,
+      [
+        "projects",
+        projectId,
+        "applications",
+        applicationId,
+        "domains",
+      ] as const,
   },
   envvars: {
     all: (projectId: string, applicationId: string) =>
       ["projects", projectId, "applications", applicationId, "env"] as const,
   },
   projectEnvvars: {
-    all: (projectId: string) =>
-      ["projects", projectId, "env"] as const,
+    all: (projectId: string) => ["projects", projectId, "env"] as const,
   },
   users: {
     all: ["users"] as const,
   },
   features: ["features"] as const,
   metrics: ["metrics"] as const,
+  notifications: {
+    list: ["notifications"] as const,
+    unread: ["notifications", "unread"] as const,
+  },
   hostMetrics: (range: string) => ["metrics", "host", range] as const,
   settings: ["settings"] as const,
   databases: {
-    all: (projectId: string) =>
-      ["projects", projectId, "databases"] as const,
+    all: (projectId: string) => ["projects", projectId, "databases"] as const,
     detail: (projectId: string, databaseId: string) =>
       ["projects", projectId, "databases", databaseId] as const,
   },
   applicationLogs: {
     history: (projectId: string, applicationId: string, params?: object) =>
-      ["projects", projectId, "applications", applicationId, "logs", "history", params] as const,
+      [
+        "projects",
+        projectId,
+        "applications",
+        applicationId,
+        "logs",
+        "history",
+        params,
+      ] as const,
   },
-  globalDeployments: (params?: object) =>
-    ["deployments", params] as const,
-  requestLogs: (params?: object) =>
-    ["requests", params] as const,
+  globalDeployments: (params?: object) => ["deployments", params] as const,
+  requestLogs: (params?: object) => ["requests", params] as const,
   gitCredentials: ["git-credentials"] as const,
-  auditLogs: (params?: object) =>
-    ["audit-logs", params] as const,
+  auditLogs: (params?: object) => ["audit-logs", params] as const,
   routeFeatures: (projectId: string, applicationId: string, domainId: string) =>
-    ["projects", projectId, "applications", applicationId, "domains", domainId, "features"] as const,
+    [
+      "projects",
+      projectId,
+      "applications",
+      applicationId,
+      "domains",
+      domainId,
+      "features",
+    ] as const,
   quotas: {
     all: ["quotas"] as const,
-    detail: (scope: string, scopeId: string) => ["quotas", scope, scopeId] as const,
+    detail: (scope: string, scopeId: string) =>
+      ["quotas", scope, scopeId] as const,
   },
   previews: {
     all: (projectId: string, applicationId: string) =>
-      ["projects", projectId, "applications", applicationId, "previews"] as const,
+      [
+        "projects",
+        projectId,
+        "applications",
+        applicationId,
+        "previews",
+      ] as const,
   },
   backups: {
     runs: ["backups", "runs"] as const,

@@ -178,7 +178,12 @@ export interface GitCredential {
 export interface RouteFeature {
   id: string;
   domain_id: string;
-  feature_type: "basic_auth" | "redirect" | "headers" | "ip_allowlist" | "rate_limit";
+  feature_type:
+    | "basic_auth"
+    | "redirect"
+    | "headers"
+    | "ip_allowlist"
+    | "rate_limit";
   config: Record<string, unknown>;
   enabled: boolean;
   created_at: string;
@@ -241,4 +246,15 @@ export interface AlertPreferences {
   build_failures: boolean;
   quota_threshold: boolean;
   quota_threshold_percent: number;
+}
+
+export interface Notification {
+  id: string;
+  user_id: string;
+  type: string;
+  title: string;
+  body: string;
+  link: string | null;
+  read: boolean;
+  created_at: string;
 }

@@ -1,42 +1,21 @@
 import { Link } from "@tanstack/react-router";
-import { Menu, PanelLeft, Bell } from "lucide-react";
+import { Menu, PanelLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { useSidebarStore } from "@/lib/stores/sidebar";
 import { useAuthStore } from "@/lib/stores/auth";
+import { useNotificationStream } from "@/lib/hooks/use-notifications";
 import { initialsOf } from "@/lib/utils/initials";
 import { ThemeToggle } from "./theme-toggle";
 import { AccentToggle } from "./accent-toggle";
-
-/**
- * Placeholder notification bell. The notification backend lands in a later
- * phase; for now this shows the calm empty state (no fake data, no badge).
- */
-function NotificationBell() {
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger
-        render={<Button variant="ghost" size="icon" aria-label="Notifications" />}
-      >
-        <Bell aria-hidden="true" className="h-4 w-4" />
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-72">
-        <div className="text-muted-foreground px-3 py-6 text-center text-sm">
-          You&apos;re all caught up.
-        </div>
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
-}
+import { NotificationBell } from "./notification-bell";
 
 export function Topbar({ onMobileMenu }: { onMobileMenu: () => void }) {
   const toggleSidebar = useSidebarStore((s) => s.toggle);
   const user = useAuthStore((s) => s.user);
   const identity = user?.username || user?.email || "User";
+
+  // Mounted once globally — keeps the bell badge and toasts live.
+  useNotificationStream();
 
   return (
     <header className="bg-background flex h-14 shrink-0 items-center gap-2 border-b px-3 md:px-4">
@@ -72,7 +51,8 @@ export function Topbar({ onMobileMenu }: { onMobileMenu: () => void }) {
           title={identity}
           className="ml-1 grid size-8 place-items-center rounded-full text-xs font-semibold text-white"
           style={{
-            background: "linear-gradient(140deg, var(--brand), var(--brand-press))",
+            background:
+              "linear-gradient(140deg, var(--brand), var(--brand-press))",
           }}
         >
           {initialsOf(identity)}
