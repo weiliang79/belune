@@ -23,7 +23,7 @@ import {
 import { toast } from "sonner";
 import { useDatabase, useDeleteDatabase } from "@/lib/hooks/use-databases";
 import { useProject } from "@/lib/hooks/use-projects";
-import { Loader2, Trash2 } from "lucide-react";
+import { Database as DatabaseIcon, Loader2, Trash2 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AppBreadcrumb } from "@/lib/components/app-breadcrumb";
 import { StatusBadge } from "@/lib/components/status-badge";
@@ -93,12 +93,17 @@ function DatabaseDetailPage() {
         ]}
       />
 
-      <div className="flex items-start justify-between">
-        <div>
-          <h2 className="text-xl font-semibold">{db.name}</h2>
-          <p className="text-muted-foreground text-sm">{db.slug}</p>
-          <div className="text-muted-foreground mt-1 flex items-center gap-2 text-sm">
-            <Badge variant="outline">
+      <div className="flex items-start gap-3">
+        <div className="bg-elev text-text-muted grid size-11 shrink-0 place-items-center rounded-xl">
+          <DatabaseIcon aria-hidden="true" className="size-5" />
+        </div>
+        <div className="min-w-0">
+          <h1 className="truncate text-2xl font-semibold tracking-tight">
+            {db.name}
+          </h1>
+          <p className="text-text-faint truncate font-mono text-sm">{db.slug}</p>
+          <div className="mt-2 flex items-center gap-2">
+            <Badge variant="outline" className="font-mono">
               {db.type}:{db.version}
             </Badge>
             <StatusBadge status={db.status} />
