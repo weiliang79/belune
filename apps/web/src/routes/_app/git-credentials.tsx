@@ -16,6 +16,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { GitBranchIcon } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -69,7 +70,7 @@ function GitCredentialsPage() {
     return (
       <div className="space-y-6">
         <div>
-          <h1 className="text-2xl font-bold">Git Credentials</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Git Credentials</h1>
           <p className="text-muted-foreground">Manage centralized git credentials for your applications.</p>
         </div>
         <Card>
@@ -87,7 +88,7 @@ function GitCredentialsPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold">Git Credentials</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Git Credentials</h1>
           <p className="text-muted-foreground">
             Manage centralized git credentials for your applications.
           </p>
@@ -158,18 +159,23 @@ function CredentialRow({
   const deleteCred = useDeleteGitCredential();
 
   return (
-    <div className="flex items-center justify-between rounded-md border p-3">
-      <div className="flex items-center gap-3">
-        <span className="text-sm font-medium">{credential.name}</span>
-        <Badge variant="secondary">{providerLabel(credential.provider)}</Badge>
-        {credential.username && (
-          <span className="text-muted-foreground text-xs font-mono">
-            {credential.username}
-          </span>
-        )}
-        <span className="text-muted-foreground text-xs">
-          {formatDate(credential.created_at)}
-        </span>
+    <div className="hover:bg-card-hover flex items-center justify-between gap-3 rounded-lg border p-3 transition-colors">
+      <div className="flex min-w-0 items-center gap-3">
+        <div className="bg-elev text-text-muted grid size-9 shrink-0 place-items-center rounded-lg">
+          <GitBranchIcon aria-hidden="true" className="size-4" />
+        </div>
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <span className="truncate text-sm font-medium">{credential.name}</span>
+            <Badge variant="secondary">{providerLabel(credential.provider)}</Badge>
+          </div>
+          <div className="text-text-faint mt-0.5 flex items-center gap-2 text-xs">
+            {credential.username && (
+              <span className="truncate font-mono">{credential.username}</span>
+            )}
+            <span>Added {formatDate(credential.created_at)}</span>
+          </div>
+        </div>
       </div>
       <div className="flex items-center gap-2">
         <Button size="sm" variant="ghost" onClick={onEdit}>

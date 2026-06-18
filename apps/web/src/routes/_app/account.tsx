@@ -1,14 +1,18 @@
 import { useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
+import { useTheme } from "next-themes";
+import { MonitorIcon, MoonIcon, SunIcon } from "lucide-react";
 import { RouteError } from "@/lib/components/route-error";
 import { toast } from "sonner";
 import { useAuthStore } from "@/lib/stores/auth";
 import { useChangeOwnPassword, useUpdateProfile } from "@/lib/hooks/use-users";
 import { useAlertPreferences, useUpdateAlertPreferences } from "@/lib/hooks/use-alert-preferences";
+import { useAccentStore, type Accent } from "@/lib/stores/accent";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/_app/account")({
   component: SettingsPage,
@@ -19,11 +23,11 @@ function SettingsPage() {
   const user = useAuthStore((s) => s.user);
 
   return (
-    <div className="space-y-6">
+    <div className="mx-auto max-w-2xl space-y-6">
       <div>
-        <h1 className="text-2xl font-bold">Settings</h1>
-        <p className="text-muted-foreground">
-          Manage your account and platform settings.
+        <h1 className="text-2xl font-semibold tracking-tight">Account</h1>
+        <p className="text-muted-foreground text-sm">
+          Manage your profile, security, and appearance.
         </p>
       </div>
 
@@ -34,7 +38,7 @@ function SettingsPage() {
         <CardContent className="space-y-2 text-sm">
           <div className="flex justify-between">
             <span className="text-muted-foreground">Email</span>
-            <span>{user?.email}</span>
+            <span className="font-mono">{user?.email}</span>
           </div>
           <div className="flex justify-between">
             <span className="text-muted-foreground">Role</span>
@@ -46,6 +50,7 @@ function SettingsPage() {
       <ProfileCard />
       <ChangePasswordCard />
       <AlertPreferencesCard />
+      <AppearanceCard />
     </div>
   );
 }
@@ -293,6 +298,96 @@ function AlertPreferencesCard() {
             </Button>
           </div>
         )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function SegmentedOption({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className={cn(
+        "flex flex-1 items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+        active
+          ? "bg-card text-foreground shadow-sm ring-1 ring-border-strong"
+          : "text-muted-foreground hover:text-foreground",
+      )}
+    >
+      {children}
+    </button>
+  );
+}
+
+function AppearanceCard() {
+  const { theme, setTheme } = useTheme();
+  const accent = useAccentStore((s) => s.accent);
+  const setAccent = useAccentStore((s) => s.setAccent);
+
+  const themes = [
+    { value: "light", label: "Light", Icon: SunIcon },
+    { value: "dark", label: "Dark", Icon: MoonIcon },
+    { value: "system", label: "System", Icon: MonitorIcon },
+  ];
+  const accents: { value: Accent; label: string; swatch: string }[] = [
+    { value: "violet", label: "Violet", swatch: "#7c3aed" },
+    { value: "emerald", label: "Emerald", swatch: "#10b981" },
+  ];
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Appearance</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-5">
+        <div className="space-y-2">
+          <Label>Theme</Label>
+          <div className="bg-elev flex gap-1 rounded-lg p-1">
+            {themes.map(({ value, label, Icon }) => (
+              <SegmentedOption
+                key={value}
+                active={theme === value}
+                onClick={() => setTheme(value)}
+              >
+                <Icon aria-hidden="true" className="size-4" />
+                {label}
+              </SegmentedOption>
+            ))}
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <Label>Accent</Label>
+          <div className="bg-elev flex gap-1 rounded-lg p-1">
+            {accents.map(({ value, label, swatch }) => (
+              <SegmentedOption
+                key={value}
+                active={accent === value}
+                onClick={() => setAccent(value)}
+              >
+                <span
+                  aria-hidden="true"
+                  className="size-3.5 rounded-full ring-1 ring-inset ring-black/10"
+                  style={{ background: swatch }}
+                />
+                {label}
+              </SegmentedOption>
+            ))}
+          </div>
+          <p className="text-text-faint text-xs">
+            Stored on this device — applies across the dashboard.
+          </p>
+        </div>
       </CardContent>
     </Card>
   );
