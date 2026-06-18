@@ -30,6 +30,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import { AppWindowIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AppBreadcrumb } from "@/lib/components/app-breadcrumb";
@@ -116,13 +117,22 @@ function ApplicationLayout() {
         ]}
       />
 
-      <div className="flex items-center justify-between">
-        <div>
-          <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-bold">{application.name}</h1>
-            <StatusBadge status={application.status} />
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="flex items-start gap-3">
+          <div className="bg-elev text-text-muted grid size-11 shrink-0 place-items-center rounded-xl">
+            <AppWindowIcon aria-hidden="true" className="size-5" />
           </div>
-          <p className="text-muted-foreground text-sm">{application.slug}</p>
+          <div className="min-w-0">
+            <div className="flex items-center gap-2.5">
+              <h1 className="truncate text-2xl font-semibold tracking-tight">
+                {application.name}
+              </h1>
+              <StatusBadge status={application.status} />
+            </div>
+            <p className="text-text-faint truncate font-mono text-sm">
+              {application.slug}
+            </p>
+          </div>
         </div>
         <div className="flex gap-2">
           <Button

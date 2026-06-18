@@ -170,10 +170,14 @@ function LogsPage() {
         </div>
 
         <div className="flex items-center gap-2">
-          <span
-            aria-hidden="true"
-            className={`size-2 rounded-full ${connected ? "bg-green-500" : "bg-gray-400"}`}
-          />
+          <span aria-hidden="true" className="relative flex size-2">
+            {connected && (
+              <span className="bg-status-ready absolute inline-flex size-full animate-ping rounded-full opacity-75" />
+            )}
+            <span
+              className={`relative inline-flex size-2 rounded-full ${connected ? "bg-status-ready" : "bg-text-faint"}`}
+            />
+          </span>
           <span className="text-muted-foreground text-sm">
             {connected ? "Connected" : "Disconnected"} · {entries.length}{" "}
             {entries.length === 1 ? "entry" : "entries"}
@@ -199,12 +203,12 @@ function LogsPage() {
         <CardContent className="p-0">
           <pre
             ref={scrollRef}
-            className="h-[600px] overflow-auto bg-zinc-950 p-4 font-mono text-xs text-zinc-200"
+            className="bg-terminal-bg h-[600px] overflow-auto p-4 font-mono text-xs text-zinc-200"
           >
             {isLoading ? (
               <span className="text-zinc-500">Loading logs...</span>
             ) : error ? (
-              <span className="text-red-400">
+              <span className="text-terminal-err">
                 Failed to load log history: {error.message}
               </span>
             ) : entries.length === 0 ? (
@@ -217,7 +221,7 @@ function LogsPage() {
               entries.map((entry) => (
                 <div
                   key={entry.id}
-                  className={`hover:bg-zinc-900 ${entry.stream === "stderr" ? "text-red-400" : ""}`}
+                  className={`hover:bg-white/5 ${entry.stream === "stderr" ? "text-terminal-err" : ""}`}
                 >
                   {entry.recorded_at && (
                     <span className="text-zinc-500">
