@@ -6,13 +6,7 @@ import { useAuthStore } from "@/lib/stores/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { AuthLayout } from "@/lib/components/layout/auth-layout";
 import { useState } from "react";
 
 export const Route = createFileRoute("/setup")({
@@ -45,23 +39,18 @@ function SetupPage() {
   });
 
   return (
-    <div className="flex min-h-screen items-center justify-center">
-      <Card className="w-full max-w-sm">
-        <CardHeader>
-          <CardTitle className="text-2xl">Setup</CardTitle>
-          <CardDescription>
-            Create your admin account to get started
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              form.handleSubmit();
-            }}
-            className="space-y-4"
-          >
+    <AuthLayout
+      title="Create admin account"
+      description="Set up the first administrator to get started."
+    >
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          form.handleSubmit();
+        }}
+        className="space-y-4"
+      >
             {error && (
               <div className="bg-destructive/10 text-destructive rounded-md px-3 py-2 text-sm">
                 {error}
@@ -176,10 +165,8 @@ function SetupPage() {
                     : "Create admin account"}
                 </Button>
               )}
-            />
-          </form>
-        </CardContent>
-      </Card>
-    </div>
+        />
+      </form>
+    </AuthLayout>
   );
 }

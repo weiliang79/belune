@@ -8,13 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { AuthLayout } from "@/lib/components/layout/auth-layout";
 import { useEffect, useState } from "react";
 
 export const Route = createFileRoute("/accept-invite")({
@@ -71,51 +65,41 @@ function AcceptInvitePage() {
 
   if (!token || lookupError) {
     return (
-      <div className="flex min-h-screen items-center justify-center">
-        <Card className="w-full max-w-sm">
-          <CardContent className="pt-6">
-            <p className="text-destructive text-sm">
-              {lookupError || "Invalid invitation link."}
-            </p>
-          </CardContent>
-        </Card>
-      </div>
+      <AuthLayout title="Invitation">
+        <div className="bg-destructive/10 text-destructive rounded-md px-3 py-2.5 text-sm">
+          {lookupError || "Invalid invitation link."}
+        </div>
+      </AuthLayout>
     );
   }
 
   if (!inviteInfo) {
     return (
-      <div className="flex min-h-screen items-center justify-center">
+      <AuthLayout title="Accept invitation">
         <p className="text-muted-foreground text-sm">Verifying invitation…</p>
-      </div>
+      </AuthLayout>
     );
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center">
-      <Card className="w-full max-w-sm">
-        <CardHeader>
-          <CardTitle className="text-2xl">Accept invitation</CardTitle>
-          <CardDescription>
-            You've been invited to join as{" "}
-            <Badge variant="secondary" className="ml-1">
-              {inviteInfo.role}
-            </Badge>
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="mb-4 text-sm">
-            <span className="text-muted-foreground">Email: </span>
-            <span>{inviteInfo.email}</span>
-          </div>
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              form.handleSubmit();
-            }}
-            className="space-y-4"
-          >
+    <AuthLayout title="Accept invitation">
+      <div className="bg-card mb-6 flex items-center justify-between gap-2 rounded-lg border px-3 py-2.5">
+        <div className="min-w-0">
+          <p className="text-text-faint text-xs">Joining as</p>
+          <p className="truncate font-mono text-sm">{inviteInfo.email}</p>
+        </div>
+        <Badge variant="secondary" className="capitalize">
+          {inviteInfo.role}
+        </Badge>
+      </div>
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          form.handleSubmit();
+        }}
+        className="space-y-4"
+      >
             {submitError && (
               <div className="bg-destructive/10 text-destructive rounded-md px-3 py-2 text-sm">
                 {submitError}
@@ -201,10 +185,8 @@ function AcceptInvitePage() {
                   {isSubmitting ? "Creating account…" : "Create account"}
                 </Button>
               )}
-            />
-          </form>
-        </CardContent>
-      </Card>
-    </div>
+        />
+      </form>
+    </AuthLayout>
   );
 }

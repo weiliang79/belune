@@ -7,13 +7,7 @@ import { useAuthStore } from "@/lib/stores/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { AuthLayout } from "@/lib/components/layout/auth-layout";
 import { useState } from "react";
 
 export const Route = createFileRoute("/login")({
@@ -48,21 +42,15 @@ function LoginPage() {
   });
 
   return (
-    <div className="flex min-h-screen items-center justify-center">
-      <Card className="w-full max-w-sm">
-        <CardHeader>
-          <CardTitle className="text-2xl">Login</CardTitle>
-          <CardDescription>Sign in to your PaaS dashboard</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              form.handleSubmit();
-            }}
-            className="space-y-4"
-          >
+    <AuthLayout title="Welcome back" description="Sign in to your dashboard.">
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          form.handleSubmit();
+        }}
+        className="space-y-4"
+      >
             {error && (
               <div className="bg-destructive/10 text-destructive rounded-md px-3 py-2 text-sm">
                 {error}
@@ -127,17 +115,15 @@ function LoginPage() {
                 </Button>
               )}
             />
-            <div className="text-center">
-              <Link
-                to="/forgot-password"
-                className="text-muted-foreground text-sm underline"
-              >
-                Forgot password?
-              </Link>
-            </div>
-          </form>
-        </CardContent>
-      </Card>
-    </div>
+        <div className="text-center">
+          <Link
+            to="/forgot-password"
+            className="text-muted-foreground hover:text-foreground text-sm underline-offset-4 hover:underline"
+          >
+            Forgot password?
+          </Link>
+        </div>
+      </form>
+    </AuthLayout>
   );
 }

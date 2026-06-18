@@ -6,13 +6,7 @@ import { ApiError } from "@/lib/api/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { AuthLayout } from "@/lib/components/layout/auth-layout";
 import { useState } from "react";
 
 export const Route = createFileRoute("/reset-password")({
@@ -46,37 +40,30 @@ function ResetPasswordPage() {
 
   if (!token) {
     return (
-      <div className="flex min-h-screen items-center justify-center">
-        <Card className="w-full max-w-sm">
-          <CardContent className="pt-6">
-            <p className="text-destructive text-sm">
-              Invalid or missing reset token.{" "}
-              <Link to="/forgot-password" className="underline">
-                Request a new one.
-              </Link>
-            </p>
-          </CardContent>
-        </Card>
-      </div>
+      <AuthLayout title="Reset password">
+        <div className="bg-destructive/10 text-destructive rounded-md px-3 py-2.5 text-sm">
+          Invalid or missing reset token.{" "}
+          <Link to="/forgot-password" className="font-medium underline underline-offset-4">
+            Request a new one.
+          </Link>
+        </div>
+      </AuthLayout>
     );
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center">
-      <Card className="w-full max-w-sm">
-        <CardHeader>
-          <CardTitle className="text-2xl">Reset password</CardTitle>
-          <CardDescription>Choose a new password for your account.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              form.handleSubmit();
-            }}
-            className="space-y-4"
-          >
+    <AuthLayout
+      title="Reset password"
+      description="Choose a new password for your account."
+    >
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          form.handleSubmit();
+        }}
+        className="space-y-4"
+      >
             {error && (
               <div className="bg-destructive/10 text-destructive rounded-md px-3 py-2 text-sm">
                 {error}
@@ -133,10 +120,8 @@ function ResetPasswordPage() {
                   {isSubmitting ? "Resetting..." : "Reset password"}
                 </Button>
               )}
-            />
-          </form>
-        </CardContent>
-      </Card>
-    </div>
+        />
+      </form>
+    </AuthLayout>
   );
 }
