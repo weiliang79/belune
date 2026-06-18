@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/select";
 import { formatDate } from "@/lib/utils/format";
 import { cn } from "@/lib/utils";
+import { OperatorHealthStrip } from "@/lib/components/stats/operator-health-strip";
 import type { Project } from "@/lib/types";
 
 export const Route = createFileRoute("/_app/projects/")({
@@ -225,6 +226,8 @@ function ProjectsPage() {
           New Project
         </Link>
       </div>
+
+      <OperatorHealthStrip />
 
       <div className="flex flex-wrap items-center gap-2">
         <div className="relative min-w-0 flex-1 sm:max-w-xs">

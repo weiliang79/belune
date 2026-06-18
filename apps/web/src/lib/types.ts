@@ -259,3 +259,25 @@ export interface Notification {
   read: boolean;
   created_at: string;
 }
+
+export interface HostResources {
+  cpu_percent: number;
+  memory_used: number;
+  memory_total: number;
+  disk_used: number;
+  disk_total: number;
+  recorded_at: string;
+}
+
+export interface Stats {
+  is_admin: boolean;
+  app_health: { running: number; total: number };
+  deploy_7d: { succeeded: number; failed: number; total: number };
+  needs_attention: {
+    failed_deploys: number;
+    error_services: number;
+    failed_backups: number;
+    total: number;
+  };
+  host: HostResources | null;
+}

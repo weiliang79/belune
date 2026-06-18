@@ -56,6 +56,7 @@ export const queryKeys = {
   },
   features: ["features"] as const,
   metrics: ["metrics"] as const,
+  stats: ["stats"] as const,
   notifications: {
     list: ["notifications"] as const,
     unread: ["notifications", "unread"] as const,

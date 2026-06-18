@@ -4,6 +4,8 @@ import { useQuery } from "@tanstack/react-query";
 import { useGlobalDeployments } from "@/lib/hooks/use-global-deployments";
 import { useProjects } from "@/lib/hooks/use-projects";
 import { StatusPill } from "@/components/ui/status-pill";
+import { StatCard } from "@/lib/components/stats/stat-card";
+import { useStats } from "@/lib/hooks/use-stats";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -165,6 +167,39 @@ function DeploymentRow({ d }: { d: GlobalDeployment }) {
   );
 }
 
+/** 7-day deploy outcome summary from the stats endpoint. */
+function Deploy7dStrip() {
+  const { data: stats } = useStats();
+  if (!stats) return null;
+  const { succeeded, failed, total } = stats.deploy_7d;
+  const rate = total > 0 ? Math.round((succeeded / total) * 100) : 0;
+  return (
+    <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+      <StatCard
+        label="Success rate · 7d"
+        tone={total === 0 ? "default" : rate === 100 ? "ready" : "attention"}
+        value={total === 0 ? "—" : `${rate}%`}
+        hint={
+          total === 0
+            ? "No deploys in 7 days"
+            : `${succeeded}/${total} succeeded`
+        }
+      />
+      <StatCard
+        label="Deploys · 7d"
+        value={total}
+        hint="started in the last 7 days"
+      />
+      <StatCard
+        label="Failed · 7d"
+        tone={failed === 0 ? "ready" : "error"}
+        value={failed}
+        hint={failed === 0 ? "All clear" : "needs attention"}
+      />
+    </div>
+  );
+}
+
 function GlobalDeploymentsPage() {
   const [offset, setOffset] = useState(0);
   const [filters, setFilters] = useState<Filters>({
@@ -202,6 +237,8 @@ function GlobalDeploymentsPage() {
           All deployments across your applications.
         </p>
       </div>
+
+      <Deploy7dStrip />
 
       <DeploymentFilters filters={filters} onChange={handleFilterChange} />
 
