@@ -3,7 +3,7 @@ import { useCallback, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useGlobalDeployments } from "@/lib/hooks/use-global-deployments";
 import { useProjects } from "@/lib/hooks/use-projects";
-import { Badge } from "@/components/ui/badge";
+import { StatusPill } from "@/components/ui/status-pill";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -22,17 +22,6 @@ import * as applicationsApi from "@/lib/api/applications";
 export const Route = createFileRoute("/_app/deployments/")({
   component: GlobalDeploymentsPage,
 });
-
-const statusVariant: Record<
-  string,
-  "default" | "secondary" | "destructive" | "outline"
-> = {
-  success: "default",
-  pending: "secondary",
-  building: "secondary",
-  deploying: "secondary",
-  failed: "destructive",
-};
 
 const STATUSES = [
   { label: "All statuses", value: "" },
@@ -140,12 +129,7 @@ function DeploymentRow({ d }: { d: GlobalDeployment }) {
   return (
     <div className="flex items-center justify-between">
       <div className="flex min-w-0 flex-1 items-center gap-3">
-        <Badge
-          variant={statusVariant[d.status] ?? "outline"}
-          className="shrink-0"
-        >
-          {d.status}
-        </Badge>
+        <StatusPill status={d.status} className="shrink-0" />
         <div className="min-w-0">
           <div className="flex items-center gap-1.5 text-sm font-medium">
             <span className="text-muted-foreground">{d.project_name}</span>
@@ -197,8 +181,8 @@ function GlobalDeploymentsPage() {
     <div className="space-y-6">
       <AppBreadcrumb items={[{ label: "Deployments" }]} />
       <div>
-        <h1 className="text-2xl font-bold">Deployments</h1>
-        <p className="text-muted-foreground">
+        <h1 className="text-2xl font-semibold tracking-tight">Deployments</h1>
+        <p className="text-muted-foreground text-sm">
           All deployments across your applications.
         </p>
       </div>
@@ -231,7 +215,7 @@ function GlobalDeploymentsPage() {
               key={d.id}
               to="/projects/$projectId/applications/$applicationId/deployments"
               params={{ projectId: d.project_id, applicationId: d.application_id }}
-              className="border rounded-lg px-4 py-3 hover:bg-muted/50 transition-colors block"
+              className="hover:bg-card-hover block rounded-lg border px-4 py-3 transition-colors"
             >
               <DeploymentRow d={d} />
             </Link>
