@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { useBackupRuns, useBackupStatus, useTriggerBackup } from "@/lib/hooks/use-backups";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { StatusPill } from "@/components/ui/status-pill";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -33,12 +34,6 @@ function formatDate(iso: string | null) {
   return new Date(iso).toLocaleString();
 }
 
-function statusVariant(status: string): "default" | "secondary" | "destructive" | "outline" {
-  if (status === "succeeded") return "default";
-  if (status === "failed") return "destructive";
-  return "secondary";
-}
-
 function BackupsPage() {
   const { data: status, isLoading: statusLoading } = useBackupStatus();
   const { data: runs, isLoading: runsLoading } = useBackupRuns();
@@ -58,8 +53,8 @@ function BackupsPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold">Backups</h1>
-          <p className="text-muted-foreground">
+          <h1 className="text-2xl font-semibold tracking-tight">Backups</h1>
+          <p className="text-muted-foreground text-sm">
             Database and configuration backups.
           </p>
         </div>
@@ -140,9 +135,7 @@ function BackupsPage() {
                 {runs.map((run) => (
                   <TableRow key={run.id}>
                     <TableCell>
-                      <Badge variant={statusVariant(run.status)}>
-                        {run.status}
-                      </Badge>
+                      <StatusPill status={run.status} />
                     </TableCell>
                     <TableCell className="text-muted-foreground text-sm">
                       {formatDate(run.started_at)}

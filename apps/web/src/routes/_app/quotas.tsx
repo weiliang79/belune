@@ -62,8 +62,8 @@ function QuotasPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold">Quotas</h1>
-        <p className="text-muted-foreground">
+        <h1 className="text-2xl font-semibold tracking-tight">Quotas</h1>
+        <p className="text-muted-foreground text-sm">
           Aggregate caps on top of per-container limits. Unset fields mean unlimited.
         </p>
       </div>
