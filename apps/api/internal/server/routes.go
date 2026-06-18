@@ -227,6 +227,9 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService,
 			// Global deployments
 			r.Get("/api/deployments", h.GetGlobalDeployments)
 
+			// Operator-health stat strip (member-scoped; admins see host + backups)
+			r.Get("/api/stats", h.GetStats)
+
 			// Notifications — per-user feed (recipient is the current user).
 			r.Get("/api/notifications", h.ListNotifications)
 			r.Get("/api/notifications/unread-count", h.UnreadNotificationCount)
