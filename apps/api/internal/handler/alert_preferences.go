@@ -14,6 +14,7 @@ import (
 
 type alertPreferencesResponse struct {
 	DeployFailures        bool  `json:"deploy_failures"`
+	DeploySuccess         bool  `json:"deploy_success"`
 	BuildFailures         bool  `json:"build_failures"`
 	QuotaThreshold        bool  `json:"quota_threshold"`
 	QuotaThresholdPercent int32 `json:"quota_threshold_percent"`
@@ -22,6 +23,7 @@ type alertPreferencesResponse struct {
 func defaultAlertPreferences() alertPreferencesResponse {
 	return alertPreferencesResponse{
 		DeployFailures:        true,
+		DeploySuccess:         true,
 		BuildFailures:         true,
 		QuotaThreshold:        true,
 		QuotaThresholdPercent: 80,
@@ -50,6 +52,7 @@ func (h *Handler) GetAlertPreferences(w http.ResponseWriter, r *http.Request) {
 
 	writeJSON(w, http.StatusOK, alertPreferencesResponse{
 		DeployFailures:        prefs.DeployFailures,
+		DeploySuccess:         prefs.DeploySuccess,
 		BuildFailures:         prefs.BuildFailures,
 		QuotaThreshold:        prefs.QuotaThreshold,
 		QuotaThresholdPercent: prefs.QuotaThresholdPercent,
@@ -58,6 +61,7 @@ func (h *Handler) GetAlertPreferences(w http.ResponseWriter, r *http.Request) {
 
 type updateAlertPreferencesRequest struct {
 	DeployFailures        bool  `json:"deploy_failures"`
+	DeploySuccess         bool  `json:"deploy_success"`
 	BuildFailures         bool  `json:"build_failures"`
 	QuotaThreshold        bool  `json:"quota_threshold"`
 	QuotaThresholdPercent int32 `json:"quota_threshold_percent"`
@@ -86,6 +90,7 @@ func (h *Handler) UpdateAlertPreferences(w http.ResponseWriter, r *http.Request)
 	prefs, err := h.queries.UpsertAlertPreferences(r.Context(), generated.UpsertAlertPreferencesParams{
 		UserID:                uid,
 		DeployFailures:        req.DeployFailures,
+		DeploySuccess:         req.DeploySuccess,
 		BuildFailures:         req.BuildFailures,
 		QuotaThreshold:        req.QuotaThreshold,
 		QuotaThresholdPercent: req.QuotaThresholdPercent,
@@ -97,6 +102,7 @@ func (h *Handler) UpdateAlertPreferences(w http.ResponseWriter, r *http.Request)
 
 	writeJSON(w, http.StatusOK, alertPreferencesResponse{
 		DeployFailures:        prefs.DeployFailures,
+		DeploySuccess:         prefs.DeploySuccess,
 		BuildFailures:         prefs.BuildFailures,
 		QuotaThreshold:        prefs.QuotaThreshold,
 		QuotaThresholdPercent: prefs.QuotaThresholdPercent,

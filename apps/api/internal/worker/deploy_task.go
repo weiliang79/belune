@@ -691,9 +691,9 @@ func (h *TaskHandler) failDeployment(ctx context.Context, deploymentID pgtype.UU
 // path (project owner); the link deep-links into the app's Deployments tab.
 // Best-effort and nil-safe — never blocks or fails the deploy path.
 //
-// Gated on the owner's alert preferences, same as the email path: build
-// failures honour build_failures; deploy outcomes (success and deploy failure)
-// honour deploy_failures. Defaults to enabled when no preferences row exists.
+// Gated on the owner's alert preferences: deploy success honours
+// deploy_success, deploy failure honours deploy_failures, and build failure
+// honours build_failures. Defaults to enabled when no preferences row exists.
 func (h *TaskHandler) notifyDeployment(ctx context.Context, deploymentID pgtype.UUID, outcome, kind, errMsg string) {
 	if h.Notifier == nil {
 		return
@@ -711,9 +711,14 @@ func (h *TaskHandler) notifyDeployment(ctx context.Context, deploymentID pgtype.
 		return
 	}
 	if prefErr == nil {
-		enabled := prefs.DeployFailures
-		if outcome == status.DeploymentFailed && kind == "build" {
+		var enabled bool
+		switch {
+		case outcome == status.DeploymentFailed && kind == "build":
 			enabled = prefs.BuildFailures
+		case outcome == status.DeploymentFailed:
+			enabled = prefs.DeployFailures
+		default:
+			enabled = prefs.DeploySuccess
 		}
 		if !enabled {
 			return

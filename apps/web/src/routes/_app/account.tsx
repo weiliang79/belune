@@ -224,6 +224,7 @@ function AlertPreferencesCard() {
 
   const [local, setLocal] = useState<{
     deploy_failures: boolean;
+    deploy_success: boolean;
     build_failures: boolean;
     quota_threshold: boolean;
     quota_threshold_percent: number;
@@ -232,13 +233,18 @@ function AlertPreferencesCard() {
   const current = local ??
     prefs ?? {
       deploy_failures: true,
+      deploy_success: true,
       build_failures: true,
       quota_threshold: true,
       quota_threshold_percent: 80,
     };
 
   const toggle = (
-    key: "deploy_failures" | "build_failures" | "quota_threshold",
+    key:
+      | "deploy_failures"
+      | "deploy_success"
+      | "build_failures"
+      | "quota_threshold",
   ) => {
     setLocal({ ...current, [key]: !current[key] });
   };
@@ -262,7 +268,7 @@ function AlertPreferencesCard() {
       <CardContent>
         {isLoading ? (
           <div className="space-y-3">
-            {[1, 2, 3].map((i) => (
+            {[1, 2, 3, 4].map((i) => (
               <div key={i} className="bg-muted h-8 animate-pulse rounded" />
             ))}
           </div>
@@ -270,13 +276,19 @@ function AlertPreferencesCard() {
           <div className="space-y-4">
             <PreferenceRow
               label="Deploy failures"
-              description="Email when a deployment fails."
+              description="Email and notify when a deployment fails."
               checked={current.deploy_failures}
               onToggle={() => toggle("deploy_failures")}
             />
             <PreferenceRow
+              label="Deploy successes"
+              description="Notify when a deployment finishes successfully."
+              checked={current.deploy_success}
+              onToggle={() => toggle("deploy_success")}
+            />
+            <PreferenceRow
               label="Build failures"
-              description="Email when a build fails."
+              description="Email and notify when a build fails."
               checked={current.build_failures}
               onToggle={() => toggle("build_failures")}
             />

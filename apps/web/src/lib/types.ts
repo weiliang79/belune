@@ -243,6 +243,7 @@ export interface BackupStatus {
 
 export interface AlertPreferences {
   deploy_failures: boolean;
+  deploy_success: boolean;
   build_failures: boolean;
   quota_threshold: boolean;
   quota_threshold_percent: number;

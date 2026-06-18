@@ -14,6 +14,7 @@ type AlertPreference struct {
 	BuildFailures         bool        `json:"build_failures"`
 	QuotaThreshold        bool        `json:"quota_threshold"`
 	QuotaThresholdPercent int32       `json:"quota_threshold_percent"`
+	DeploySuccess         bool        `json:"deploy_success"`
 }
 
 type Application struct {
