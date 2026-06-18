@@ -45,3 +45,16 @@ export function useDeleteDatabase(projectId: string) {
     },
   });
 }
+
+export function useUpdateDatabase(projectId: string, databaseId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { cpu_limit: number; memory_limit: number }) =>
+      databasesApi.updateDatabase(projectId, databaseId, data),
+    onSuccess: () => {
+      qc.invalidateQueries({
+        queryKey: queryKeys.databases.detail(projectId, databaseId),
+      });
+    },
+  });
+}

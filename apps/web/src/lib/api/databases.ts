@@ -27,6 +27,17 @@ export function createDatabase(
   return api.post<Database>(`/projects/${projectId}/databases`, data);
 }
 
+export function updateDatabase(
+  projectId: string,
+  databaseId: string,
+  data: { cpu_limit: number; memory_limit: number },
+) {
+  return api.put<Database>(
+    `/projects/${projectId}/databases/${databaseId}`,
+    data,
+  );
+}
+
 export function deleteDatabase(projectId: string, databaseId: string) {
   return api.delete<void>(`/projects/${projectId}/databases/${databaseId}`);
 }

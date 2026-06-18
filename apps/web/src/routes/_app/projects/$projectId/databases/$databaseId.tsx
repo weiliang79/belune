@@ -6,8 +6,11 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import {
   AlertDialog,
@@ -21,13 +24,19 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
-import { useDatabase, useDeleteDatabase } from "@/lib/hooks/use-databases";
+import {
+  useDatabase,
+  useDeleteDatabase,
+  useUpdateDatabase,
+} from "@/lib/hooks/use-databases";
 import { useProject } from "@/lib/hooks/use-projects";
 import { Database as DatabaseIcon, Loader2, Trash2 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AppBreadcrumb } from "@/lib/components/app-breadcrumb";
 import { StatusBadge } from "@/lib/components/status-badge";
 import { CopyButton } from "@/lib/components/copy-button";
+import { formatBytes } from "@/lib/utils/format";
+import type { Database } from "@/lib/types";
 
 export const Route = createFileRoute(
   "/_app/projects/$projectId/databases/$databaseId",
@@ -198,6 +207,8 @@ function DatabaseDetailPage() {
         </Card>
       )}
 
+      {db.status === "running" && <AdvancedCard db={db} />}
+
       <Card>
         <CardHeader>
           <CardTitle className="text-destructive">Danger Zone</CardTitle>
@@ -244,5 +255,118 @@ function DatabaseDetailPage() {
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+const MB = 1024 * 1024;
+
+/**
+ * Advanced settings: editable CPU/memory limits applied live, plus read-only
+ * image and managed-volume info. Image upgrades are intentionally not editable
+ * here — a major version bump is a separate guarded flow.
+ */
+function AdvancedCard({ db }: { db: Database }) {
+  const update = useUpdateDatabase(db.project_id, db.id);
+  const [cpu, setCpu] = useState(String(db.cpu_limit ?? 0));
+  const [memMb, setMemMb] = useState(
+    String(db.memory_limit ? Math.round(db.memory_limit / MB) : 0),
+  );
+
+  const handleSave = () => {
+    const cpuVal = Number(cpu);
+    const memVal = Number(memMb);
+    if (
+      Number.isNaN(cpuVal) ||
+      cpuVal < 0 ||
+      Number.isNaN(memVal) ||
+      memVal < 0
+    ) {
+      toast.error("CPU and memory must be non-negative numbers");
+      return;
+    }
+    toast.promise(
+      update.mutateAsync({ cpu_limit: cpuVal, memory_limit: memVal * MB }),
+      {
+        loading: "Applying resource limits…",
+        success: "Resource limits updated",
+        error: (err) => err.message,
+      },
+    );
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Advanced</CardTitle>
+        <CardDescription>
+          Resource limits apply live. 0 means unlimited.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-6">
+        {/* Resource limits — editable */}
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-2">
+            <Label htmlFor="db-cpu">CPU limit (cores)</Label>
+            <Input
+              id="db-cpu"
+              type="number"
+              min={0}
+              step={0.1}
+              value={cpu}
+              onChange={(e) => setCpu(e.target.value)}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="db-mem">Memory limit (MB)</Label>
+            <Input
+              id="db-mem"
+              type="number"
+              min={0}
+              step={64}
+              value={memMb}
+              onChange={(e) => setMemMb(e.target.value)}
+            />
+          </div>
+        </div>
+        <Button size="sm" onClick={handleSave} disabled={update.isPending}>
+          {update.isPending ? "Saving…" : "Save resource limits"}
+        </Button>
+
+        <Separator />
+
+        {/* Image — read-only */}
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-sm font-medium">Image</p>
+            <p className="text-text-faint text-xs">
+              Major version upgrades are a separate guarded flow.
+            </p>
+          </div>
+          <Badge variant="outline" className="font-mono">
+            {db.type}:{db.version}
+          </Badge>
+        </div>
+
+        {/* Volume — read-only */}
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-sm font-medium">Volume</p>
+            <p className="text-text-faint text-xs">Managed automatically.</p>
+          </div>
+          <div className="text-right">
+            {db.volume ? (
+              <>
+                <p className="font-mono text-xs">{db.volume.name}</p>
+                <p className="text-text-faint text-xs">
+                  {formatBytes(db.volume.size_bytes)}
+                </p>
+              </>
+            ) : (
+              <p className="text-text-faint text-xs">—</p>
+            )}
+          </div>
+        </div>
+      </CardContent>
+    </Card>
   );
 }

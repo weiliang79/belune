@@ -161,9 +161,13 @@ export interface Database {
   status: string;
   internal_host: string;
   internal_port: number;
+  cpu_limit: number;
+  memory_limit: number;
+  host_port: number | null;
   created_at: string;
   credentials?: Record<string, string>;
   connection_string?: string;
+  volume?: { name: string; size_bytes: number };
 }
 
 export interface GitCredential {
