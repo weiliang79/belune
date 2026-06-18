@@ -42,7 +42,12 @@ function AcceptInvitePage() {
   }, [token]);
 
   const form = useForm({
-    defaultValues: { password: "", username: "", first_name: "", last_name: "" },
+    defaultValues: {
+      password: "",
+      username: "",
+      first_name: "",
+      last_name: "",
+    },
     onSubmit: async ({ value }) => {
       setSubmitError("");
       try {
@@ -100,91 +105,91 @@ function AcceptInvitePage() {
         }}
         className="space-y-4"
       >
-            {submitError && (
-              <div className="bg-destructive/10 text-destructive rounded-md px-3 py-2 text-sm">
-                {submitError}
-              </div>
-            )}
-            <form.Field
-              name="password"
-              validators={{
-                onChange: z.string().min(8, "At least 8 characters required"),
-              }}
-              children={(field) => (
-                <div className="space-y-2">
-                  <Label htmlFor="password">Password</Label>
-                  <Input
-                    id="password"
-                    type="password"
-                    placeholder="At least 8 characters"
-                    value={field.state.value}
-                    onBlur={field.handleBlur}
-                    onChange={(e) => field.handleChange(e.target.value)}
-                  />
-                  {field.state.meta.errors.length > 0 && (
-                    <p className="text-destructive text-sm">
-                      {typeof field.state.meta.errors[0] === "string"
-                        ? field.state.meta.errors[0]
-                        : field.state.meta.errors[0]?.message}
-                    </p>
-                  )}
-                </div>
-              )}
-            />
-            <form.Field
-              name="username"
-              children={(field) => (
-                <div className="space-y-2">
-                  <Label htmlFor="username">Username (optional)</Label>
-                  <Input
-                    id="username"
-                    value={field.state.value}
-                    onBlur={field.handleBlur}
-                    onChange={(e) => field.handleChange(e.target.value)}
-                    placeholder="username"
-                  />
-                </div>
-              )}
-            />
-            <div className="grid grid-cols-2 gap-3">
-              <form.Field
-                name="first_name"
-                children={(field) => (
-                  <div className="space-y-2">
-                    <Label htmlFor="first_name">First name</Label>
-                    <Input
-                      id="first_name"
-                      value={field.state.value}
-                      onBlur={field.handleBlur}
-                      onChange={(e) => field.handleChange(e.target.value)}
-                      placeholder="First"
-                    />
-                  </div>
-                )}
+        {submitError && (
+          <div className="bg-destructive/10 text-destructive rounded-md px-3 py-2 text-sm">
+            {submitError}
+          </div>
+        )}
+        <form.Field
+          name="password"
+          validators={{
+            onChange: z.string().min(8, "At least 8 characters required"),
+          }}
+          children={(field) => (
+            <div className="space-y-2">
+              <Label htmlFor="password">Password</Label>
+              <Input
+                id="password"
+                type="password"
+                placeholder="At least 8 characters"
+                value={field.state.value}
+                onBlur={field.handleBlur}
+                onChange={(e) => field.handleChange(e.target.value)}
               />
-              <form.Field
-                name="last_name"
-                children={(field) => (
-                  <div className="space-y-2">
-                    <Label htmlFor="last_name">Last name</Label>
-                    <Input
-                      id="last_name"
-                      value={field.state.value}
-                      onBlur={field.handleBlur}
-                      onChange={(e) => field.handleChange(e.target.value)}
-                      placeholder="Last"
-                    />
-                  </div>
-                )}
+              {field.state.meta.errors.length > 0 && (
+                <p className="text-destructive text-sm">
+                  {typeof field.state.meta.errors[0] === "string"
+                    ? field.state.meta.errors[0]
+                    : field.state.meta.errors[0]?.message}
+                </p>
+              )}
+            </div>
+          )}
+        />
+        <form.Field
+          name="username"
+          children={(field) => (
+            <div className="space-y-2">
+              <Label htmlFor="username">Username (optional)</Label>
+              <Input
+                id="username"
+                value={field.state.value}
+                onBlur={field.handleBlur}
+                onChange={(e) => field.handleChange(e.target.value)}
+                placeholder="username"
               />
             </div>
-            <form.Subscribe
-              selector={(s) => s.isSubmitting}
-              children={(isSubmitting) => (
-                <Button type="submit" className="w-full" disabled={isSubmitting}>
-                  {isSubmitting ? "Creating account…" : "Create account"}
-                </Button>
-              )}
+          )}
+        />
+        <div className="grid grid-cols-2 gap-3">
+          <form.Field
+            name="first_name"
+            children={(field) => (
+              <div className="space-y-2">
+                <Label htmlFor="first_name">First name</Label>
+                <Input
+                  id="first_name"
+                  value={field.state.value}
+                  onBlur={field.handleBlur}
+                  onChange={(e) => field.handleChange(e.target.value)}
+                  placeholder="First"
+                />
+              </div>
+            )}
+          />
+          <form.Field
+            name="last_name"
+            children={(field) => (
+              <div className="space-y-2">
+                <Label htmlFor="last_name">Last name</Label>
+                <Input
+                  id="last_name"
+                  value={field.state.value}
+                  onBlur={field.handleBlur}
+                  onChange={(e) => field.handleChange(e.target.value)}
+                  placeholder="Last"
+                />
+              </div>
+            )}
+          />
+        </div>
+        <form.Subscribe
+          selector={(s) => s.isSubmitting}
+          children={(isSubmitting) => (
+            <Button type="submit" className="w-full" disabled={isSubmitting}>
+              {isSubmitting ? "Creating account…" : "Create account"}
+            </Button>
+          )}
         />
       </form>
     </AuthLayout>

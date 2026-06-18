@@ -42,7 +42,10 @@ interface Filters {
   applicationId: string;
 }
 
-function DeploymentFilters({ filters, onChange }: {
+function DeploymentFilters({
+  filters,
+  onChange,
+}: {
   filters: Filters;
   onChange: (f: Filters) => void;
 }) {
@@ -57,7 +60,9 @@ function DeploymentFilters({ filters, onChange }: {
     <div className="flex flex-wrap gap-2">
       <DateRangePicker
         value={{ from: filters.dateFrom, to: filters.dateTo }}
-        onChange={(range) => onChange({ ...filters, dateFrom: range.from, dateTo: range.to })}
+        onChange={(range) =>
+          onChange({ ...filters, dateFrom: range.from, dateTo: range.to })
+        }
         placeholder="All time"
         className="w-64"
       />
@@ -71,7 +76,9 @@ function DeploymentFilters({ filters, onChange }: {
         </SelectTrigger>
         <SelectContent>
           {STATUSES.map((s) => (
-            <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
+            <SelectItem key={s.value} value={s.value}>
+              {s.label}
+            </SelectItem>
           ))}
         </SelectContent>
       </Select>
@@ -82,7 +89,9 @@ function DeploymentFilters({ filters, onChange }: {
           value: p.id,
         }))}
         value={filters.projectId}
-        onValueChange={(v) => onChange({ ...filters, projectId: v ?? "", applicationId: "" })}
+        onValueChange={(v) =>
+          onChange({ ...filters, projectId: v ?? "", applicationId: "" })
+        }
       >
         <SelectTrigger className="w-40">
           <SelectValue placeholder="All projects" />
@@ -90,7 +99,9 @@ function DeploymentFilters({ filters, onChange }: {
         <SelectContent>
           <SelectItem value="">All projects</SelectItem>
           {projects?.map((p) => (
-            <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+            <SelectItem key={p.id} value={p.id}>
+              {p.name}
+            </SelectItem>
           ))}
         </SelectContent>
       </Select>
@@ -110,7 +121,9 @@ function DeploymentFilters({ filters, onChange }: {
         <SelectContent>
           <SelectItem value="">All applications</SelectItem>
           {applications?.map((a) => (
-            <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>
+            <SelectItem key={a.id} value={a.id}>
+              {a.name}
+            </SelectItem>
           ))}
         </SelectContent>
       </Select>
@@ -165,15 +178,18 @@ function GlobalDeploymentsPage() {
     setOffset(0);
   }, []);
 
-  const queryParams = useMemo(() => ({
-    limit: PAGE_SIZE,
-    offset,
-    project_id: filters.projectId || undefined,
-    application_id: filters.applicationId || undefined,
-    status: filters.status || undefined,
-    from: filters.dateFrom,
-    to: filters.dateTo,
-  }), [filters, offset]);
+  const queryParams = useMemo(
+    () => ({
+      limit: PAGE_SIZE,
+      offset,
+      project_id: filters.projectId || undefined,
+      application_id: filters.applicationId || undefined,
+      status: filters.status || undefined,
+      from: filters.dateFrom,
+      to: filters.dateTo,
+    }),
+    [filters, offset],
+  );
 
   const { data: deployments, isLoading } = useGlobalDeployments(queryParams);
 
@@ -192,7 +208,10 @@ function GlobalDeploymentsPage() {
       {isLoading ? (
         <div className="space-y-2">
           {[1, 2, 3, 4, 5].map((i) => (
-            <div key={i} className="border rounded-lg flex items-center justify-between px-4 py-3">
+            <div
+              key={i}
+              className="flex items-center justify-between rounded-lg border px-4 py-3"
+            >
               <div className="flex items-center gap-3">
                 <Skeleton className="h-5 w-16 rounded-full" />
                 <div className="space-y-1">
@@ -205,7 +224,7 @@ function GlobalDeploymentsPage() {
           ))}
         </div>
       ) : !deployments || deployments.length === 0 ? (
-        <div className="border rounded-lg text-muted-foreground py-12 text-center text-sm">
+        <div className="text-muted-foreground rounded-lg border py-12 text-center text-sm">
           {offset > 0 ? "No more deployments." : "No deployments found."}
         </div>
       ) : (
@@ -214,7 +233,10 @@ function GlobalDeploymentsPage() {
             <Link
               key={d.id}
               to="/projects/$projectId/applications/$applicationId/deployments"
-              params={{ projectId: d.project_id, applicationId: d.application_id }}
+              params={{
+                projectId: d.project_id,
+                applicationId: d.application_id,
+              }}
               className="hover:bg-card-hover block rounded-lg border px-4 py-3 transition-colors"
             >
               <DeploymentRow d={d} />

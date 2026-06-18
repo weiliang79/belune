@@ -70,8 +70,12 @@ function GitCredentialsPage() {
     return (
       <div className="space-y-6">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Git Credentials</h1>
-          <p className="text-muted-foreground">Manage centralized git credentials for your applications.</p>
+          <h1 className="text-2xl font-semibold tracking-tight">
+            Git Credentials
+          </h1>
+          <p className="text-muted-foreground">
+            Manage centralized git credentials for your applications.
+          </p>
         </div>
         <Card>
           <CardContent className="space-y-3 py-4">
@@ -88,7 +92,9 @@ function GitCredentialsPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Git Credentials</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">
+            Git Credentials
+          </h1>
           <p className="text-muted-foreground">
             Manage centralized git credentials for your applications.
           </p>
@@ -100,9 +106,7 @@ function GitCredentialsPage() {
             if (!open) setEditing(null);
           }}
         >
-          <DialogTrigger render={<Button />}>
-            Add Credential
-          </DialogTrigger>
+          <DialogTrigger render={<Button />}>Add Credential</DialogTrigger>
           <DialogContent>
             <DialogHeader>
               <DialogTitle>
@@ -166,8 +170,12 @@ function CredentialRow({
         </div>
         <div className="min-w-0">
           <div className="flex items-center gap-2">
-            <span className="truncate text-sm font-medium">{credential.name}</span>
-            <Badge variant="secondary">{providerLabel(credential.provider)}</Badge>
+            <span className="truncate text-sm font-medium">
+              {credential.name}
+            </span>
+            <Badge variant="secondary" className="shrink-0">
+              {providerLabel(credential.provider)}
+            </Badge>
           </div>
           <div className="text-text-faint mt-0.5 flex items-center gap-2 text-xs">
             {credential.username && (
@@ -319,7 +327,9 @@ function CredentialForm({
             <Label>Provider</Label>
             <Select
               value={field.state.value}
-              onValueChange={(v) => v && field.handleChange(v as typeof field.state.value)}
+              onValueChange={(v) =>
+                v && field.handleChange(v as typeof field.state.value)
+              }
             >
               <SelectTrigger>
                 <SelectValue />

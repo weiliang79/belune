@@ -42,7 +42,8 @@ function ProjectServicesBadge({ projectId }: { projectId: string }) {
       <span className="text-text-faint text-xs font-medium">No services</span>
     );
   }
-  const status = running === total ? "running" : running === 0 ? "error" : "building";
+  const status =
+    running === total ? "running" : running === 0 ? "error" : "building";
   return (
     <StatusPill
       status={status}
@@ -110,7 +111,8 @@ function ProjectsOnboarding() {
         aria-hidden="true"
         className="mx-auto grid size-14 place-items-center rounded-2xl text-white shadow-sm"
         style={{
-          background: "linear-gradient(140deg, var(--brand), var(--brand-press))",
+          background:
+            "linear-gradient(140deg, var(--brand), var(--brand-press))",
         }}
       >
         <RocketIcon className="size-7" />
@@ -184,7 +186,8 @@ function ProjectsPage() {
     const matches = q
       ? projects.filter(
           (p) =>
-            p.name.toLowerCase().includes(q) || p.slug.toLowerCase().includes(q),
+            p.name.toLowerCase().includes(q) ||
+            p.slug.toLowerCase().includes(q),
         )
       : projects.slice();
     matches.sort((a, b) =>
@@ -227,7 +230,7 @@ function ProjectsPage() {
         <div className="relative min-w-0 flex-1 sm:max-w-xs">
           <SearchIcon
             aria-hidden="true"
-            className="text-text-faint pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2"
+            className="text-text-faint pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2"
           />
           <Input
             value={query}

@@ -75,41 +75,48 @@ function LogsPage() {
     setInputValue(search.q ?? "");
   }, [search.q]);
 
-  const { data: history, isLoading, error } = useApplicationLogs(
-    projectId,
-    applicationId,
-    {
-      limit: 500,
-      q: search.q,
-      stream: search.stream,
+  const {
+    data: history,
+    isLoading,
+    error,
+  } = useApplicationLogs(projectId, applicationId, {
+    limit: 500,
+    q: search.q,
+    stream: search.stream,
+  });
+
+  const handleMessage = useCallback(
+    (_event: string, data: unknown) => {
+      if (!data || typeof data !== "object") return;
+      const obj = data as { stream?: string; message?: string };
+      if (typeof obj.message !== "string") return;
+      const stream: "stdout" | "stderr" =
+        obj.stream === "stderr" ? "stderr" : "stdout";
+
+      // Apply live-side stream filter
+      if (streamFilter && stream !== streamFilter) return;
+      // Apply live-side keyword filter
+      if (
+        search.q &&
+        !obj.message.toLowerCase().includes(search.q.toLowerCase())
+      )
+        return;
+
+      liveIdRef.current += 1;
+      setLiveLogs((prev) =>
+        [
+          ...prev,
+          {
+            id: `live-${liveIdRef.current}`,
+            stream,
+            message: obj.message as string,
+            recorded_at: new Date().toISOString(),
+          },
+        ].slice(-5000),
+      );
     },
+    [streamFilter, search.q],
   );
-
-  const handleMessage = useCallback((_event: string, data: unknown) => {
-    if (!data || typeof data !== "object") return;
-    const obj = data as { stream?: string; message?: string };
-    if (typeof obj.message !== "string") return;
-    const stream: "stdout" | "stderr" =
-      obj.stream === "stderr" ? "stderr" : "stdout";
-
-    // Apply live-side stream filter
-    if (streamFilter && stream !== streamFilter) return;
-    // Apply live-side keyword filter
-    if (search.q && !obj.message.toLowerCase().includes(search.q.toLowerCase())) return;
-
-    liveIdRef.current += 1;
-    setLiveLogs((prev) =>
-      [
-        ...prev,
-        {
-          id: `live-${liveIdRef.current}`,
-          stream,
-          message: obj.message as string,
-          recorded_at: new Date().toISOString(),
-        },
-      ].slice(-5000),
-    );
-  }, [streamFilter, search.q]);
 
   const { connected } = useChannel(`app-logs:${applicationId}`, handleMessage);
 
@@ -149,7 +156,7 @@ function LogsPage() {
               <button
                 key={tab.value}
                 onClick={() => handleStreamChange(tab.value)}
-                className={`px-3 py-1 first:rounded-l-md last:rounded-r-md transition-colors ${
+                className={`px-3 py-1 transition-colors first:rounded-l-md last:rounded-r-md ${
                   streamFilter === tab.value
                     ? "bg-primary text-primary-foreground"
                     : "text-muted-foreground hover:bg-muted"
@@ -189,11 +196,7 @@ function LogsPage() {
           >
             {follow ? "Following" : "Follow"}
           </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => setLiveLogs([])}
-          >
+          <Button size="sm" variant="outline" onClick={() => setLiveLogs([])}>
             Clear live
           </Button>
         </div>

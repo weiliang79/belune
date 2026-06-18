@@ -1,7 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { RouteError } from "@/lib/components/route-error";
 import { toast } from "sonner";
-import { useBackupRuns, useBackupStatus, useTriggerBackup } from "@/lib/hooks/use-backups";
+import {
+  useBackupRuns,
+  useBackupStatus,
+  useTriggerBackup,
+} from "@/lib/hooks/use-backups";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { StatusPill } from "@/components/ui/status-pill";
@@ -58,8 +62,15 @@ function BackupsPage() {
             Database and configuration backups.
           </p>
         </div>
-        <Button onClick={handleTrigger} disabled={trigger.isPending || isRunning}>
-          {isRunning ? "Backup in progress…" : trigger.isPending ? "Queueing…" : "Run Backup Now"}
+        <Button
+          onClick={handleTrigger}
+          disabled={trigger.isPending || isRunning}
+        >
+          {isRunning
+            ? "Backup in progress…"
+            : trigger.isPending
+              ? "Queueing…"
+              : "Run Backup Now"}
         </Button>
       </div>
 
@@ -76,12 +87,20 @@ function BackupsPage() {
             </div>
           ) : status ? (
             <div className="grid grid-cols-2 gap-4 text-sm md:grid-cols-4">
-              <StatusItem label="Last succeeded" value={formatDate(status.last_succeeded_at)} />
-              <StatusItem label="Last attempted" value={formatDate(status.last_attempted_at)} />
+              <StatusItem
+                label="Last succeeded"
+                value={formatDate(status.last_succeeded_at)}
+              />
+              <StatusItem
+                label="Last attempted"
+                value={formatDate(status.last_attempted_at)}
+              />
               <StatusItem
                 label="Remote storage"
                 value={
-                  <Badge variant={status.remote_enabled ? "default" : "secondary"}>
+                  <Badge
+                    variant={status.remote_enabled ? "default" : "secondary"}
+                  >
                     {status.remote_enabled ? "Enabled" : "Disabled"}
                   </Badge>
                 }
@@ -92,7 +111,9 @@ function BackupsPage() {
               />
               {status.last_error && (
                 <div className="col-span-2 md:col-span-4">
-                  <p className="text-muted-foreground text-xs font-medium">Last error</p>
+                  <p className="text-muted-foreground text-xs font-medium">
+                    Last error
+                  </p>
                   <p className="text-destructive mt-1 font-mono text-xs">
                     {status.last_error}
                   </p>
@@ -143,7 +164,9 @@ function BackupsPage() {
                     <TableCell className="text-muted-foreground text-sm">
                       {formatDate(run.finished_at)}
                     </TableCell>
-                    <TableCell className="text-sm">{formatBytes(run.size_bytes)}</TableCell>
+                    <TableCell className="text-sm">
+                      {formatBytes(run.size_bytes)}
+                    </TableCell>
                     <TableCell className="max-w-[200px] truncate font-mono text-xs">
                       {run.remote_key ?? "—"}
                     </TableCell>
@@ -171,7 +194,9 @@ function StatusItem({
   return (
     <div>
       <p className="text-muted-foreground text-xs font-medium">{label}</p>
-      <div className="mt-1">{typeof value === "string" ? <p>{value}</p> : value}</div>
+      <div className="mt-1">
+        {typeof value === "string" ? <p>{value}</p> : value}
+      </div>
     </div>
   );
 }

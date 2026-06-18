@@ -101,7 +101,9 @@ function DatabaseDetailPage() {
           <h1 className="truncate text-2xl font-semibold tracking-tight">
             {db.name}
           </h1>
-          <p className="text-text-faint truncate font-mono text-sm">{db.slug}</p>
+          <p className="text-text-faint truncate font-mono text-sm">
+            {db.slug}
+          </p>
           <div className="mt-2 flex items-center gap-2">
             <Badge variant="outline" className="font-mono">
               {db.type}:{db.version}

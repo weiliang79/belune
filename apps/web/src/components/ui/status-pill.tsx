@@ -42,14 +42,11 @@ const TONE_BY_STATUS: Record<string, StatusTone> = {
 };
 
 const TONE_CLASSES: Record<StatusTone, string> = {
-  ready:
-    "bg-status-ready-soft text-status-ready ring-status-ready-line",
+  ready: "bg-status-ready-soft text-status-ready ring-status-ready-line",
   building:
     "bg-status-building-soft text-status-building ring-status-building-line",
-  error:
-    "bg-status-error-soft text-status-error ring-status-error-line",
-  neutral:
-    "bg-elev text-text-muted ring-border-strong",
+  error: "bg-status-error-soft text-status-error ring-status-error-line",
+  neutral: "bg-elev text-text-muted ring-border-strong",
 };
 
 const DOT_CLASSES: Record<StatusTone, string> = {
@@ -93,7 +90,10 @@ export function StatusPill({ status, label, className }: StatusPillProps) {
         )}
         <span
           aria-hidden="true"
-          className={cn("relative inline-flex size-1.5 rounded-full", DOT_CLASSES[tone])}
+          className={cn(
+            "relative inline-flex size-1.5 rounded-full",
+            DOT_CLASSES[tone],
+          )}
         />
       </span>
       {text}

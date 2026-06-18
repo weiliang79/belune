@@ -55,41 +55,41 @@ function ForgotPasswordPage() {
           }}
           className="space-y-4"
         >
-              <form.Field
-                name="email"
-                validators={{ onChange: z.string().email("Valid email required") }}
-                children={(field) => (
-                  <div className="space-y-2">
-                    <Label htmlFor="email">Email</Label>
-                    <Input
-                      id="email"
-                      type="email"
-                      placeholder="you@example.com"
-                      value={field.state.value}
-                      onBlur={field.handleBlur}
-                      onChange={(e) => field.handleChange(e.target.value)}
-                    />
-                    {field.state.meta.errors.length > 0 && (
-                      <p className="text-destructive text-sm">
-                        {typeof field.state.meta.errors[0] === "string"
-                          ? field.state.meta.errors[0]
-                          : field.state.meta.errors[0]?.message}
-                      </p>
-                    )}
-                  </div>
+          <form.Field
+            name="email"
+            validators={{ onChange: z.string().email("Valid email required") }}
+            children={(field) => (
+              <div className="space-y-2">
+                <Label htmlFor="email">Email</Label>
+                <Input
+                  id="email"
+                  type="email"
+                  placeholder="you@example.com"
+                  value={field.state.value}
+                  onBlur={field.handleBlur}
+                  onChange={(e) => field.handleChange(e.target.value)}
+                />
+                {field.state.meta.errors.length > 0 && (
+                  <p className="text-destructive text-sm">
+                    {typeof field.state.meta.errors[0] === "string"
+                      ? field.state.meta.errors[0]
+                      : field.state.meta.errors[0]?.message}
+                  </p>
                 )}
-              />
-              {submitError && (
-                <p className="text-destructive text-sm">{submitError}</p>
-              )}
-              <form.Subscribe
-                selector={(s) => s.isSubmitting}
-                children={(isSubmitting) => (
-                  <Button type="submit" className="w-full" disabled={isSubmitting}>
-                    {isSubmitting ? "Sending..." : "Send reset link"}
-                  </Button>
-                )}
-              />
+              </div>
+            )}
+          />
+          {submitError && (
+            <p className="text-destructive text-sm">{submitError}</p>
+          )}
+          <form.Subscribe
+            selector={(s) => s.isSubmitting}
+            children={(isSubmitting) => (
+              <Button type="submit" className="w-full" disabled={isSubmitting}>
+                {isSubmitting ? "Sending..." : "Send reset link"}
+              </Button>
+            )}
+          />
           <div className="text-center">
             <Link
               to="/login"

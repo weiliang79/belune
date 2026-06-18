@@ -1,5 +1,10 @@
 import type { ReactNode } from "react";
-import { RocketIcon, GitBranchIcon, ShieldCheckIcon, ActivityIcon } from "lucide-react";
+import {
+  RocketIcon,
+  GitBranchIcon,
+  ShieldCheckIcon,
+  ActivityIcon,
+} from "lucide-react";
 import { BRAND } from "@/lib/brand";
 
 const HIGHLIGHTS = [
@@ -40,12 +45,15 @@ export function AuthLayout({
         </div>
 
         <div className="max-w-sm">
-          <h2 className="text-3xl font-semibold leading-tight tracking-tight">
+          <h2 className="text-3xl leading-tight font-semibold tracking-tight">
             Your homelab, shipped like a platform.
           </h2>
           <ul className="mt-8 space-y-3">
             {HIGHLIGHTS.map(({ Icon, text }) => (
-              <li key={text} className="flex items-center gap-3 text-sm text-white/90">
+              <li
+                key={text}
+                className="flex items-center gap-3 text-sm text-white/90"
+              >
                 <Icon aria-hidden="true" className="size-4 shrink-0" />
                 {text}
               </li>
@@ -75,7 +83,9 @@ export function AuthLayout({
 
           <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
           {description && (
-            <p className="text-muted-foreground mt-1.5 text-sm">{description}</p>
+            <p className="text-muted-foreground mt-1.5 text-sm">
+              {description}
+            </p>
           )}
           <div className="mt-8">{children}</div>
         </div>

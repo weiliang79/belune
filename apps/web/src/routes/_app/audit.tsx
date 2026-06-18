@@ -110,7 +110,7 @@ function AuditLogRow({
 
   return (
     <div
-      className="cursor-pointer rounded-md border p-3 transition-colors hover:bg-muted/50"
+      className="hover:bg-muted/50 cursor-pointer rounded-md border p-3 transition-colors"
       onClick={() => setExpanded(!expanded)}
     >
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 md:flex-nowrap">

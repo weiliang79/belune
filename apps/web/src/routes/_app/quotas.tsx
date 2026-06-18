@@ -4,7 +4,11 @@ import { toast } from "sonner";
 import { useForm, useStore } from "@tanstack/react-form";
 import { z } from "zod";
 import { RouteError } from "@/lib/components/route-error";
-import { useQuotas, useUpsertQuota, useDeleteQuota } from "@/lib/hooks/use-quotas";
+import {
+  useQuotas,
+  useUpsertQuota,
+  useDeleteQuota,
+} from "@/lib/hooks/use-quotas";
 import { useUsers } from "@/lib/hooks/use-users";
 import { useProjects } from "@/lib/hooks/use-projects";
 import type { QuotaLimits, QuotaScope, QuotaView } from "@/lib/api/quotas";
@@ -64,7 +68,8 @@ function QuotasPage() {
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Quotas</h1>
         <p className="text-muted-foreground text-sm">
-          Aggregate caps on top of per-container limits. Unset fields mean unlimited.
+          Aggregate caps on top of per-container limits. Unset fields mean
+          unlimited.
         </p>
       </div>
 
@@ -147,8 +152,8 @@ function QuotaRow({
 }) {
   const label =
     quota.scope === "user"
-      ? quota.meta?.email ?? quota.scope_id.slice(0, 8)
-      : quota.meta?.name ?? quota.scope_id.slice(0, 8);
+      ? (quota.meta?.email ?? quota.scope_id.slice(0, 8))
+      : (quota.meta?.name ?? quota.scope_id.slice(0, 8));
 
   const memUsedMB = Math.round(quota.usage.memory_bytes / (1024 * 1024));
 
@@ -161,7 +166,10 @@ function QuotaRow({
       </TableCell>
       <TableCell className="font-medium">{label}</TableCell>
       <TableCell>
-        <UsageCell current={quota.usage.applications} limit={quota.limits.max_applications} />
+        <UsageCell
+          current={quota.usage.applications}
+          limit={quota.limits.max_applications}
+        />
       </TableCell>
       <TableCell>
         <UsageCell
@@ -209,12 +217,15 @@ function UsageCell({
       </div>
     );
   }
-  const pct = limit === 0 ? 100 : Math.min(100, Math.round((current / limit) * 100));
-  const color = pct >= 100 ? "bg-destructive" : pct >= 80 ? "bg-amber-500" : "bg-primary";
+  const pct =
+    limit === 0 ? 100 : Math.min(100, Math.round((current / limit) * 100));
+  const color =
+    pct >= 100 ? "bg-destructive" : pct >= 80 ? "bg-amber-500" : "bg-primary";
   return (
     <div className="min-w-[120px] space-y-1 text-sm">
       <div>
-        {fmt(current)} <span className="text-muted-foreground">/ {fmt(limit)}</span>
+        {fmt(current)}{" "}
+        <span className="text-muted-foreground">/ {fmt(limit)}</span>
       </div>
       <div className="bg-muted h-1.5 w-full overflow-hidden rounded">
         <div className={`h-full ${color}`} style={{ width: `${pct}%` }} />
@@ -226,11 +237,9 @@ function UsageCell({
 // Quota fields are stored as strings ("" = unlimited) and parsed at submit
 // time. Validators run on the string input directly so they fit TanStack
 // Form's StandardSchemaV1 contract; numeric coercion happens after .refine.
-const optionalInt = z
-  .string()
-  .refine((v) => v === "" || /^\d+$/.test(v), {
-    message: "must be a non-negative integer or blank",
-  });
+const optionalInt = z.string().refine((v) => v === "" || /^\d+$/.test(v), {
+  message: "must be a non-negative integer or blank",
+});
 const optionalNumber = z
   .string()
   .refine((v) => v === "" || (!isNaN(Number(v)) && Number(v) >= 0), {
@@ -477,8 +486,8 @@ function DeleteQuotaDialog({
   const del = useDeleteQuota();
   const label =
     quota.scope === "user"
-      ? quota.meta?.email ?? quota.scope_id
-      : quota.meta?.name ?? quota.scope_id;
+      ? (quota.meta?.email ?? quota.scope_id)
+      : (quota.meta?.name ?? quota.scope_id);
 
   const handleDelete = () => {
     toast.promise(

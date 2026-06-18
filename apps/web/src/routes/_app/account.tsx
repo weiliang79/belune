@@ -6,7 +6,10 @@ import { RouteError } from "@/lib/components/route-error";
 import { toast } from "sonner";
 import { useAuthStore } from "@/lib/stores/auth";
 import { useChangeOwnPassword, useUpdateProfile } from "@/lib/hooks/use-users";
-import { useAlertPreferences, useUpdateAlertPreferences } from "@/lib/hooks/use-alert-preferences";
+import {
+  useAlertPreferences,
+  useUpdateAlertPreferences,
+} from "@/lib/hooks/use-alert-preferences";
 import { useAccentStore, type Accent } from "@/lib/stores/accent";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -66,9 +69,17 @@ function ProfileCard() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     toast.promise(
-      updateProfile.mutateAsync({ username, first_name: firstName, last_name: lastName }).then((updated) => {
-        if (user) setUser({ ...user, username: updated.username, first_name: updated.first_name, last_name: updated.last_name });
-      }),
+      updateProfile
+        .mutateAsync({ username, first_name: firstName, last_name: lastName })
+        .then((updated) => {
+          if (user)
+            setUser({
+              ...user,
+              username: updated.username,
+              first_name: updated.first_name,
+              last_name: updated.last_name,
+            });
+        }),
       {
         loading: "Saving profile...",
         success: "Profile updated",
@@ -145,11 +156,16 @@ function ChangePasswordCard() {
     }
 
     toast.promise(
-      changePassword.mutateAsync({ current_password: currentPassword, new_password: newPassword }).then(() => {
-        setCurrentPassword("");
-        setNewPassword("");
-        setConfirmPassword("");
-      }),
+      changePassword
+        .mutateAsync({
+          current_password: currentPassword,
+          new_password: newPassword,
+        })
+        .then(() => {
+          setCurrentPassword("");
+          setNewPassword("");
+          setConfirmPassword("");
+        }),
       {
         loading: "Updating password...",
         success: "Password updated",
@@ -213,14 +229,17 @@ function AlertPreferencesCard() {
     quota_threshold_percent: number;
   } | null>(null);
 
-  const current = local ?? prefs ?? {
-    deploy_failures: true,
-    build_failures: true,
-    quota_threshold: true,
-    quota_threshold_percent: 80,
-  };
+  const current = local ??
+    prefs ?? {
+      deploy_failures: true,
+      build_failures: true,
+      quota_threshold: true,
+      quota_threshold_percent: 80,
+    };
 
-  const toggle = (key: "deploy_failures" | "build_failures" | "quota_threshold") => {
+  const toggle = (
+    key: "deploy_failures" | "build_failures" | "quota_threshold",
+  ) => {
     setLocal({ ...current, [key]: !current[key] });
   };
 
@@ -320,7 +339,7 @@ function SegmentedOption({
       className={cn(
         "flex flex-1 items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors",
         active
-          ? "bg-card text-foreground shadow-sm ring-1 ring-border-strong"
+          ? "bg-card text-foreground ring-border-strong shadow-sm ring-1"
           : "text-muted-foreground hover:text-foreground",
       )}
     >
@@ -377,7 +396,7 @@ function AppearanceCard() {
               >
                 <span
                   aria-hidden="true"
-                  className="size-3.5 rounded-full ring-1 ring-inset ring-black/10"
+                  className="size-3.5 rounded-full ring-1 ring-black/10 ring-inset"
                   style={{ background: swatch }}
                 />
                 {label}
@@ -415,12 +434,12 @@ function PreferenceRow({
         role="switch"
         aria-checked={checked}
         onClick={onToggle}
-        className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+        className={`focus-visible:ring-ring relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus-visible:ring-2 focus-visible:outline-none ${
           checked ? "bg-primary" : "bg-input"
         }`}
       >
         <span
-          className={`pointer-events-none inline-block h-4 w-4 rounded-full bg-background shadow-lg transition-transform ${
+          className={`bg-background pointer-events-none inline-block h-4 w-4 rounded-full shadow-lg transition-transform ${
             checked ? "translate-x-4" : "translate-x-0"
           }`}
         />

@@ -10,7 +10,11 @@ interface Props {
   onAddDatabase: () => void;
 }
 
-export function ProjectHeader({ project, onAddApplication, onAddDatabase }: Props) {
+export function ProjectHeader({
+  project,
+  onAddApplication,
+  onAddDatabase,
+}: Props) {
   return (
     <div className="flex flex-wrap items-start justify-between gap-3">
       <div className="min-w-0">

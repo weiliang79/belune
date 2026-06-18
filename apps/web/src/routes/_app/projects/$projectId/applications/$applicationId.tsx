@@ -47,20 +47,20 @@ export const Route = createFileRoute(
 
 function ApplicationLayout() {
   const { projectId, applicationId } = Route.useParams();
-  const { data: application, isLoading } = useApplication(projectId, applicationId);
+  const { data: application, isLoading } = useApplication(
+    projectId,
+    applicationId,
+  );
   const { data: project } = useProject(projectId);
   const appMetrics = useAppMetricsStream(projectId, applicationId, true);
   const qc = useQueryClient();
 
   // Subscribe to real-time container status changes
-  const handleContainerStatus = useCallback(
-    () => {
-      qc.invalidateQueries({
-        queryKey: queryKeys.applications.detail(projectId, applicationId),
-      });
-    },
-    [qc, projectId, applicationId],
-  );
+  const handleContainerStatus = useCallback(() => {
+    qc.invalidateQueries({
+      queryKey: queryKeys.applications.detail(projectId, applicationId),
+    });
+  }, [qc, projectId, applicationId]);
   useChannel(`container-status:${applicationId}`, handleContainerStatus);
 
   const deploy = useDeployApplication(projectId, applicationId);
@@ -177,12 +177,10 @@ function ApplicationLayout() {
               </AlertDialogTrigger>
               <AlertDialogContent>
                 <AlertDialogHeader>
-                  <AlertDialogTitle>
-                    Stop {application.name}?
-                  </AlertDialogTitle>
+                  <AlertDialogTitle>Stop {application.name}?</AlertDialogTitle>
                   <AlertDialogDescription>
-                    This will stop the running container. You can start it
-                    again later.
+                    This will stop the running container. You can start it again
+                    later.
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
@@ -212,7 +210,11 @@ function ApplicationLayout() {
                   error: (err) => err.message,
                 });
               }}
-              disabled={start.isPending || application.status === "deploying" || application.status === "building"}
+              disabled={
+                start.isPending ||
+                application.status === "deploying" ||
+                application.status === "building"
+              }
             >
               {start.isPending ? "Starting..." : "Start"}
             </Button>
@@ -220,7 +222,10 @@ function ApplicationLayout() {
         </div>
       </div>
 
-      <nav aria-label="Application navigation" className="flex gap-1 overflow-x-auto border-b">
+      <nav
+        aria-label="Application navigation"
+        className="flex gap-1 overflow-x-auto border-b"
+      >
         {tabs.map((tab) => {
           const isActive = tab.exact
             ? currentPath === tab.to

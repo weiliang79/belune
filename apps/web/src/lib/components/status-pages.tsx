@@ -25,7 +25,8 @@ function StatusPageFrame({
           aria-hidden="true"
           className="grid size-8 place-items-center rounded-lg text-white"
           style={{
-            background: "linear-gradient(140deg, var(--brand), var(--brand-press))",
+            background:
+              "linear-gradient(140deg, var(--brand), var(--brand-press))",
           }}
         >
           <RocketIcon className="size-4.5" />
@@ -35,7 +36,9 @@ function StatusPageFrame({
 
       <p className="text-brand mt-10 font-mono text-sm font-semibold">{code}</p>
       <h1 className="mt-2 text-2xl font-semibold tracking-tight">{title}</h1>
-      <p className="text-muted-foreground mt-2 max-w-md text-sm">{description}</p>
+      <p className="text-muted-foreground mt-2 max-w-md text-sm">
+        {description}
+      </p>
 
       <div className="mt-8 w-full max-w-md">{children}</div>
     </div>
@@ -51,7 +54,10 @@ export function NotFoundPage() {
       description="The page you're looking for doesn't exist or may have been moved."
     >
       {isAuthenticated ? (
-        <Link to="/projects" className={cn(buttonVariants(), "w-full sm:w-auto")}>
+        <Link
+          to="/projects"
+          className={cn(buttonVariants(), "w-full sm:w-auto")}
+        >
           Back to projects
         </Link>
       ) : (

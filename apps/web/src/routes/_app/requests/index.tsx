@@ -59,7 +59,10 @@ function statusCodeClass(code: number) {
 function percentile(values: number[], p: number): number {
   if (values.length === 0) return 0;
   const sorted = [...values].sort((a, b) => a - b);
-  const idx = Math.min(sorted.length - 1, Math.floor((p / 100) * sorted.length));
+  const idx = Math.min(
+    sorted.length - 1,
+    Math.floor((p / 100) * sorted.length),
+  );
   return sorted[idx];
 }
 
@@ -108,7 +111,10 @@ function RequestSummary({ logs }: { logs: RequestLog[] }) {
   );
 }
 
-function RequestFilters({ filters, onChange }: {
+function RequestFilters({
+  filters,
+  onChange,
+}: {
   filters: Filters;
   onChange: (f: Filters) => void;
 }) {
@@ -123,7 +129,9 @@ function RequestFilters({ filters, onChange }: {
     <div className="flex flex-wrap gap-2">
       <DateRangePicker
         value={{ from: filters.dateFrom, to: filters.dateTo }}
-        onChange={(range) => onChange({ ...filters, dateFrom: range.from, dateTo: range.to })}
+        onChange={(range) =>
+          onChange({ ...filters, dateFrom: range.from, dateTo: range.to })
+        }
         placeholder="All time"
         className="w-64"
       />
@@ -137,7 +145,9 @@ function RequestFilters({ filters, onChange }: {
         </SelectTrigger>
         <SelectContent>
           {STATUS_RANGES.map((r) => (
-            <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>
+            <SelectItem key={r.value} value={r.value}>
+              {r.label}
+            </SelectItem>
           ))}
         </SelectContent>
       </Select>
@@ -148,7 +158,9 @@ function RequestFilters({ filters, onChange }: {
           value: p.id,
         }))}
         value={filters.projectId}
-        onValueChange={(v) => onChange({ ...filters, projectId: v ?? "", applicationId: "" })}
+        onValueChange={(v) =>
+          onChange({ ...filters, projectId: v ?? "", applicationId: "" })
+        }
       >
         <SelectTrigger className="w-40">
           <SelectValue placeholder="All projects" />
@@ -156,7 +168,9 @@ function RequestFilters({ filters, onChange }: {
         <SelectContent>
           <SelectItem value="">All projects</SelectItem>
           {projects?.map((p) => (
-            <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+            <SelectItem key={p.id} value={p.id}>
+              {p.name}
+            </SelectItem>
           ))}
         </SelectContent>
       </Select>
@@ -176,7 +190,9 @@ function RequestFilters({ filters, onChange }: {
         <SelectContent>
           <SelectItem value="">All applications</SelectItem>
           {applications?.map((a) => (
-            <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>
+            <SelectItem key={a.id} value={a.id}>
+              {a.name}
+            </SelectItem>
           ))}
         </SelectContent>
       </Select>
@@ -202,7 +218,8 @@ function RequestRow({ log }: { log: RequestLog }) {
         {log.method}
       </span>
       <span className="min-w-0 flex-1 truncate font-mono text-xs">
-        {log.hostname}{log.path}
+        {log.hostname}
+        {log.path}
       </span>
       <span className="text-text-faint shrink-0 font-mono text-xs">
         {log.latency_ms}ms
@@ -235,18 +252,27 @@ function GlobalRequestsPage() {
 
   const { data: history, isLoading } = useRequestLogs(queryParams);
 
-  const handleMessage = useCallback((_event: string, data: unknown) => {
-    try {
-      const parsed = (typeof data === "string" ? JSON.parse(data) : data) as RequestLog;
-      const { min, max } = statusRangeToMinMax(filters.statusRange);
-      if (min != null && parsed.status_code < min) return;
-      if (max != null && parsed.status_code >= max) return;
-      if (filters.applicationId && parsed.application_id !== filters.applicationId) return;
-      setLiveEntries((prev) => [parsed, ...prev].slice(0, 500));
-    } catch {
-      // ignore parse errors
-    }
-  }, [filters.statusRange, filters.applicationId]);
+  const handleMessage = useCallback(
+    (_event: string, data: unknown) => {
+      try {
+        const parsed = (
+          typeof data === "string" ? JSON.parse(data) : data
+        ) as RequestLog;
+        const { min, max } = statusRangeToMinMax(filters.statusRange);
+        if (min != null && parsed.status_code < min) return;
+        if (max != null && parsed.status_code >= max) return;
+        if (
+          filters.applicationId &&
+          parsed.application_id !== filters.applicationId
+        )
+          return;
+        setLiveEntries((prev) => [parsed, ...prev].slice(0, 500));
+      } catch {
+        // ignore parse errors
+      }
+    },
+    [filters.statusRange, filters.applicationId],
+  );
 
   const { connected } = useChannel("requests:all", handleMessage);
 
@@ -293,7 +319,10 @@ function GlobalRequestsPage() {
         {isLoading ? (
           <div className="space-y-2">
             {[1, 2, 3, 4, 5].map((i) => (
-              <div key={i} className="border rounded-lg flex items-center gap-3 px-4 py-3">
+              <div
+                key={i}
+                className="flex items-center gap-3 rounded-lg border px-4 py-3"
+              >
                 <Skeleton className="h-3 w-28" />
                 <Skeleton className="h-5 w-12 rounded-full" />
                 <Skeleton className="h-3 w-12" />
@@ -302,26 +331,35 @@ function GlobalRequestsPage() {
             ))}
           </div>
         ) : allLogs.length === 0 ? (
-          <div className="border rounded-lg text-muted-foreground py-12 text-center text-sm">
+          <div className="text-muted-foreground rounded-lg border py-12 text-center text-sm">
             {offset > 0 ? "No more request logs." : "No request logs found."}
           </div>
         ) : (
           <div className="space-y-2">
-            {allLogs.map((log) => <RequestRow key={log.id} log={log} />)}
+            {allLogs.map((log) => (
+              <RequestRow key={log.id} log={log} />
+            ))}
           </div>
         )}
 
         <div className="flex items-center justify-between">
-          <Button variant="outline" size="sm" disabled={offset === 0}
-            onClick={() => setOffset(Math.max(0, offset - PAGE_SIZE))}>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={offset === 0}
+            onClick={() => setOffset(Math.max(0, offset - PAGE_SIZE))}
+          >
             Previous
           </Button>
           <span className="text-muted-foreground text-sm">
             {offset + 1}–{offset + (history?.length ?? 0)}
           </span>
-          <Button variant="outline" size="sm"
+          <Button
+            variant="outline"
+            size="sm"
             disabled={!history || history.length < PAGE_SIZE}
-            onClick={() => setOffset(offset + PAGE_SIZE)}>
+            onClick={() => setOffset(offset + PAGE_SIZE)}
+          >
             Next
           </Button>
         </div>

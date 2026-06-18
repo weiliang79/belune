@@ -43,7 +43,10 @@ function ResetPasswordPage() {
       <AuthLayout title="Reset password">
         <div className="bg-destructive/10 text-destructive rounded-md px-3 py-2.5 text-sm">
           Invalid or missing reset token.{" "}
-          <Link to="/forgot-password" className="font-medium underline underline-offset-4">
+          <Link
+            to="/forgot-password"
+            className="font-medium underline underline-offset-4"
+          >
             Request a new one.
           </Link>
         </div>
@@ -64,62 +67,62 @@ function ResetPasswordPage() {
         }}
         className="space-y-4"
       >
-            {error && (
-              <div className="bg-destructive/10 text-destructive rounded-md px-3 py-2 text-sm">
-                {error}
-              </div>
-            )}
-            <form.Field
-              name="password"
-              validators={{
-                onChange: z.string().min(8, "At least 8 characters required"),
-              }}
-              children={(field) => (
-                <div className="space-y-2">
-                  <Label htmlFor="password">New password</Label>
-                  <Input
-                    id="password"
-                    type="password"
-                    placeholder="At least 8 characters"
-                    value={field.state.value}
-                    onBlur={field.handleBlur}
-                    onChange={(e) => field.handleChange(e.target.value)}
-                  />
-                  {field.state.meta.errors.length > 0 && (
-                    <p className="text-destructive text-sm">
-                      {typeof field.state.meta.errors[0] === "string"
-                        ? field.state.meta.errors[0]
-                        : field.state.meta.errors[0]?.message}
-                    </p>
-                  )}
-                </div>
+        {error && (
+          <div className="bg-destructive/10 text-destructive rounded-md px-3 py-2 text-sm">
+            {error}
+          </div>
+        )}
+        <form.Field
+          name="password"
+          validators={{
+            onChange: z.string().min(8, "At least 8 characters required"),
+          }}
+          children={(field) => (
+            <div className="space-y-2">
+              <Label htmlFor="password">New password</Label>
+              <Input
+                id="password"
+                type="password"
+                placeholder="At least 8 characters"
+                value={field.state.value}
+                onBlur={field.handleBlur}
+                onChange={(e) => field.handleChange(e.target.value)}
+              />
+              {field.state.meta.errors.length > 0 && (
+                <p className="text-destructive text-sm">
+                  {typeof field.state.meta.errors[0] === "string"
+                    ? field.state.meta.errors[0]
+                    : field.state.meta.errors[0]?.message}
+                </p>
               )}
-            />
-            <form.Field
-              name="confirm"
-              validators={{
-                onChange: z.string().min(1, "Please confirm your password"),
-              }}
-              children={(field) => (
-                <div className="space-y-2">
-                  <Label htmlFor="confirm">Confirm password</Label>
-                  <Input
-                    id="confirm"
-                    type="password"
-                    value={field.state.value}
-                    onBlur={field.handleBlur}
-                    onChange={(e) => field.handleChange(e.target.value)}
-                  />
-                </div>
-              )}
-            />
-            <form.Subscribe
-              selector={(s) => s.isSubmitting}
-              children={(isSubmitting) => (
-                <Button type="submit" className="w-full" disabled={isSubmitting}>
-                  {isSubmitting ? "Resetting..." : "Reset password"}
-                </Button>
-              )}
+            </div>
+          )}
+        />
+        <form.Field
+          name="confirm"
+          validators={{
+            onChange: z.string().min(1, "Please confirm your password"),
+          }}
+          children={(field) => (
+            <div className="space-y-2">
+              <Label htmlFor="confirm">Confirm password</Label>
+              <Input
+                id="confirm"
+                type="password"
+                value={field.state.value}
+                onBlur={field.handleBlur}
+                onChange={(e) => field.handleChange(e.target.value)}
+              />
+            </div>
+          )}
+        />
+        <form.Subscribe
+          selector={(s) => s.isSubmitting}
+          children={(isSubmitting) => (
+            <Button type="submit" className="w-full" disabled={isSubmitting}>
+              {isSubmitting ? "Resetting..." : "Reset password"}
+            </Button>
+          )}
         />
       </form>
     </AuthLayout>
