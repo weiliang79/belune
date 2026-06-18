@@ -88,6 +88,9 @@ type Database struct {
 	InternalPort         pgtype.Int4        `json:"internal_port"`
 	CredentialsEncrypted []byte             `json:"credentials_encrypted"`
 	CreatedAt            pgtype.Timestamptz `json:"created_at"`
+	CpuLimit             float64            `json:"cpu_limit"`
+	MemoryLimit          int64              `json:"memory_limit"`
+	HostPort             pgtype.Int4        `json:"host_port"`
 }
 
 type Deployment struct {

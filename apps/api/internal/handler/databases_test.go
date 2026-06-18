@@ -59,6 +59,38 @@ func TestGetDatabase(t *testing.T) {
 	assert.NotEmpty(t, creds["password"])
 }
 
+func TestUpdateDatabaseResources(t *testing.T) {
+	resetDB(t)
+	token := env.SetupAdmin(t, "admin@test.com", "password123")
+	project := env.CreateProject(t, token, "Test Project", "test-project")
+	projectID := extractID(project["id"])
+
+	resp := env.DoRequest(t, "POST", fmt.Sprintf("/api/projects/%s/databases", projectID), map[string]any{
+		"name": "mydb",
+		"type": "postgres",
+	}, testutil.AuthHeader(token))
+	db := testutil.ReadJSON(t, resp)
+	dbID := extractID(db["id"])
+
+	// Update resource limits.
+	resp = env.DoRequest(t, "PUT", fmt.Sprintf("/api/projects/%s/databases/%s", projectID, dbID), map[string]any{
+		"cpu_limit":    0.5,
+		"memory_limit": 536870912,
+	}, testutil.AuthHeader(token))
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	updated := testutil.ReadJSON(t, resp)
+	assert.Equal(t, 0.5, updated["cpu_limit"])
+	assert.Equal(t, float64(536870912), updated["memory_limit"])
+
+	// Negative values are rejected.
+	resp = env.DoRequest(t, "PUT", fmt.Sprintf("/api/projects/%s/databases/%s", projectID, dbID), map[string]any{
+		"cpu_limit":    -1,
+		"memory_limit": 0,
+	}, testutil.AuthHeader(token))
+	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+	resp.Body.Close()
+}
+
 func TestDeleteDatabase(t *testing.T) {
 	resetDB(t)
 	token := env.SetupAdmin(t, "admin@test.com", "password123")

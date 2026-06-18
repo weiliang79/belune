@@ -117,6 +117,22 @@ func (c *Client) RemoveContainer(ctx context.Context, id string) (err error) {
 	return c.cli.ContainerRemove(ctx, id, container.RemoveOptions{Force: true})
 }
 
+// UpdateContainerResources applies new CPU/memory limits to a running container
+// live (no recreate), using the same conversion as create time. A zero value
+// means unlimited for that dimension.
+func (c *Client) UpdateContainerResources(ctx context.Context, id string, cpuCores float64, memoryBytes int64) (err error) {
+	defer func() { metrics.RecordDockerOp("update_container", err) }()
+	resources := container.Resources{}
+	if cpuCores > 0 {
+		resources.NanoCPUs = int64(cpuCores * 1e9)
+	}
+	if memoryBytes > 0 {
+		resources.Memory = memoryBytes
+	}
+	_, err = c.cli.ContainerUpdate(ctx, id, container.UpdateConfig{Resources: resources})
+	return err
+}
+
 func (c *Client) ContainerLogs(ctx context.Context, id string, follow bool) (io.ReadCloser, error) {
 	return c.cli.ContainerLogs(ctx, id, container.LogsOptions{
 		ShowStdout: true,

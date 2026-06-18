@@ -51,10 +51,16 @@ type provisionDBPayload struct {
 	DatabaseID string `json:"database_id"`
 }
 
+type volumeInfo struct {
+	Name      string `json:"name"`
+	SizeBytes int64  `json:"size_bytes"`
+}
+
 type databaseResponse struct {
 	generated.Database
 	Credentials      map[string]string `json:"credentials,omitempty"`
 	ConnectionString string            `json:"connection_string,omitempty"`
+	Volume           *volumeInfo       `json:"volume,omitempty"`
 }
 
 func (h *Handler) CreateDatabase(w http.ResponseWriter, r *http.Request) {
@@ -279,7 +285,71 @@ func (h *Handler) GetDatabase(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Read-only managed-volume info (best-effort). Name matches the provision
+	// convention; size comes from the runtime's disk-usage view.
+	volName := db.Slug + "-vol"
+	if size, err := h.runtime.VolumeSize(r.Context(), volName); err == nil {
+		resp.Volume = &volumeInfo{Name: volName, SizeBytes: size}
+	}
+
 	writeJSON(w, http.StatusOK, resp)
+}
+
+type updateDatabaseRequest struct {
+	CPULimit    float64 `json:"cpu_limit"`
+	MemoryLimit int64   `json:"memory_limit"`
+}
+
+// UpdateDatabase edits a managed database's resource limits (CPU cores / memory
+// bytes) and applies them live to the running container. The limit is persisted
+// regardless, so it also takes effect if the container is later recreated.
+func (h *Handler) UpdateDatabase(w http.ResponseWriter, r *http.Request) {
+	databaseID := chi.URLParam(r, "databaseId")
+	var dbUUID pgtype.UUID
+	if err := dbUUID.Scan(databaseID); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid database id")
+		return
+	}
+
+	if !h.canAccessDatabase(r, dbUUID) {
+		writeError(w, http.StatusForbidden, "access denied")
+		return
+	}
+
+	var req updateDatabaseRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if req.CPULimit < 0 || req.MemoryLimit < 0 {
+		writeError(w, http.StatusBadRequest, "cpu_limit and memory_limit must be non-negative")
+		return
+	}
+
+	db, err := h.queries.UpdateDatabaseResources(r.Context(), generated.UpdateDatabaseResourcesParams{
+		ID:          dbUUID,
+		CpuLimit:    req.CPULimit,
+		MemoryLimit: req.MemoryLimit,
+	})
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to update database")
+		return
+	}
+
+	// Apply live; a failure here is non-fatal because the persisted limit will
+	// be honoured the next time the container is (re)created.
+	if db.Status == status.DatabaseRunning && db.InternalHost.Valid {
+		if err := h.runtime.UpdateContainerResources(r.Context(), db.InternalHost.String, req.CPULimit, req.MemoryLimit); err != nil {
+			slog.Warn("failed to apply database resource limits live", "database_id", databaseID, "error", err)
+		}
+	}
+
+	h.audit(r, "update_database", "database", databaseID, map[string]any{
+		"cpu_limit":    req.CPULimit,
+		"memory_limit": req.MemoryLimit,
+	})
+
+	writeJSON(w, http.StatusOK, db)
 }
 
 func (h *Handler) DeleteDatabase(w http.ResponseWriter, r *http.Request) {

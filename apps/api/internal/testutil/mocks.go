@@ -52,6 +52,10 @@ func (m *MockContainerRuntime) RemoveContainer(_ context.Context, id string) err
 	return nil
 }
 
+func (m *MockContainerRuntime) UpdateContainerResources(_ context.Context, _ string, _ float64, _ int64) error {
+	return nil
+}
+
 func (m *MockContainerRuntime) ContainerLogs(_ context.Context, _ string, _ bool) (io.ReadCloser, error) {
 	return io.NopCloser(strings.NewReader("")), nil
 }
@@ -78,9 +82,11 @@ func (m *MockContainerRuntime) PullImage(_ context.Context, image string) error 
 func (m *MockContainerRuntime) BuildImage(_ context.Context, _, _, _ string) error {
 	return nil
 }
-func (m *MockContainerRuntime) CreateNetwork(_ context.Context, _ string) error              { return nil }
-func (m *MockContainerRuntime) RemoveNetwork(_ context.Context, _ string) error              { return nil }
-func (m *MockContainerRuntime) ConnectContainerToNetwork(_ context.Context, _, _ string) error { return nil }
+func (m *MockContainerRuntime) CreateNetwork(_ context.Context, _ string) error { return nil }
+func (m *MockContainerRuntime) RemoveNetwork(_ context.Context, _ string) error { return nil }
+func (m *MockContainerRuntime) ConnectContainerToNetwork(_ context.Context, _, _ string) error {
+	return nil
+}
 func (m *MockContainerRuntime) CreateVolume(_ context.Context, _ string) error      { return nil }
 func (m *MockContainerRuntime) CreateCacheVolume(_ context.Context, _ string) error { return nil }
 func (m *MockContainerRuntime) VolumeSize(_ context.Context, _ string) (int64, error) {
@@ -90,9 +96,9 @@ func (m *MockContainerRuntime) VolumeSizes(_ context.Context, _ []string) (map[s
 	return map[string]int64{}, nil
 }
 func (m *MockContainerRuntime) RemoveVolume(_ context.Context, _ string) error { return nil }
-func (m *MockContainerRuntime) RemoveImage(_ context.Context, _ string) error    { return nil }
-func (m *MockContainerRuntime) PruneImages(_ context.Context) error  { return nil }
-func (m *MockContainerRuntime) PruneVolumes(_ context.Context) error { return nil }
+func (m *MockContainerRuntime) RemoveImage(_ context.Context, _ string) error  { return nil }
+func (m *MockContainerRuntime) PruneImages(_ context.Context) error            { return nil }
+func (m *MockContainerRuntime) PruneVolumes(_ context.Context) error           { return nil }
 func (m *MockContainerRuntime) ContainerStats(_ context.Context, _ string) (*runtime.ContainerResourceStats, error) {
 	return &runtime.ContainerResourceStats{}, nil
 }

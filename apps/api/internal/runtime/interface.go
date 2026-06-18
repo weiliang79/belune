@@ -13,14 +13,14 @@ type TerminalExecSession struct {
 }
 
 type ContainerConfig struct {
-	Name        string
-	Image       string
-	Env         map[string]string
-	Ports       map[string]string // host:container
-	Volumes     map[string]string // host:container
-	Network     string
-	Cmd         []string
-	Labels      map[string]string
+	Name            string
+	Image           string
+	Env             map[string]string
+	Ports           map[string]string // host:container
+	Volumes         map[string]string // host:container
+	Network         string
+	Cmd             []string
+	Labels          map[string]string
 	CPULimit        float64 // CPU cores (0 = unlimited, e.g. 0.5 = half a core)
 	MemoryLimit     int64   // bytes (0 = unlimited, e.g. 536870912 = 512 MB)
 	HealthCheckPath string  // HTTP path for health polling after deploy (e.g. /healthz); empty = skip
@@ -64,6 +64,9 @@ type ContainerRuntime interface {
 	StartContainer(ctx context.Context, id string) error
 	StopContainer(ctx context.Context, id string) error
 	RemoveContainer(ctx context.Context, id string) error
+	// UpdateContainerResources applies CPU (cores) / memory (bytes) limits to a
+	// running container without recreating it. Zero means unlimited.
+	UpdateContainerResources(ctx context.Context, id string, cpuCores float64, memoryBytes int64) error
 	ContainerLogs(ctx context.Context, id string, follow bool) (io.ReadCloser, error)
 	// ContainerLogsSince streams logs from a container starting at the given time.
 	// Pass time.Now() to receive only new log lines (no backlog).
