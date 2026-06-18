@@ -14,8 +14,8 @@ import (
 )
 
 const (
-	defaultBodyLimit = 1 << 20      // 1 MB — applied to all non-streaming routes
-	envBodyLimit     = 5 << 20      // 5 MB — raised for bulk env-var imports
+	defaultBodyLimit = 1 << 20 // 1 MB — applied to all non-streaming routes
+	envBodyLimit     = 5 << 20 // 5 MB — raised for bulk env-var imports
 	handlerTimeout   = 15 * time.Second
 )
 
@@ -227,6 +227,12 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService,
 			// Global deployments
 			r.Get("/api/deployments", h.GetGlobalDeployments)
 
+			// Notifications — per-user feed (recipient is the current user).
+			r.Get("/api/notifications", h.ListNotifications)
+			r.Get("/api/notifications/unread-count", h.UnreadNotificationCount)
+			r.Post("/api/notifications/{notificationId}/read", h.MarkNotificationRead)
+			r.Post("/api/notifications/read-all", h.MarkAllNotificationsRead)
+
 			// Admin-only: metrics snapshots, settings, cleanup, audit
 			r.Group(func(r chi.Router) {
 				r.Use(middleware.RequireRole("admin"))
@@ -274,6 +280,7 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService,
 		r.Get("/api/projects/{projectId}/applications/{applicationId}/logs", h.StreamLogs)
 		r.Get("/api/projects/{projectId}/applications/{applicationId}/requests/stream", h.StreamRequestLogs)
 		r.Get("/api/projects/{projectId}/applications/{applicationId}/metrics/stream", h.StreamApplicationMetrics)
+		r.Get("/api/notifications/stream", h.StreamNotifications)
 		r.Group(func(r chi.Router) {
 			r.Use(middleware.RequireRole("admin"))
 			r.Get("/api/metrics/host/stream", h.StreamHostMetrics)

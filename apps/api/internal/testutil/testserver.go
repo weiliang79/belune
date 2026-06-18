@@ -60,7 +60,7 @@ func SetupTestServer(pool *pgxpool.Pool, queries *generated.Queries) *TestEnv {
 	}
 	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
 
-	srv := server.New(cfg, pool, queries, mockAsynq, mockRuntime, mockProxy, nil, rdb, nil, nil, nil, nil)
+	srv := server.New(cfg, pool, queries, mockAsynq, mockRuntime, mockProxy, nil, rdb, nil, nil, nil, nil, nil)
 	ts := httptest.NewServer(srv.Router())
 
 	return &TestEnv{

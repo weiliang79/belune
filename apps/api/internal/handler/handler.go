@@ -49,6 +49,7 @@ type Handler struct {
 	gitCredSvc  *service.GitCredentialService
 	hub         *ws.Hub
 	auditSvc    *service.AuditService
+	notifySvc   *service.NotificationService
 	termManager *terminal.Manager
 	quotaSvc    *quota.Service
 	emailSvc    *email.Service
@@ -70,6 +71,7 @@ func New(
 	gitCredSvc *service.GitCredentialService,
 	hub *ws.Hub,
 	auditSvc *service.AuditService,
+	notifySvc *service.NotificationService,
 	termMgr *terminal.Manager,
 	quotaSvc *quota.Service,
 	emailSvc *email.Service,
@@ -90,6 +92,7 @@ func New(
 		gitCredSvc:  gitCredSvc,
 		hub:         hub,
 		auditSvc:    auditSvc,
+		notifySvc:   notifySvc,
 		termManager: termMgr,
 		quotaSvc:    quotaSvc,
 		emailSvc:    emailSvc,

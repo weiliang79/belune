@@ -194,6 +194,8 @@ func (h *TaskHandler) HandleDeployTask(ctx context.Context, t *asynq.Task) error
 	}); err != nil {
 		slog.Error("failed to commit deploy success status", "application_id", payload.ApplicationID, "error", err)
 		recordSpanErr(rootSpan, err)
+	} else {
+		h.notifyDeployment(ctx, dc.deploymentID, status.DeploymentSuccess, "")
 	}
 
 	rootSpan.SetAttributes(
@@ -680,7 +682,40 @@ func (h *TaskHandler) failDeployment(ctx context.Context, deploymentID pgtype.UU
 			ErrorMessage: pgtype.Text{String: safeMsg, Valid: true},
 		})
 		h.maybeAlertDeploymentFailed(ctx, deploymentID, kind, safeMsg)
+		h.notifyDeployment(ctx, deploymentID, status.DeploymentFailed, safeMsg)
 	}
+}
+
+// notifyDeployment emits a user-facing notification to the project owner for a
+// terminal deployment outcome. Recipient resolution mirrors the email-alert
+// path (project owner); the link deep-links into the app's Deployments tab.
+// Best-effort and nil-safe — never blocks or fails the deploy path.
+func (h *TaskHandler) notifyDeployment(ctx context.Context, deploymentID pgtype.UUID, outcome, errMsg string) {
+	if h.Notifier == nil {
+		return
+	}
+
+	info, err := h.Queries.GetDeploymentNotifyInfo(ctx, deploymentID)
+	if err != nil {
+		slog.Warn("notify: failed to fetch deployment info", "deployment_id", fmt.Sprintf("%v", deploymentID), "error", err)
+		return
+	}
+
+	var notifType, title, body string
+	if outcome == status.DeploymentFailed {
+		notifType = "deployment.failed"
+		title = fmt.Sprintf("Deployment failed — %s", info.AppName)
+		body = errMsg
+	} else {
+		notifType = "deployment.succeeded"
+		title = fmt.Sprintf("Deployment succeeded — %s", info.AppName)
+		body = fmt.Sprintf("%s is now running.", info.AppName)
+	}
+
+	link := fmt.Sprintf("/projects/%s/applications/%s/deployments",
+		formatUUID(info.ProjectID), formatUUID(info.ApplicationID))
+
+	h.Notifier.Notify(formatUUID(info.UserID), notifType, title, body, link)
 }
 
 // maybeAlertDeploymentFailed fires a failure alert email if the deployment owner has alerts enabled.

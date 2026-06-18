@@ -187,6 +187,17 @@ type LoginAttempt struct {
 	LockedUntil   pgtype.Timestamptz `json:"locked_until"`
 }
 
+type Notification struct {
+	ID        pgtype.UUID        `json:"id"`
+	UserID    pgtype.UUID        `json:"user_id"`
+	Type      string             `json:"type"`
+	Title     string             `json:"title"`
+	Body      string             `json:"body"`
+	Link      pgtype.Text        `json:"link"`
+	Read      bool               `json:"read"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+}
+
 type PasswordResetToken struct {
 	ID        pgtype.UUID        `json:"id"`
 	UserID    pgtype.UUID        `json:"user_id"`

@@ -42,26 +42,27 @@ import (
 
 // App holds all application dependencies and owns their lifecycle.
 type App struct {
-	cfg          *config.Config
-	db           *pgxpool.Pool
-	queries      *generated.Queries
-	dockerClient *docker.Client
-	caddyClient  *caddy.Client
-	asynqClient  *asynq.Client
-	rdb          *redis.Client
-	hub          *ws.Hub
-	auditSvc     *service.AuditService
-	termMgr      *terminal.Manager
-	worker          *worker.Worker
-	scheduler       *asynq.Scheduler
-	httpServer      *http.Server
-	metricsServer   *http.Server // optional separate listener (METRICS_BIND)
-	asynqInspector  *asynq.Inspector
-	reconciler      *proxy.Reconciler
-	logTailer       *logtailer.Tailer
-	logCollector    *logcollector.Collector
-	redisAdapter    *ws.RedisAdapter
-	eventWatcher    *eventwatcher.Watcher
+	cfg            *config.Config
+	db             *pgxpool.Pool
+	queries        *generated.Queries
+	dockerClient   *docker.Client
+	caddyClient    *caddy.Client
+	asynqClient    *asynq.Client
+	rdb            *redis.Client
+	hub            *ws.Hub
+	auditSvc       *service.AuditService
+	notifySvc      *service.NotificationService
+	termMgr        *terminal.Manager
+	worker         *worker.Worker
+	scheduler      *asynq.Scheduler
+	httpServer     *http.Server
+	metricsServer  *http.Server // optional separate listener (METRICS_BIND)
+	asynqInspector *asynq.Inspector
+	reconciler     *proxy.Reconciler
+	logTailer      *logtailer.Tailer
+	logCollector   *logcollector.Collector
+	redisAdapter   *ws.RedisAdapter
+	eventWatcher   *eventwatcher.Watcher
 }
 
 // New initialises all application dependencies in dependency order.
@@ -117,6 +118,7 @@ func New(cfg *config.Config) (*App, error) {
 
 	metricsSvc := service.NewMetricsService(queries, rdb)
 	auditSvc := service.NewAuditService(queries)
+	notifySvc := service.NewNotificationService(queries, rdb)
 	termMgr := terminal.NewManager(cfg.MaxTerminalSessionsPerUser)
 	hub := ws.NewHub(cfg.MaxWebSocketConnsPerUser)
 
@@ -147,6 +149,7 @@ func New(cfg *config.Config) (*App, error) {
 		EmailService:   emailSvc,
 		BackupService:  backupSvc,
 		AuditLog:       auditSvc,
+		Notifier:       notifySvc,
 		Enqueuer:       asynqClient,
 	}
 
@@ -165,7 +168,7 @@ func New(cfg *config.Config) (*App, error) {
 	}
 
 	broadcaster := ws.NewContainerStatusBroadcaster(hub)
-	httpSrv := server.New(cfg, db, queries, asynqClient, dockerClient, caddyClient, reconciler, rdb, hub, auditSvc, termMgr, emailSvc)
+	httpSrv := server.New(cfg, db, queries, asynqClient, dockerClient, caddyClient, reconciler, rdb, hub, auditSvc, notifySvc, termMgr, emailSvc)
 
 	// Optional Prometheus-friendly bind. Serves /metrics without auth on the
 	// configured address (typically loopback). Keeps the main /metrics route
@@ -193,6 +196,7 @@ func New(cfg *config.Config) (*App, error) {
 		rdb:          rdb,
 		hub:          hub,
 		auditSvc:     auditSvc,
+		notifySvc:    notifySvc,
 		termMgr:      termMgr,
 		worker:       w,
 		scheduler:    scheduler,
@@ -249,6 +253,7 @@ func (a *App) Run(ctx context.Context) error {
 	g.Go(func() error { ws.RunAppMetricsBroadcaster(gctx, a.hub, a.dockerClient, a.queries); return nil })
 	g.Go(func() error { a.eventWatcher.Run(gctx); return nil })
 	g.Go(func() error { a.auditSvc.Run(gctx); return nil })
+	g.Go(func() error { a.notifySvc.Run(gctx); return nil })
 	g.Go(func() error { metrics.AsynqQueuePoller(gctx, a.asynqInspector, 15*time.Second); return nil })
 
 	if a.metricsServer != nil {

@@ -27,6 +27,12 @@ type auditLogger interface {
 	Log(userID, ip, action, resourceType, resourceID string, details map[string]any)
 }
 
+// notifier is the narrow interface the worker needs to emit user-facing
+// notifications. Sibling of auditLogger — emitted in parallel, never chained.
+type notifier interface {
+	Notify(userID, notifType, title, body, link string)
+}
+
 // TaskEnqueuer is the narrow interface used by worker tasks that need to
 // enqueue follow-on work (e.g. sending alert emails from async tasks).
 type TaskEnqueuer interface {
@@ -49,6 +55,7 @@ type TaskHandler struct {
 	EmailService   *email.Service
 	BackupService  *backup.Service
 	AuditLog       auditLogger
+	Notifier       notifier
 	Enqueuer       TaskEnqueuer
 }
 
