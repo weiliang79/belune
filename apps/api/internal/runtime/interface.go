@@ -110,6 +110,11 @@ type ContainerRuntime interface {
 	// nil to discard). Returns the command's exit code. Used for managed-database
 	// logical dump/restore (pg_dump → stdout file, restore ← stdin file).
 	ContainerExec(ctx context.Context, containerName string, cmd []string, stdin io.Reader, stdout, stderr io.Writer) (int, error)
+	// RunHelper creates and runs a short-lived container to completion, streaming
+	// stdin in and stdout/stderr out (stdcopy-demuxed, non-TTY), then removes it.
+	// Used for cold volume tar snapshot/restore against a stopped database's
+	// volume (the helper mounts the volume and runs tar). Returns the exit code.
+	RunHelper(ctx context.Context, cfg ContainerConfig, stdin io.Reader, stdout, stderr io.Writer) (int, error)
 }
 
 // ContainerEvent represents a Docker container lifecycle event.

@@ -22,6 +22,14 @@ export function createDatabase(
       database_name?: string;
       root_password?: string;
     };
+    // "other" type only:
+    image?: string;
+    container_port?: number;
+    data_dir?: string;
+    env?: Record<string, string>;
+    backup_mode?: "volume_snapshot" | "command";
+    backup_command?: string;
+    restore_command?: string;
   },
 ) {
   return api.post<Database>(`/projects/${projectId}/databases`, data);

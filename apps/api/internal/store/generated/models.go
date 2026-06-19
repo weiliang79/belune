@@ -91,6 +91,12 @@ type Database struct {
 	CpuLimit             float64            `json:"cpu_limit"`
 	MemoryLimit          int64              `json:"memory_limit"`
 	HostPort             pgtype.Int4        `json:"host_port"`
+	Image                pgtype.Text        `json:"image"`
+	ContainerPort        pgtype.Int4        `json:"container_port"`
+	DataDir              pgtype.Text        `json:"data_dir"`
+	BackupMode           string             `json:"backup_mode"`
+	BackupCommand        pgtype.Text        `json:"backup_command"`
+	RestoreCommand       pgtype.Text        `json:"restore_command"`
 }
 
 type DatabaseBackup struct {

@@ -188,9 +188,23 @@ func (h *TaskHandler) provisionDBContainer(ctx context.Context, db generated.Dat
 	containerName := db.Slug
 	volumeName := fmt.Sprintf("%s-vol", db.Slug)
 
-	image, dataDir, port, env, cmd, err := dbContainerSpec(db.Type, db.Version, creds)
-	if err != nil {
-		return err
+	var image, dataDir string
+	var port int32
+	var env map[string]string
+	var cmd []string
+	if db.Type == "other" {
+		// "other": image/port/data-dir come from the user; the credentials map is
+		// passed verbatim as container env. No per-engine command.
+		image = db.Image.String
+		dataDir = db.DataDir.String
+		port = db.ContainerPort.Int32
+		env = creds
+	} else {
+		var err error
+		image, dataDir, port, env, cmd, err = dbContainerSpec(db.Type, db.Version, creds)
+		if err != nil {
+			return err
+		}
 	}
 
 	project, err := h.Queries.GetProject(ctx, db.ProjectID)

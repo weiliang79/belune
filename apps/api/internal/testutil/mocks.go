@@ -26,6 +26,9 @@ type MockContainerRuntime struct {
 	// ExecFunc, when set, backs ContainerExec — lets tests simulate dump output
 	// and exit codes. When nil, ContainerExec is a no-op returning exit 0.
 	ExecFunc func(ctx context.Context, container string, cmd []string, stdin io.Reader, stdout, stderr io.Writer) (int, error)
+	// RunHelperFunc, when set, backs RunHelper (volume tar snapshot/restore).
+	// When nil, RunHelper is a no-op returning exit 0.
+	RunHelperFunc func(ctx context.Context, cfg runtime.ContainerConfig, stdin io.Reader, stdout, stderr io.Writer) (int, error)
 }
 
 func (m *MockContainerRuntime) CreateContainer(_ context.Context, cfg runtime.ContainerConfig) (string, error) {
@@ -126,6 +129,13 @@ func (m *MockContainerRuntime) ContainerExecResize(_ context.Context, _ string, 
 func (m *MockContainerRuntime) ContainerExec(ctx context.Context, container string, cmd []string, stdin io.Reader, stdout, stderr io.Writer) (int, error) {
 	if m.ExecFunc != nil {
 		return m.ExecFunc(ctx, container, cmd, stdin, stdout, stderr)
+	}
+	return 0, nil
+}
+
+func (m *MockContainerRuntime) RunHelper(ctx context.Context, cfg runtime.ContainerConfig, stdin io.Reader, stdout, stderr io.Writer) (int, error) {
+	if m.RunHelperFunc != nil {
+		return m.RunHelperFunc(ctx, cfg, stdin, stdout, stderr)
 	}
 	return 0, nil
 }

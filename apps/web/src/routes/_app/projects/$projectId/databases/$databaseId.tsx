@@ -52,8 +52,19 @@ import { cn } from "@/lib/utils";
 import type { Database, DatabaseBackup } from "@/lib/types";
 
 // Engines with an in-image logical-dump tool (pg_dump/mysqldump/mongodump).
-// redis (cache) is backed up via volume snapshot in a later version.
+// redis (cache) has no logical backup. "other" is backed up when a backup mode
+// (volume snapshot or custom commands) was configured at creation.
 const BACKUP_SUPPORTED_TYPES = ["postgres", "mysql", "mongo"];
+
+function dbBackupEnabled(db: Database): boolean {
+  if (db.type === "other") return db.backup_mode !== "none";
+  return BACKUP_SUPPORTED_TYPES.includes(db.type);
+}
+
+// imageLabel shows the engine:tag for known engines and the full image for "other".
+function imageLabel(db: Database): string {
+  return db.type === "other" ? (db.image ?? "—") : `${db.type}:${db.version}`;
+}
 
 export const Route = createFileRoute(
   "/_app/projects/$projectId/databases/$databaseId",
@@ -132,7 +143,7 @@ function DatabaseDetailPage() {
           </p>
           <div className="mt-2 flex items-center gap-2">
             <Badge variant="outline" className="font-mono">
-              {db.type}:{db.version}
+              {imageLabel(db)}
             </Badge>
             <StatusBadge status={db.status} />
           </div>
@@ -231,7 +242,7 @@ function DatabaseDetailPage() {
 
       {db.status === "running" && <AdvancedCard db={db} />}
 
-      {db.status === "running" && BACKUP_SUPPORTED_TYPES.includes(db.type) && (
+      {db.status === "running" && dbBackupEnabled(db) && (
         <BackupsCard db={db} />
       )}
 
@@ -499,13 +510,30 @@ function AdvancedCard({ db }: { db: Database }) {
           <div>
             <p className="text-sm font-medium">Image</p>
             <p className="text-text-faint text-xs">
-              Major version upgrades are a separate guarded flow.
+              {db.type === "other"
+                ? "Change it by recreating the database."
+                : "Major version upgrades are a separate guarded flow."}
             </p>
           </div>
           <Badge variant="outline" className="font-mono">
-            {db.type}:{db.version}
+            {imageLabel(db)}
           </Badge>
         </div>
+
+        {/* Data directory — read-only ("other" only) */}
+        {db.type === "other" && db.data_dir && (
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-sm font-medium">Data directory</p>
+              <p className="text-text-faint text-xs">
+                Set at creation; cannot be changed.
+              </p>
+            </div>
+            <Badge variant="outline" className="font-mono">
+              {db.data_dir}
+            </Badge>
+          </div>
+        )}
 
         {/* Volume — read-only */}
         <div className="flex items-start justify-between gap-3">

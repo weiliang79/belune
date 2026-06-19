@@ -39,6 +39,15 @@ type createDatabaseRequest struct {
 	Type        string                     `json:"type"`
 	Version     string                     `json:"version"`
 	Credentials *createDatabaseCredentials `json:"credentials"`
+
+	// "other" type only: an arbitrary container image run as a managed database.
+	Image          string            `json:"image"`
+	ContainerPort  int32             `json:"container_port"`
+	DataDir        string            `json:"data_dir"`
+	Env            map[string]string `json:"env"`             // passed verbatim as container env
+	BackupMode     string            `json:"backup_mode"`     // volume_snapshot | command
+	BackupCommand  string            `json:"backup_command"`  // command mode: dump into $PAAS_BACKUP_DIR
+	RestoreCommand string            `json:"restore_command"` // command mode: restore from $PAAS_BACKUP_DIR
 }
 
 var defaultUsers = map[string]string{
@@ -100,14 +109,36 @@ func (h *Handler) CreateDatabase(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Validate type
-	if _, ok := defaultVersions[req.Type]; !ok {
-		writeError(w, http.StatusBadRequest, "type must be one of: postgres, mysql, redis, mongo")
-		return
-	}
-
-	// Apply default version if empty
-	if req.Version == "" {
-		req.Version = defaultVersions[req.Type]
+	isOther := req.Type == "other"
+	if !isOther {
+		if _, ok := defaultVersions[req.Type]; !ok {
+			writeError(w, http.StatusBadRequest, "type must be one of: postgres, mysql, redis, mongo, other")
+			return
+		}
+		// Apply default version if empty.
+		if req.Version == "" {
+			req.Version = defaultVersions[req.Type]
+		}
+	} else {
+		// "other": the user supplies the image, port, data dir, and backup mode.
+		if req.Image == "" || req.ContainerPort <= 0 {
+			writeError(w, http.StatusBadRequest, "image and container_port are required for 'other' databases")
+			return
+		}
+		if req.DataDir == "" {
+			req.DataDir = "/data"
+		}
+		if req.BackupMode == "" {
+			req.BackupMode = "volume_snapshot"
+		}
+		if req.BackupMode != "volume_snapshot" && req.BackupMode != "command" {
+			writeError(w, http.StatusBadRequest, "backup_mode must be volume_snapshot or command")
+			return
+		}
+		if req.BackupMode == "command" && (req.BackupCommand == "" || req.RestoreCommand == "") {
+			writeError(w, http.StatusBadRequest, "backup_command and restore_command are required for command backup mode")
+			return
+		}
 	}
 
 	// Fetch project for slug
@@ -122,57 +153,65 @@ func (h *Handler) CreateDatabase(w http.ResponseWriter, r *http.Request) {
 		baseSlug = naming.Slugify(req.Slug)
 	}
 
-	// Generate random password
-	passwordBytes := make([]byte, 16)
-	if _, err := rand.Read(passwordBytes); err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to generate credentials")
-		return
-	}
-	password := hex.EncodeToString(passwordBytes)
-
-	// Determine effective credential values
-	user := defaultUsers[req.Type]
-	dbName := req.Name
-	if req.Credentials != nil {
-		if req.Credentials.User != "" {
-			user = req.Credentials.User
-		}
-		if req.Credentials.Password != "" {
-			password = req.Credentials.Password
-		}
-		if req.Credentials.DatabaseName != "" {
-			dbName = req.Credentials.DatabaseName
-		}
-	}
-
-	// Build credentials based on type
+	// Build credentials. For known engines these are well-known keys consumed by
+	// the per-engine env in provisioning; for "other" the map is passed verbatim
+	// as container env (so it doubles as the env/credentials the image needs).
 	creds := make(map[string]string)
-	switch req.Type {
-	case "postgres":
-		creds["user"] = user
-		creds["password"] = password
-		creds["database"] = dbName
-	case "mysql":
-		rootPassword := ""
-		if req.Credentials != nil && req.Credentials.RootPassword != "" {
-			rootPassword = req.Credentials.RootPassword
-		} else {
-			rootPasswordBytes := make([]byte, 16)
-			if _, err := rand.Read(rootPasswordBytes); err != nil {
-				writeError(w, http.StatusInternalServerError, "failed to generate root password")
-				return
-			}
-			rootPassword = hex.EncodeToString(rootPasswordBytes)
+	if isOther {
+		for k, v := range req.Env {
+			creds[k] = v
 		}
-		creds["root_password"] = rootPassword
-		creds["user"] = user
-		creds["password"] = password
-		creds["database"] = dbName
-	case "redis":
-		creds["password"] = password
-	case "mongo":
-		creds["username"] = user
-		creds["password"] = password
+	} else {
+		// Generate random password
+		passwordBytes := make([]byte, 16)
+		if _, err := rand.Read(passwordBytes); err != nil {
+			writeError(w, http.StatusInternalServerError, "failed to generate credentials")
+			return
+		}
+		password := hex.EncodeToString(passwordBytes)
+
+		// Determine effective credential values
+		user := defaultUsers[req.Type]
+		dbName := req.Name
+		if req.Credentials != nil {
+			if req.Credentials.User != "" {
+				user = req.Credentials.User
+			}
+			if req.Credentials.Password != "" {
+				password = req.Credentials.Password
+			}
+			if req.Credentials.DatabaseName != "" {
+				dbName = req.Credentials.DatabaseName
+			}
+		}
+
+		switch req.Type {
+		case "postgres":
+			creds["user"] = user
+			creds["password"] = password
+			creds["database"] = dbName
+		case "mysql":
+			rootPassword := ""
+			if req.Credentials != nil && req.Credentials.RootPassword != "" {
+				rootPassword = req.Credentials.RootPassword
+			} else {
+				rootPasswordBytes := make([]byte, 16)
+				if _, err := rand.Read(rootPasswordBytes); err != nil {
+					writeError(w, http.StatusInternalServerError, "failed to generate root password")
+					return
+				}
+				rootPassword = hex.EncodeToString(rootPasswordBytes)
+			}
+			creds["root_password"] = rootPassword
+			creds["user"] = user
+			creds["password"] = password
+			creds["database"] = dbName
+		case "redis":
+			creds["password"] = password
+		case "mongo":
+			creds["username"] = user
+			creds["password"] = password
+		}
 	}
 
 	credsJSON, err := json.Marshal(creds)
@@ -185,6 +224,24 @@ func (h *Handler) CreateDatabase(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to encrypt credentials")
 		return
+	}
+
+	// "other"-type provisioning columns (NULL/none for known engines).
+	imageCol := pgtype.Text{}
+	portCol := pgtype.Int4{}
+	dataDirCol := pgtype.Text{}
+	backupCmdCol := pgtype.Text{}
+	restoreCmdCol := pgtype.Text{}
+	backupMode := "none"
+	if isOther {
+		imageCol = pgtype.Text{String: req.Image, Valid: true}
+		portCol = pgtype.Int4{Int32: req.ContainerPort, Valid: true}
+		dataDirCol = pgtype.Text{String: req.DataDir, Valid: true}
+		backupMode = req.BackupMode
+		if req.BackupMode == "command" {
+			backupCmdCol = pgtype.Text{String: req.BackupCommand, Valid: true}
+			restoreCmdCol = pgtype.Text{String: req.RestoreCommand, Valid: true}
+		}
 	}
 
 	var db generated.Database
@@ -200,6 +257,12 @@ func (h *Handler) CreateDatabase(w http.ResponseWriter, r *http.Request) {
 			InternalHost:         pgtype.Text{},
 			InternalPort:         pgtype.Int4{},
 			CredentialsEncrypted: encrypted,
+			Image:                imageCol,
+			ContainerPort:        portCol,
+			DataDir:              dataDirCol,
+			BackupMode:           backupMode,
+			BackupCommand:        backupCmdCol,
+			RestoreCommand:       restoreCmdCol,
 		})
 		if err != nil {
 			return err
@@ -441,12 +504,17 @@ func (h *Handler) UpdateDatabase(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, db)
 }
 
-// backupSupportedTypes are the engines with an in-image logical-dump tool.
-// redis (cache) and "other" engines fall back to volume snapshots (later version).
-var backupSupportedTypes = map[string]bool{
-	"postgres": true,
-	"mysql":    true,
-	"mongo":    true,
+// databaseBackupEnabled reports whether a database can be backed up: known
+// engines have a logical-dump tool; "other" supports backup when a backup_mode
+// (volume_snapshot or command) was configured. redis (cache) is not supported.
+func databaseBackupEnabled(db generated.Database) bool {
+	switch db.Type {
+	case "postgres", "mysql", "mongo":
+		return true
+	case "other":
+		return db.BackupMode == "volume_snapshot" || db.BackupMode == "command"
+	}
+	return false
 }
 
 type databaseBackupResponse struct {
@@ -524,7 +592,7 @@ func (h *Handler) BackupDatabase(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "database not found")
 		return
 	}
-	if !backupSupportedTypes[db.Type] {
+	if !databaseBackupEnabled(db) {
 		writeError(w, http.StatusBadRequest, fmt.Sprintf("logical backup is not supported for %s", db.Type))
 		return
 	}
@@ -580,7 +648,7 @@ func (h *Handler) RestoreDatabase(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "database not found")
 		return
 	}
-	if !backupSupportedTypes[db.Type] {
+	if !databaseBackupEnabled(db) {
 		writeError(w, http.StatusBadRequest, fmt.Sprintf("restore is not supported for %s", db.Type))
 		return
 	}

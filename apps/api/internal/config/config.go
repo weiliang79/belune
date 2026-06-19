@@ -68,7 +68,7 @@ type Config struct {
 	// SMTP configuration for outbound email. All fields are optional; when
 	// SMTPHost is empty the email service writes to slog instead of dialing.
 	SMTPHost      string
-	SMTPPort      int    // default 587
+	SMTPPort      int // default 587
 	SMTPUser      string
 	SMTPPassword  string
 	SMTPFromEmail string
@@ -93,23 +93,26 @@ type Config struct {
 	// Local directory where managed-database logical dumps are written before
 	// (optional) upload to S3. Defaults to $PAAS_DIR/backups/databases.
 	DatabaseBackupDir string
+	// Image for the short-lived helper that tars/untars a database volume during
+	// "other"-type volume-snapshot backup/restore. Must contain `tar` and `sh`.
+	DatabaseBackupHelperImage string
 }
 
 func Load() (*Config, error) {
 	cfg := &Config{
-		Port:           getEnvInt("PORT", 8080),
-		DatabaseURL:    getEnv("DATABASE_URL", "postgres://paas:paas@localhost:5432/paas?sslmode=disable"),
-		RedisURL:       getEnv("REDIS_URL", "redis://localhost:6379"),
-		JWTSecret:       getEnv("JWT_SECRET", ""),
-		JWTExpiryHours:  getEnvInt("JWT_EXPIRY_HOURS", 1),
-		JWTRefreshHours: getEnvInt("JWT_REFRESH_HOURS", 24*7),
+		Port:               getEnvInt("PORT", 8080),
+		DatabaseURL:        getEnv("DATABASE_URL", "postgres://paas:paas@localhost:5432/paas?sslmode=disable"),
+		RedisURL:           getEnv("REDIS_URL", "redis://localhost:6379"),
+		JWTSecret:          getEnv("JWT_SECRET", ""),
+		JWTExpiryHours:     getEnvInt("JWT_EXPIRY_HOURS", 1),
+		JWTRefreshHours:    getEnvInt("JWT_REFRESH_HOURS", 24*7),
 		CaddyAdminURL:      getEnv("CADDY_ADMIN_URL", "http://localhost:2019"),
 		CaddyContainerName: getEnv("CADDY_CONTAINER_NAME", "infra-caddy-1"),
-		AccessLogPath:  getEnv("ACCESS_LOG_PATH", "../../infra/caddy/logs/access.log"),
-		CORSOrigins:    getEnvList("CORS_ORIGINS", []string{"http://localhost:5173"}),
-		SecureCookies:  getEnvBool("SECURE_COOKIES", false),
-		TLS:            getEnvBool("TLS_ENABLED", false),
-		LogLevel:       getEnv("LOG_LEVEL", "info"),
+		AccessLogPath:      getEnv("ACCESS_LOG_PATH", "../../infra/caddy/logs/access.log"),
+		CORSOrigins:        getEnvList("CORS_ORIGINS", []string{"http://localhost:5173"}),
+		SecureCookies:      getEnvBool("SECURE_COOKIES", false),
+		TLS:                getEnvBool("TLS_ENABLED", false),
+		LogLevel:           getEnv("LOG_LEVEL", "info"),
 
 		BuildTimeoutMinutes:     getEnvInt("BUILD_TIMEOUT_MINUTES", 30),
 		TaskTimeoutMinutes:      getEnvInt("TASK_TIMEOUT_MINUTES", 45),
@@ -140,18 +143,19 @@ func Load() (*Config, error) {
 		SMTPFromName:  getEnv("SMTP_FROM_NAME", "Self-Hosted PaaS"),
 		SMTPTLSMode:   getEnv("SMTP_TLS_MODE", "starttls"),
 
-		BackupRemoteEnabled: getEnvBool("BACKUP_REMOTE_ENABLED", false),
-		BackupS3Endpoint:    getEnv("BACKUP_S3_ENDPOINT", ""),
-		BackupS3Region:      getEnv("BACKUP_S3_REGION", "us-east-1"),
-		BackupS3Bucket:      getEnv("BACKUP_S3_BUCKET", ""),
-		BackupS3AccessKey:   getEnv("BACKUP_S3_ACCESS_KEY", ""),
-		BackupS3SecretKey:   getEnv("BACKUP_S3_SECRET_KEY", ""),
-		BackupS3Prefix:      getEnv("BACKUP_S3_PREFIX", "paas/"),
-		BackupS3UseSSL:      getEnvBool("BACKUP_S3_USE_SSL", true),
-		BackupRetainDays:    getEnvInt("BACKUP_RETAIN_DAYS", 30),
-		BackupRetainCount:   getEnvInt("BACKUP_RETAIN_COUNT", 14),
-		BackupScriptPath:    getEnv("BACKUP_SCRIPT_PATH", paasDir()+"/scripts/backup.sh"),
-		DatabaseBackupDir:   getEnv("DATABASE_BACKUP_DIR", paasDir()+"/backups/databases"),
+		BackupRemoteEnabled:       getEnvBool("BACKUP_REMOTE_ENABLED", false),
+		BackupS3Endpoint:          getEnv("BACKUP_S3_ENDPOINT", ""),
+		BackupS3Region:            getEnv("BACKUP_S3_REGION", "us-east-1"),
+		BackupS3Bucket:            getEnv("BACKUP_S3_BUCKET", ""),
+		BackupS3AccessKey:         getEnv("BACKUP_S3_ACCESS_KEY", ""),
+		BackupS3SecretKey:         getEnv("BACKUP_S3_SECRET_KEY", ""),
+		BackupS3Prefix:            getEnv("BACKUP_S3_PREFIX", "paas/"),
+		BackupS3UseSSL:            getEnvBool("BACKUP_S3_USE_SSL", true),
+		BackupRetainDays:          getEnvInt("BACKUP_RETAIN_DAYS", 30),
+		BackupRetainCount:         getEnvInt("BACKUP_RETAIN_COUNT", 14),
+		BackupScriptPath:          getEnv("BACKUP_SCRIPT_PATH", paasDir()+"/scripts/backup.sh"),
+		DatabaseBackupDir:         getEnv("DATABASE_BACKUP_DIR", paasDir()+"/backups/databases"),
+		DatabaseBackupHelperImage: getEnv("DATABASE_BACKUP_HELPER_IMAGE", "alpine:3.20"),
 	}
 
 	if cfg.JWTSecret == "" {

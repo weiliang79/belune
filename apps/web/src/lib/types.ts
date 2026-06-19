@@ -154,7 +154,7 @@ export interface ApplicationLog {
 export interface Database {
   id: string;
   project_id: string;
-  type: "postgres" | "mysql" | "redis" | "mongo";
+  type: "postgres" | "mysql" | "redis" | "mongo" | "other";
   name: string;
   slug: string;
   version: string;
@@ -164,6 +164,13 @@ export interface Database {
   cpu_limit: number;
   memory_limit: number;
   host_port: number | null;
+  // "other" type only:
+  image: string | null;
+  container_port: number | null;
+  data_dir: string | null;
+  backup_mode: "none" | "volume_snapshot" | "command";
+  backup_command: string | null;
+  restore_command: string | null;
   created_at: string;
   credentials?: Record<string, string>;
   connection_string?: string;

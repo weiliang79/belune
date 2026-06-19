@@ -5,8 +5,12 @@ SELECT * FROM databases WHERE project_id = $1 ORDER BY created_at DESC;
 SELECT * FROM databases WHERE id = $1;
 
 -- name: CreateDatabase :one
-INSERT INTO databases (project_id, type, name, slug, version, status, internal_host, internal_port, credentials_encrypted)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+INSERT INTO databases (
+    project_id, type, name, slug, version, status, internal_host, internal_port,
+    credentials_encrypted, image, container_port, data_dir, backup_mode,
+    backup_command, restore_command
+)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
 RETURNING *;
 
 -- name: UpdateDatabaseStatus :one
