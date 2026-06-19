@@ -90,6 +90,9 @@ type Config struct {
 	// Path to backup.sh reachable from the API process. Defaults to
 	// $PAAS_DIR/scripts/backup.sh (falls back to /opt/paas/scripts/backup.sh).
 	BackupScriptPath string
+	// Local directory where managed-database logical dumps are written before
+	// (optional) upload to S3. Defaults to $PAAS_DIR/backups/databases.
+	DatabaseBackupDir string
 }
 
 func Load() (*Config, error) {
@@ -148,6 +151,7 @@ func Load() (*Config, error) {
 		BackupRetainDays:    getEnvInt("BACKUP_RETAIN_DAYS", 30),
 		BackupRetainCount:   getEnvInt("BACKUP_RETAIN_COUNT", 14),
 		BackupScriptPath:    getEnv("BACKUP_SCRIPT_PATH", paasDir()+"/scripts/backup.sh"),
+		DatabaseBackupDir:   getEnv("DATABASE_BACKUP_DIR", paasDir()+"/backups/databases"),
 	}
 
 	if cfg.JWTSecret == "" {

@@ -93,6 +93,18 @@ type Database struct {
 	HostPort             pgtype.Int4        `json:"host_port"`
 }
 
+type DatabaseBackup struct {
+	ID         pgtype.UUID        `json:"id"`
+	DatabaseID pgtype.UUID        `json:"database_id"`
+	StartedAt  pgtype.Timestamptz `json:"started_at"`
+	FinishedAt pgtype.Timestamptz `json:"finished_at"`
+	Status     string             `json:"status"`
+	LocalPath  pgtype.Text        `json:"local_path"`
+	RemoteKey  pgtype.Text        `json:"remote_key"`
+	SizeBytes  int64              `json:"size_bytes"`
+	Error      pgtype.Text        `json:"error"`
+}
+
 type Deployment struct {
 	ID              pgtype.UUID        `json:"id"`
 	ApplicationID   pgtype.UUID        `json:"application_id"`

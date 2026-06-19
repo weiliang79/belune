@@ -1,4 +1,4 @@
-import type { Database } from "@/lib/types";
+import type { Database, DatabaseBackup } from "@/lib/types";
 import { api } from "./client";
 
 export function listDatabases(projectId: string) {
@@ -46,6 +46,30 @@ export function setDatabaseExternalAccess(
   return api.post<{ status: string }>(
     `/projects/${projectId}/databases/${databaseId}/external-access`,
     { enabled },
+  );
+}
+
+export function listDatabaseBackups(projectId: string, databaseId: string) {
+  return api.get<DatabaseBackup[]>(
+    `/projects/${projectId}/databases/${databaseId}/backups`,
+  );
+}
+
+export function backupDatabase(projectId: string, databaseId: string) {
+  return api.post<{ status: string }>(
+    `/projects/${projectId}/databases/${databaseId}/backups`,
+    {},
+  );
+}
+
+export function restoreDatabase(
+  projectId: string,
+  databaseId: string,
+  backupId: string,
+) {
+  return api.post<{ status: string }>(
+    `/projects/${projectId}/databases/${databaseId}/restore`,
+    { backup_id: backupId },
   );
 }
 

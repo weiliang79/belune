@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/hibiken/asynq"
@@ -438,6 +439,182 @@ func (h *Handler) UpdateDatabase(w http.ResponseWriter, r *http.Request) {
 	})
 
 	writeJSON(w, http.StatusOK, db)
+}
+
+// backupSupportedTypes are the engines with an in-image logical-dump tool.
+// redis (cache) and "other" engines fall back to volume snapshots (later version).
+var backupSupportedTypes = map[string]bool{
+	"postgres": true,
+	"mysql":    true,
+	"mongo":    true,
+}
+
+type databaseBackupResponse struct {
+	ID         string     `json:"id"`
+	Status     string     `json:"status"`
+	SizeBytes  int64      `json:"size_bytes"`
+	HasRemote  bool       `json:"has_remote"`
+	StartedAt  time.Time  `json:"started_at"`
+	FinishedAt *time.Time `json:"finished_at,omitempty"`
+	Error      string     `json:"error,omitempty"`
+}
+
+func toBackupResponse(b generated.DatabaseBackup) databaseBackupResponse {
+	resp := databaseBackupResponse{
+		ID:        uuidToString(b.ID),
+		Status:    b.Status,
+		SizeBytes: b.SizeBytes,
+		HasRemote: b.RemoteKey.Valid,
+		StartedAt: b.StartedAt.Time,
+	}
+	if b.FinishedAt.Valid {
+		t := b.FinishedAt.Time
+		resp.FinishedAt = &t
+	}
+	if b.Error.Valid {
+		resp.Error = b.Error.String
+	}
+	return resp
+}
+
+// ListDatabaseBackups returns the recent backup runs for a database (newest first).
+func (h *Handler) ListDatabaseBackups(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "databaseId")
+	var dbUUID pgtype.UUID
+	if err := dbUUID.Scan(id); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid database id")
+		return
+	}
+	if !h.canAccessDatabase(r, dbUUID) {
+		writeError(w, http.StatusForbidden, "access denied")
+		return
+	}
+
+	backups, err := h.queries.ListDatabaseBackups(r.Context(), generated.ListDatabaseBackupsParams{
+		DatabaseID: dbUUID,
+		Limit:      50,
+	})
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to list backups")
+		return
+	}
+
+	resp := make([]databaseBackupResponse, 0, len(backups))
+	for _, b := range backups {
+		resp = append(resp, toBackupResponse(b))
+	}
+	writeJSON(w, http.StatusOK, resp)
+}
+
+// BackupDatabase enqueues an online logical-dump backup of a running database.
+func (h *Handler) BackupDatabase(w http.ResponseWriter, r *http.Request) {
+	databaseID := chi.URLParam(r, "databaseId")
+	var dbUUID pgtype.UUID
+	if err := dbUUID.Scan(databaseID); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid database id")
+		return
+	}
+	if !h.canAccessDatabase(r, dbUUID) {
+		writeError(w, http.StatusForbidden, "access denied")
+		return
+	}
+
+	db, err := h.queries.GetDatabase(r.Context(), dbUUID)
+	if err != nil {
+		writeError(w, http.StatusNotFound, "database not found")
+		return
+	}
+	if !backupSupportedTypes[db.Type] {
+		writeError(w, http.StatusBadRequest, fmt.Sprintf("logical backup is not supported for %s", db.Type))
+		return
+	}
+	if db.Status != status.DatabaseRunning {
+		writeError(w, http.StatusConflict, "database must be running to back up")
+		return
+	}
+
+	payload, err := json.Marshal(map[string]any{"database_id": databaseID})
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to create backup task")
+		return
+	}
+	if _, err := h.asynq.Enqueue(asynq.NewTask("backup_db", payload), asynq.Queue("default")); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to enqueue backup task")
+		return
+	}
+
+	h.audit(r, "backup_database", "database", databaseID, nil)
+	writeJSON(w, http.StatusAccepted, map[string]string{"status": "running"})
+}
+
+type restoreDatabaseRequest struct {
+	BackupID string `json:"backup_id"`
+}
+
+// RestoreDatabase enqueues a restore of a database from one of its recorded backups.
+func (h *Handler) RestoreDatabase(w http.ResponseWriter, r *http.Request) {
+	databaseID := chi.URLParam(r, "databaseId")
+	var dbUUID pgtype.UUID
+	if err := dbUUID.Scan(databaseID); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid database id")
+		return
+	}
+	if !h.canAccessDatabase(r, dbUUID) {
+		writeError(w, http.StatusForbidden, "access denied")
+		return
+	}
+
+	var req restoreDatabaseRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	var backupUUID pgtype.UUID
+	if err := backupUUID.Scan(req.BackupID); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid backup id")
+		return
+	}
+
+	db, err := h.queries.GetDatabase(r.Context(), dbUUID)
+	if err != nil {
+		writeError(w, http.StatusNotFound, "database not found")
+		return
+	}
+	if !backupSupportedTypes[db.Type] {
+		writeError(w, http.StatusBadRequest, fmt.Sprintf("restore is not supported for %s", db.Type))
+		return
+	}
+	if db.Status != status.DatabaseRunning {
+		writeError(w, http.StatusConflict, "database must be running to restore")
+		return
+	}
+
+	backup, err := h.queries.GetDatabaseBackup(r.Context(), backupUUID)
+	if err != nil {
+		writeError(w, http.StatusNotFound, "backup not found")
+		return
+	}
+	if backup.DatabaseID != db.ID {
+		writeError(w, http.StatusBadRequest, "backup does not belong to this database")
+		return
+	}
+	if backup.Status != "succeeded" {
+		writeError(w, http.StatusConflict, "only a succeeded backup can be restored")
+		return
+	}
+
+	payload, err := json.Marshal(map[string]any{"database_id": databaseID, "backup_id": req.BackupID})
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to create restore task")
+		return
+	}
+	if _, err := h.asynq.Enqueue(asynq.NewTask("restore_db", payload), asynq.Queue("critical")); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to enqueue restore task")
+		return
+	}
+
+	h.audit(r, "restore_database", "database", databaseID, map[string]any{"backup_id": req.BackupID})
+	writeJSON(w, http.StatusAccepted, map[string]string{"status": "restoring"})
 }
 
 func (h *Handler) DeleteDatabase(w http.ResponseWriter, r *http.Request) {

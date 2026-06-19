@@ -76,6 +76,22 @@ func (s *Service) Upload(ctx context.Context, localPath string) (string, error) 
 	return key, nil
 }
 
+// Download fetches the object at key into localPath, creating parent dirs as
+// needed. Used to restore a managed-database backup from S3.
+func (s *Service) Download(ctx context.Context, key, localPath string) error {
+	if err := s.init(); err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(localPath), 0o755); err != nil {
+		return fmt.Errorf("create download dir: %w", err)
+	}
+	if err := s.client.FGetObject(ctx, s.cfg.BackupS3Bucket, key, localPath,
+		minio.GetObjectOptions{}); err != nil {
+		return fmt.Errorf("download from s3: %w", err)
+	}
+	return nil
+}
+
 // List returns all backup objects under the configured prefix, sorted oldest-first.
 func (s *Service) List(ctx context.Context) ([]BackupObject, error) {
 	if err := s.init(); err != nil {

@@ -7,6 +7,7 @@ import (
 
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/pkg/stdcopy"
 
 	"github.com/ungweiliang/selfhost-paas/internal/runtime"
 )
@@ -65,4 +66,50 @@ func (c *Client) ContainerExecResize(ctx context.Context, execID string, rows, c
 		Height: rows,
 		Width:  cols,
 	})
+}
+
+// ContainerExec runs cmd in the named container without a TTY and blocks until
+// it exits, returning the exit code. The non-TTY attach stream is multiplexed,
+// so stdout/stderr are demuxed with stdcopy. stdin is streamed first (and its
+// write side closed) so dump/restore pipes terminate cleanly.
+func (c *Client) ContainerExec(ctx context.Context, containerName string, cmd []string, stdin io.Reader, stdout, stderr io.Writer) (int, error) {
+	execResp, err := c.cli.ContainerExecCreate(ctx, containerName, container.ExecOptions{
+		AttachStdin:  stdin != nil,
+		AttachStdout: true,
+		AttachStderr: true,
+		Tty:          false,
+		Cmd:          cmd,
+	})
+	if err != nil {
+		return -1, fmt.Errorf("exec create: %w", err)
+	}
+
+	hr, err := c.cli.ContainerExecAttach(ctx, execResp.ID, container.ExecAttachOptions{})
+	if err != nil {
+		return -1, fmt.Errorf("exec attach: %w", err)
+	}
+	defer hr.Close()
+
+	if stdin != nil {
+		go func() {
+			_, _ = io.Copy(hr.Conn, stdin)
+			_ = hr.CloseWrite()
+		}()
+	}
+
+	if stdout == nil {
+		stdout = io.Discard
+	}
+	if stderr == nil {
+		stderr = io.Discard
+	}
+	if _, err := stdcopy.StdCopy(stdout, stderr, hr.Reader); err != nil {
+		return -1, fmt.Errorf("exec stream copy: %w", err)
+	}
+
+	inspect, err := c.cli.ContainerExecInspect(ctx, execResp.ID)
+	if err != nil {
+		return -1, fmt.Errorf("exec inspect: %w", err)
+	}
+	return inspect.ExitCode, nil
 }

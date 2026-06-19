@@ -74,3 +74,32 @@ export function useSetDatabaseExternalAccess(
     },
   });
 }
+
+export function useDatabaseBackups(projectId: string, databaseId: string) {
+  return useQuery({
+    queryKey: queryKeys.databases.backups(projectId, databaseId),
+    queryFn: () => databasesApi.listDatabaseBackups(projectId, databaseId),
+    // Poll faster while a backup is running so the row resolves promptly.
+    refetchInterval: (query) =>
+      query.state.data?.some((b) => b.status === "running") ? 3000 : false,
+  });
+}
+
+export function useBackupDatabase(projectId: string, databaseId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => databasesApi.backupDatabase(projectId, databaseId),
+    onSuccess: () => {
+      qc.invalidateQueries({
+        queryKey: queryKeys.databases.backups(projectId, databaseId),
+      });
+    },
+  });
+}
+
+export function useRestoreDatabase(projectId: string, databaseId: string) {
+  return useMutation({
+    mutationFn: (backupId: string) =>
+      databasesApi.restoreDatabase(projectId, databaseId, backupId),
+  });
+}

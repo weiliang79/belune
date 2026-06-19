@@ -22,6 +22,10 @@ type MockContainerRuntime struct {
 	CreateCalls     []runtime.ContainerConfig
 	PullCalls       []string // image tags passed to PullImage
 	ListContainers_ []runtime.ContainerInfo
+
+	// ExecFunc, when set, backs ContainerExec — lets tests simulate dump output
+	// and exit codes. When nil, ContainerExec is a no-op returning exit 0.
+	ExecFunc func(ctx context.Context, container string, cmd []string, stdin io.Reader, stdout, stderr io.Writer) (int, error)
 }
 
 func (m *MockContainerRuntime) CreateContainer(_ context.Context, cfg runtime.ContainerConfig) (string, error) {
@@ -117,6 +121,13 @@ func (m *MockContainerRuntime) ContainerExecTTY(_ context.Context, _ string, _ [
 
 func (m *MockContainerRuntime) ContainerExecResize(_ context.Context, _ string, _, _ uint) error {
 	return nil
+}
+
+func (m *MockContainerRuntime) ContainerExec(ctx context.Context, container string, cmd []string, stdin io.Reader, stdout, stderr io.Writer) (int, error) {
+	if m.ExecFunc != nil {
+		return m.ExecFunc(ctx, container, cmd, stdin, stdout, stderr)
+	}
+	return 0, nil
 }
 
 // MockProxyManager implements proxy.ProxyManager for testing.

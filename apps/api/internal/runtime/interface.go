@@ -104,6 +104,12 @@ type ContainerRuntime interface {
 	ContainerExecTTY(ctx context.Context, containerName string, cmd []string) (*TerminalExecSession, error)
 	// ContainerExecResize resizes the PTY for the given exec session.
 	ContainerExecResize(ctx context.Context, execID string, rows, cols uint) error
+	// ContainerExec runs a command in the named container without a TTY and
+	// blocks until it exits. stdin (if non-nil) is streamed to the command;
+	// stdout and stderr are written to the respective writers (either may be
+	// nil to discard). Returns the command's exit code. Used for managed-database
+	// logical dump/restore (pg_dump → stdout file, restore ← stdin file).
+	ContainerExec(ctx context.Context, containerName string, cmd []string, stdin io.Reader, stdout, stderr io.Writer) (int, error)
 }
 
 // ContainerEvent represents a Docker container lifecycle event.

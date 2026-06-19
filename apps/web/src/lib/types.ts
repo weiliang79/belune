@@ -176,6 +176,16 @@ export interface Database {
   };
 }
 
+export interface DatabaseBackup {
+  id: string;
+  status: "running" | "succeeded" | "failed";
+  size_bytes: number;
+  has_remote: boolean;
+  started_at: string;
+  finished_at?: string;
+  error?: string;
+}
+
 export interface GitCredential {
   id: string;
   name: string;
