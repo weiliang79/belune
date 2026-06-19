@@ -205,10 +205,13 @@ function DatabaseDetailPage() {
 
       {db.status === "failed" && (
         <Card>
-          <CardContent className="py-6">
-            <p className="text-destructive text-sm">
-              Database provisioning failed. You can delete this database and try
-              again.
+          <CardContent className="space-y-1 py-6">
+            <p className="text-destructive text-sm font-medium">
+              This database is in a failed state.
+            </p>
+            <p className="text-muted-foreground text-sm">
+              Its data volume is preserved. Retry the last operation, or remove
+              the database from the Danger Zone below if you no longer need it.
             </p>
           </CardContent>
         </Card>

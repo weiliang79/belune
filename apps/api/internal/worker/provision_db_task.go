@@ -91,6 +91,13 @@ func (h *TaskHandler) HandleReconfigureDBTask(ctx context.Context, t *asynq.Task
 		return fmt.Errorf("credentials: %w", err)
 	}
 
+	// Prior host port, for rollback if the new configuration fails to come up.
+	// db was read before any change, so this is the pre-toggle value.
+	var oldHostPort int32
+	if db.HostPort.Valid {
+		oldHostPort = db.HostPort.Int32
+	}
+
 	// Allocate the loopback port up front so a failure leaves the old container
 	// untouched. A fresh free port is taken each time external access is enabled.
 	var hostPort int32
@@ -107,8 +114,23 @@ func (h *TaskHandler) HandleReconfigureDBTask(ctx context.Context, t *asynq.Task
 	h.removeDBContainer(ctx, db.Slug)
 
 	if err := h.provisionDBContainer(ctx, db, creds, hostPort); err != nil {
-		h.failDatabase(ctx, dbID, err.Error())
-		return err
+		// A failed external-access toggle must not take the database offline.
+		// Roll back to the prior configuration so the database comes back up;
+		// the toggle simply doesn't take effect. Only if rollback also fails is
+		// the database genuinely broken (and its volume data is still intact).
+		slog.Warn("reconfigure failed; rolling back to previous state",
+			"database_id", payload.DatabaseID, "error", err)
+		h.removeDBContainer(ctx, db.Slug)
+		if rbErr := h.provisionDBContainer(ctx, db, creds, oldHostPort); rbErr != nil {
+			h.failDatabase(ctx, dbID, fmt.Sprintf("reconfigure failed and rollback failed: %v", rbErr))
+			return fmt.Errorf("reconfigure rollback failed: %w", rbErr)
+		}
+		slog.Warn("reconfigure rolled back; database restored to previous state",
+			"database_id", payload.DatabaseID)
+		// Returning nil: the database is healthy in its prior state, so there is
+		// nothing to retry. The unchanged external_access state signals to the
+		// UI that the toggle did not take.
+		return nil
 	}
 
 	slog.Info("database reconfigured", "database_id", payload.DatabaseID, "external_access", payload.Enable, "host_port", hostPort)
