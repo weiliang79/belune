@@ -9,7 +9,11 @@ export function useDatabases(projectId: string) {
     // Fast while a database is provisioning; slow floor otherwise so changes
     // from other sessions still surface without hammering the API.
     refetchInterval: (query) =>
-      query.state.data?.some((d) => d.status === "creating") ? 3000 : 30000,
+      query.state.data?.some(
+        (d) => d.status === "creating" || d.status === "upgrading",
+      )
+        ? 3000
+        : 30000,
   });
 }
 
@@ -17,8 +21,10 @@ export function useDatabase(projectId: string, databaseId: string) {
   return useQuery({
     queryKey: queryKeys.databases.detail(projectId, databaseId),
     queryFn: () => databasesApi.getDatabase(projectId, databaseId),
-    refetchInterval: (query) =>
-      query.state.data?.status === "creating" ? 3000 : false,
+    refetchInterval: (query) => {
+      const status = query.state.data?.status;
+      return status === "creating" || status === "upgrading" ? 3000 : false;
+    },
   });
 }
 
@@ -101,5 +107,18 @@ export function useRestoreDatabase(projectId: string, databaseId: string) {
   return useMutation({
     mutationFn: (backupId: string) =>
       databasesApi.restoreDatabase(projectId, databaseId, backupId),
+  });
+}
+
+export function useUpgradeDatabase(projectId: string, databaseId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (targetVersion: string) =>
+      databasesApi.upgradeDatabase(projectId, databaseId, targetVersion),
+    onSuccess: () => {
+      qc.invalidateQueries({
+        queryKey: queryKeys.databases.detail(projectId, databaseId),
+      });
+    },
   });
 }

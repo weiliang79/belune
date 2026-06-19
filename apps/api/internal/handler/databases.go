@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -127,6 +128,13 @@ func (h *Handler) CreateDatabase(w http.ResponseWriter, r *http.Request) {
 		}
 		if req.DataDir == "" {
 			req.DataDir = "/data"
+		}
+		// Guard the volume mount path: a restore (volume_snapshot) wipes the
+		// data dir, so an absolute, non-root path is required to avoid wiping
+		// unintended container paths.
+		if !strings.HasPrefix(req.DataDir, "/") || req.DataDir == "/" {
+			writeError(w, http.StatusBadRequest, "data_dir must be an absolute path and not the container root")
+			return
 		}
 		if req.BackupMode == "" {
 			req.BackupMode = "volume_snapshot"
@@ -606,7 +614,9 @@ func (h *Handler) BackupDatabase(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "failed to create backup task")
 		return
 	}
-	if _, err := h.asynq.Enqueue(asynq.NewTask("backup_db", payload), asynq.Queue("default")); err != nil {
+	// MaxRetry(1): a backup is user-triggered and records a run row on each
+	// attempt, so avoid asynq's default 25 retries spraying failed rows.
+	if _, err := h.asynq.Enqueue(asynq.NewTask("backup_db", payload), asynq.Queue("default"), asynq.MaxRetry(1)); err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to enqueue backup task")
 		return
 	}
@@ -683,6 +693,86 @@ func (h *Handler) RestoreDatabase(w http.ResponseWriter, r *http.Request) {
 
 	h.audit(r, "restore_database", "database", databaseID, map[string]any{"backup_id": req.BackupID})
 	writeJSON(w, http.StatusAccepted, map[string]string{"status": "restoring"})
+}
+
+// databaseUpgradable reports whether a database supports the guarded major-version
+// upgrade (logical dump-and-reload engines only; "other" and redis are excluded).
+func databaseUpgradable(dbType string) bool {
+	return dbType == "postgres" || dbType == "mysql" || dbType == "mongo"
+}
+
+type upgradeDatabaseRequest struct {
+	TargetVersion string `json:"target_version"`
+}
+
+// UpgradeDatabase enqueues a guarded major-version upgrade: the worker dumps the
+// current data, rebuilds the container at the target version, and restores the
+// dump (rolling back to the prior version on failure). Brief downtime.
+func (h *Handler) UpgradeDatabase(w http.ResponseWriter, r *http.Request) {
+	databaseID := chi.URLParam(r, "databaseId")
+	var dbUUID pgtype.UUID
+	if err := dbUUID.Scan(databaseID); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid database id")
+		return
+	}
+	if !h.canAccessDatabase(r, dbUUID) {
+		writeError(w, http.StatusForbidden, "access denied")
+		return
+	}
+
+	var req upgradeDatabaseRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	req.TargetVersion = strings.TrimSpace(req.TargetVersion)
+	if req.TargetVersion == "" {
+		writeError(w, http.StatusBadRequest, "target_version is required")
+		return
+	}
+
+	db, err := h.queries.GetDatabase(r.Context(), dbUUID)
+	if err != nil {
+		writeError(w, http.StatusNotFound, "database not found")
+		return
+	}
+	if !databaseUpgradable(db.Type) {
+		writeError(w, http.StatusBadRequest, fmt.Sprintf("guarded upgrade is not supported for %s", db.Type))
+		return
+	}
+	if db.Status != status.DatabaseRunning {
+		writeError(w, http.StatusConflict, "database must be running to upgrade")
+		return
+	}
+	if req.TargetVersion == db.Version {
+		writeError(w, http.StatusBadRequest, "target_version matches the current version")
+		return
+	}
+
+	if _, err := h.queries.UpdateDatabaseStatus(r.Context(), generated.UpdateDatabaseStatusParams{
+		ID:     dbUUID,
+		Status: status.DatabaseUpgrading,
+	}); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to update database")
+		return
+	}
+
+	payload, err := json.Marshal(map[string]any{"database_id": databaseID, "target_version": req.TargetVersion})
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to create upgrade task")
+		return
+	}
+	// No auto-retry: the worker performs its own dump-and-rollback; a blind retry
+	// could re-run a destructive step.
+	if _, err := h.asynq.Enqueue(asynq.NewTask("upgrade_db", payload), asynq.Queue("critical"), asynq.MaxRetry(0)); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to enqueue upgrade task")
+		return
+	}
+
+	h.audit(r, "upgrade_database", "database", databaseID, map[string]any{
+		"from": db.Version, "to": req.TargetVersion,
+	})
+	writeJSON(w, http.StatusAccepted, map[string]string{"status": status.DatabaseUpgrading})
 }
 
 func (h *Handler) DeleteDatabase(w http.ResponseWriter, r *http.Request) {

@@ -280,6 +280,7 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService,
 			r.Get("/api/projects/{projectId}/databases/{databaseId}/backups", h.ListDatabaseBackups)
 			r.Post("/api/projects/{projectId}/databases/{databaseId}/backups", h.BackupDatabase)
 			r.Post("/api/projects/{projectId}/databases/{databaseId}/restore", h.RestoreDatabase)
+			r.Post("/api/projects/{projectId}/databases/{databaseId}/upgrade", h.UpgradeDatabase)
 			r.Delete("/api/projects/{projectId}/databases/{databaseId}", h.DeleteDatabase)
 		})
 

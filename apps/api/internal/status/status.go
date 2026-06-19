@@ -19,10 +19,11 @@ const (
 
 // Database statuses
 const (
-	DatabaseCreating = "creating"
-	DatabaseRunning  = "running"
-	DatabaseStopped  = "stopped"
-	DatabaseFailed   = "failed"
+	DatabaseCreating  = "creating"
+	DatabaseRunning   = "running"
+	DatabaseStopped   = "stopped"
+	DatabaseFailed    = "failed"
+	DatabaseUpgrading = "upgrading"
 )
 
 // validDeploymentTransitions defines the allowed deployment status state machine.

@@ -327,3 +327,40 @@ func (q *Queries) UpdateDatabaseStatus(ctx context.Context, arg UpdateDatabaseSt
 	)
 	return i, err
 }
+
+const updateDatabaseVersion = `-- name: UpdateDatabaseVersion :one
+UPDATE databases SET version = $2 WHERE id = $1 RETURNING id, project_id, type, name, slug, version, status, internal_host, internal_port, credentials_encrypted, created_at, cpu_limit, memory_limit, host_port, image, container_port, data_dir, backup_mode, backup_command, restore_command
+`
+
+type UpdateDatabaseVersionParams struct {
+	ID      pgtype.UUID `json:"id"`
+	Version string      `json:"version"`
+}
+
+func (q *Queries) UpdateDatabaseVersion(ctx context.Context, arg UpdateDatabaseVersionParams) (Database, error) {
+	row := q.db.QueryRow(ctx, updateDatabaseVersion, arg.ID, arg.Version)
+	var i Database
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.Type,
+		&i.Name,
+		&i.Slug,
+		&i.Version,
+		&i.Status,
+		&i.InternalHost,
+		&i.InternalPort,
+		&i.CredentialsEncrypted,
+		&i.CreatedAt,
+		&i.CpuLimit,
+		&i.MemoryLimit,
+		&i.HostPort,
+		&i.Image,
+		&i.ContainerPort,
+		&i.DataDir,
+		&i.BackupMode,
+		&i.BackupCommand,
+		&i.RestoreCommand,
+	)
+	return i, err
+}

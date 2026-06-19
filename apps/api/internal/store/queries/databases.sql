@@ -22,6 +22,9 @@ UPDATE databases SET status = $2, internal_host = $3, internal_port = $4, host_p
 -- name: UpdateDatabaseResources :one
 UPDATE databases SET cpu_limit = $2, memory_limit = $3 WHERE id = $1 RETURNING *;
 
+-- name: UpdateDatabaseVersion :one
+UPDATE databases SET version = $2 WHERE id = $1 RETURNING *;
+
 -- name: DeleteDatabase :exec
 DELETE FROM databases WHERE id = $1;
 

@@ -32,6 +32,7 @@ import {
   useDatabaseBackups,
   useBackupDatabase,
   useRestoreDatabase,
+  useUpgradeDatabase,
 } from "@/lib/hooks/use-databases";
 import { useProject } from "@/lib/hooks/use-projects";
 import {
@@ -64,6 +65,11 @@ function dbBackupEnabled(db: Database): boolean {
 // imageLabel shows the engine:tag for known engines and the full image for "other".
 function imageLabel(db: Database): string {
   return db.type === "other" ? (db.image ?? "—") : `${db.type}:${db.version}`;
+}
+
+// Engines eligible for the guarded major-version upgrade (logical dump-and-reload).
+function dbUpgradable(db: Database): boolean {
+  return db.type === "postgres" || db.type === "mysql" || db.type === "mongo";
 }
 
 export const Route = createFileRoute(
@@ -150,14 +156,20 @@ function DatabaseDetailPage() {
         </div>
       </div>
 
-      {db.status === "creating" && (
+      {(db.status === "creating" || db.status === "upgrading") && (
         <Card>
           <CardContent className="flex items-center gap-3 py-6">
             <Loader2 className="h-5 w-5 animate-spin" />
             <div>
-              <p className="font-medium">Provisioning database...</p>
+              <p className="font-medium">
+                {db.status === "upgrading"
+                  ? "Upgrading database…"
+                  : "Provisioning database..."}
+              </p>
               <p className="text-muted-foreground text-sm">
-                This usually takes a few seconds.
+                {db.status === "upgrading"
+                  ? "Dumping, rebuilding at the new version, and restoring. The database is briefly offline."
+                  : "This usually takes a few seconds."}
               </p>
             </div>
           </CardContent>
@@ -438,10 +450,23 @@ const MB = 1024 * 1024;
  */
 function AdvancedCard({ db }: { db: Database }) {
   const update = useUpdateDatabase(db.project_id, db.id);
+  const upgrade = useUpgradeDatabase(db.project_id, db.id);
   const [cpu, setCpu] = useState(String(db.cpu_limit ?? 0));
   const [memMb, setMemMb] = useState(
     String(db.memory_limit ? Math.round(db.memory_limit / MB) : 0),
   );
+  const [targetVersion, setTargetVersion] = useState("");
+
+  const handleUpgrade = () => {
+    const target = targetVersion.trim();
+    if (!target) return;
+    toast.promise(upgrade.mutateAsync(target), {
+      loading: "Starting upgrade…",
+      success: "Upgrade started — the database will be briefly offline",
+      error: (err) => err.message,
+    });
+    setTargetVersion("");
+  };
 
   const handleSave = () => {
     const cpuVal = Number(cpu);
@@ -505,19 +530,67 @@ function AdvancedCard({ db }: { db: Database }) {
 
         <Separator />
 
-        {/* Image — read-only */}
+        {/* Image — read-only, with guarded upgrade for known engines */}
         <div className="flex items-start justify-between gap-3">
           <div>
             <p className="text-sm font-medium">Image</p>
             <p className="text-text-faint text-xs">
               {db.type === "other"
                 ? "Change it by recreating the database."
-                : "Major version upgrades are a separate guarded flow."}
+                : "Major version upgrades dump, rebuild, and restore (brief downtime)."}
             </p>
           </div>
-          <Badge variant="outline" className="font-mono">
-            {imageLabel(db)}
-          </Badge>
+          <div className="flex items-center gap-2">
+            <Badge variant="outline" className="font-mono">
+              {imageLabel(db)}
+            </Badge>
+            {dbUpgradable(db) && (
+              <AlertDialog>
+                <AlertDialogTrigger
+                  render={<Button variant="outline" size="sm" />}
+                >
+                  Upgrade
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>
+                      Upgrade {db.type} version
+                    </AlertDialogTitle>
+                    <AlertDialogDescription>
+                      This takes a dump of{" "}
+                      <span className="font-medium">{db.name}</span>, rebuilds
+                      the container at the new version, and restores the data.
+                      The database is briefly offline. If anything fails it
+                      rolls back to {db.version}. A pre-upgrade backup is kept.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <div className="space-y-2">
+                    <Label htmlFor="upgrade-version">
+                      Target version (current: {db.version})
+                    </Label>
+                    <Input
+                      id="upgrade-version"
+                      value={targetVersion}
+                      onChange={(e) => setTargetVersion(e.target.value)}
+                      placeholder="e.g. 17"
+                    />
+                  </div>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction
+                      onClick={handleUpgrade}
+                      disabled={
+                        !targetVersion.trim() ||
+                        targetVersion.trim() === db.version
+                      }
+                    >
+                      Upgrade
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            )}
+          </div>
         </div>
 
         {/* Data directory — read-only ("other" only) */}

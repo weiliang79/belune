@@ -7,5 +7,5 @@
  */
 export const BRAND = {
   name: "homelab-paas",
-  version: "v0.0.20-alpha",
+  version: "v0.0.21-alpha",
 } as const;

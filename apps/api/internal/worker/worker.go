@@ -104,6 +104,7 @@ func (w *Worker) Start() error {
 	mux.HandleFunc(TypeReconfigureDB, w.handler.HandleReconfigureDBTask)
 	mux.HandleFunc(TypeBackupDB, w.handler.HandleBackupDBTask)
 	mux.HandleFunc(TypeRestoreDB, w.handler.HandleRestoreDBTask)
+	mux.HandleFunc(TypeUpgradeDB, w.handler.HandleUpgradeDBTask)
 	mux.HandleFunc(TypeRetentionCleanup, func(ctx context.Context, t *asynq.Task) error {
 		w.handler.HandleRetentionCleanup(ctx)
 		return nil

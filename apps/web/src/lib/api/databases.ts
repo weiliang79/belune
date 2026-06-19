@@ -81,6 +81,17 @@ export function restoreDatabase(
   );
 }
 
+export function upgradeDatabase(
+  projectId: string,
+  databaseId: string,
+  targetVersion: string,
+) {
+  return api.post<{ status: string }>(
+    `/projects/${projectId}/databases/${databaseId}/upgrade`,
+    { target_version: targetVersion },
+  );
+}
+
 export function deleteDatabase(projectId: string, databaseId: string) {
   return api.delete<void>(`/projects/${projectId}/databases/${databaseId}`);
 }
