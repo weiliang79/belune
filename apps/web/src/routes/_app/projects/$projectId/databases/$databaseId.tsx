@@ -28,14 +28,21 @@ import {
   useDatabase,
   useDeleteDatabase,
   useUpdateDatabase,
+  useSetDatabaseExternalAccess,
 } from "@/lib/hooks/use-databases";
 import { useProject } from "@/lib/hooks/use-projects";
-import { Database as DatabaseIcon, Loader2, Trash2 } from "lucide-react";
+import {
+  Database as DatabaseIcon,
+  Loader2,
+  Trash2,
+  TriangleAlert as AlertTriangleIcon,
+} from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AppBreadcrumb } from "@/lib/components/app-breadcrumb";
 import { StatusBadge } from "@/lib/components/status-badge";
 import { CopyButton } from "@/lib/components/copy-button";
 import { formatBytes } from "@/lib/utils/format";
+import { cn } from "@/lib/utils";
 import type { Database } from "@/lib/types";
 
 export const Route = createFileRoute(
@@ -207,6 +214,8 @@ function DatabaseDetailPage() {
         </Card>
       )}
 
+      {db.status === "running" && <ExternalAccessCard db={db} />}
+
       {db.status === "running" && <AdvancedCard db={db} />}
 
       <Card>
@@ -255,6 +264,140 @@ function DatabaseDetailPage() {
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+/** Per-engine localhost connection string reached through the SSH tunnel. */
+function localConnectionString(db: Database, localPort: number): string {
+  const c = db.credentials ?? {};
+  switch (db.type) {
+    case "postgres":
+      return `postgresql://${c.user}:${c.password}@localhost:${localPort}/${c.database}`;
+    case "mysql":
+      return `mysql://${c.user}:${c.password}@localhost:${localPort}/${c.database}`;
+    case "redis":
+      return `redis://:${c.password}@localhost:${localPort}`;
+    case "mongo":
+      return `mongodb://${c.username}:${c.password}@localhost:${localPort}`;
+    default:
+      return "";
+  }
+}
+
+/**
+ * External Access (SSH tunnel). Toggling binds/unbinds a loopback host port,
+ * which recreates the container — surfaced via the warning so the brief
+ * downtime isn't a surprise. The database is never exposed publicly.
+ */
+function ExternalAccessCard({ db }: { db: Database }) {
+  const setAccess = useSetDatabaseExternalAccess(db.project_id, db.id);
+  const ext = db.external_access;
+  const enabled = ext?.enabled ?? false;
+
+  const handleToggle = () => {
+    toast.promise(setAccess.mutateAsync(!enabled), {
+      loading: enabled
+        ? "Disabling external access…"
+        : "Enabling external access…",
+      success: enabled
+        ? "Disabling — recreating container…"
+        : "Enabling — recreating container…",
+      error: (err) => err.message,
+    });
+  };
+
+  const localPort = db.internal_port;
+  const sshHost = ext?.ssh_host || "<server-host>";
+  const sshUser = ext?.ssh_user || "<user>";
+  const sshCmd = `ssh -L ${localPort}:127.0.0.1:${ext?.host_port ?? ""} ${sshUser}@${sshHost}`;
+  const connStr = localConnectionString(db, localPort);
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>External Access</CardTitle>
+        <CardDescription>
+          Reach this database from your machine over an SSH tunnel. It is bound
+          to the server&apos;s loopback only — never exposed publicly.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {/* Toggle + recreate warning */}
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="text-sm font-medium">Enable external access</p>
+            <p className="text-text-faint text-xs">
+              Binds a loopback port for SSH tunneling.
+            </p>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={enabled}
+            aria-label="Enable external access"
+            disabled={setAccess.isPending}
+            onClick={handleToggle}
+            className={cn(
+              "focus-visible:ring-ring relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus-visible:ring-2 focus-visible:outline-none disabled:opacity-50",
+              enabled ? "bg-primary" : "bg-input",
+            )}
+          >
+            <span
+              className={cn(
+                "bg-background pointer-events-none inline-block h-4 w-4 rounded-full shadow-lg transition-transform",
+                enabled ? "translate-x-4" : "translate-x-0",
+              )}
+            />
+          </button>
+        </div>
+
+        <div className="bg-status-building-soft text-status-building ring-status-building-line flex items-start gap-2 rounded-md px-3 py-2 text-xs ring-1 ring-inset">
+          <AlertTriangleIcon
+            aria-hidden="true"
+            className="mt-0.5 size-3.5 shrink-0"
+          />
+          <span>
+            Toggling external access recreates the database container — expect a
+            few seconds of downtime. Your data is preserved (the volume is
+            reattached).
+          </span>
+        </div>
+
+        {/* Tunnel details — only when enabled */}
+        {enabled && ext?.host_port && (
+          <div className="space-y-3 border-t pt-4">
+            <div className="space-y-1.5">
+              <p className="text-muted-foreground text-xs">
+                SSH tunnel command
+              </p>
+              <div className="bg-muted flex items-center justify-between gap-2 rounded-md px-3 py-2">
+                <code className="text-xs break-all">{sshCmd}</code>
+                <CopyButton value={sshCmd} />
+              </div>
+            </div>
+
+            {connStr && (
+              <div className="space-y-1.5">
+                <p className="text-muted-foreground text-xs">
+                  Connection string (via tunnel)
+                </p>
+                <div className="bg-muted flex items-center justify-between gap-2 rounded-md px-3 py-2">
+                  <code className="text-xs break-all">{connStr}</code>
+                  <CopyButton value={connStr} />
+                </div>
+              </div>
+            )}
+
+            <p className="text-text-faint text-xs">
+              GUI clients (TablePlus, DBeaver, DataGrip) can use their built-in
+              SSH-tunnel option instead of running the command above. Once
+              connected, point the client at{" "}
+              <span className="font-mono">localhost:{localPort}</span>.
+            </p>
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 

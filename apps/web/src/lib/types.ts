@@ -168,6 +168,12 @@ export interface Database {
   credentials?: Record<string, string>;
   connection_string?: string;
   volume?: { name: string; size_bytes: number };
+  external_access?: {
+    enabled: boolean;
+    host_port?: number;
+    ssh_host?: string;
+    ssh_user?: string;
+  };
 }
 
 export interface GitCredential {

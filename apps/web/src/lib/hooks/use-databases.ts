@@ -58,3 +58,19 @@ export function useUpdateDatabase(projectId: string, databaseId: string) {
     },
   });
 }
+
+export function useSetDatabaseExternalAccess(
+  projectId: string,
+  databaseId: string,
+) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (enabled: boolean) =>
+      databasesApi.setDatabaseExternalAccess(projectId, databaseId, enabled),
+    onSuccess: () => {
+      qc.invalidateQueries({
+        queryKey: queryKeys.databases.detail(projectId, databaseId),
+      });
+    },
+  });
+}

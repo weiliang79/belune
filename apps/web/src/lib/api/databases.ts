@@ -38,6 +38,17 @@ export function updateDatabase(
   );
 }
 
+export function setDatabaseExternalAccess(
+  projectId: string,
+  databaseId: string,
+  enabled: boolean,
+) {
+  return api.post<{ status: string }>(
+    `/projects/${projectId}/databases/${databaseId}/external-access`,
+    { enabled },
+  );
+}
+
 export function deleteDatabase(projectId: string, databaseId: string) {
   return api.delete<void>(`/projects/${projectId}/databases/${databaseId}`);
 }
