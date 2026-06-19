@@ -56,11 +56,22 @@ type volumeInfo struct {
 	SizeBytes int64  `json:"size_bytes"`
 }
 
+// externalAccessInfo describes the SSH-tunnel loopback exposure. Enabled means a
+// host port is bound on 127.0.0.1; the frontend builds the ssh -L command and a
+// localhost connection string from these fields.
+type externalAccessInfo struct {
+	Enabled  bool   `json:"enabled"`
+	HostPort int32  `json:"host_port,omitempty"`
+	SSHHost  string `json:"ssh_host,omitempty"`
+	SSHUser  string `json:"ssh_user,omitempty"`
+}
+
 type databaseResponse struct {
 	generated.Database
-	Credentials      map[string]string `json:"credentials,omitempty"`
-	ConnectionString string            `json:"connection_string,omitempty"`
-	Volume           *volumeInfo       `json:"volume,omitempty"`
+	Credentials      map[string]string   `json:"credentials,omitempty"`
+	ConnectionString string              `json:"connection_string,omitempty"`
+	Volume           *volumeInfo         `json:"volume,omitempty"`
+	ExternalAccess   *externalAccessInfo `json:"external_access,omitempty"`
 }
 
 func (h *Handler) CreateDatabase(w http.ResponseWriter, r *http.Request) {
@@ -292,7 +303,84 @@ func (h *Handler) GetDatabase(w http.ResponseWriter, r *http.Request) {
 		resp.Volume = &volumeInfo{Name: volName, SizeBytes: size}
 	}
 
+	// External-access (SSH tunnel) state — enabled when a loopback host port is
+	// bound. SSH host/user come from config and are presentation-only hints.
+	resp.ExternalAccess = &externalAccessInfo{
+		Enabled:  db.HostPort.Valid,
+		HostPort: db.HostPort.Int32,
+		SSHHost:  h.cfg.ServerSSHHost,
+		SSHUser:  h.cfg.ServerSSHUser,
+	}
+
 	writeJSON(w, http.StatusOK, resp)
+}
+
+type externalAccessRequest struct {
+	Enabled bool `json:"enabled"`
+}
+
+// SetDatabaseExternalAccess enables or disables SSH-tunnel external access by
+// recreating the database container with/without a loopback host-port binding.
+// The recreate runs as an async task; the database is marked transitional
+// (creating) so the UI reflects the brief downtime.
+func (h *Handler) SetDatabaseExternalAccess(w http.ResponseWriter, r *http.Request) {
+	databaseID := chi.URLParam(r, "databaseId")
+	var dbUUID pgtype.UUID
+	if err := dbUUID.Scan(databaseID); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid database id")
+		return
+	}
+
+	if !h.canAccessDatabase(r, dbUUID) {
+		writeError(w, http.StatusForbidden, "access denied")
+		return
+	}
+
+	var req externalAccessRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	db, err := h.queries.GetDatabase(r.Context(), dbUUID)
+	if err != nil {
+		writeError(w, http.StatusNotFound, "database not found")
+		return
+	}
+	if db.Status != status.DatabaseRunning {
+		writeError(w, http.StatusConflict, "database must be running to change external access")
+		return
+	}
+	// Already in the requested state — nothing to recreate.
+	if db.HostPort.Valid == req.Enabled {
+		writeJSON(w, http.StatusOK, map[string]string{"status": db.Status})
+		return
+	}
+
+	// Mark transitional before the async recreate so the UI shows progress.
+	if _, err := h.queries.UpdateDatabaseStatus(r.Context(), generated.UpdateDatabaseStatusParams{
+		ID:     dbUUID,
+		Status: status.DatabaseCreating,
+	}); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to update database")
+		return
+	}
+
+	payload, err := json.Marshal(map[string]any{"database_id": databaseID, "enable": req.Enabled})
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to create reconfigure task")
+		return
+	}
+	if _, err := h.asynq.Enqueue(asynq.NewTask("reconfigure_db", payload), asynq.Queue("critical")); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to enqueue reconfigure task")
+		return
+	}
+
+	h.audit(r, "update_database", "database", databaseID, map[string]any{
+		"external_access": req.Enabled,
+	})
+
+	writeJSON(w, http.StatusAccepted, map[string]string{"status": status.DatabaseCreating})
 }
 
 type updateDatabaseRequest struct {

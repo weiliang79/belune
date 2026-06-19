@@ -17,6 +17,7 @@ type ContainerConfig struct {
 	Image           string
 	Env             map[string]string
 	Ports           map[string]string // host:container
+	HostBindIP      string            // host IP for port bindings (empty = 0.0.0.0; "127.0.0.1" = loopback only)
 	Volumes         map[string]string // host:container
 	Network         string
 	Cmd             []string

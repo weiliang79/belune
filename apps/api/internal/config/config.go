@@ -59,6 +59,12 @@ type Config struct {
 	// links in outbound emails (password reset, invitations).
 	PublicBaseURL string
 
+	// ServerSSHHost / ServerSSHUser are presentation-only hints shown in the
+	// database External Access card to build the SSH-tunnel command (ssh -L).
+	// When empty the UI falls back to a generic placeholder.
+	ServerSSHHost string
+	ServerSSHUser string
+
 	// SMTP configuration for outbound email. All fields are optional; when
 	// SMTPHost is empty the email service writes to slog instead of dialing.
 	SMTPHost      string
@@ -119,6 +125,9 @@ func Load() (*Config, error) {
 		MetricsBind: getEnv("METRICS_BIND", ""),
 
 		PublicBaseURL: getEnv("PUBLIC_BASE_URL", ""),
+
+		ServerSSHHost: getEnv("SERVER_SSH_HOST", ""),
+		ServerSSHUser: getEnv("SERVER_SSH_USER", ""),
 
 		SMTPHost:      getEnv("SMTP_HOST", ""),
 		SMTPPort:      getEnvInt("SMTP_PORT", 587),

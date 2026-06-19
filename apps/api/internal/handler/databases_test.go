@@ -91,6 +91,28 @@ func TestUpdateDatabaseResources(t *testing.T) {
 	resp.Body.Close()
 }
 
+func TestSetDatabaseExternalAccess_RequiresRunning(t *testing.T) {
+	resetDB(t)
+	token := env.SetupAdmin(t, "admin@test.com", "password123")
+	project := env.CreateProject(t, token, "Test Project", "test-project")
+	projectID := extractID(project["id"])
+
+	resp := env.DoRequest(t, "POST", fmt.Sprintf("/api/projects/%s/databases", projectID), map[string]any{
+		"name": "mydb",
+		"type": "postgres",
+	}, testutil.AuthHeader(token))
+	db := testutil.ReadJSON(t, resp)
+	dbID := extractID(db["id"])
+
+	// Provisioning is async + mocked in tests, so the database stays "creating";
+	// toggling external access must be refused until it is running.
+	resp = env.DoRequest(t, "POST",
+		fmt.Sprintf("/api/projects/%s/databases/%s/external-access", projectID, dbID),
+		map[string]any{"enabled": true}, testutil.AuthHeader(token))
+	assert.Equal(t, http.StatusConflict, resp.StatusCode)
+	resp.Body.Close()
+}
+
 func TestDeleteDatabase(t *testing.T) {
 	resetDB(t)
 	token := env.SetupAdmin(t, "admin@test.com", "password123")

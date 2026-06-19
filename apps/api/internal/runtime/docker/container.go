@@ -30,13 +30,17 @@ func (c *Client) CreateContainer(ctx context.Context, cfg runtime.ContainerConfi
 	}
 
 	// Convert port map to Docker format
+	hostBindIP := cfg.HostBindIP
+	if hostBindIP == "" {
+		hostBindIP = "0.0.0.0"
+	}
 	exposedPorts := nat.PortSet{}
 	portBindings := nat.PortMap{}
 	for hostPort, containerPort := range cfg.Ports {
 		cp := nat.Port(containerPort + "/tcp")
 		exposedPorts[cp] = struct{}{}
 		portBindings[cp] = []nat.PortBinding{
-			{HostIP: "0.0.0.0", HostPort: hostPort},
+			{HostIP: hostBindIP, HostPort: hostPort},
 		}
 	}
 

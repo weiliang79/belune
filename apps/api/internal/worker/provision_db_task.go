@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 
 	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -18,6 +19,14 @@ import (
 
 type provisionDBPayload struct {
 	DatabaseID string `json:"database_id"`
+}
+
+// reconfigureDBPayload toggles SSH-tunnel external access for a database by
+// recreating its container with (enable) or without (disable) a loopback host
+// port binding.
+type reconfigureDBPayload struct {
+	DatabaseID string `json:"database_id"`
+	Enable     bool   `json:"enable"`
 }
 
 func (h *TaskHandler) HandleProvisionDBTask(ctx context.Context, t *asynq.Task) error {
@@ -38,77 +47,132 @@ func (h *TaskHandler) HandleProvisionDBTask(ctx context.Context, t *asynq.Task) 
 		return fmt.Errorf("get database: %w", err)
 	}
 
-	// Decrypt credentials
+	creds, err := h.decryptDBCredentials(db)
+	if err != nil {
+		h.failDatabase(ctx, dbID, fmt.Sprintf("credentials: %v", err))
+		return fmt.Errorf("credentials: %w", err)
+	}
+
+	// New databases start internal-only (no host port); external access is an
+	// explicit opt-in handled by the reconfigure task.
+	if err := h.provisionDBContainer(ctx, db, creds, 0); err != nil {
+		h.failDatabase(ctx, dbID, err.Error())
+		return err
+	}
+
+	slog.Info("database provisioned", "database_id", payload.DatabaseID, "container", db.Slug, "type", db.Type)
+	return nil
+}
+
+// HandleReconfigureDBTask recreates a database container to add or remove the
+// loopback host-port binding used for SSH-tunnel external access. The named
+// volume is reattached, so data survives the recreate (brief downtime).
+func (h *TaskHandler) HandleReconfigureDBTask(ctx context.Context, t *asynq.Task) error {
+	var payload reconfigureDBPayload
+	if err := json.Unmarshal(t.Payload(), &payload); err != nil {
+		return fmt.Errorf("unmarshal reconfigure_db payload: %w", err)
+	}
+
+	slog.Info("handling reconfigure_db task", "database_id", payload.DatabaseID, "enable", payload.Enable)
+
+	dbID, err := parseUUID(payload.DatabaseID)
+	if err != nil {
+		return errors.Join(fmt.Errorf("invalid database_id (permanent): %w", err), asynq.SkipRetry)
+	}
+
+	db, err := h.Queries.GetDatabase(ctx, dbID)
+	if err != nil {
+		return fmt.Errorf("get database: %w", err)
+	}
+
+	creds, err := h.decryptDBCredentials(db)
+	if err != nil {
+		h.failDatabase(ctx, dbID, fmt.Sprintf("credentials: %v", err))
+		return fmt.Errorf("credentials: %w", err)
+	}
+
+	// Allocate the loopback port up front so a failure leaves the old container
+	// untouched. A fresh free port is taken each time external access is enabled.
+	var hostPort int32
+	if payload.Enable {
+		p, perr := freeLoopbackPort()
+		if perr != nil {
+			h.failDatabase(ctx, dbID, fmt.Sprintf("allocate host port: %v", perr))
+			return fmt.Errorf("allocate host port: %w", perr)
+		}
+		hostPort = p
+	}
+
+	// Remove the existing container (best-effort; the volume persists).
+	h.removeDBContainer(ctx, db.Slug)
+
+	if err := h.provisionDBContainer(ctx, db, creds, hostPort); err != nil {
+		h.failDatabase(ctx, dbID, err.Error())
+		return err
+	}
+
+	slog.Info("database reconfigured", "database_id", payload.DatabaseID, "external_access", payload.Enable, "host_port", hostPort)
+	return nil
+}
+
+func (h *TaskHandler) decryptDBCredentials(db generated.Database) (map[string]string, error) {
 	credsJSON, err := h.Keyring.Decrypt(db.CredentialsEncrypted)
 	if err != nil {
-		h.failDatabase(ctx, dbID, fmt.Sprintf("decrypt credentials: %v", err))
-		return fmt.Errorf("decrypt credentials: %w", err)
+		return nil, fmt.Errorf("decrypt: %w", err)
 	}
-
 	var creds map[string]string
 	if err := json.Unmarshal(credsJSON, &creds); err != nil {
-		h.failDatabase(ctx, dbID, fmt.Sprintf("unmarshal credentials: %v", err))
-		return fmt.Errorf("unmarshal credentials: %w", err)
+		return nil, fmt.Errorf("unmarshal: %w", err)
 	}
+	return creds, nil
+}
 
-	containerName := db.Slug
-	volumeName := fmt.Sprintf("%s-vol", db.Slug)
-
-	// Determine image, port, data dir, env vars, and cmd based on db type
-	var (
-		image   string
-		port    int32
-		dataDir string
-		env     map[string]string
-		cmd     []string
-	)
-
-	switch db.Type {
+// dbContainerSpec returns the per-type image, data dir, container port, env, and
+// command for a managed database.
+func dbContainerSpec(dbType, version string, creds map[string]string) (image, dataDir string, port int32, env map[string]string, cmd []string, err error) {
+	switch dbType {
 	case "postgres":
-		image = fmt.Sprintf("postgres:%s", db.Version)
-		port = 5432
-		dataDir = "/var/lib/postgresql/data"
-		env = map[string]string{
+		return fmt.Sprintf("postgres:%s", version), "/var/lib/postgresql/data", 5432, map[string]string{
 			"POSTGRES_USER":     creds["user"],
 			"POSTGRES_PASSWORD": creds["password"],
 			"POSTGRES_DB":       creds["database"],
-		}
+		}, nil, nil
 	case "mysql":
-		image = fmt.Sprintf("mysql:%s", db.Version)
-		port = 3306
-		dataDir = "/var/lib/mysql"
-		env = map[string]string{
+		return fmt.Sprintf("mysql:%s", version), "/var/lib/mysql", 3306, map[string]string{
 			"MYSQL_ROOT_PASSWORD": creds["root_password"],
 			"MYSQL_DATABASE":      creds["database"],
 			"MYSQL_USER":          creds["user"],
 			"MYSQL_PASSWORD":      creds["password"],
-		}
+		}, nil, nil
 	case "redis":
-		image = fmt.Sprintf("redis:%s", db.Version)
-		port = 6379
-		dataDir = "/data"
-		env = map[string]string{}
-		cmd = []string{"redis-server", "--requirepass", creds["password"]}
+		return fmt.Sprintf("redis:%s", version), "/data", 6379, map[string]string{},
+			[]string{"redis-server", "--requirepass", creds["password"]}, nil
 	case "mongo":
-		image = fmt.Sprintf("mongo:%s", db.Version)
-		port = 27017
-		dataDir = "/data/db"
-		env = map[string]string{
+		return fmt.Sprintf("mongo:%s", version), "/data/db", 27017, map[string]string{
 			"MONGO_INITDB_ROOT_USERNAME": creds["username"],
 			"MONGO_INITDB_ROOT_PASSWORD": creds["password"],
-		}
+		}, nil, nil
 	default:
-		h.failDatabase(ctx, dbID, fmt.Sprintf("unsupported database type: %s", db.Type))
-		return fmt.Errorf("unsupported database type: %s", db.Type)
+		return "", "", 0, nil, nil, fmt.Errorf("unsupported database type: %s", dbType)
+	}
+}
+
+// provisionDBContainer (re)creates and starts a database's container, optionally
+// binding the database port to 127.0.0.1:hostPort (hostPort > 0). It is
+// idempotent on the network/volume/image so it can be used for both first-time
+// provisioning and reconfigure recreates. On success the database row is stamped
+// running with its connection info and host port.
+func (h *TaskHandler) provisionDBContainer(ctx context.Context, db generated.Database, creds map[string]string, hostPort int32) error {
+	containerName := db.Slug
+	volumeName := fmt.Sprintf("%s-vol", db.Slug)
+
+	image, dataDir, port, env, cmd, err := dbContainerSpec(db.Type, db.Version, creds)
+	if err != nil {
+		return err
 	}
 
-	// Ensure project-scoped network exists for DB–app communication (idempotent).
-	// Fall-back to paas-infra was removed in v0.0.9 Phase 2 to keep tenant
-	// isolation invariant — a database without a project network has nowhere
-	// safe to land.
 	project, err := h.Queries.GetProject(ctx, db.ProjectID)
 	if err != nil {
-		h.failDatabase(ctx, dbID, fmt.Sprintf("get project: %v", err))
 		return fmt.Errorf("get project for network setup: %w", err)
 	}
 	projectNetwork := naming.ProjectNetworkName(project.Slug)
@@ -116,59 +180,80 @@ func (h *TaskHandler) HandleProvisionDBTask(ctx context.Context, t *asynq.Task) 
 		slog.Debug("could not create project network (may already exist)", "network", projectNetwork, "error", netErr)
 	}
 
-	// Pull the image
-	slog.Info("pulling database image", "image", image)
 	if err := h.Runtime.PullImage(ctx, image); err != nil {
-		h.failDatabase(ctx, dbID, fmt.Sprintf("pull image: %v", err))
 		return fmt.Errorf("pull image: %w", err)
 	}
-
-	// Create the volume
 	if err := h.Runtime.CreateVolume(ctx, volumeName); err != nil {
-		h.failDatabase(ctx, dbID, fmt.Sprintf("create volume: %v", err))
 		return fmt.Errorf("create volume: %w", err)
 	}
 
-	// Create the container on the project network so apps can connect
+	ports := map[string]string{}
+	hostBindIP := ""
+	hostPortCol := pgtype.Int4{}
+	if hostPort > 0 {
+		// Loopback only — reachable from the host (e.g. an SSH tunnel), never
+		// the public internet.
+		ports[fmt.Sprintf("%d", hostPort)] = fmt.Sprintf("%d", port)
+		hostBindIP = "127.0.0.1"
+		hostPortCol = pgtype.Int4{Int32: hostPort, Valid: true}
+	}
+
 	containerID, err := h.Runtime.CreateContainer(ctx, runtime.ContainerConfig{
-		Name:    containerName,
-		Image:   image,
-		Env:     env,
-		Cmd:     cmd,
-		Ports:   map[string]string{},
-		Volumes: map[string]string{volumeName: dataDir},
-		Network: projectNetwork,
+		Name:        containerName,
+		Image:       image,
+		Env:         env,
+		Cmd:         cmd,
+		Ports:       ports,
+		HostBindIP:  hostBindIP,
+		Volumes:     map[string]string{volumeName: dataDir},
+		Network:     projectNetwork,
+		CPULimit:    db.CpuLimit,
+		MemoryLimit: db.MemoryLimit,
 	})
 	if err != nil {
-		h.failDatabase(ctx, dbID, fmt.Sprintf("create container: %v", err))
 		return fmt.Errorf("create container: %w", err)
 	}
 
-	// Start the container
 	if err := h.Runtime.StartContainer(ctx, containerID); err != nil {
-		h.failDatabase(ctx, dbID, fmt.Sprintf("start container: %v", err))
 		return fmt.Errorf("start container: %w", err)
 	}
 
-	// Update database record with running status and connection info
 	h.Queries.UpdateDatabaseAfterProvision(ctx, generated.UpdateDatabaseAfterProvisionParams{
-		ID:           dbID,
+		ID:           db.ID,
 		Status:       status.DatabaseRunning,
 		InternalHost: pgtype.Text{String: containerName, Valid: true},
 		InternalPort: pgtype.Int4{Int32: port, Valid: true},
+		HostPort:     hostPortCol,
 	})
-
-	slog.Info("database provisioned",
-		"database_id", payload.DatabaseID,
-		"container", containerName,
-		"type", db.Type,
-		"port", port,
-	)
 	return nil
 }
 
+// removeDBContainer stops and removes a database container by name. Both steps
+// are best-effort: a missing/stopped container is not an error for the caller.
+func (h *TaskHandler) removeDBContainer(ctx context.Context, name string) {
+	if err := h.Runtime.StopContainer(ctx, name); err != nil {
+		slog.Debug("reconfigure: stop container (may already be stopped)", "container", name, "error", err)
+	}
+	if err := h.Runtime.RemoveContainer(ctx, name); err != nil {
+		slog.Debug("reconfigure: remove container (may already be gone)", "container", name, "error", err)
+	}
+}
+
+// freeLoopbackPort asks the OS for a free TCP port on the loopback interface.
+// The listener is closed immediately; the small window before Docker binds it is
+// acceptable for a single-host deployment (a collision just fails the recreate,
+// which can be retried).
+func freeLoopbackPort() (int32, error) {
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		return 0, err
+	}
+	defer l.Close()
+	return int32(l.Addr().(*net.TCPAddr).Port), nil
+}
+
 func (h *TaskHandler) failDatabase(ctx context.Context, dbID pgtype.UUID, errMsg string) {
-	slog.Error("database provisioning failed", "database_id", fmt.Sprintf("%v", dbID), "error", errMsg)
+	slog.Error("database task failed", "database_id", fmt.Sprintf("%v", dbID), "error", errMsg)
 	h.Queries.UpdateDatabaseStatus(ctx, generated.UpdateDatabaseStatusParams{
 		ID:     dbID,
 		Status: status.DatabaseFailed,
