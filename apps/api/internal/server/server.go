@@ -18,6 +18,7 @@ import (
 	"github.com/ungweiliang/selfhost-paas/internal/runtime"
 	"github.com/ungweiliang/selfhost-paas/internal/server/middleware"
 	"github.com/ungweiliang/selfhost-paas/internal/service"
+	"github.com/ungweiliang/selfhost-paas/internal/service/backup"
 	"github.com/ungweiliang/selfhost-paas/internal/service/email"
 	"github.com/ungweiliang/selfhost-paas/internal/store/generated"
 	"github.com/ungweiliang/selfhost-paas/internal/terminal"
@@ -37,7 +38,7 @@ func New(cfg *config.Config, db *pgxpool.Pool, queries *generated.Queries, asynq
 	auth := service.NewAuthService(queries, cfg.JWTSecret, cfg.JWTExpiryHours, cfg.JWTRefreshHours, rdb)
 	appSvc := service.NewApplicationService(db, queries, rt, cfg.Keyring)
 	projSvc := service.NewProjectService(queries, rt)
-	dbSvc := service.NewDatabaseService(queries, rt)
+	dbSvc := service.NewDatabaseService(queries, rt, backup.New(cfg))
 	gitCredSvc := service.NewGitCredentialService(queries, cfg.Keyring)
 	quotaSvc := quota.NewService(queries)
 
