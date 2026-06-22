@@ -355,11 +355,35 @@ func (h *TaskHandler) HandleRestoreDBTask(ctx context.Context, t *asynq.Task) er
 	defer cleanup()
 
 	if err := h.applyRestoreArchive(ctx, db, creds, method, dumpPath); err != nil {
+		h.notifyRestore(ctx, db, false, err.Error())
 		return err
 	}
 
+	h.notifyRestore(ctx, db, true, "")
 	slog.Info("database restored", "database_id", payload.DatabaseID, "backup_id", payload.BackupID, "method", method)
 	return nil
+}
+
+// notifyRestore tells the database owner whether an async restore succeeded or
+// failed, since restore is otherwise fire-and-forget. No-op when no notifier is
+// wired (e.g. tests).
+func (h *TaskHandler) notifyRestore(ctx context.Context, db generated.Database, ok bool, detail string) {
+	if h.Notifier == nil {
+		return
+	}
+	owner, err := h.Queries.GetDatabaseOwnerUserID(ctx, db.ID)
+	if err != nil {
+		slog.Warn("notify restore: could not resolve owner", "database_id", formatUUID(db.ID), "error", err)
+		return
+	}
+	link := fmt.Sprintf("/projects/%s/databases/%s", formatUUID(db.ProjectID), formatUUID(db.ID))
+	if ok {
+		h.Notifier.Notify(formatUUID(owner), "database.restored", "Database restored",
+			fmt.Sprintf("%s was restored from a backup.", db.Name), link)
+	} else {
+		h.Notifier.Notify(formatUUID(owner), "database.restore_failed", "Database restore failed",
+			fmt.Sprintf("Restoring %s failed: %s", db.Name, detail), link)
+	}
 }
 
 func (h *TaskHandler) applyRestoreArchive(ctx context.Context, db generated.Database, creds map[string]string, method, dumpPath string) error {
