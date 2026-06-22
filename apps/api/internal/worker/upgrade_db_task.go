@@ -13,6 +13,7 @@ import (
 	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	statuspkg "github.com/ungweiliang/selfhost-paas/internal/status"
 	"github.com/ungweiliang/selfhost-paas/internal/store/generated"
 )
 
@@ -242,6 +243,25 @@ func (h *TaskHandler) waitForDBReady(ctx context.Context, db generated.Database,
 			return ctx.Err()
 		case <-time.After(2 * time.Second):
 		}
+	}
+}
+
+// ReconcileInterruptedUpgrades marks databases left in the "upgrading" state as
+// failed. Upgrades run with no auto-retry, so any database still "upgrading"
+// when the worker boots is from an interrupted upgrade (e.g. a crash between the
+// volume wipe and the restore) that will not resume on its own — without this it
+// would sit in a silent, permanent transitional state. The pre-upgrade dump was
+// recorded as a backup, so the data is recoverable from it.
+func (h *TaskHandler) ReconcileInterruptedUpgrades(ctx context.Context) {
+	dbs, err := h.Queries.ListDatabasesByStatus(ctx, statuspkg.DatabaseUpgrading)
+	if err != nil {
+		slog.Warn("reconcile: failed to list upgrading databases", "error", err)
+		return
+	}
+	for _, db := range dbs {
+		slog.Warn("reconcile: marking interrupted upgrade as failed; recover from the pre-upgrade backup",
+			"database_id", formatUUID(db.ID), "slug", db.Slug)
+		h.failDatabase(ctx, db.ID, "upgrade interrupted (worker restart); restore from the latest pre-upgrade backup")
 	}
 }
 

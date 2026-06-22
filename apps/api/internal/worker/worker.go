@@ -115,6 +115,11 @@ func (w *Worker) Start() error {
 	mux.HandleFunc(TypeBackupNow, w.handler.HandleBackupNowTask)
 	mux.HandleFunc(TypeBackupRotate, w.handler.HandleBackupRotateTask)
 
+	// Reconcile any database left mid-upgrade by a previous crash/restart before
+	// accepting new work — upgrades never auto-retry, so these would otherwise sit
+	// permanently in the "upgrading" state.
+	w.handler.ReconcileInterruptedUpgrades(context.Background())
+
 	slog.Info("starting worker server")
 	return w.server.Start(mux)
 }

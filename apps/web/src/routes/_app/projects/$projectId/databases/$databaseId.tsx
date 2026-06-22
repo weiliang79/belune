@@ -243,8 +243,10 @@ function DatabaseDetailPage() {
               This database is in a failed state.
             </p>
             <p className="text-muted-foreground text-sm">
-              Its data volume is preserved. Retry the last operation, or remove
-              the database from the Danger Zone below if you no longer need it.
+              A failed provision or reconfigure usually leaves the data volume
+              intact. If an upgrade was interrupted, recover from the most
+              recent pre-upgrade backup. Otherwise remove the database from the
+              Danger Zone below if you no longer need it.
             </p>
           </CardContent>
         </Card>

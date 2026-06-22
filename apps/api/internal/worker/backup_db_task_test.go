@@ -325,6 +325,24 @@ func TestHandleUpgradeDBTask_RollbackOnRestoreFailure(t *testing.T) {
 	assert.Equal(t, 2, restoreCalls, "forward restore + rollback restore")
 }
 
+func TestReconcileInterruptedUpgrades(t *testing.T) {
+	ctx := context.Background()
+	h := newTestHandler(&testutil.MockContainerRuntime{}, nil)
+
+	stuck := seedDatabase(t, func(p *generated.CreateDatabaseParams) { p.Status = "upgrading" })
+	running := seedDatabase(t) // must be left alone
+
+	h.ReconcileInterruptedUpgrades(ctx)
+
+	got, err := testQueries.GetDatabase(ctx, stuck.ID)
+	require.NoError(t, err)
+	assert.Equal(t, status.DatabaseFailed, got.Status, "interrupted upgrade should be marked failed")
+
+	ok, err := testQueries.GetDatabase(ctx, running.ID)
+	require.NoError(t, err)
+	assert.Equal(t, status.DatabaseRunning, ok.Status, "running databases must be untouched")
+}
+
 func TestHandleUpgradeDBTask_HappyPath(t *testing.T) {
 	ctx := context.Background()
 	// A realistic dump body so the gzipped archive clears the pre-upgrade

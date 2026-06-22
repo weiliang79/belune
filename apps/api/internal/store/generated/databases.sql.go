@@ -193,6 +193,51 @@ func (q *Queries) ListDatabasesByProject(ctx context.Context, projectID pgtype.U
 	return items, nil
 }
 
+const listDatabasesByStatus = `-- name: ListDatabasesByStatus :many
+SELECT id, project_id, type, name, slug, version, status, internal_host, internal_port, credentials_encrypted, created_at, cpu_limit, memory_limit, host_port, image, container_port, data_dir, backup_mode, backup_command, restore_command FROM databases WHERE status = $1
+`
+
+func (q *Queries) ListDatabasesByStatus(ctx context.Context, status string) ([]Database, error) {
+	rows, err := q.db.Query(ctx, listDatabasesByStatus, status)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Database{}
+	for rows.Next() {
+		var i Database
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.Type,
+			&i.Name,
+			&i.Slug,
+			&i.Version,
+			&i.Status,
+			&i.InternalHost,
+			&i.InternalPort,
+			&i.CredentialsEncrypted,
+			&i.CreatedAt,
+			&i.CpuLimit,
+			&i.MemoryLimit,
+			&i.HostPort,
+			&i.Image,
+			&i.ContainerPort,
+			&i.DataDir,
+			&i.BackupMode,
+			&i.BackupCommand,
+			&i.RestoreCommand,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const updateDatabaseAfterProvision = `-- name: UpdateDatabaseAfterProvision :one
 UPDATE databases SET status = $2, internal_host = $3, internal_port = $4, host_port = $5 WHERE id = $1 RETURNING id, project_id, type, name, slug, version, status, internal_host, internal_port, credentials_encrypted, created_at, cpu_limit, memory_limit, host_port, image, container_port, data_dir, backup_mode, backup_command, restore_command
 `

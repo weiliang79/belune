@@ -25,6 +25,9 @@ UPDATE databases SET cpu_limit = $2, memory_limit = $3 WHERE id = $1 RETURNING *
 -- name: UpdateDatabaseVersion :one
 UPDATE databases SET version = $2 WHERE id = $1 RETURNING *;
 
+-- name: ListDatabasesByStatus :many
+SELECT * FROM databases WHERE status = $1;
+
 -- name: DeleteDatabase :exec
 DELETE FROM databases WHERE id = $1;
 
