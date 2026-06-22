@@ -415,7 +415,10 @@ export function DatabaseFormDialog({ projectId, open, onOpenChange }: Props) {
                   <p className="text-muted-foreground text-xs">
                     Run inside the container. Backup writes into
                     <code className="mx-1">$PAAS_BACKUP_DIR</code>; restore
-                    reads from it.
+                    reads from it. The image must include
+                    <code className="mx-1">sh</code> and
+                    <code className="mx-1">tar</code> (used to archive that
+                    directory).
                   </p>
                 </div>
               )}

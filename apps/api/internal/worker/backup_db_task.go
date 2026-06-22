@@ -336,6 +336,9 @@ func (h *TaskHandler) commandBackup(ctx context.Context, db generated.Database, 
 		return errors.Join(fmt.Errorf("backup command exited %d: %s", exit, strings.TrimSpace(stderr.String())), asynq.SkipRetry)
 	}
 
+	// Requires `sh` + `tar` in the "other" image; a missing tar surfaces here as
+	// a non-zero exit ("tar: not found") in the returned error (documented in the
+	// create dialog).
 	var terr bytes.Buffer
 	exit, err = h.Runtime.ContainerExec(ctx, db.Slug,
 		[]string{"sh", "-c", fmt.Sprintf("tar czf - -C %s .", paasBackupDir)}, nil, f, &terr)
