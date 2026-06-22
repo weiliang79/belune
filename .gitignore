@@ -33,9 +33,8 @@ dist/
 *~
 .DS_Store
 
-# Generated
-apps/api/internal/store/generated/*
-!apps/api/internal/store/generated/.gitkeep
+# sqlc output is committed (no `sqlc generate` step in CI/Docker), so a fresh
+# clone builds without sqlc installed. Regenerate with `sqlc generate`.
 
 # Caddy logs (bind mount from container)
 infra/caddy/logs/
