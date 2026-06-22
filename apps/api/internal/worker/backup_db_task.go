@@ -81,6 +81,25 @@ func dbDumpSpec(dbType string, creds map[string]string) dumpSpec {
 	}
 }
 
+// dbReadyCmd returns a trivial connect-and-query command for a known engine,
+// run via the same client the restore uses, so a zero exit means the engine is
+// actually accepting authenticated connections (not merely started). ok is false
+// for engines without a probe.
+func dbReadyCmd(dbType string, creds map[string]string) ([]string, bool) {
+	switch dbType {
+	case "postgres":
+		return []string{"sh", "-c", fmt.Sprintf("PGPASSWORD=%s psql -U %s -d %s -tAc 'SELECT 1'",
+			shArg(creds["password"]), shArg(creds["user"]), shArg(creds["database"]))}, true
+	case "mysql":
+		return []string{"sh", "-c", fmt.Sprintf("MYSQL_PWD=%s mysql -u %s -e 'SELECT 1'",
+			shArg(creds["password"]), shArg(creds["user"]))}, true
+	case "mongo":
+		return []string{"sh", "-c", fmt.Sprintf("mongosh --username %s --password %s --authenticationDatabase admin --quiet --eval 'db.runCommand({ping:1})'",
+			shArg(creds["username"]), shArg(creds["password"]))}, true
+	}
+	return nil, false
+}
+
 // dbBackupMethod selects how a database is backed up:
 //   - "logical": known engine, online dump (pg_dump/mysqldump/mongodump)
 //   - "volume_snapshot": "other" — cold tar of the data-dir volume

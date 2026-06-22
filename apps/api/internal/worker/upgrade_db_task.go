@@ -98,6 +98,13 @@ func (h *TaskHandler) HandleUpgradeDBTask(ctx context.Context, t *asynq.Task) er
 			fmt.Sprintf("provision target version: %v", err))
 	}
 
+	// The container is started but the engine needs a moment to accept
+	// authenticated connections; restoring before then would fail spuriously.
+	if err := h.waitForDBReady(ctx, dbNew, creds); err != nil {
+		return h.rollbackUpgrade(ctx, dbNew, creds, oldVersion, hostPort, dumpPath,
+			fmt.Sprintf("target version not ready: %v", err))
+	}
+
 	// 3. Restore the dump into the new-version container.
 	if err := h.applyRestoreArchive(ctx, dbNew, creds, "logical", dumpPath); err != nil {
 		return h.rollbackUpgrade(ctx, dbNew, creds, oldVersion, hostPort, dumpPath,
@@ -185,6 +192,10 @@ func (h *TaskHandler) rollbackUpgrade(ctx context.Context, db generated.Database
 		h.failDatabase(ctx, db.ID, fmt.Sprintf("upgrade failed (%s); rollback provision failed: %v", reason, err))
 		return errors.Join(fmt.Errorf("rollback provision: %w", err), asynq.SkipRetry)
 	}
+	if err := h.waitForDBReady(ctx, dbOld, creds); err != nil {
+		h.failDatabase(ctx, db.ID, fmt.Sprintf("upgrade failed (%s); rollback not ready: %v", reason, err))
+		return errors.Join(fmt.Errorf("rollback not ready: %w", err), asynq.SkipRetry)
+	}
 	if err := h.applyRestoreArchive(ctx, dbOld, creds, "logical", dumpPath); err != nil {
 		h.failDatabase(ctx, db.ID, fmt.Sprintf("upgrade failed (%s); rollback restore failed: %v", reason, err))
 		return errors.Join(fmt.Errorf("rollback restore: %w", err), asynq.SkipRetry)
@@ -192,6 +203,34 @@ func (h *TaskHandler) rollbackUpgrade(ctx context.Context, db generated.Database
 
 	slog.Warn("upgrade rolled back; database restored to previous version", "database_id", formatUUID(db.ID), "old_version", oldVersion)
 	return nil
+}
+
+// waitForDBReady polls the engine's own client until it accepts an
+// authenticated connection (or the deadline passes), so a restore that runs
+// immediately after (re)provisioning does not race container startup. Engines
+// without a probe return nil (no wait).
+func (h *TaskHandler) waitForDBReady(ctx context.Context, db generated.Database, creds map[string]string) error {
+	cmd, ok := dbReadyCmd(db.Type, creds)
+	if !ok {
+		return nil
+	}
+	deadline := time.Now().Add(90 * time.Second)
+	var lastErr error
+	for {
+		exit, err := h.Runtime.ContainerExec(ctx, db.Slug, cmd, nil, nil, nil)
+		if err == nil && exit == 0 {
+			return nil
+		}
+		lastErr = fmt.Errorf("exit=%d, err=%v", exit, err)
+		if time.Now().After(deadline) {
+			return fmt.Errorf("database not ready before timeout: %w", lastErr)
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(2 * time.Second):
+		}
+	}
 }
 
 func (h *TaskHandler) setDatabaseStatus(ctx context.Context, dbID pgtype.UUID, status string) {
