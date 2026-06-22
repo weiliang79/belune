@@ -253,15 +253,28 @@ func (h *TaskHandler) waitForDBReady(ctx context.Context, db generated.Database,
 // would sit in a silent, permanent transitional state. The pre-upgrade dump was
 // recorded as a backup, so the data is recoverable from it.
 func (h *TaskHandler) ReconcileInterruptedUpgrades(ctx context.Context) {
-	dbs, err := h.Queries.ListDatabasesByStatus(ctx, statuspkg.DatabaseUpgrading)
+	upgrading, err := h.Queries.ListDatabasesByStatus(ctx, statuspkg.DatabaseUpgrading)
 	if err != nil {
 		slog.Warn("reconcile: failed to list upgrading databases", "error", err)
-		return
 	}
-	for _, db := range dbs {
+	for _, db := range upgrading {
 		slog.Warn("reconcile: marking interrupted upgrade as failed; recover from the pre-upgrade backup",
 			"database_id", formatUUID(db.ID), "slug", db.Slug)
 		h.failDatabase(ctx, db.ID, "upgrade interrupted (worker restart); restore from the latest pre-upgrade backup")
+	}
+
+	// A volume snapshot only stops the container to tar it (read-only), so an
+	// interrupted one is safely recovered by restarting the container.
+	backingUp, err := h.Queries.ListDatabasesByStatus(ctx, statuspkg.DatabaseBackingUp)
+	if err != nil {
+		slog.Warn("reconcile: failed to list backing-up databases", "error", err)
+	}
+	for _, db := range backingUp {
+		slog.Warn("reconcile: restarting database left mid-snapshot", "database_id", formatUUID(db.ID), "slug", db.Slug)
+		if err := h.Runtime.StartContainer(ctx, db.Slug); err != nil {
+			slog.Warn("reconcile: failed to restart database after snapshot", "database_id", formatUUID(db.ID), "error", err)
+		}
+		h.setDatabaseStatus(ctx, db.ID, statuspkg.DatabaseRunning)
 	}
 }
 

@@ -24,6 +24,7 @@ const (
 	DatabaseStopped   = "stopped"
 	DatabaseFailed    = "failed"
 	DatabaseUpgrading = "upgrading"
+	DatabaseBackingUp = "backing_up"
 )
 
 // validDeploymentTransitions defines the allowed deployment status state machine.

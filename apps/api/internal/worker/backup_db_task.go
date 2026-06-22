@@ -17,6 +17,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/ungweiliang/selfhost-paas/internal/runtime"
+	statuspkg "github.com/ungweiliang/selfhost-paas/internal/status"
 	"github.com/ungweiliang/selfhost-paas/internal/store/generated"
 )
 
@@ -248,7 +249,10 @@ func (h *TaskHandler) snapshotVolume(ctx context.Context, db generated.Database,
 		return fmt.Errorf("pull helper image: %w", err)
 	}
 
-	// Cold snapshot: stop the database so files are not mutated mid-tar.
+	// Cold snapshot: the database is offline while it is tarred. Reflect that in
+	// the row so the UI doesn't show it as running, and always return it to
+	// running (a snapshot is read-only, so the prior state is always "running").
+	h.setDatabaseStatus(ctx, db.ID, statuspkg.DatabaseBackingUp)
 	if err := h.Runtime.StopContainer(ctx, db.Slug); err != nil {
 		slog.Warn("snapshot: stop database (may already be stopped)", "database_id", formatUUID(db.ID), "error", err)
 	}
@@ -256,6 +260,7 @@ func (h *TaskHandler) snapshotVolume(ctx context.Context, db generated.Database,
 		if err := h.Runtime.StartContainer(ctx, db.Slug); err != nil {
 			slog.Error("snapshot: failed to restart database after backup", "database_id", formatUUID(db.ID), "error", err)
 		}
+		h.setDatabaseStatus(ctx, db.ID, statuspkg.DatabaseRunning)
 	}()
 
 	var stderr bytes.Buffer

@@ -10,7 +10,10 @@ export function useDatabases(projectId: string) {
     // from other sessions still surface without hammering the API.
     refetchInterval: (query) =>
       query.state.data?.some(
-        (d) => d.status === "creating" || d.status === "upgrading",
+        (d) =>
+          d.status === "creating" ||
+          d.status === "upgrading" ||
+          d.status === "backing_up",
       )
         ? 3000
         : 30000,
@@ -23,7 +26,11 @@ export function useDatabase(projectId: string, databaseId: string) {
     queryFn: () => databasesApi.getDatabase(projectId, databaseId),
     refetchInterval: (query) => {
       const status = query.state.data?.status;
-      return status === "creating" || status === "upgrading" ? 3000 : false;
+      return status === "creating" ||
+        status === "upgrading" ||
+        status === "backing_up"
+        ? 3000
+        : false;
     },
   });
 }

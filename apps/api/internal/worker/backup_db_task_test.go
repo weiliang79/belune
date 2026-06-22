@@ -330,6 +330,7 @@ func TestReconcileInterruptedUpgrades(t *testing.T) {
 	h := newTestHandler(&testutil.MockContainerRuntime{}, nil)
 
 	stuck := seedDatabase(t, func(p *generated.CreateDatabaseParams) { p.Status = "upgrading" })
+	snapshotting := seedDatabase(t, func(p *generated.CreateDatabaseParams) { p.Status = "backing_up" })
 	running := seedDatabase(t) // must be left alone
 
 	h.ReconcileInterruptedUpgrades(ctx)
@@ -337,6 +338,10 @@ func TestReconcileInterruptedUpgrades(t *testing.T) {
 	got, err := testQueries.GetDatabase(ctx, stuck.ID)
 	require.NoError(t, err)
 	assert.Equal(t, status.DatabaseFailed, got.Status, "interrupted upgrade should be marked failed")
+
+	snap, err := testQueries.GetDatabase(ctx, snapshotting.ID)
+	require.NoError(t, err)
+	assert.Equal(t, status.DatabaseRunning, snap.Status, "interrupted snapshot should recover to running")
 
 	ok, err := testQueries.GetDatabase(ctx, running.ID)
 	require.NoError(t, err)

@@ -156,7 +156,9 @@ function DatabaseDetailPage() {
         </div>
       </div>
 
-      {(db.status === "creating" || db.status === "upgrading") && (
+      {(db.status === "creating" ||
+        db.status === "upgrading" ||
+        db.status === "backing_up") && (
         <Card>
           <CardContent className="flex items-center gap-3 py-6">
             <Loader2 className="h-5 w-5 animate-spin" />
@@ -164,12 +166,16 @@ function DatabaseDetailPage() {
               <p className="font-medium">
                 {db.status === "upgrading"
                   ? "Upgrading database…"
-                  : "Provisioning database..."}
+                  : db.status === "backing_up"
+                    ? "Backing up database…"
+                    : "Provisioning database..."}
               </p>
               <p className="text-muted-foreground text-sm">
                 {db.status === "upgrading"
                   ? "Dumping, rebuilding at the new version, and restoring. The database is briefly offline."
-                  : "This usually takes a few seconds."}
+                  : db.status === "backing_up"
+                    ? "Briefly offline while a volume snapshot is taken."
+                    : "This usually takes a few seconds."}
               </p>
             </div>
           </CardContent>
