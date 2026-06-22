@@ -234,6 +234,11 @@ func (h *TaskHandler) provisionDBContainer(ctx context.Context, db generated.Dat
 		hostPortCol = pgtype.Int4{Int32: hostPort, Valid: true}
 	}
 
+	// Remove any leftover container with this name first, so provisioning is
+	// idempotent: an asynq retry after a partial failure (or a reconfigure/
+	// upgrade recreate) won't fail with "name in use".
+	h.removeDBContainer(ctx, containerName)
+
 	containerID, err := h.Runtime.CreateContainer(ctx, runtime.ContainerConfig{
 		Name:        containerName,
 		Image:       image,
