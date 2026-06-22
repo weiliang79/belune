@@ -165,6 +165,74 @@ func TestUpgradeRoundTrip_MySQL_RealDocker(t *testing.T) {
 	assert.Contains(t, out.String(), "42", "data did not survive the MySQL upgrade")
 }
 
+// TestUpgradeRoundTrip_Mongo_RealDocker is the MongoDB analogue (7 → 8),
+// exercising mongodump/mongorestore against real containers.
+func TestUpgradeRoundTrip_Mongo_RealDocker(t *testing.T) {
+	if os.Getenv("PAAS_DOCKER_INTEGRATION") == "" {
+		t.Skip("set PAAS_DOCKER_INTEGRATION=1 to run the real-Docker Mongo upgrade round-trip")
+	}
+
+	ctx := context.Background()
+	rt, err := docker.New()
+	require.NoError(t, err)
+
+	h := newTestHandler(rt, nil)
+	h.Config.DatabaseBackupDir = t.TempDir()
+
+	db := seedDatabase(t, func(p *generated.CreateDatabaseParams) {
+		p.Type = "mongo"
+		p.Version = "7"
+		p.Status = "creating"
+		p.InternalHost = pgtype.Text{}
+		p.InternalPort = pgtype.Int4{}
+	})
+	network := naming.ProjectNetworkName(strings.TrimSuffix(db.Slug, "-db"))
+	t.Cleanup(func() {
+		_ = rt.StopContainer(context.Background(), db.Slug)
+		_ = rt.RemoveContainer(context.Background(), db.Slug)
+		_ = rt.RemoveVolume(context.Background(), db.Slug+"-vol")
+		_ = rt.RemoveNetwork(context.Background(), network)
+	})
+
+	provPayload, _ := json.Marshal(map[string]string{"database_id": dbIDStr(db)})
+	require.NoError(t, h.HandleProvisionDBTask(ctx, asynq.NewTask("provision_db", provPayload)))
+
+	// mongosh authenticated as the root user; --quiet keeps stdout to the eval result.
+	mongo := func(js string, out *bytes.Buffer) (int, error) {
+		cmd := []string{"sh", "-c",
+			"mongosh --username u --password p --authenticationDatabase admin --quiet --eval " + shellQuote(js)}
+		if out == nil {
+			return rt.ContainerExec(ctx, db.Slug, cmd, nil, nil, nil)
+		}
+		return rt.ContainerExec(ctx, db.Slug, cmd, nil, out, nil)
+	}
+	requireReady(t, func() bool {
+		exit, err := mongo("db.runCommand({ping:1})", nil)
+		return err == nil && exit == 0
+	})
+	exit, err := mongo("db.getSiblingDB('app').t.insertOne({id:42})", nil)
+	require.NoError(t, err)
+	require.Equal(t, 0, exit)
+
+	upPayload, _ := json.Marshal(map[string]string{"database_id": dbIDStr(db), "target_version": "8"})
+	require.NoError(t, h.HandleUpgradeDBTask(ctx, asynq.NewTask("upgrade_db", upPayload)))
+
+	updated, err := testQueries.GetDatabase(ctx, db.ID)
+	require.NoError(t, err)
+	assert.Equal(t, "8", updated.Version)
+	assert.Equal(t, "running", updated.Status)
+
+	requireReady(t, func() bool {
+		exit, err := mongo("db.runCommand({ping:1})", nil)
+		return err == nil && exit == 0
+	})
+	var out bytes.Buffer
+	exit, err = mongo("print(db.getSiblingDB('app').t.findOne().id)", &out)
+	require.NoError(t, err)
+	require.Equal(t, 0, exit)
+	assert.Contains(t, out.String(), "42", "data did not survive the Mongo upgrade")
+}
+
 func requireReady(t *testing.T, ready func() bool) {
 	t.Helper()
 	deadline := time.Now().Add(90 * time.Second)
