@@ -185,10 +185,15 @@ func TestHandleBackupDBTask_Command(t *testing.T) {
 
 func TestHandleUpgradeDBTask_HappyPath(t *testing.T) {
 	ctx := context.Background()
+	// A realistic dump body so the gzipped archive clears the pre-upgrade
+	// dump-validity floor (the destructive wipe is gated on a non-empty dump).
+	dumpBody := []byte(strings.Repeat(
+		"CREATE TABLE t (id int, name text, created timestamptz);\n"+
+			"INSERT INTO t VALUES (1, 'alpha', now()), (2, 'beta', now());\n", 40))
 	rt := &testutil.MockContainerRuntime{
 		ExecFunc: func(_ context.Context, _ string, _ []string, _ io.Reader, stdout, _ io.Writer) (int, error) {
 			if stdout != nil {
-				_, _ = stdout.Write([]byte("-- DUMP --"))
+				_, _ = stdout.Write(dumpBody)
 			}
 			return 0, nil
 		},

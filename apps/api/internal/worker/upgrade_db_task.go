@@ -152,6 +152,18 @@ func (h *TaskHandler) dumpForUpgrade(ctx context.Context, db generated.Database,
 	if info, statErr := os.Stat(localPath); statErr == nil {
 		sizeBytes = info.Size()
 	}
+	// Validity gate: a real logical dump (even of an empty schema) compresses to
+	// well over this; a near-empty archive means the engine produced no output
+	// despite a zero exit. Abort here so the upgrade never wipes the volume with
+	// nothing to restore from.
+	const minPreUpgradeDumpBytes = 100
+	if sizeBytes < minPreUpgradeDumpBytes {
+		_ = os.Remove(localPath)
+		msg := fmt.Sprintf("pre-upgrade dump is suspiciously small (%d bytes); aborting before volume wipe", sizeBytes)
+		h.failDatabaseBackup(ctx, run.ID, msg)
+		return "", errors.New(msg)
+	}
+
 	remoteKey := pgtype.Text{}
 	if h.BackupService != nil && h.BackupService.Enabled() {
 		if key, upErr := h.BackupService.Upload(ctx, localPath); upErr != nil {
