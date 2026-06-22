@@ -35,6 +35,10 @@ func NewMetricsService(queries *generated.Queries, rdb *redis.Client) *MetricsSe
 	return &MetricsService{queries: queries, rdb: rdb}
 }
 
+// HostMetricsLatestKey caches the most recent host snapshot (short TTL) so HTTP
+// handlers can read it instead of re-running gopsutil collection per request.
+const HostMetricsLatestKey = "host:metrics:latest"
+
 // CollectHostStats gathers host CPU, memory, and disk usage via gopsutil.
 func CollectHostStats(ctx context.Context) HostMetricPoint {
 	now := time.Now()
@@ -156,6 +160,10 @@ func (s *MetricsService) StartTicker(ctx context.Context) {
 			if err == nil {
 				if pubErr := s.rdb.Publish(ctx, "host:metrics:live", data).Err(); pubErr != nil {
 					slog.Debug("failed to publish host metrics to Redis", "error", pubErr)
+				}
+				// Cache the latest point (short TTL) for per-request handlers.
+				if setErr := s.rdb.Set(ctx, HostMetricsLatestKey, data, 5*time.Second).Err(); setErr != nil {
+					slog.Debug("failed to cache latest host metrics", "error", setErr)
 				}
 			}
 

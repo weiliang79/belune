@@ -76,7 +76,14 @@ export function MeterRow({
           {clamped.toFixed(0)}%
         </span>
       </div>
-      <div className="bg-elev h-1.5 overflow-hidden rounded-full">
+      <div
+        className="bg-elev h-1.5 overflow-hidden rounded-full"
+        role="progressbar"
+        aria-label={label}
+        aria-valuenow={Math.round(clamped)}
+        aria-valuemin={0}
+        aria-valuemax={100}
+      >
         <div
           className={cn("h-full rounded-full transition-all", tone)}
           style={{ width: `${clamped}%` }}

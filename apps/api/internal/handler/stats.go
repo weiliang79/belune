@@ -1,6 +1,8 @@
 package handler
 
 import (
+	"context"
+	"encoding/json"
 	"log/slog"
 	"net/http"
 
@@ -9,6 +11,22 @@ import (
 	"github.com/ungweiliang/selfhost-paas/internal/server/middleware"
 	"github.com/ungweiliang/selfhost-paas/internal/service"
 )
+
+// latestHostStats returns the cached host snapshot written by the metrics
+// ticker (~1s fresh), falling back to a live collection when the cache is empty
+// (e.g. the ticker isn't running). Reading the cache avoids re-running gopsutil
+// per request and the CPU-percent jitter that a second concurrent sampler causes.
+func (h *Handler) latestHostStats(ctx context.Context) service.HostMetricPoint {
+	if h.rdb != nil {
+		if data, err := h.rdb.Get(ctx, service.HostMetricsLatestKey).Bytes(); err == nil {
+			var p service.HostMetricPoint
+			if json.Unmarshal(data, &p) == nil {
+				return p
+			}
+		}
+	}
+	return service.CollectHostStats(ctx)
+}
 
 type healthRatio struct {
 	Running int64 `json:"running"`
@@ -89,7 +107,7 @@ func (h *Handler) GetStats(w http.ResponseWriter, r *http.Request) {
 			slog.Warn("stats: count failed backups", "error", err)
 			failedBackups = 0
 		}
-		host := service.CollectHostStats(ctx)
+		host := h.latestHostStats(ctx)
 		resp.Host = &host
 	}
 
