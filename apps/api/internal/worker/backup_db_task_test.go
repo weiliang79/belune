@@ -78,6 +78,7 @@ func seedDatabase(t *testing.T, opts ...func(*generated.CreateDatabaseParams)) g
 	require.NoError(t, err)
 	credsJSON, err := json.Marshal(map[string]string{
 		"user": "u", "password": "p", "database": "d", "username": "u",
+		"root_password": "rootp",
 	})
 	require.NoError(t, err)
 	enc, err := keyring.Encrypt(credsJSON)

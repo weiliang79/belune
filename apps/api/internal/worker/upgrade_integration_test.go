@@ -99,6 +99,72 @@ func TestUpgradeRoundTrip_RealDocker(t *testing.T) {
 	assert.Contains(t, out.String(), "42", "data did not survive the upgrade")
 }
 
+// TestUpgradeRoundTrip_MySQL_RealDocker is the MySQL analogue (8.0 → 8.4),
+// exercising mysqldump/mysql restore-as-root against real containers.
+func TestUpgradeRoundTrip_MySQL_RealDocker(t *testing.T) {
+	if os.Getenv("PAAS_DOCKER_INTEGRATION") == "" {
+		t.Skip("set PAAS_DOCKER_INTEGRATION=1 to run the real-Docker MySQL upgrade round-trip")
+	}
+
+	ctx := context.Background()
+	rt, err := docker.New()
+	require.NoError(t, err)
+
+	h := newTestHandler(rt, nil)
+	h.Config.DatabaseBackupDir = t.TempDir()
+
+	db := seedDatabase(t, func(p *generated.CreateDatabaseParams) {
+		p.Type = "mysql"
+		p.Version = "8.0"
+		p.Status = "creating"
+		p.InternalHost = pgtype.Text{}
+		p.InternalPort = pgtype.Int4{}
+	})
+	network := naming.ProjectNetworkName(strings.TrimSuffix(db.Slug, "-db"))
+	t.Cleanup(func() {
+		_ = rt.StopContainer(context.Background(), db.Slug)
+		_ = rt.RemoveContainer(context.Background(), db.Slug)
+		_ = rt.RemoveVolume(context.Background(), db.Slug+"-vol")
+		_ = rt.RemoveNetwork(context.Background(), network)
+	})
+
+	provPayload, _ := json.Marshal(map[string]string{"database_id": dbIDStr(db)})
+	require.NoError(t, h.HandleProvisionDBTask(ctx, asynq.NewTask("provision_db", provPayload)))
+
+	mysql := func(sql string, out *bytes.Buffer) (int, error) {
+		cmd := []string{"sh", "-c", "MYSQL_PWD=rootp mysql -u root -N -e " + shellQuote(sql) + " d"}
+		if out == nil {
+			return rt.ContainerExec(ctx, db.Slug, cmd, nil, nil, nil)
+		}
+		return rt.ContainerExec(ctx, db.Slug, cmd, nil, out, nil)
+	}
+	requireReady(t, func() bool {
+		exit, err := mysql("SELECT 1", nil)
+		return err == nil && exit == 0
+	})
+	exit, err := mysql("CREATE TABLE t (id int); INSERT INTO t VALUES (42);", nil)
+	require.NoError(t, err)
+	require.Equal(t, 0, exit)
+
+	upPayload, _ := json.Marshal(map[string]string{"database_id": dbIDStr(db), "target_version": "8.4"})
+	require.NoError(t, h.HandleUpgradeDBTask(ctx, asynq.NewTask("upgrade_db", upPayload)))
+
+	updated, err := testQueries.GetDatabase(ctx, db.ID)
+	require.NoError(t, err)
+	assert.Equal(t, "8.4", updated.Version)
+	assert.Equal(t, "running", updated.Status)
+
+	requireReady(t, func() bool {
+		exit, err := mysql("SELECT 1", nil)
+		return err == nil && exit == 0
+	})
+	var out bytes.Buffer
+	exit, err = mysql("SELECT id FROM t", &out)
+	require.NoError(t, err)
+	require.Equal(t, 0, exit)
+	assert.Contains(t, out.String(), "42", "data did not survive the MySQL upgrade")
+}
+
 func requireReady(t *testing.T, ready func() bool) {
 	t.Helper()
 	deadline := time.Now().Add(90 * time.Second)

@@ -61,12 +61,13 @@ func dbDumpSpec(dbType string, creds map[string]string) dumpSpec {
 			ok:      true,
 		}
 	case "mysql":
-		user := shArg(creds["user"])
+		// Use root for dump+restore: dumping --routines/--triggers needs broad
+		// privileges, and restoring DEFINER clauses fails as the app user.
 		db := shArg(creds["database"])
-		pw := shArg(creds["password"])
+		rootPw := shArg(creds["root_password"])
 		return dumpSpec{
-			dump:    []string{"sh", "-c", fmt.Sprintf("MYSQL_PWD=%s mysqldump --single-transaction --routines --triggers -u %s %s", pw, user, db)},
-			restore: []string{"sh", "-c", fmt.Sprintf("MYSQL_PWD=%s mysql -u %s %s", pw, user, db)},
+			dump:    []string{"sh", "-c", fmt.Sprintf("MYSQL_PWD=%s mysqldump --single-transaction --routines --triggers -u root %s", rootPw, db)},
+			restore: []string{"sh", "-c", fmt.Sprintf("MYSQL_PWD=%s mysql -u root %s", rootPw, db)},
 			ok:      true,
 		}
 	case "mongo":
@@ -92,8 +93,8 @@ func dbReadyCmd(dbType string, creds map[string]string) ([]string, bool) {
 		return []string{"sh", "-c", fmt.Sprintf("PGPASSWORD=%s psql -U %s -d %s -tAc 'SELECT 1'",
 			shArg(creds["password"]), shArg(creds["user"]), shArg(creds["database"]))}, true
 	case "mysql":
-		return []string{"sh", "-c", fmt.Sprintf("MYSQL_PWD=%s mysql -u %s -e 'SELECT 1'",
-			shArg(creds["password"]), shArg(creds["user"]))}, true
+		return []string{"sh", "-c", fmt.Sprintf("MYSQL_PWD=%s mysql -u root -e 'SELECT 1'",
+			shArg(creds["root_password"]))}, true
 	case "mongo":
 		return []string{"sh", "-c", fmt.Sprintf("mongosh --username %s --password %s --authenticationDatabase admin --quiet --eval 'db.runCommand({ping:1})'",
 			shArg(creds["username"]), shArg(creds["password"]))}, true
