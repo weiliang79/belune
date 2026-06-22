@@ -633,6 +633,15 @@ func (h *Handler) BackupDatabase(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusConflict, "database must be running to back up")
 		return
 	}
+	// Reject overlapping backups so a double-click doesn't spawn two runs.
+	if recent, err := h.queries.ListDatabaseBackups(r.Context(), generated.ListDatabaseBackupsParams{DatabaseID: dbUUID, Limit: 5}); err == nil {
+		for _, b := range recent {
+			if b.Status == "running" {
+				writeError(w, http.StatusConflict, "a backup is already in progress")
+				return
+			}
+		}
+	}
 
 	payload, err := json.Marshal(map[string]any{"database_id": databaseID})
 	if err != nil {

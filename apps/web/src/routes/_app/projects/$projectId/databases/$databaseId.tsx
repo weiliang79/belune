@@ -692,7 +692,13 @@ function BackupsCard({ db }: { db: Database }) {
               Online logical dumps. No downtime; restore replaces current data.
             </CardDescription>
           </div>
-          <Button size="sm" onClick={handleBackup} disabled={backup.isPending}>
+          <Button
+            size="sm"
+            onClick={handleBackup}
+            disabled={
+              backup.isPending || backups?.some((b) => b.status === "running")
+            }
+          >
             <DatabaseBackupIcon className="mr-1 h-4 w-4" />
             Back up now
           </Button>
