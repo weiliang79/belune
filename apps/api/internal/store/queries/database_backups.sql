@@ -23,6 +23,9 @@ WHERE database_id = $1
 ORDER BY started_at DESC
 LIMIT $2;
 
+-- name: DeleteDatabaseBackup :exec
+DELETE FROM database_backups WHERE id = $1;
+
 -- name: GetLastSucceededDatabaseBackup :one
 SELECT * FROM database_backups
 WHERE database_id = $1 AND status = 'succeeded'

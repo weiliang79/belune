@@ -96,6 +96,9 @@ type Config struct {
 	// Image for the short-lived helper that tars/untars a database volume during
 	// "other"-type volume-snapshot backup/restore. Must contain `tar` and `sh`.
 	DatabaseBackupHelperImage string
+	// Number of most-recent backups to keep per managed database; older ones are
+	// pruned (rows + local files + S3 objects) after a new backup succeeds.
+	DatabaseBackupRetainCount int
 }
 
 func Load() (*Config, error) {
@@ -156,6 +159,7 @@ func Load() (*Config, error) {
 		BackupScriptPath:          getEnv("BACKUP_SCRIPT_PATH", paasDir()+"/scripts/backup.sh"),
 		DatabaseBackupDir:         getEnv("DATABASE_BACKUP_DIR", paasDir()+"/backups/databases"),
 		DatabaseBackupHelperImage: getEnv("DATABASE_BACKUP_HELPER_IMAGE", "alpine:3.20"),
+		DatabaseBackupRetainCount: getEnvInt("DATABASE_BACKUP_RETAIN_COUNT", 7),
 	}
 
 	if cfg.JWTSecret == "" {

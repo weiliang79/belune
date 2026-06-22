@@ -32,6 +32,7 @@ import {
   useDatabaseBackups,
   useBackupDatabase,
   useRestoreDatabase,
+  useDeleteDatabaseBackup,
   useUpgradeDatabase,
 } from "@/lib/hooks/use-databases";
 import { useProject } from "@/lib/hooks/use-projects";
@@ -655,6 +656,15 @@ function BackupsCard({ db }: { db: Database }) {
   const { data: backups, isLoading } = useDatabaseBackups(db.project_id, db.id);
   const backup = useBackupDatabase(db.project_id, db.id);
   const restore = useRestoreDatabase(db.project_id, db.id);
+  const deleteBackup = useDeleteDatabaseBackup(db.project_id, db.id);
+
+  const handleDeleteBackup = (backupId: string) => {
+    toast.promise(deleteBackup.mutateAsync(backupId), {
+      loading: "Deleting backup…",
+      success: "Backup deleted",
+      error: (err) => err.message,
+    });
+  };
 
   const handleBackup = () => {
     toast.promise(backup.mutateAsync(), {
@@ -736,37 +746,75 @@ function BackupsCard({ db }: { db: Database }) {
                     </p>
                   )}
                 </div>
-                {b.status === "succeeded" && (
-                  <AlertDialog>
-                    <AlertDialogTrigger
-                      render={<Button variant="outline" size="sm" />}
-                    >
-                      <RotateCcw className="mr-1 h-4 w-4" />
-                      Restore
-                    </AlertDialogTrigger>
-                    <AlertDialogContent>
-                      <AlertDialogHeader>
-                        <AlertDialogTitle>
-                          Restore this backup?
-                        </AlertDialogTitle>
-                        <AlertDialogDescription>
-                          This replaces the current contents of{" "}
-                          <span className="font-medium">{db.name}</span> with
-                          the backup from{" "}
-                          {new Date(b.started_at).toLocaleString()}. Data
-                          written since then will be lost. The database stays
-                          online during the restore.
-                        </AlertDialogDescription>
-                      </AlertDialogHeader>
-                      <AlertDialogFooter>
-                        <AlertDialogCancel>Cancel</AlertDialogCancel>
-                        <AlertDialogAction onClick={() => handleRestore(b.id)}>
-                          Restore
-                        </AlertDialogAction>
-                      </AlertDialogFooter>
-                    </AlertDialogContent>
-                  </AlertDialog>
-                )}
+                <div className="flex items-center gap-2">
+                  {b.status === "succeeded" && (
+                    <AlertDialog>
+                      <AlertDialogTrigger
+                        render={<Button variant="outline" size="sm" />}
+                      >
+                        <RotateCcw className="mr-1 h-4 w-4" />
+                        Restore
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>
+                            Restore this backup?
+                          </AlertDialogTitle>
+                          <AlertDialogDescription>
+                            This replaces the current contents of{" "}
+                            <span className="font-medium">{db.name}</span> with
+                            the backup from{" "}
+                            {new Date(b.started_at).toLocaleString()}. Data
+                            written since then will be lost. The database stays
+                            online during the restore.
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>Cancel</AlertDialogCancel>
+                          <AlertDialogAction
+                            onClick={() => handleRestore(b.id)}
+                          >
+                            Restore
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
+                  )}
+                  {b.status !== "running" && (
+                    <AlertDialog>
+                      <AlertDialogTrigger
+                        render={
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            aria-label="Delete backup"
+                          />
+                        }
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>
+                            Delete this backup?
+                          </AlertDialogTitle>
+                          <AlertDialogDescription>
+                            Permanently removes this backup (local file and any
+                            S3 copy). This can't be undone.
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>Cancel</AlertDialogCancel>
+                          <AlertDialogAction
+                            onClick={() => handleDeleteBackup(b.id)}
+                          >
+                            Delete
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
+                  )}
+                </div>
               </li>
             ))}
           </ul>

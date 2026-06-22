@@ -206,8 +206,47 @@ func (h *TaskHandler) HandleBackupDBTask(ctx context.Context, t *asynq.Task) err
 		SizeBytes:  sizeBytes,
 	})
 
+	h.pruneDatabaseBackups(ctx, db.ID)
+
 	slog.Info("database backed up", "database_id", payload.DatabaseID, "method", method, "size_bytes", sizeBytes, "remote", remoteKey.Valid)
 	return nil
+}
+
+// deleteBackupArtifacts removes a backup's local file, S3 object, and row.
+func (h *TaskHandler) deleteBackupArtifacts(ctx context.Context, b generated.DatabaseBackup) {
+	if b.LocalPath.Valid {
+		if err := os.Remove(b.LocalPath.String); err != nil && !os.IsNotExist(err) {
+			slog.Warn("prune: remove local backup", "path", b.LocalPath.String, "error", err)
+		}
+	}
+	if b.RemoteKey.Valid && h.BackupService != nil && h.BackupService.Enabled() {
+		if err := h.BackupService.Delete(ctx, []string{b.RemoteKey.String}); err != nil {
+			slog.Warn("prune: remove remote backup", "key", b.RemoteKey.String, "error", err)
+		}
+	}
+	if err := h.Queries.DeleteDatabaseBackup(ctx, b.ID); err != nil {
+		slog.Warn("prune: delete backup row", "backup_id", formatUUID(b.ID), "error", err)
+	}
+}
+
+// pruneDatabaseBackups keeps the newest N backups for a database (config
+// DatabaseBackupRetainCount, default 7) and deletes the rest. Best-effort.
+func (h *TaskHandler) pruneDatabaseBackups(ctx context.Context, dbID pgtype.UUID) {
+	keep := 7
+	if h.Config != nil && h.Config.DatabaseBackupRetainCount > 0 {
+		keep = h.Config.DatabaseBackupRetainCount
+	}
+	rows, err := h.Queries.ListDatabaseBackups(ctx, generated.ListDatabaseBackupsParams{DatabaseID: dbID, Limit: 1000})
+	if err != nil {
+		slog.Warn("prune: list backups", "error", err)
+		return
+	}
+	if len(rows) <= keep {
+		return
+	}
+	for _, b := range rows[keep:] { // ListDatabaseBackups is newest-first
+		h.deleteBackupArtifacts(ctx, b)
+	}
 }
 
 // writeBackupArchive produces the gzipped backup archive into f according to the

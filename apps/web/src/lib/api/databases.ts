@@ -81,6 +81,16 @@ export function restoreDatabase(
   );
 }
 
+export function deleteDatabaseBackup(
+  projectId: string,
+  databaseId: string,
+  backupId: string,
+) {
+  return api.delete<{ status: string }>(
+    `/projects/${projectId}/databases/${databaseId}/backups/${backupId}`,
+  );
+}
+
 export function upgradeDatabase(
   projectId: string,
   databaseId: string,

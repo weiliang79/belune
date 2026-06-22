@@ -582,6 +582,31 @@ func (h *Handler) ListDatabaseBackups(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, resp)
 }
 
+// DeleteDatabaseBackup removes one backup (row + local file + S3 object).
+func (h *Handler) DeleteDatabaseBackup(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "databaseId")
+	var dbUUID pgtype.UUID
+	if err := dbUUID.Scan(id); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid database id")
+		return
+	}
+	var backupUUID pgtype.UUID
+	if err := backupUUID.Scan(chi.URLParam(r, "backupId")); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid backup id")
+		return
+	}
+	if !h.canAccessDatabase(r, dbUUID) {
+		writeError(w, http.StatusForbidden, "access denied")
+		return
+	}
+	if err := h.dbService.DeleteBackup(r.Context(), dbUUID, backupUUID); err != nil {
+		writeError(w, http.StatusNotFound, "backup not found")
+		return
+	}
+	h.audit(r, "delete_database_backup", "database", id, map[string]any{"backup_id": chi.URLParam(r, "backupId")})
+	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
+}
+
 // BackupDatabase enqueues an online logical-dump backup of a running database.
 func (h *Handler) BackupDatabase(w http.ResponseWriter, r *http.Request) {
 	databaseID := chi.URLParam(r, "databaseId")

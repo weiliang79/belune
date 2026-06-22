@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"os"
 
@@ -20,6 +21,30 @@ type DatabaseService struct {
 
 func NewDatabaseService(queries *generated.Queries, rt runtime.ContainerRuntime, backups *backup.Service) *DatabaseService {
 	return &DatabaseService{queries: queries, runtime: rt, backups: backups}
+}
+
+// DeleteBackup removes a single backup belonging to dbID: its local file, S3
+// object, and row. Returns an error if the backup isn't found or doesn't belong
+// to the database.
+func (s *DatabaseService) DeleteBackup(ctx context.Context, dbID, backupID pgtype.UUID) error {
+	b, err := s.queries.GetDatabaseBackup(ctx, backupID)
+	if err != nil {
+		return err
+	}
+	if b.DatabaseID != dbID {
+		return fmt.Errorf("backup does not belong to this database")
+	}
+	if b.LocalPath.Valid {
+		if err := os.Remove(b.LocalPath.String); err != nil && !os.IsNotExist(err) {
+			slog.Warn("could not remove backup file", "path", b.LocalPath.String, "error", err)
+		}
+	}
+	if b.RemoteKey.Valid && s.backups != nil && s.backups.Enabled() {
+		if err := s.backups.Delete(ctx, []string{b.RemoteKey.String}); err != nil {
+			slog.Warn("could not remove remote backup", "key", b.RemoteKey.String, "error", err)
+		}
+	}
+	return s.queries.DeleteDatabaseBackup(ctx, backupID)
 }
 
 // cleanupBackups removes a database's backup archives (local files and, when

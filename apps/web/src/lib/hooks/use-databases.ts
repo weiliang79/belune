@@ -110,6 +110,19 @@ export function useBackupDatabase(projectId: string, databaseId: string) {
   });
 }
 
+export function useDeleteDatabaseBackup(projectId: string, databaseId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (backupId: string) =>
+      databasesApi.deleteDatabaseBackup(projectId, databaseId, backupId),
+    onSuccess: () => {
+      qc.invalidateQueries({
+        queryKey: queryKeys.databases.backups(projectId, databaseId),
+      });
+    },
+  });
+}
+
 export function useRestoreDatabase(projectId: string, databaseId: string) {
   return useMutation({
     mutationFn: (backupId: string) =>

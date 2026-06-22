@@ -11,6 +11,15 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const deleteDatabaseBackup = `-- name: DeleteDatabaseBackup :exec
+DELETE FROM database_backups WHERE id = $1
+`
+
+func (q *Queries) DeleteDatabaseBackup(ctx context.Context, id pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, deleteDatabaseBackup, id)
+	return err
+}
+
 const getDatabaseBackup = `-- name: GetDatabaseBackup :one
 SELECT id, database_id, started_at, finished_at, status, local_path, remote_key, size_bytes, error FROM database_backups
 WHERE id = $1
