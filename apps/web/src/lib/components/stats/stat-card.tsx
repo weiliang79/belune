@@ -11,30 +11,32 @@ const VALUE_TONE: Record<Tone, string> = {
   error: "text-status-error",
 };
 
-/** One at-a-glance metric: label, large value, optional hint and accent tone. */
+/** One at-a-glance metric: label, large value, optional hint, footer and tone. */
 export function StatCard({
   label,
   value,
   hint,
   tone = "default",
   icon,
+  footer,
 }: {
   label: string;
   value: ReactNode;
   hint?: ReactNode;
   tone?: Tone;
   icon?: ReactNode;
+  footer?: ReactNode;
 }) {
   return (
-    <Card>
-      <CardContent className="p-4">
-        <div className="flex items-center justify-between gap-2">
-          <p className="text-text-faint text-xs font-medium">{label}</p>
+    <Card className="h-full">
+      <CardContent className="flex h-full flex-col px-4 py-3">
+        <div className="text-text-faint flex items-center gap-1.5">
           {icon}
+          <p className="text-xs font-medium tracking-wide uppercase">{label}</p>
         </div>
         <p
           className={cn(
-            "mt-1.5 text-2xl font-semibold tracking-tight",
+            "mt-2 text-2xl font-semibold tracking-tight",
             VALUE_TONE[tone],
           )}
         >
@@ -44,6 +46,11 @@ export function StatCard({
           <p className="text-muted-foreground mt-0.5 truncate text-xs">
             {hint}
           </p>
+        )}
+        {footer != null && (
+          <div className="mt-auto flex flex-wrap items-center gap-1.5 pt-3">
+            {footer}
+          </div>
         )}
       </CardContent>
     </Card>

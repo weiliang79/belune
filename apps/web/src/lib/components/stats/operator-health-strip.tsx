@@ -1,3 +1,10 @@
+import {
+  ActivityIcon,
+  RocketIcon,
+  TriangleAlertIcon,
+  ServerIcon,
+} from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useStats } from "@/lib/hooks/use-stats";
@@ -49,15 +56,17 @@ export function OperatorHealthStrip({ className }: { className?: string }) {
 
   const deployRate = pct(deploy_7d.succeeded, deploy_7d.total);
   const attention = needs_attention.total;
+  const notRunning = Math.max(0, app_health.total - app_health.running);
 
   const cols = host ? "lg:grid-cols-4" : "lg:grid-cols-3";
 
   return (
     <div
-      className={cn("grid items-start gap-4 sm:grid-cols-2", cols, className)}
+      className={cn("grid items-stretch gap-4 sm:grid-cols-2", cols, className)}
     >
       <StatCard
         label="App health"
+        icon={<ActivityIcon className="size-3.5" />}
         tone={healthTone}
         value={
           <span className="font-mono">
@@ -66,10 +75,21 @@ export function OperatorHealthStrip({ className }: { className?: string }) {
           </span>
         }
         hint={app_health.total === 0 ? "No services yet" : "services running"}
+        footer={
+          app_health.total === 0 ? undefined : (
+            <>
+              <Badge variant="outline">{app_health.running} running</Badge>
+              {notRunning > 0 && (
+                <Badge variant="destructive">{notRunning} down</Badge>
+              )}
+            </>
+          )
+        }
       />
 
       <StatCard
         label="Deploy success · 7d"
+        icon={<RocketIcon className="size-3.5" />}
         tone={
           deploy_7d.total === 0
             ? "default"
@@ -81,36 +101,58 @@ export function OperatorHealthStrip({ className }: { className?: string }) {
         hint={
           deploy_7d.total === 0
             ? "No deploys in 7 days"
-            : `${deploy_7d.succeeded}/${deploy_7d.total} succeeded`
+            : `${deploy_7d.succeeded} of ${deploy_7d.total} deploys`
+        }
+        footer={
+          deploy_7d.total === 0 ? undefined : (
+            <>
+              <Badge variant="outline">{deploy_7d.succeeded} succeeded</Badge>
+              {deploy_7d.failed > 0 && (
+                <Badge variant="destructive">{deploy_7d.failed} failed</Badge>
+              )}
+            </>
+          )
         }
       />
 
       <StatCard
         label="Needs attention"
+        icon={<TriangleAlertIcon className="size-3.5" />}
         tone={attention === 0 ? "ready" : "error"}
         value={attention}
-        hint={
-          attention === 0
-            ? "All clear"
-            : [
-                needs_attention.failed_deploys > 0 &&
-                  `${needs_attention.failed_deploys} failed deploys`,
-                needs_attention.error_services > 0 &&
-                  `${needs_attention.error_services} errored`,
-                needs_attention.failed_backups > 0 &&
-                  `${needs_attention.failed_backups} failed backups`,
-              ]
-                .filter(Boolean)
-                .join(" · ")
+        hint={attention === 0 ? "All clear" : attention === 1 ? "issue" : "issues"}
+        footer={
+          attention === 0 ? undefined : (
+            <>
+              {needs_attention.error_services > 0 && (
+                <Badge variant="destructive">
+                  {needs_attention.error_services} errored
+                </Badge>
+              )}
+              {needs_attention.failed_deploys > 0 && (
+                <Badge variant="destructive">
+                  {needs_attention.failed_deploys} failed deploys
+                </Badge>
+              )}
+              {needs_attention.failed_backups > 0 && (
+                <Badge variant="destructive">
+                  {needs_attention.failed_backups} failed backups
+                </Badge>
+              )}
+            </>
+          )
         }
       />
 
       {host && (
-        <Card>
-          <CardContent className="space-y-2.5 p-4">
-            <p className="text-text-faint text-xs font-medium">
-              Host resources
-            </p>
+        <Card className="h-full">
+          <CardContent className="space-y-2.5 px-4 py-3">
+            <div className="text-text-faint flex items-center gap-1.5">
+              <ServerIcon className="size-3.5" />
+              <p className="text-xs font-medium tracking-wide uppercase">
+                Host resources
+              </p>
+            </div>
             <MeterRow label="CPU" percent={host.cpu_percent} />
             <MeterRow
               label="Memory"

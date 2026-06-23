@@ -1,74 +1,33 @@
-import { useState } from "react";
-import { createFileRoute, Link } from "@tanstack/react-router";
-import {
-  AppWindowIcon,
-  ChevronRightIcon,
-  DatabaseIcon,
-  LayersIcon,
-} from "lucide-react";
-import { useProject } from "@/lib/hooks/use-projects";
+import { useMemo, useState } from "react";
+import { createFileRoute } from "@tanstack/react-router";
+import { Database, DatabaseIcon, Globe, LayersIcon, PlusIcon } from "lucide-react";
 import { useApplications } from "@/lib/hooks/use-applications";
 import { useDatabases } from "@/lib/hooks/use-databases";
-import { Badge } from "@/components/ui/badge";
-import { StatusPill } from "@/components/ui/status-pill";
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { ApplicationFormDialog } from "@/components/applications/application-form-dialog";
 import { DatabaseFormDialog } from "@/components/databases/database-form-dialog";
-import { ProjectHeader } from "@/components/projects/project-header";
+import {
+  ServiceRow,
+  type ServiceRowItem,
+} from "@/components/projects/service-row";
 
 export const Route = createFileRoute("/_app/projects/$projectId/")({
   component: ProjectOverview,
 });
 
-function ServiceRow({
-  to,
-  params,
-  icon,
-  name,
-  slug,
-  status,
-  meta,
-}: {
-  to: string;
-  params: Record<string, string>;
-  icon: React.ReactNode;
-  name: string;
-  slug: string;
-  status: string;
-  meta: React.ReactNode;
-}) {
-  return (
-    <Link
-      to={to}
-      params={params}
-      className="hover:bg-card-hover group flex items-center gap-3 px-4 py-3 transition-colors"
-    >
-      <div className="bg-elev text-text-muted grid size-9 shrink-0 place-items-center rounded-lg">
-        {icon}
-      </div>
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2">
-          <span className="group-hover:text-primary truncate text-sm font-medium transition-colors">
-            {name}
-          </span>
-          <span className="text-text-faint hidden truncate font-mono text-xs sm:inline">
-            {slug}
-          </span>
-        </div>
-        <div className="mt-1 flex items-center gap-2">{meta}</div>
-      </div>
-      <StatusPill status={status} />
-      <ChevronRightIcon
-        aria-hidden="true"
-        className="text-text-faint size-4 shrink-0"
-      />
-    </Link>
-  );
-}
+type TypeFilter = "all" | "application" | "database";
+type StatusFilter = "all" | "running" | "stopped" | "error";
+
+const STATUS_GROUPS: Record<Exclude<StatusFilter, "all">, Set<string>> = {
+  running: new Set(["running", "ready"]),
+  stopped: new Set(["stopped", "inactive", "paused", "exited"]),
+  error: new Set(["failed", "error", "crashed", "unhealthy"]),
+};
 
 function ProjectOverview() {
   const { projectId } = Route.useParams();
-  const { data: project } = useProject(projectId);
   const { data: applications, isLoading: applicationsLoading } =
     useApplications(projectId);
   const { data: databases, isLoading: databasesLoading } =
@@ -76,20 +35,37 @@ function ProjectOverview() {
 
   const [appDialogOpen, setAppDialogOpen] = useState(false);
   const [dbDialogOpen, setDbDialogOpen] = useState(false);
+  const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
 
   const loading = applicationsLoading || databasesLoading;
-  const hasApplications = !!applications && applications.length > 0;
-  const hasDatabases = !!databases && databases.length > 0;
-  const isEmpty = !hasApplications && !hasDatabases;
+
+  const items = useMemo<ServiceRowItem[]>(() => {
+    const all: ServiceRowItem[] = [
+      ...(applications ?? []).map(
+        (data) => ({ kind: "application", data }) as ServiceRowItem,
+      ),
+      ...(databases ?? []).map(
+        (data) => ({ kind: "database", data }) as ServiceRowItem,
+      ),
+    ];
+    return all.filter((item) => {
+      if (typeFilter !== "all" && item.kind !== typeFilter) return false;
+      if (statusFilter !== "all") {
+        const group = STATUS_GROUPS[statusFilter];
+        if (!group.has(item.data.status.toLowerCase())) return false;
+      }
+      return true;
+    });
+  }, [applications, databases, typeFilter, statusFilter]);
+
+  const isEmpty =
+    !loading &&
+    (applications?.length ?? 0) === 0 &&
+    (databases?.length ?? 0) === 0;
 
   return (
-    <div className="space-y-8">
-      <ProjectHeader
-        project={project}
-        onAddApplication={() => setAppDialogOpen(true)}
-        onAddDatabase={() => setDbDialogOpen(true)}
-      />
-
+    <div className="space-y-4">
       <ApplicationFormDialog
         projectId={projectId}
         open={appDialogOpen}
@@ -101,8 +77,56 @@ function ProjectOverview() {
         onOpenChange={setDbDialogOpen}
       />
 
+      {/* Filter bar */}
+      <div className="flex flex-wrap items-center gap-2">
+        <ToggleGroup
+          variant="outline"
+          size="sm"
+          value={[typeFilter]}
+          onValueChange={(v) => v.length > 0 && setTypeFilter(v[0] as TypeFilter)}
+        >
+          <ToggleGroupItem value="all">All types</ToggleGroupItem>
+          <ToggleGroupItem value="application">
+            <Globe />
+            App
+          </ToggleGroupItem>
+          <ToggleGroupItem value="database">
+            <Database />
+            Database
+          </ToggleGroupItem>
+        </ToggleGroup>
+        <ToggleGroup
+          variant="outline"
+          size="sm"
+          value={[statusFilter]}
+          onValueChange={(v) =>
+            v.length > 0 && setStatusFilter(v[0] as StatusFilter)
+          }
+        >
+          <ToggleGroupItem value="all">All</ToggleGroupItem>
+          <ToggleGroupItem value="running">Running</ToggleGroupItem>
+          <ToggleGroupItem value="stopped">Stopped</ToggleGroupItem>
+          <ToggleGroupItem value="error">Error</ToggleGroupItem>
+        </ToggleGroup>
+
+        <div className="ml-auto flex items-center gap-2">
+          <span className="text-text-faint text-xs">
+            {items.length} service{items.length === 1 ? "" : "s"}
+          </span>
+          <Button variant="outline" size="sm" onClick={() => setDbDialogOpen(true)}>
+            <DatabaseIcon aria-hidden="true" className="size-4" />
+            New Database
+          </Button>
+          <Button size="sm" onClick={() => setAppDialogOpen(true)}>
+            <PlusIcon aria-hidden="true" className="size-4" />
+            New Application
+          </Button>
+        </div>
+      </div>
+
+      {/* Service table */}
       {loading ? (
-        <div className="divide-border overflow-hidden rounded-xl border">
+        <div className="divide-border divide-y overflow-hidden rounded-xl border">
           {[1, 2, 3].map((i) => (
             <div key={i} className="flex items-center gap-3 px-4 py-3">
               <Skeleton className="size-9 rounded-lg" />
@@ -131,46 +155,25 @@ function ProjectOverview() {
           </p>
         </div>
       ) : (
-        <div className="divide-border divide-y overflow-hidden rounded-xl border">
-          {applications?.map((application) => (
-            <ServiceRow
-              key={application.id}
-              to="/projects/$projectId/applications/$applicationId"
-              params={{ projectId, applicationId: application.id }}
-              icon={<AppWindowIcon aria-hidden="true" className="size-4.5" />}
-              name={application.name}
-              slug={application.slug}
-              status={application.status}
-              meta={
-                <>
-                  <Badge variant="outline" className="capitalize">
-                    {application.type}
-                  </Badge>
-                  <span className="text-text-faint truncate font-mono text-xs">
-                    {application.type === "image"
-                      ? application.source_image
-                      : application.build_type}
-                  </span>
-                </>
-              }
-            />
-          ))}
-          {databases?.map((db) => (
-            <ServiceRow
-              key={db.id}
-              to="/projects/$projectId/databases/$databaseId"
-              params={{ projectId, databaseId: db.id }}
-              icon={<DatabaseIcon aria-hidden="true" className="size-4.5" />}
-              name={db.name}
-              slug={db.slug}
-              status={db.status}
-              meta={
-                <span className="text-text-faint font-mono text-xs">
-                  {db.type}:{db.version}
-                </span>
-              }
-            />
-          ))}
+        <div className="overflow-hidden rounded-xl border">
+          {/* Column header */}
+          <div className="text-text-faint bg-elev/40 hidden grid-cols-[minmax(0,2.2fr)_minmax(0,1.4fr)_140px_120px] gap-3 px-4 py-2 text-xs font-medium md:grid">
+            <span>Name / Type</span>
+            <span>Source</span>
+            <span>Status</span>
+            <span>Actions</span>
+          </div>
+          <div className="divide-border divide-y">
+            {items.length === 0 ? (
+              <div className="text-muted-foreground px-4 py-10 text-center text-sm">
+                No services match the current filters.
+              </div>
+            ) : (
+              items.map((item) => (
+                <ServiceRow key={item.data.id} projectId={projectId} item={item} />
+              ))
+            )}
+          </div>
         </div>
       )}
     </div>

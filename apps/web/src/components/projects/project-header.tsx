@@ -1,53 +1,98 @@
 import { Link } from "@tanstack/react-router";
-import { DatabaseIcon, PlusIcon, SettingsIcon } from "lucide-react";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { LayersIcon, SettingsIcon } from "lucide-react";
+import { buttonVariants } from "@/components/ui/button";
+import { StatusPill } from "@/components/ui/status-pill";
 import { cn } from "@/lib/utils";
-import type { Project } from "@/lib/types";
+import type { Application, Database, Project } from "@/lib/types";
 
 interface Props {
   project?: Project;
-  onAddApplication: () => void;
-  onAddDatabase: () => void;
+  applications?: Application[];
+  databases?: Database[];
 }
 
-export function ProjectHeader({
-  project,
-  onAddApplication,
-  onAddDatabase,
-}: Props) {
+/** Two uppercase initials derived from the project name. */
+function initials(name: string): string {
+  const parts = name.trim().split(/[\s-_]+/).filter(Boolean);
+  if (parts.length === 0) return "··";
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[1][0]).toUpperCase();
+}
+
+/** Stable hue from the name so each project glyph keeps a consistent colour. */
+function hueOf(name: string): number {
+  let h = 0;
+  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) % 360;
+  return h;
+}
+
+const ERROR_STATES = new Set(["failed", "error", "crashed", "unhealthy", "exited"]);
+
+export function ProjectHeader({ project, applications, databases }: Props) {
+  const services = [
+    ...(applications ?? []).map((a) => a.status),
+    ...(databases ?? []).map((d) => d.status),
+  ];
+  const total = services.length;
+  const running = services.filter(
+    (s) => s.toLowerCase() === "running" || s.toLowerCase() === "ready",
+  ).length;
+  const errored = services.filter((s) => ERROR_STATES.has(s.toLowerCase())).length;
+
+  const name = project?.name ?? "Project";
+  const hue = hueOf(name);
+  const glyphBg = `linear-gradient(150deg, hsl(${hue} 62% 52%), hsl(${(hue + 26) % 360} 58% 38%))`;
+
   return (
     <div className="flex flex-wrap items-start justify-between gap-3">
-      <div className="min-w-0">
-        <h1 className="truncate text-2xl font-semibold tracking-tight">
-          {project?.name ?? "Project"}
-        </h1>
-        {project && (
-          <p className="text-text-faint mt-0.5 truncate font-mono text-sm">
-            {project.slug}
-          </p>
-        )}
+      <div className="flex min-w-0 items-center gap-3">
+        <div
+          aria-hidden="true"
+          className="grid size-11 shrink-0 place-items-center rounded-xl text-sm font-semibold text-white"
+          style={{ background: glyphBg }}
+        >
+          {initials(name)}
+        </div>
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <h1 className="truncate text-2xl font-semibold tracking-tight">
+              {name}
+            </h1>
+            {total > 0 && (
+              <StatusPill
+                status="running"
+                label={`${running}/${total} running`}
+              />
+            )}
+            {errored > 0 && (
+              <StatusPill
+                status="error"
+                label={`${errored} error${errored === 1 ? "" : "s"}`}
+              />
+            )}
+          </div>
+          {project && (
+            <div className="text-text-faint mt-1 flex items-center gap-3 text-sm">
+              <span className="truncate font-mono">{project.slug}</span>
+              <span className="inline-flex items-center gap-1">
+                <LayersIcon aria-hidden="true" className="size-3.5" />
+                {total} service{total === 1 ? "" : "s"}
+              </span>
+            </div>
+          )}
+        </div>
       </div>
-      <div className="flex items-center gap-2">
-        {project && (
-          <Link
-            to="/projects/$projectId/settings"
-            params={{ projectId: project.id }}
-            className={cn(buttonVariants({ variant: "outline", size: "icon" }))}
-            aria-label="Project settings"
-            title="Project settings"
-          >
-            <SettingsIcon aria-hidden="true" className="size-4" />
-          </Link>
-        )}
-        <Button variant="outline" onClick={onAddDatabase}>
-          <DatabaseIcon aria-hidden="true" className="size-4" />
-          New Database
-        </Button>
-        <Button onClick={onAddApplication}>
-          <PlusIcon aria-hidden="true" className="size-4" />
-          New Application
-        </Button>
-      </div>
+
+      {project && (
+        <Link
+          to="/projects/$projectId/settings"
+          params={{ projectId: project.id }}
+          className={cn(buttonVariants({ variant: "outline" }))}
+        >
+          <SettingsIcon aria-hidden="true" className="size-4" />
+          Settings
+        </Link>
+      )}
     </div>
   );
 }

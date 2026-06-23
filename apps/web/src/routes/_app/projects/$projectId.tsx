@@ -5,9 +5,12 @@ import {
   useRouterState,
 } from "@tanstack/react-router";
 import { useProject } from "@/lib/hooks/use-projects";
+import { useApplications } from "@/lib/hooks/use-applications";
+import { useDatabases } from "@/lib/hooks/use-databases";
 import { cn } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AppBreadcrumb } from "@/lib/components/app-breadcrumb";
+import { ProjectHeader } from "@/components/projects/project-header";
 import { RouteError } from "@/lib/components/route-error";
 
 export const Route = createFileRoute("/_app/projects/$projectId")({
@@ -18,6 +21,8 @@ export const Route = createFileRoute("/_app/projects/$projectId")({
 function ProjectLayout() {
   const { projectId } = Route.useParams();
   const { data: project, isLoading } = useProject(projectId);
+  const { data: applications } = useApplications(projectId);
+  const { data: databases } = useDatabases(projectId);
   const routerState = useRouterState();
   const currentPath = routerState.location.pathname;
 
@@ -48,8 +53,8 @@ function ProjectLayout() {
   }
 
   const tabs = [
-    { to: `/projects/${projectId}`, label: "Applications" },
-    { to: `/projects/${projectId}/env`, label: "Environment" },
+    { to: `/projects/${projectId}`, label: "Overview" },
+    { to: `/projects/${projectId}/env`, label: "Environment Variables" },
     { to: `/projects/${projectId}/settings`, label: "Settings" },
   ];
 
@@ -62,10 +67,11 @@ function ProjectLayout() {
         ]}
       />
 
-      <div>
-        <h1 className="text-2xl font-bold">{project.name}</h1>
-        <p className="text-muted-foreground text-sm">{project.slug}</p>
-      </div>
+      <ProjectHeader
+        project={project}
+        applications={applications}
+        databases={databases}
+      />
 
       <nav className="flex gap-1 border-b">
         {tabs.map((tab) => {
