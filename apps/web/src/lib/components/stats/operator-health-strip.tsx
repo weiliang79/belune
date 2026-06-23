@@ -87,33 +87,29 @@ export function OperatorHealthStrip({ className }: { className?: string }) {
         }
       />
 
-      <StatCard
-        label="Deploy success · 7d"
-        icon={<RocketIcon className="size-3.5" />}
-        tone={
-          deploy_7d.total === 0
-            ? "default"
-            : deployRate === 100
-              ? "ready"
-              : "attention"
-        }
-        value={deploy_7d.total === 0 ? "—" : `${deployRate}%`}
-        hint={
-          deploy_7d.total === 0
-            ? "No deploys in 7 days"
-            : `${deploy_7d.succeeded} of ${deploy_7d.total} deploys`
-        }
-        footer={
-          deploy_7d.total === 0 ? undefined : (
-            <>
-              <Badge variant="outline">{deploy_7d.succeeded} succeeded</Badge>
-              {deploy_7d.failed > 0 && (
-                <Badge variant="destructive">{deploy_7d.failed} failed</Badge>
-              )}
-            </>
-          )
-        }
-      />
+      {host && (
+        <Card className="h-full">
+          <CardContent className="space-y-2.5 px-4 py-3">
+            <div className="text-text-faint flex items-center gap-1.5">
+              <ServerIcon className="size-3.5" />
+              <p className="text-xs font-medium tracking-wide uppercase">
+                Host resources
+              </p>
+            </div>
+            <MeterRow label="CPU" percent={host.cpu_percent} />
+            <MeterRow
+              label="Memory"
+              percent={pct(host.memory_used, host.memory_total)}
+              detail={`${formatBytes(host.memory_used)}/${formatBytes(host.memory_total)}`}
+            />
+            <MeterRow
+              label="Disk"
+              percent={pct(host.disk_used, host.disk_total)}
+              detail={`${formatBytes(host.disk_used)}/${formatBytes(host.disk_total)}`}
+            />
+          </CardContent>
+        </Card>
+      )}
 
       <StatCard
         label="Needs attention"
@@ -144,29 +140,33 @@ export function OperatorHealthStrip({ className }: { className?: string }) {
         }
       />
 
-      {host && (
-        <Card className="h-full">
-          <CardContent className="space-y-2.5 px-4 py-3">
-            <div className="text-text-faint flex items-center gap-1.5">
-              <ServerIcon className="size-3.5" />
-              <p className="text-xs font-medium tracking-wide uppercase">
-                Host resources
-              </p>
-            </div>
-            <MeterRow label="CPU" percent={host.cpu_percent} />
-            <MeterRow
-              label="Memory"
-              percent={pct(host.memory_used, host.memory_total)}
-              detail={`${formatBytes(host.memory_used)}/${formatBytes(host.memory_total)}`}
-            />
-            <MeterRow
-              label="Disk"
-              percent={pct(host.disk_used, host.disk_total)}
-              detail={`${formatBytes(host.disk_used)}/${formatBytes(host.disk_total)}`}
-            />
-          </CardContent>
-        </Card>
-      )}
+      <StatCard
+        label="Deploy success · 7d"
+        icon={<RocketIcon className="size-3.5" />}
+        tone={
+          deploy_7d.total === 0
+            ? "default"
+            : deployRate === 100
+              ? "ready"
+              : "attention"
+        }
+        value={deploy_7d.total === 0 ? "—" : `${deployRate}%`}
+        hint={
+          deploy_7d.total === 0
+            ? "No deploys in 7 days"
+            : `${deploy_7d.succeeded} of ${deploy_7d.total} deploys`
+        }
+        footer={
+          deploy_7d.total === 0 ? undefined : (
+            <>
+              <Badge variant="outline">{deploy_7d.succeeded} succeeded</Badge>
+              {deploy_7d.failed > 0 && (
+                <Badge variant="destructive">{deploy_7d.failed} failed</Badge>
+              )}
+            </>
+          )
+        }
+      />
     </div>
   );
 }

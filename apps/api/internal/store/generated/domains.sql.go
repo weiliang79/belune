@@ -252,6 +252,43 @@ func (q *Queries) ListDomainsByApplicationWithFeatures(ctx context.Context, appl
 	return items, nil
 }
 
+const listProjectAppPrimaryDomain = `-- name: ListProjectAppPrimaryDomain :many
+SELECT DISTINCT ON (a.id) a.id AS application_id, d.hostname, d.container_port
+FROM applications a
+LEFT JOIN domains d ON d.application_id = a.id
+WHERE a.project_id = $1 AND a.parent_application_id IS NULL
+ORDER BY a.id, d.created_at ASC
+`
+
+type ListProjectAppPrimaryDomainRow struct {
+	ApplicationID pgtype.UUID `json:"application_id"`
+	Hostname      pgtype.Text `json:"hostname"`
+	ContainerPort pgtype.Int4 `json:"container_port"`
+}
+
+// The first-added domain (hostname + container_port) per parent application in a
+// project, for the project services table. hostname/port are NULL when an app
+// has no domain.
+func (q *Queries) ListProjectAppPrimaryDomain(ctx context.Context, projectID pgtype.UUID) ([]ListProjectAppPrimaryDomainRow, error) {
+	rows, err := q.db.Query(ctx, listProjectAppPrimaryDomain, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListProjectAppPrimaryDomainRow{}
+	for rows.Next() {
+		var i ListProjectAppPrimaryDomainRow
+		if err := rows.Scan(&i.ApplicationID, &i.Hostname, &i.ContainerPort); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const updateDomain = `-- name: UpdateDomain :one
 UPDATE domains SET
     hostname = $2, ssl_enabled = $3, container_port = $4, force_https = $5,

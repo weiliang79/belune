@@ -44,6 +44,7 @@ function BackupsPage() {
   const trigger = useTriggerBackup();
 
   const isRunning = runs?.[0]?.status === "running";
+  const lastRunFailed = runs?.[0]?.status === "failed" || !!status?.last_error;
 
   const handleTrigger = () => {
     toast.promise(trigger.mutateAsync(), {
@@ -77,7 +78,14 @@ function BackupsPage() {
       {/* Status card */}
       <Card>
         <CardHeader>
-          <CardTitle>Status</CardTitle>
+          <div className="flex items-center justify-between">
+            <CardTitle>Status</CardTitle>
+            {status && (
+              <Badge variant={lastRunFailed ? "destructive" : "default"}>
+                {lastRunFailed ? "Last run failed" : "Healthy"}
+              </Badge>
+            )}
+          </div>
         </CardHeader>
         <CardContent>
           {statusLoading ? (
@@ -110,11 +118,11 @@ function BackupsPage() {
                 value={`${status.retention.count} backups / ${status.retention.days} days`}
               />
               {status.last_error && (
-                <div className="col-span-2 md:col-span-4">
-                  <p className="text-muted-foreground text-xs font-medium">
+                <div className="border-destructive/30 bg-destructive/10 col-span-2 mt-1 rounded-lg border p-3 md:col-span-4">
+                  <p className="text-destructive text-xs font-semibold">
                     Last error
                   </p>
-                  <p className="text-destructive mt-1 font-mono text-xs">
+                  <p className="text-destructive/90 mt-1 font-mono text-xs">
                     {status.last_error}
                   </p>
                 </div>

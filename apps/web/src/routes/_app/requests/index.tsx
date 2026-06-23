@@ -1,10 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { useRequestLogs } from "@/lib/hooks/use-request-logs";
+import { SearchIcon } from "lucide-react";
+import { useRequestLogs, useRequestSummary } from "@/lib/hooks/use-request-logs";
 import { useChannel } from "@/lib/hooks/use-websocket";
 import { useProjects } from "@/lib/hooks/use-projects";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Select,
@@ -13,10 +15,21 @@ import {
   SelectContent,
   SelectItem,
 } from "@/components/ui/select";
-import { DateRangePicker } from "@/components/ui/date-range-picker";
-import { AppBreadcrumb } from "@/lib/components/app-breadcrumb";
+import {
+  Table,
+  TableHeader,
+  TableBody,
+  TableRow,
+  TableHead,
+  TableCell,
+} from "@/components/ui/table";
+import { StatusBar, type StatusSegment } from "@/components/ui/status-bar";
+import { Sparkline } from "@/components/ui/sparkline";
+import { TimeRangeTabs } from "@/components/ui/time-range-tabs";
+import { timeRangeToDates, type TimeRange } from "@/lib/utils/time-range";
 import { cn } from "@/lib/utils";
 import type { RequestLog } from "@/lib/types";
+import type { RequestSummary } from "@/lib/api/request-logs";
 import * as applicationsApi from "@/lib/api/applications";
 
 export const Route = createFileRoute("/_app/requests/")({
@@ -34,8 +47,8 @@ const STATUS_RANGES = [
 ] as const;
 
 interface Filters {
-  dateFrom?: string;
-  dateTo?: string;
+  range: TimeRange;
+  search: string;
   statusRange: string;
   projectId: string;
   applicationId: string;
@@ -55,58 +68,78 @@ function statusCodeClass(code: number) {
   return "bg-status-ready-soft text-status-ready";
 }
 
-/** Percentile of an unsorted numeric array (0–100). */
-function percentile(values: number[], p: number): number {
-  if (values.length === 0) return 0;
-  const sorted = [...values].sort((a, b) => a - b);
-  const idx = Math.min(
-    sorted.length - 1,
-    Math.floor((p / 100) * sorted.length),
-  );
-  return sorted[idx];
+/** Color an HTTP method by verb to match the design's method badges. */
+function methodClass(method: string) {
+  switch (method.toUpperCase()) {
+    case "GET":
+      return "bg-status-ready-soft text-status-ready";
+    case "POST":
+      return "bg-brand-soft text-brand";
+    case "PUT":
+    case "PATCH":
+      return "bg-status-building-soft text-status-building";
+    case "DELETE":
+      return "bg-status-error-soft text-status-error";
+    default:
+      return "bg-elev text-text-muted";
+  }
 }
 
-function RequestSummary({ logs }: { logs: RequestLog[] }) {
-  const stats = useMemo(() => {
-    const total = logs.length;
-    const errors = logs.filter((l) => l.status_code >= 500).length;
-    const latencies = logs.map((l) => l.latency_ms);
-    return {
-      total,
-      errorRate: total ? (errors / total) * 100 : 0,
-      p50: percentile(latencies, 50),
-      p95: percentile(latencies, 95),
-    };
-  }, [logs]);
+function RequestSummaryCards({ summary }: { summary: RequestSummary }) {
+  const { class_counts, p50_ms, p95_ms, error_rate, per_minute, total } =
+    summary;
 
-  const cells = [
-    { label: "Requests", value: stats.total.toLocaleString(), mono: true },
-    {
-      label: "Error rate (5xx)",
-      value: `${stats.errorRate.toFixed(1)}%`,
-      mono: true,
-      tone: stats.errorRate > 0 ? "text-status-error" : undefined,
-    },
-    { label: "p50 latency", value: `${stats.p50}ms`, mono: true },
-    { label: "p95 latency", value: `${stats.p95}ms`, mono: true },
+  const segments: StatusSegment[] = [
+    { label: "2xx", count: class_counts.c2xx, className: "bg-status-ready" },
+    { label: "3xx", count: class_counts.c3xx, className: "bg-text-faint" },
+    { label: "4xx", count: class_counts.c4xx, className: "bg-status-building" },
+    { label: "5xx", count: class_counts.c5xx, className: "bg-status-error" },
   ];
 
   return (
-    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-      {cells.map((c) => (
-        <div key={c.label} className="bg-card rounded-xl border p-4">
-          <p className="text-text-faint text-xs">{c.label}</p>
-          <p
-            className={cn(
-              "mt-1 text-lg font-semibold",
-              c.mono && "font-mono",
-              c.tone,
-            )}
-          >
-            {c.value}
-          </p>
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="bg-card rounded-xl border p-4">
+        <p className="text-text-faint text-xs">Status breakdown</p>
+        <StatusBar segments={segments} className="mt-3" />
+      </div>
+
+      <div className="bg-card rounded-xl border p-4">
+        <p className="text-text-faint text-xs">Latency</p>
+        <div className="mt-1 flex items-baseline gap-5">
+          <span className="font-mono text-lg font-semibold">
+            {Math.round(p50_ms)}ms
+            <span className="text-text-faint ml-1 text-xs font-normal">P50</span>
+          </span>
+          <span className="font-mono text-lg font-semibold">
+            {Math.round(p95_ms)}ms
+            <span className="text-text-faint ml-1 text-xs font-normal">P95</span>
+          </span>
         </div>
-      ))}
+      </div>
+
+      <div className="bg-card rounded-xl border p-4">
+        <p className="text-text-faint text-xs">Requests</p>
+        <p className="mt-1 font-mono text-lg font-semibold">
+          {total.toLocaleString()}
+        </p>
+        <Sparkline
+          className="mt-2"
+          height={32}
+          values={per_minute.map((p) => p.count)}
+        />
+      </div>
+
+      <div className="bg-card rounded-xl border p-4">
+        <p className="text-text-faint text-xs">Error rate (5xx)</p>
+        <p
+          className={cn(
+            "mt-1 font-mono text-lg font-semibold",
+            error_rate > 0 && "text-status-error",
+          )}
+        >
+          {error_rate.toFixed(1)}%
+        </p>
+      </div>
     </div>
   );
 }
@@ -126,15 +159,25 @@ function RequestFilters({
   });
 
   return (
-    <div className="flex flex-wrap gap-2">
-      <DateRangePicker
-        value={{ from: filters.dateFrom, to: filters.dateTo }}
-        onChange={(range) =>
-          onChange({ ...filters, dateFrom: range.from, dateTo: range.to })
-        }
-        placeholder="All time"
-        className="w-64"
+    <div className="flex flex-wrap items-center gap-2">
+      <TimeRangeTabs
+        value={filters.range}
+        onChange={(range) => onChange({ ...filters, range })}
       />
+
+      <div className="relative min-w-0 flex-1 sm:max-w-xs">
+        <SearchIcon
+          aria-hidden="true"
+          className="text-text-faint pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2"
+        />
+        <Input
+          value={filters.search}
+          onChange={(e) => onChange({ ...filters, search: e.target.value })}
+          placeholder="Path or client IP…"
+          aria-label="Search requests"
+          className="pl-9"
+        />
+      </div>
 
       <Select
         value={filters.statusRange}
@@ -153,10 +196,7 @@ function RequestFilters({
       </Select>
 
       <Select
-        items={projects?.map((p) => ({
-          label: p.name,
-          value: p.id,
-        }))}
+        items={projects?.map((p) => ({ label: p.name, value: p.id }))}
         value={filters.projectId}
         onValueChange={(v) =>
           onChange({ ...filters, projectId: v ?? "", applicationId: "" })
@@ -176,10 +216,7 @@ function RequestFilters({
       </Select>
 
       <Select
-        items={applications?.map((a) => ({
-          label: a.name,
-          value: a.id,
-        }))}
+        items={applications?.map((a) => ({ label: a.name, value: a.id }))}
         value={filters.applicationId}
         onValueChange={(v) => onChange({ ...filters, applicationId: v ?? "" })}
         disabled={!filters.projectId}
@@ -200,31 +237,97 @@ function RequestFilters({
   );
 }
 
-function RequestRow({ log }: { log: RequestLog }) {
-  return (
-    <div className="hover:bg-card-hover flex items-center gap-3 rounded-lg border px-4 py-2.5 text-sm transition-colors">
-      <span className="text-text-faint w-32 shrink-0 font-mono text-xs">
-        {new Date(log.recorded_at).toLocaleTimeString()}
-      </span>
+interface Column<T> {
+  key: string;
+  header: string;
+  cell: (row: T) => ReactNode;
+  className?: string;
+}
+
+const requestColumns: Column<RequestLog>[] = [
+  {
+    key: "status",
+    header: "Status",
+    cell: (log) => (
       <span
         className={cn(
-          "w-11 shrink-0 rounded-md py-0.5 text-center font-mono text-xs font-medium",
+          "inline-block w-11 rounded-md py-0.5 text-center font-mono text-xs font-medium",
           statusCodeClass(log.status_code),
         )}
       >
         {log.status_code}
       </span>
-      <span className="text-text-muted w-14 shrink-0 font-mono text-xs">
+    ),
+  },
+  {
+    key: "method",
+    header: "Method",
+    cell: (log) => (
+      <span
+        className={cn(
+          "inline-block rounded-md px-1.5 py-0.5 font-mono text-xs font-medium",
+          methodClass(log.method),
+        )}
+      >
         {log.method}
       </span>
-      <span className="min-w-0 flex-1 truncate font-mono text-xs">
-        {log.hostname}
-        {log.path}
-      </span>
-      <span className="text-text-faint shrink-0 font-mono text-xs">
-        {log.latency_ms}ms
-      </span>
-    </div>
+    ),
+  },
+  {
+    key: "path",
+    header: "Path",
+    className: "max-w-[20rem] truncate font-mono text-xs",
+    cell: (log) => log.path,
+  },
+  {
+    key: "host",
+    header: "Host",
+    className: "font-mono text-xs",
+    cell: (log) => log.hostname,
+  },
+  {
+    key: "client_ip",
+    header: "Client IP",
+    className: "font-mono text-xs",
+    cell: (log) =>
+      log.client_ip ?? <span className="text-text-faint">—</span>,
+  },
+  {
+    key: "latency",
+    header: "Latency",
+    className: "text-text-muted whitespace-nowrap font-mono text-xs",
+    cell: (log) => `${log.latency_ms}ms`,
+  },
+  {
+    key: "time",
+    header: "Time",
+    className: "text-text-faint whitespace-nowrap font-mono text-xs",
+    cell: (log) => new Date(log.recorded_at).toLocaleTimeString(),
+  },
+];
+
+function RequestsTable({ logs }: { logs: RequestLog[] }) {
+  return (
+    <Table>
+      <TableHeader>
+        <TableRow>
+          {requestColumns.map((c) => (
+            <TableHead key={c.key}>{c.header}</TableHead>
+          ))}
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {logs.map((log) => (
+          <TableRow key={log.id}>
+            {requestColumns.map((c) => (
+              <TableCell key={c.key} className={c.className}>
+                {c.cell(log)}
+              </TableCell>
+            ))}
+          </TableRow>
+        ))}
+      </TableBody>
+    </Table>
   );
 }
 
@@ -232,6 +335,8 @@ function GlobalRequestsPage() {
   const [liveEntries, setLiveEntries] = useState<RequestLog[]>([]);
   const [offset, setOffset] = useState(0);
   const [filters, setFilters] = useState<Filters>({
+    range: "7d",
+    search: "",
     statusRange: "",
     projectId: "",
     applicationId: "",
@@ -239,18 +344,23 @@ function GlobalRequestsPage() {
 
   const queryParams = useMemo(() => {
     const { min, max } = statusRangeToMinMax(filters.statusRange);
+    const { from, to } = timeRangeToDates(filters.range);
     return {
       limit: PAGE_SIZE,
       offset,
       application_id: filters.applicationId || undefined,
       status_min: min,
       status_max: max,
-      from: filters.dateFrom,
-      to: filters.dateTo,
+      search: filters.search.trim() || undefined,
+      from,
+      to,
     };
   }, [filters, offset]);
 
   const { data: history, isLoading } = useRequestLogs(queryParams);
+  // Summary is window-scoped (not paginated); drop the offset so paging the
+  // table doesn't refetch the aggregates.
+  const { data: summary } = useRequestSummary({ ...queryParams, offset: 0 });
 
   const handleMessage = useCallback(
     (_event: string, data: unknown) => {
@@ -285,7 +395,6 @@ function GlobalRequestsPage() {
 
   return (
     <div className="space-y-6">
-      <AppBreadcrumb items={[{ label: "Requests" }]} />
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Requests</h1>
@@ -311,7 +420,7 @@ function GlobalRequestsPage() {
         </div>
       </div>
 
-      {allLogs.length > 0 && <RequestSummary logs={allLogs} />}
+      {summary && <RequestSummaryCards summary={summary} />}
 
       <RequestFilters filters={filters} onChange={handleFilterChange} />
 
@@ -335,11 +444,7 @@ function GlobalRequestsPage() {
             {offset > 0 ? "No more request logs." : "No request logs found."}
           </div>
         ) : (
-          <div className="space-y-2">
-            {allLogs.map((log) => (
-              <RequestRow key={log.id} log={log} />
-            ))}
-          </div>
+          <RequestsTable logs={allLogs} />
         )}
 
         <div className="flex items-center justify-between">

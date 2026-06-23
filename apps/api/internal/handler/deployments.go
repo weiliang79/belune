@@ -101,6 +101,9 @@ func (h *Handler) GetGlobalDeployments(w http.ResponseWriter, r *http.Request) {
 	if v := r.URL.Query().Get("status"); v != "" {
 		params.Status = pgtype.Text{String: v, Valid: true}
 	}
+	if v := r.URL.Query().Get("search"); v != "" {
+		params.Search = pgtype.Text{String: v, Valid: true}
+	}
 	if v := r.URL.Query().Get("from"); v != "" {
 		t, err := time.Parse(time.RFC3339, v)
 		if err != nil {

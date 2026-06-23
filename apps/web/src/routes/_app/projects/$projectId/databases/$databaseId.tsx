@@ -46,7 +46,7 @@ import {
   Cloud,
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
-import { AppBreadcrumb } from "@/lib/components/app-breadcrumb";
+import { useBreadcrumbLabel } from "@/lib/hooks/use-breadcrumb";
 import { StatusBadge } from "@/lib/components/status-badge";
 import { CopyButton } from "@/lib/components/copy-button";
 import { formatBytes } from "@/lib/utils/format";
@@ -85,6 +85,9 @@ function DatabaseDetailPage() {
   const { data: db, isLoading } = useDatabase(projectId, databaseId);
   const { data: project } = useProject(projectId);
   const deleteDb = useDeleteDatabase(projectId);
+
+  useBreadcrumbLabel(projectId, project?.name);
+  useBreadcrumbLabel(databaseId, db?.name);
 
   if (isLoading || !db) {
     return (
@@ -126,16 +129,6 @@ function DatabaseDetailPage() {
 
   return (
     <div className="space-y-6">
-      <AppBreadcrumb
-        items={[
-          { label: "Projects", to: "/projects" },
-          {
-            label: project?.name ?? "Project",
-            to: `/projects/${projectId}`,
-          },
-          { label: db.name },
-        ]}
-      />
 
       <div className="flex items-start gap-3">
         <div className="bg-elev text-text-muted grid size-11 shrink-0 place-items-center rounded-xl">

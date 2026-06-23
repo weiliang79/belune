@@ -64,7 +64,13 @@ func (q *Queries) CountDatabaseHealth(ctx context.Context, userID pgtype.UUID) (
 const countDeployments7d = `-- name: CountDeployments7d :one
 SELECT count(*)                                       AS total,
        count(*) FILTER (WHERE d.status = 'success')   AS succeeded,
-       count(*) FILTER (WHERE d.status = 'failed')    AS failed
+       count(*) FILTER (WHERE d.status = 'failed')    AS failed,
+       COALESCE(
+         percentile_cont(0.5) WITHIN GROUP (
+           ORDER BY EXTRACT(EPOCH FROM (d.build_ended_at - d.build_started_at)) * 1000
+         ) FILTER (WHERE d.build_started_at IS NOT NULL AND d.build_ended_at IS NOT NULL),
+         0
+       )::float8                                      AS median_build_ms
 FROM deployments d
 JOIN applications a ON a.id = d.application_id
 JOIN projects p ON p.id = a.project_id
@@ -73,15 +79,23 @@ WHERE d.started_at >= now() - interval '7 days'
 `
 
 type CountDeployments7dRow struct {
-	Total     int64 `json:"total"`
-	Succeeded int64 `json:"succeeded"`
-	Failed    int64 `json:"failed"`
+	Total         int64   `json:"total"`
+	Succeeded     int64   `json:"succeeded"`
+	Failed        int64   `json:"failed"`
+	MedianBuildMs float64 `json:"median_build_ms"`
 }
 
+// median_build_ms is the median build duration (build_ended_at - build_started_at)
+// over completed builds in the window; 0 when there are none.
 func (q *Queries) CountDeployments7d(ctx context.Context, userID pgtype.UUID) (CountDeployments7dRow, error) {
 	row := q.db.QueryRow(ctx, countDeployments7d, userID)
 	var i CountDeployments7dRow
-	err := row.Scan(&i.Total, &i.Succeeded, &i.Failed)
+	err := row.Scan(
+		&i.Total,
+		&i.Succeeded,
+		&i.Failed,
+		&i.MedianBuildMs,
+	)
 	return i, err
 }
 

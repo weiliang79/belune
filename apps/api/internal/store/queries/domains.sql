@@ -40,3 +40,13 @@ SELECT d.*, COALESCE(
 FROM domains d
 WHERE d.application_id = $1
 ORDER BY d.created_at DESC;
+
+-- name: ListProjectAppPrimaryDomain :many
+-- The first-added domain (hostname + container_port) per parent application in a
+-- project, for the project services table. hostname/port are NULL when an app
+-- has no domain.
+SELECT DISTINCT ON (a.id) a.id AS application_id, d.hostname, d.container_port
+FROM applications a
+LEFT JOIN domains d ON d.application_id = a.id
+WHERE a.project_id = $1 AND a.parent_application_id IS NULL
+ORDER BY a.id, d.created_at ASC;

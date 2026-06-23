@@ -20,6 +20,128 @@ func (q *Queries) DeleteOldRequestLogs(ctx context.Context, dollar_1 pgtype.Text
 	return err
 }
 
+const getRequestPerMinute = `-- name: GetRequestPerMinute :many
+SELECT date_trunc('minute', recorded_at)::timestamptz AS bucket, count(*) AS count
+FROM request_logs
+WHERE ($1::uuid IS NULL OR application_id = $1)
+  AND ($2::smallint IS NULL OR status_code >= $2)
+  AND ($3::smallint IS NULL OR status_code < $3)
+  AND ($4::timestamptz IS NULL OR recorded_at >= $4)
+  AND ($5::timestamptz IS NULL OR recorded_at <= $5)
+  AND ($6::text IS NULL
+       OR path ILIKE '%' || $6 || '%'
+       OR client_ip ILIKE '%' || $6 || '%')
+GROUP BY bucket
+ORDER BY bucket DESC
+LIMIT 60
+`
+
+type GetRequestPerMinuteParams struct {
+	ApplicationID pgtype.UUID        `json:"application_id"`
+	StatusMin     pgtype.Int2        `json:"status_min"`
+	StatusMax     pgtype.Int2        `json:"status_max"`
+	From          pgtype.Timestamptz `json:"from"`
+	To            pgtype.Timestamptz `json:"to"`
+	Search        pgtype.Text        `json:"search"`
+}
+
+type GetRequestPerMinuteRow struct {
+	Bucket pgtype.Timestamptz `json:"bucket"`
+	Count  int64              `json:"count"`
+}
+
+// Per-minute request counts for the requests/min sparkline, most-recent first
+// (capped at 60 buckets to bound the payload). Same filters as the list.
+func (q *Queries) GetRequestPerMinute(ctx context.Context, arg GetRequestPerMinuteParams) ([]GetRequestPerMinuteRow, error) {
+	rows, err := q.db.Query(ctx, getRequestPerMinute,
+		arg.ApplicationID,
+		arg.StatusMin,
+		arg.StatusMax,
+		arg.From,
+		arg.To,
+		arg.Search,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GetRequestPerMinuteRow{}
+	for rows.Next() {
+		var i GetRequestPerMinuteRow
+		if err := rows.Scan(&i.Bucket, &i.Count); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getRequestSummary = `-- name: GetRequestSummary :one
+SELECT
+  count(*)                                                          AS total,
+  count(*) FILTER (WHERE status_code >= 200 AND status_code < 300)  AS class_2xx,
+  count(*) FILTER (WHERE status_code >= 300 AND status_code < 400)  AS class_3xx,
+  count(*) FILTER (WHERE status_code >= 400 AND status_code < 500)  AS class_4xx,
+  count(*) FILTER (WHERE status_code >= 500)                        AS class_5xx,
+  COALESCE(percentile_cont(0.5) WITHIN GROUP (ORDER BY latency_ms), 0)::float8  AS p50_ms,
+  COALESCE(percentile_cont(0.95) WITHIN GROUP (ORDER BY latency_ms), 0)::float8 AS p95_ms
+FROM request_logs
+WHERE ($1::uuid IS NULL OR application_id = $1)
+  AND ($2::smallint IS NULL OR status_code >= $2)
+  AND ($3::smallint IS NULL OR status_code < $3)
+  AND ($4::timestamptz IS NULL OR recorded_at >= $4)
+  AND ($5::timestamptz IS NULL OR recorded_at <= $5)
+  AND ($6::text IS NULL
+       OR path ILIKE '%' || $6 || '%'
+       OR client_ip ILIKE '%' || $6 || '%')
+`
+
+type GetRequestSummaryParams struct {
+	ApplicationID pgtype.UUID        `json:"application_id"`
+	StatusMin     pgtype.Int2        `json:"status_min"`
+	StatusMax     pgtype.Int2        `json:"status_max"`
+	From          pgtype.Timestamptz `json:"from"`
+	To            pgtype.Timestamptz `json:"to"`
+	Search        pgtype.Text        `json:"search"`
+}
+
+type GetRequestSummaryRow struct {
+	Total    int64   `json:"total"`
+	Class2xx int64   `json:"class_2xx"`
+	Class3xx int64   `json:"class_3xx"`
+	Class4xx int64   `json:"class_4xx"`
+	Class5xx int64   `json:"class_5xx"`
+	P50Ms    float64 `json:"p50_ms"`
+	P95Ms    float64 `json:"p95_ms"`
+}
+
+// Scalar aggregates over the same filter window the list uses: status-class
+// counts and latency percentiles. Error rate is derived in Go from class_5xx.
+func (q *Queries) GetRequestSummary(ctx context.Context, arg GetRequestSummaryParams) (GetRequestSummaryRow, error) {
+	row := q.db.QueryRow(ctx, getRequestSummary,
+		arg.ApplicationID,
+		arg.StatusMin,
+		arg.StatusMax,
+		arg.From,
+		arg.To,
+		arg.Search,
+	)
+	var i GetRequestSummaryRow
+	err := row.Scan(
+		&i.Total,
+		&i.Class2xx,
+		&i.Class3xx,
+		&i.Class4xx,
+		&i.Class5xx,
+		&i.P50Ms,
+		&i.P95Ms,
+	)
+	return i, err
+}
+
 const insertRequestLog = `-- name: InsertRequestLog :exec
 INSERT INTO request_logs (application_id, method, path, status_code, latency_ms, hostname, request_size, response_size, client_ip, user_agent)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
@@ -151,6 +273,9 @@ WHERE ($3::uuid IS NULL OR application_id = $3)
   AND ($5::smallint IS NULL OR status_code < $5)
   AND ($6::timestamptz IS NULL OR recorded_at >= $6)
   AND ($7::timestamptz IS NULL OR recorded_at <= $7)
+  AND ($8::text IS NULL
+       OR path ILIKE '%' || $8 || '%'
+       OR client_ip ILIKE '%' || $8 || '%')
 ORDER BY recorded_at DESC
 LIMIT $1 OFFSET $2
 `
@@ -163,6 +288,7 @@ type ListRequestLogsFilteredParams struct {
 	StatusMax     pgtype.Int2        `json:"status_max"`
 	From          pgtype.Timestamptz `json:"from"`
 	To            pgtype.Timestamptz `json:"to"`
+	Search        pgtype.Text        `json:"search"`
 }
 
 func (q *Queries) ListRequestLogsFiltered(ctx context.Context, arg ListRequestLogsFilteredParams) ([]RequestLog, error) {
@@ -174,6 +300,7 @@ func (q *Queries) ListRequestLogsFiltered(ctx context.Context, arg ListRequestLo
 		arg.StatusMax,
 		arg.From,
 		arg.To,
+		arg.Search,
 	)
 	if err != nil {
 		return nil, err

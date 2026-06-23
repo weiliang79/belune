@@ -16,7 +16,15 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { GitBranchIcon } from "lucide-react";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { cn } from "@/lib/utils";
 import {
   Dialog,
   DialogContent,
@@ -43,7 +51,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import type { GitCredential } from "@/lib/types";
-import { formatDate } from "@/lib/utils/format";
+import { formatRelativeTime } from "@/lib/utils/format";
 
 export const Route = createFileRoute("/_app/git-credentials")({
   component: GitCredentialsPage,
@@ -59,6 +67,36 @@ const PROVIDERS = [
 
 function providerLabel(provider: string) {
   return PROVIDERS.find((p) => p.value === provider)?.label ?? provider;
+}
+
+const PROVIDER_STYLE: Record<
+  string,
+  { badge: string; avatar: string; short: string }
+> = {
+  github: {
+    badge: "bg-elev text-text border",
+    avatar: "bg-zinc-800 text-white",
+    short: "GH",
+  },
+  gitlab: {
+    badge: "bg-orange-500/15 text-orange-600 dark:text-orange-400",
+    avatar: "bg-orange-500 text-white",
+    short: "GL",
+  },
+  bitbucket: {
+    badge: "bg-blue-500/15 text-blue-600 dark:text-blue-400",
+    avatar: "bg-blue-600 text-white",
+    short: "BB",
+  },
+  generic: {
+    badge: "bg-elev text-text-muted",
+    avatar: "bg-elev text-text-muted",
+    short: "GIT",
+  },
+};
+
+function providerStyle(provider: string) {
+  return PROVIDER_STYLE[provider] ?? PROVIDER_STYLE.generic;
 }
 
 function GitCredentialsPage() {
@@ -134,18 +172,29 @@ function GitCredentialsPage() {
               No git credentials configured. Add one to use across applications.
             </p>
           ) : (
-            <div className="space-y-2">
-              {credentials.map((cred) => (
-                <CredentialRow
-                  key={cred.id}
-                  credential={cred}
-                  onEdit={() => {
-                    setEditing(cred);
-                    setDialogOpen(true);
-                  }}
-                />
-              ))}
-            </div>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Provider</TableHead>
+                  <TableHead>Username</TableHead>
+                  <TableHead>Added</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {credentials.map((cred) => (
+                  <CredentialRow
+                    key={cred.id}
+                    credential={cred}
+                    onEdit={() => {
+                      setEditing(cred);
+                      setDialogOpen(true);
+                    }}
+                  />
+                ))}
+              </TableBody>
+            </Table>
           )}
         </CardContent>
       </Card>
@@ -161,69 +210,79 @@ function CredentialRow({
   onEdit: () => void;
 }) {
   const deleteCred = useDeleteGitCredential();
+  const style = providerStyle(credential.provider);
 
   return (
-    <div className="hover:bg-card-hover flex items-center justify-between gap-3 rounded-lg border p-3 transition-colors">
-      <div className="flex min-w-0 items-center gap-3">
-        <div className="bg-elev text-text-muted grid size-9 shrink-0 place-items-center rounded-lg">
-          <GitBranchIcon aria-hidden="true" className="size-4" />
-        </div>
-        <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <span className="truncate text-sm font-medium">
-              {credential.name}
-            </span>
-            <Badge variant="secondary" className="shrink-0">
-              {providerLabel(credential.provider)}
-            </Badge>
-          </div>
-          <div className="text-text-faint mt-0.5 flex items-center gap-2 text-xs">
-            {credential.username && (
-              <span className="truncate font-mono">{credential.username}</span>
+    <TableRow>
+      <TableCell>
+        <div className="flex items-center gap-2.5">
+          <span
+            className={cn(
+              "grid size-8 shrink-0 place-items-center rounded-lg font-mono text-xs font-semibold",
+              style.avatar,
             )}
-            <span>Added {formatDate(credential.created_at)}</span>
-          </div>
-        </div>
-      </div>
-      <div className="flex items-center gap-2">
-        <Button size="sm" variant="ghost" onClick={onEdit}>
-          Edit
-        </Button>
-        <AlertDialog>
-          <AlertDialogTrigger
-            render={
-              <Button size="sm" variant="ghost" className="text-destructive" />
-            }
           >
-            Delete
-          </AlertDialogTrigger>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>Delete {credential.name}?</AlertDialogTitle>
-              <AlertDialogDescription>
-                Applications using this credential will lose access to private
-                repositories.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>Cancel</AlertDialogCancel>
-              <AlertDialogAction
-                onClick={() => {
-                  toast.promise(deleteCred.mutateAsync(credential.id), {
-                    loading: "Deleting...",
-                    success: "Credential deleted",
-                    error: (err) => err.message,
-                  });
-                }}
-                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              >
-                Delete
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
-      </div>
-    </div>
+            {style.short}
+          </span>
+          <span className="font-medium">{credential.name}</span>
+        </div>
+      </TableCell>
+      <TableCell>
+        <Badge variant="outline" className={cn("border-0", style.badge)}>
+          {providerLabel(credential.provider)}
+        </Badge>
+      </TableCell>
+      <TableCell className="text-text-muted font-mono text-xs">
+        {credential.username || "—"}
+      </TableCell>
+      <TableCell className="text-text-faint text-sm">
+        {formatRelativeTime(credential.created_at)}
+      </TableCell>
+      <TableCell className="text-right">
+        <div className="flex items-center justify-end gap-1">
+          <Button size="sm" variant="ghost" onClick={onEdit}>
+            Edit
+          </Button>
+          <AlertDialog>
+            <AlertDialogTrigger
+              render={
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="text-destructive"
+                />
+              }
+            >
+              Delete
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Delete {credential.name}?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Applications using this credential will lose access to private
+                  repositories.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={() => {
+                    toast.promise(deleteCred.mutateAsync(credential.id), {
+                      loading: "Deleting...",
+                      success: "Credential deleted",
+                      error: (err) => err.message,
+                    });
+                  }}
+                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                >
+                  Delete
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        </div>
+      </TableCell>
+    </TableRow>
   );
 }
 

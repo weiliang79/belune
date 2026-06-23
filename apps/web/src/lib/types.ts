@@ -6,6 +6,7 @@ export interface User {
   first_name: string;
   last_name: string;
   created_at?: string;
+  last_active_at?: string | null;
 }
 
 export interface Project {
@@ -15,6 +16,8 @@ export interface Project {
   user_id: string;
   created_at: string;
   updated_at: string;
+  /** Most recent deployment start across the project's apps; null if never deployed. */
+  last_deployed_at: string | null;
 }
 
 export interface Application {
@@ -84,8 +87,36 @@ export interface MetricsOverview {
   containers: {
     running: number;
     stopped: number;
+    error: number;
     total: number;
+    /** Per-category running/total; categories the platform models (application, database). */
+    by_type: Record<string, { running: number; total: number }>;
   };
+}
+
+export interface ServiceMetrics {
+  cpu_percent: number;
+  memory_used: number;
+  memory_limit: number;
+  uptime_seconds: number;
+  status: string;
+  domain?: string;
+  port?: number;
+}
+
+/** Per-service runtime snapshot keyed by application id. */
+export type ProjectMetrics = Record<string, ServiceMetrics>;
+
+export interface ServerService {
+  name: string;
+  description: string;
+  status: "running" | "error";
+}
+
+export interface ServerServices {
+  healthy: number;
+  total: number;
+  services: ServerService[];
 }
 
 export interface HostMetricPoint {
@@ -234,6 +265,7 @@ export interface AuditLog {
   action: string;
   resource_type: string;
   resource_id: string | null;
+  resource_name?: string;
   details: Record<string, unknown> | null;
   ip_address: string | null;
   created_at: string;
@@ -299,7 +331,12 @@ export interface HostResources {
 export interface Stats {
   is_admin: boolean;
   app_health: { running: number; total: number };
-  deploy_7d: { succeeded: number; failed: number; total: number };
+  deploy_7d: {
+    succeeded: number;
+    failed: number;
+    total: number;
+    median_build_ms: number;
+  };
   needs_attention: {
     failed_deploys: number;
     error_services: number;

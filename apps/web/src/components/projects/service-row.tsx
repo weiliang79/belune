@@ -16,7 +16,7 @@ import {
   Trash2Icon,
 } from "lucide-react";
 import { toast } from "sonner";
-import type { Application, Database } from "@/lib/types";
+import type { Application, Database, ServiceMetrics } from "@/lib/types";
 import {
   useDeleteApplication,
   useDeployApplication,
@@ -32,6 +32,7 @@ import { queryKeys } from "@/lib/hooks/query-keys";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { StatusPill } from "@/components/ui/status-pill";
+import { formatUptime } from "@/lib/utils/format";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -64,7 +65,17 @@ const TRANSIENT = new Set([
 
 const isTransient = (status: string) => TRANSIENT.has(status.toLowerCase());
 
-/** Shared row chrome: icon, name link, type badge, detail line, and the right cluster. */
+const RUNNING = new Set(["running", "ready"]);
+
+function formatBytes(bytes: number): string {
+  const gb = bytes / (1024 * 1024 * 1024);
+  if (gb >= 1) return `${gb.toFixed(1)} GB`;
+  const mb = bytes / (1024 * 1024);
+  if (mb >= 1) return `${mb.toFixed(0)} MB`;
+  return `${(bytes / 1024).toFixed(0)} KB`;
+}
+
+/** Shared row chrome: icon, name link, type badge, runtime columns, and actions. */
 function RowShell({
   to,
   params,
@@ -72,8 +83,9 @@ function RowShell({
   name,
   slug,
   typeLabel,
-  detail,
   status,
+  metrics,
+  port,
   actions,
 }: {
   to: string;
@@ -82,12 +94,17 @@ function RowShell({
   name: string;
   slug: string;
   typeLabel: string;
-  detail: React.ReactNode;
   status: string;
+  metrics?: ServiceMetrics;
+  port?: number;
   actions: React.ReactNode;
 }) {
+  const running = RUNNING.has(status.toLowerCase());
+  const domain = metrics?.domain;
+  const effectivePort = port ?? metrics?.port;
+
   return (
-    <div className="hover:bg-card-hover grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-4 py-3 transition-colors md:grid-cols-[minmax(0,2.2fr)_minmax(0,1.4fr)_140px_120px]">
+    <div className="hover:bg-card-hover grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-4 py-3 transition-colors md:grid-cols-[minmax(0,2fr)_140px_minmax(0,1.4fr)_80px_104px_104px]">
       {/* Name / Type */}
       <div className="flex min-w-0 items-center gap-3">
         <div className="bg-elev text-text-muted grid size-9 shrink-0 place-items-center rounded-lg">
@@ -114,14 +131,35 @@ function RowShell({
         </div>
       </div>
 
-      {/* Detail (source / version · port) */}
-      <div className="text-text-faint hidden min-w-0 truncate font-mono text-xs md:block">
-        {detail}
+      {/* Status (+ uptime) */}
+      <div className="hidden flex-col items-start gap-0.5 md:flex">
+        <StatusPill status={status} />
+        {running && metrics?.uptime_seconds ? (
+          <span className="text-text-faint text-xs">
+            Up {formatUptime(metrics.uptime_seconds)}
+          </span>
+        ) : null}
       </div>
 
-      {/* Status */}
-      <div className="hidden md:flex">
-        <StatusPill status={status} />
+      {/* Port · Domain */}
+      <div className="text-text-faint hidden min-w-0 font-mono text-xs md:block">
+        {effectivePort ? <span>:{effectivePort}</span> : null}
+        {domain ? (
+          <div className="text-text-muted truncate">{domain}</div>
+        ) : null}
+        {!effectivePort && !domain ? "—" : null}
+      </div>
+
+      {/* CPU */}
+      <div className="text-text-muted hidden font-mono text-xs md:block">
+        {metrics && running ? `${metrics.cpu_percent.toFixed(0)}%` : "—"}
+      </div>
+
+      {/* Memory */}
+      <div className="text-text-muted hidden font-mono text-xs md:block">
+        {metrics && running && metrics.memory_used
+          ? formatBytes(metrics.memory_used)
+          : "—"}
       </div>
 
       {/* Actions */}
@@ -138,9 +176,11 @@ function RowShell({
 function ApplicationRow({
   projectId,
   app,
+  metrics,
 }: {
   projectId: string;
   app: Application;
+  metrics?: ServiceMetrics;
 }) {
   const qc = useQueryClient();
   const navigate = useNavigate();
@@ -159,11 +199,6 @@ function ApplicationRow({
 
   const status = app.status.toLowerCase();
   const busy = isTransient(status) || stop.isPending || start.isPending || restart.isPending;
-
-  const detail =
-    app.type === "image"
-      ? app.source_image
-      : `${app.branch ? app.branch + " · " : ""}${app.build_type}`;
 
   let primary: React.ReactNode = null;
   if (busy) {
@@ -235,8 +270,8 @@ function ApplicationRow({
       name={app.name}
       slug={app.slug}
       typeLabel={app.type}
-      detail={detail}
       status={app.status}
+      metrics={metrics}
       actions={
         <>
           {primary}
@@ -331,7 +366,6 @@ function DatabaseRow({
   const [confirmOpen, setConfirmOpen] = useState(false);
 
   const busy = isTransient(db.status) || backup.isPending;
-  const detail = `${db.type}:${db.version}${db.internal_port ? " · :" + db.internal_port : ""}`;
 
   const open = () =>
     navigate({
@@ -347,8 +381,8 @@ function DatabaseRow({
       name={db.name}
       slug={db.slug}
       typeLabel={db.type}
-      detail={detail}
       status={db.status}
+      port={db.internal_port ?? undefined}
       actions={
         <>
           <Button
@@ -439,12 +473,14 @@ export type ServiceRowItem =
 export function ServiceRow({
   projectId,
   item,
+  metrics,
 }: {
   projectId: string;
   item: ServiceRowItem;
+  metrics?: ServiceMetrics;
 }) {
   return item.kind === "application" ? (
-    <ApplicationRow projectId={projectId} app={item.data} />
+    <ApplicationRow projectId={projectId} app={item.data} metrics={metrics} />
   ) : (
     <DatabaseRow projectId={projectId} db={item.data} />
   );

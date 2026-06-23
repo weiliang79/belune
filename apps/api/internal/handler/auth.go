@@ -272,6 +272,7 @@ func (h *Handler) Me(w http.ResponseWriter, r *http.Request) {
 		"username":   user.Username,
 		"first_name": user.FirstName,
 		"last_name":  user.LastName,
+		"created_at": user.CreatedAt,
 	})
 }
 

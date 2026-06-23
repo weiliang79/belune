@@ -7,6 +7,7 @@ export interface GlobalDeploymentFilters {
   project_id?: string;
   application_id?: string;
   status?: string;
+  search?: string;
   from?: string;
   to?: string;
 }
@@ -18,6 +19,7 @@ export function listGlobalDeployments(params?: GlobalDeploymentFilters) {
   if (params?.project_id) query.set("project_id", params.project_id);
   if (params?.application_id) query.set("application_id", params.application_id);
   if (params?.status) query.set("status", params.status);
+  if (params?.search) query.set("search", params.search);
   if (params?.from) query.set("from", params.from);
   if (params?.to) query.set("to", params.to);
   const qs = query.toString();

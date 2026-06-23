@@ -18,6 +18,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { ShieldIcon, UserIcon, SearchIcon } from "lucide-react";
+import { initialsOf } from "@/lib/utils/initials";
+import { formatRelativeTime } from "@/lib/utils/format";
+import type { User } from "@/lib/types";
 import {
   Dialog,
   DialogContent,
@@ -56,10 +60,16 @@ export const Route = createFileRoute("/_app/team")({
   errorComponent: RouteError,
 });
 
+function displayName(user: { first_name?: string; last_name?: string; username?: string; email: string }) {
+  const full = `${user.first_name ?? ""} ${user.last_name ?? ""}`.trim();
+  return full || user.username || user.email.split("@")[0];
+}
+
 function TeamSettingsPage() {
   const currentUser = useAuthStore((s) => s.user);
   const { data: users, isLoading } = useUsers();
 
+  const [search, setSearch] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
   const [inviteOpen, setInviteOpen] = useState(false);
   const [resetPasswordUser, setResetPasswordUser] = useState<{
@@ -74,16 +84,36 @@ function TeamSettingsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold">Settings</h1>
-        <p className="text-muted-foreground">
-          Manage your account and platform settings.
+        <h1 className="text-2xl font-semibold tracking-tight">
+          Team Members
+          {users && (
+            <span className="text-muted-foreground ml-2 text-base font-normal">
+              {users.length} {users.length === 1 ? "person" : "people"}
+            </span>
+          )}
+        </h1>
+        <p className="text-muted-foreground text-sm">
+          Manage who has access to this server and their permissions.
         </p>
       </div>
 
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
-          <CardTitle>Team Members</CardTitle>
-          <div className="flex gap-2">
+        <CardHeader className="flex flex-row items-center justify-between gap-3">
+          <CardTitle>Active members</CardTitle>
+          <div className="flex items-center gap-2">
+            <div className="relative hidden sm:block">
+              <SearchIcon
+                aria-hidden="true"
+                className="text-text-faint pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2"
+              />
+              <Input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search by name or email…"
+                aria-label="Search members"
+                className="w-56 pl-9"
+              />
+            </div>
             <Button size="sm" variant="outline" onClick={() => setInviteOpen(true)}>
               Invite by Email
             </Button>
@@ -106,29 +136,39 @@ function TeamSettingsPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Email</TableHead>
+                  <TableHead>Member</TableHead>
                   <TableHead>Role</TableHead>
-                  <TableHead>Created</TableHead>
+                  <TableHead>Joined</TableHead>
+                  <TableHead>Last active</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {users?.map((user) => (
-                  <UserRow
-                    key={user.id}
-                    user={user}
-                    isSelf={user.id === currentUser?.id}
-                    onResetPassword={() =>
-                      setResetPasswordUser({
-                        id: user.id,
-                        email: user.email,
-                      })
-                    }
-                    onDelete={() =>
-                      setDeleteUser({ id: user.id, email: user.email })
-                    }
-                  />
-                ))}
+                {users
+                  ?.filter((user) => {
+                    const q = search.trim().toLowerCase();
+                    if (!q) return true;
+                    return (
+                      user.email.toLowerCase().includes(q) ||
+                      displayName(user).toLowerCase().includes(q)
+                    );
+                  })
+                  .map((user) => (
+                    <UserRow
+                      key={user.id}
+                      user={user}
+                      isSelf={user.id === currentUser?.id}
+                      onResetPassword={() =>
+                        setResetPasswordUser({
+                          id: user.id,
+                          email: user.email,
+                        })
+                      }
+                      onDelete={() =>
+                        setDeleteUser({ id: user.id, email: user.email })
+                      }
+                    />
+                  ))}
               </TableBody>
             </Table>
           )}
@@ -161,18 +201,33 @@ function TeamSettingsPage() {
   );
 }
 
+function RoleBadge({ role }: { role: string }) {
+  const isAdmin = role === "admin";
+  return (
+    <Badge variant={isAdmin ? "default" : "secondary"} className="gap-1">
+      {isAdmin ? (
+        <ShieldIcon aria-hidden="true" className="size-3" />
+      ) : (
+        <UserIcon aria-hidden="true" className="size-3" />
+      )}
+      <span className="capitalize">{role}</span>
+    </Badge>
+  );
+}
+
 function UserRow({
   user,
   isSelf,
   onResetPassword,
   onDelete,
 }: {
-  user: { id: string; email: string; role: string; created_at?: string };
+  user: User;
   isSelf: boolean;
   onResetPassword: () => void;
   onDelete: () => void;
 }) {
   const updateRole = useUpdateUserRole();
+  const name = displayName(user);
 
   const handleRoleChange = (newRole: string) => {
     if (newRole === user.role) return;
@@ -185,25 +240,42 @@ function UserRow({
 
   return (
     <TableRow>
-      <TableCell className="font-medium">
-        {user.email}
-        {isSelf && (
-          <Badge variant="outline" className="ml-2">
-            you
-          </Badge>
-        )}
+      <TableCell>
+        <div className="flex items-center gap-2.5">
+          <span
+            className="grid size-8 shrink-0 place-items-center rounded-full text-xs font-semibold text-white"
+            style={{
+              background:
+                "linear-gradient(140deg, var(--brand), var(--brand-press))",
+            }}
+            aria-hidden="true"
+          >
+            {initialsOf(name)}
+          </span>
+          <div className="min-w-0">
+            <div className="flex items-center gap-1.5">
+              <span className="truncate font-medium">{name}</span>
+              {isSelf && (
+                <Badge variant="outline" className="px-1.5 py-0 text-[10px]">
+                  you
+                </Badge>
+              )}
+            </div>
+            <span className="text-text-faint truncate text-xs">
+              {user.email}
+            </span>
+          </div>
+        </div>
       </TableCell>
       <TableCell>
         {isSelf ? (
-          <Badge variant={user.role === "admin" ? "default" : "secondary"}>
-            {user.role}
-          </Badge>
+          <RoleBadge role={user.role} />
         ) : (
           <DropdownMenu>
             <DropdownMenuTrigger
-              render={<Badge variant={user.role === "admin" ? "default" : "secondary"} className="cursor-pointer" />}
+              render={<button type="button" className="cursor-pointer" />}
             >
-              {user.role}
+              <RoleBadge role={user.role} />
             </DropdownMenuTrigger>
             <DropdownMenuContent>
               <DropdownMenuItem onClick={() => handleRoleChange("admin")}>
@@ -217,9 +289,10 @@ function UserRow({
         )}
       </TableCell>
       <TableCell className="text-muted-foreground text-sm">
-        {user.created_at
-          ? new Date(user.created_at).toLocaleDateString()
-          : "-"}
+        {user.created_at ? formatRelativeTime(user.created_at) : "—"}
+      </TableCell>
+      <TableCell className="text-muted-foreground text-sm">
+        {user.last_active_at ? formatRelativeTime(user.last_active_at) : "—"}
       </TableCell>
       <TableCell className="text-right">
         {!isSelf && (

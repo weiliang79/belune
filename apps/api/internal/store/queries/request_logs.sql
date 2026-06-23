@@ -20,8 +20,49 @@ WHERE (sqlc.narg('application_id')::uuid IS NULL OR application_id = sqlc.narg('
   AND (sqlc.narg('status_max')::smallint IS NULL OR status_code < sqlc.narg('status_max'))
   AND (sqlc.narg('from')::timestamptz IS NULL OR recorded_at >= sqlc.narg('from'))
   AND (sqlc.narg('to')::timestamptz IS NULL OR recorded_at <= sqlc.narg('to'))
+  AND (sqlc.narg('search')::text IS NULL
+       OR path ILIKE '%' || sqlc.narg('search') || '%'
+       OR client_ip ILIKE '%' || sqlc.narg('search') || '%')
 ORDER BY recorded_at DESC
 LIMIT $1 OFFSET $2;
+
+-- name: GetRequestSummary :one
+-- Scalar aggregates over the same filter window the list uses: status-class
+-- counts and latency percentiles. Error rate is derived in Go from class_5xx.
+SELECT
+  count(*)                                                          AS total,
+  count(*) FILTER (WHERE status_code >= 200 AND status_code < 300)  AS class_2xx,
+  count(*) FILTER (WHERE status_code >= 300 AND status_code < 400)  AS class_3xx,
+  count(*) FILTER (WHERE status_code >= 400 AND status_code < 500)  AS class_4xx,
+  count(*) FILTER (WHERE status_code >= 500)                        AS class_5xx,
+  COALESCE(percentile_cont(0.5) WITHIN GROUP (ORDER BY latency_ms), 0)::float8  AS p50_ms,
+  COALESCE(percentile_cont(0.95) WITHIN GROUP (ORDER BY latency_ms), 0)::float8 AS p95_ms
+FROM request_logs
+WHERE (sqlc.narg('application_id')::uuid IS NULL OR application_id = sqlc.narg('application_id'))
+  AND (sqlc.narg('status_min')::smallint IS NULL OR status_code >= sqlc.narg('status_min'))
+  AND (sqlc.narg('status_max')::smallint IS NULL OR status_code < sqlc.narg('status_max'))
+  AND (sqlc.narg('from')::timestamptz IS NULL OR recorded_at >= sqlc.narg('from'))
+  AND (sqlc.narg('to')::timestamptz IS NULL OR recorded_at <= sqlc.narg('to'))
+  AND (sqlc.narg('search')::text IS NULL
+       OR path ILIKE '%' || sqlc.narg('search') || '%'
+       OR client_ip ILIKE '%' || sqlc.narg('search') || '%');
+
+-- name: GetRequestPerMinute :many
+-- Per-minute request counts for the requests/min sparkline, most-recent first
+-- (capped at 60 buckets to bound the payload). Same filters as the list.
+SELECT date_trunc('minute', recorded_at)::timestamptz AS bucket, count(*) AS count
+FROM request_logs
+WHERE (sqlc.narg('application_id')::uuid IS NULL OR application_id = sqlc.narg('application_id'))
+  AND (sqlc.narg('status_min')::smallint IS NULL OR status_code >= sqlc.narg('status_min'))
+  AND (sqlc.narg('status_max')::smallint IS NULL OR status_code < sqlc.narg('status_max'))
+  AND (sqlc.narg('from')::timestamptz IS NULL OR recorded_at >= sqlc.narg('from'))
+  AND (sqlc.narg('to')::timestamptz IS NULL OR recorded_at <= sqlc.narg('to'))
+  AND (sqlc.narg('search')::text IS NULL
+       OR path ILIKE '%' || sqlc.narg('search') || '%'
+       OR client_ip ILIKE '%' || sqlc.narg('search') || '%')
+GROUP BY bucket
+ORDER BY bucket DESC
+LIMIT 60;
 
 -- name: DeleteOldRequestLogs :exec
 DELETE FROM request_logs WHERE recorded_at < NOW() - ($1 || ' days')::INTERVAL;

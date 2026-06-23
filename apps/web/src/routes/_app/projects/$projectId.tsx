@@ -9,7 +9,7 @@ import { useApplications } from "@/lib/hooks/use-applications";
 import { useDatabases } from "@/lib/hooks/use-databases";
 import { cn } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
-import { AppBreadcrumb } from "@/lib/components/app-breadcrumb";
+import { useBreadcrumbLabel } from "@/lib/hooks/use-breadcrumb";
 import { ProjectHeader } from "@/components/projects/project-header";
 import { RouteError } from "@/lib/components/route-error";
 
@@ -25,6 +25,8 @@ function ProjectLayout() {
   const { data: databases } = useDatabases(projectId);
   const routerState = useRouterState();
   const currentPath = routerState.location.pathname;
+
+  useBreadcrumbLabel(projectId, project?.name);
 
   if (isLoading) {
     return (
@@ -60,13 +62,6 @@ function ProjectLayout() {
 
   return (
     <div className="space-y-6">
-      <AppBreadcrumb
-        items={[
-          { label: "Projects", to: "/projects" },
-          { label: project.name },
-        ]}
-      />
-
       <ProjectHeader
         project={project}
         applications={applications}

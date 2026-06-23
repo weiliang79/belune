@@ -1,12 +1,14 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { SearchIcon } from "lucide-react";
 import { useGlobalDeployments } from "@/lib/hooks/use-global-deployments";
 import { useProjects } from "@/lib/hooks/use-projects";
 import { StatusPill } from "@/components/ui/status-pill";
 import { StatCard } from "@/lib/components/stats/stat-card";
 import { useStats } from "@/lib/hooks/use-stats";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Select,
@@ -15,8 +17,16 @@ import {
   SelectContent,
   SelectItem,
 } from "@/components/ui/select";
-import { DateRangePicker } from "@/components/ui/date-range-picker";
-import { AppBreadcrumb } from "@/lib/components/app-breadcrumb";
+import {
+  Table,
+  TableHeader,
+  TableBody,
+  TableRow,
+  TableHead,
+  TableCell,
+} from "@/components/ui/table";
+import { TimeRangeTabs } from "@/components/ui/time-range-tabs";
+import { timeRangeToDates, type TimeRange } from "@/lib/utils/time-range";
 import { formatDate, formatDuration } from "@/lib/utils/format";
 import type { GlobalDeployment } from "@/lib/types";
 import * as applicationsApi from "@/lib/api/applications";
@@ -37,8 +47,8 @@ const STATUSES = [
 const PAGE_SIZE = 50;
 
 interface Filters {
-  dateFrom?: string;
-  dateTo?: string;
+  range: TimeRange;
+  search: string;
   status: string;
   projectId: string;
   applicationId: string;
@@ -59,15 +69,25 @@ function DeploymentFilters({
   });
 
   return (
-    <div className="flex flex-wrap gap-2">
-      <DateRangePicker
-        value={{ from: filters.dateFrom, to: filters.dateTo }}
-        onChange={(range) =>
-          onChange({ ...filters, dateFrom: range.from, dateTo: range.to })
-        }
-        placeholder="All time"
-        className="w-64"
+    <div className="flex flex-wrap items-center gap-2">
+      <TimeRangeTabs
+        value={filters.range}
+        onChange={(range) => onChange({ ...filters, range })}
       />
+
+      <div className="relative min-w-0 flex-1 sm:max-w-xs">
+        <SearchIcon
+          aria-hidden="true"
+          className="text-text-faint pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2"
+        />
+        <Input
+          value={filters.search}
+          onChange={(e) => onChange({ ...filters, search: e.target.value })}
+          placeholder="Commit SHA or app name…"
+          aria-label="Search deployments"
+          className="pl-9"
+        />
+      </div>
 
       <Select
         value={filters.status}
@@ -133,37 +153,107 @@ function DeploymentFilters({
   );
 }
 
-function DeploymentRow({ d }: { d: GlobalDeployment }) {
-  const duration =
-    d.finished_at && d.started_at
-      ? formatDuration(
-          new Date(d.finished_at).getTime() - new Date(d.started_at).getTime(),
-        )
-      : null;
+/**
+ * Plain column descriptors so the table is data-driven (and drops cleanly into a
+ * future @tanstack/react-table DataTable). See the v0.0.x table-standardization
+ * follow-up.
+ */
+interface Column<T> {
+  key: string;
+  header: string;
+  cell: (row: T) => ReactNode;
+  className?: string;
+}
 
+const deploymentColumns: Column<GlobalDeployment>[] = [
+  {
+    key: "app",
+    header: "App / Project",
+    cell: (d) => (
+      <Link
+        to="/projects/$projectId/applications/$applicationId/deployments"
+        params={{ projectId: d.project_id, applicationId: d.application_id }}
+        className="hover:text-primary block"
+      >
+        <span className="font-medium">{d.application_name}</span>
+        <span className="text-text-faint block text-xs">{d.project_name}</span>
+      </Link>
+    ),
+  },
+  {
+    key: "status",
+    header: "Status",
+    cell: (d) => <StatusPill status={d.status} />,
+  },
+  {
+    key: "commit",
+    header: "Commit",
+    cell: (d) =>
+      d.commit_sha ? (
+        <span className="font-mono text-xs">{d.commit_sha.slice(0, 7)}</span>
+      ) : (
+        <span className="text-text-faint">—</span>
+      ),
+  },
+  {
+    key: "image",
+    header: "Image",
+    className: "max-w-[14rem] truncate font-mono text-xs",
+    cell: (d) =>
+      d.image_tag ? d.image_tag : <span className="text-text-faint">—</span>,
+  },
+  {
+    key: "triggered_by",
+    header: "Triggered by",
+    cell: (d) => <span className="capitalize">{d.triggered_by}</span>,
+  },
+  {
+    key: "started",
+    header: "Started",
+    className: "text-text-muted whitespace-nowrap",
+    cell: (d) => formatDate(d.started_at),
+  },
+  {
+    key: "duration",
+    header: "Duration",
+    className: "text-text-muted whitespace-nowrap",
+    cell: (d) => {
+      const ms =
+        d.finished_at && d.started_at
+          ? new Date(d.finished_at).getTime() -
+            new Date(d.started_at).getTime()
+          : null;
+      return ms != null ? (
+        formatDuration(ms)
+      ) : (
+        <span className="text-text-faint">—</span>
+      );
+    },
+  },
+];
+
+function DeploymentsTable({ deployments }: { deployments: GlobalDeployment[] }) {
   return (
-    <div className="flex items-center justify-between">
-      <div className="flex min-w-0 flex-1 items-center gap-3">
-        <StatusPill status={d.status} className="shrink-0" />
-        <div className="min-w-0">
-          <div className="flex items-center gap-1.5 text-sm font-medium">
-            <span className="text-muted-foreground">{d.project_name}</span>
-            <span className="text-muted-foreground">/</span>
-            <span>{d.application_name}</span>
-          </div>
-          <div className="text-muted-foreground flex items-center gap-2 text-xs">
-            <span className="capitalize">{d.triggered_by}</span>
-            {d.commit_sha && (
-              <span className="font-mono">{d.commit_sha.slice(0, 7)}</span>
-            )}
-          </div>
-        </div>
-      </div>
-      <div className="text-muted-foreground flex shrink-0 items-center gap-3 text-xs">
-        {duration && <span>{duration}</span>}
-        <span>{formatDate(d.started_at)}</span>
-      </div>
-    </div>
+    <Table>
+      <TableHeader>
+        <TableRow>
+          {deploymentColumns.map((c) => (
+            <TableHead key={c.key}>{c.header}</TableHead>
+          ))}
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {deployments.map((d) => (
+          <TableRow key={d.id}>
+            {deploymentColumns.map((c) => (
+              <TableCell key={c.key} className={c.className}>
+                {c.cell(d)}
+              </TableCell>
+            ))}
+          </TableRow>
+        ))}
+      </TableBody>
+    </Table>
   );
 }
 
@@ -171,10 +261,10 @@ function DeploymentRow({ d }: { d: GlobalDeployment }) {
 function Deploy7dStrip() {
   const { data: stats } = useStats();
   if (!stats) return null;
-  const { succeeded, failed, total } = stats.deploy_7d;
+  const { succeeded, failed, total, median_build_ms } = stats.deploy_7d;
   const rate = total > 0 ? Math.round((succeeded / total) * 100) : 0;
   return (
-    <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+    <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
       <StatCard
         label="Success rate · 7d"
         tone={total === 0 ? "default" : rate === 100 ? "ready" : "attention"}
@@ -196,6 +286,11 @@ function Deploy7dStrip() {
         value={failed}
         hint={failed === 0 ? "All clear" : "needs attention"}
       />
+      <StatCard
+        label="Median build · 7d"
+        value={median_build_ms > 0 ? formatDuration(median_build_ms) : "—"}
+        hint={median_build_ms > 0 ? "median build time" : "no completed builds"}
+      />
     </div>
   );
 }
@@ -203,6 +298,8 @@ function Deploy7dStrip() {
 function GlobalDeploymentsPage() {
   const [offset, setOffset] = useState(0);
   const [filters, setFilters] = useState<Filters>({
+    range: "7d",
+    search: "",
     status: "",
     projectId: "",
     applicationId: "",
@@ -213,24 +310,24 @@ function GlobalDeploymentsPage() {
     setOffset(0);
   }, []);
 
-  const queryParams = useMemo(
-    () => ({
+  const queryParams = useMemo(() => {
+    const { from, to } = timeRangeToDates(filters.range);
+    return {
       limit: PAGE_SIZE,
       offset,
       project_id: filters.projectId || undefined,
       application_id: filters.applicationId || undefined,
       status: filters.status || undefined,
-      from: filters.dateFrom,
-      to: filters.dateTo,
-    }),
-    [filters, offset],
-  );
+      search: filters.search.trim() || undefined,
+      from,
+      to,
+    };
+  }, [filters, offset]);
 
   const { data: deployments, isLoading } = useGlobalDeployments(queryParams);
 
   return (
     <div className="space-y-6">
-      <AppBreadcrumb items={[{ label: "Deployments" }]} />
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Deployments</h1>
         <p className="text-muted-foreground text-sm">
@@ -265,21 +362,7 @@ function GlobalDeploymentsPage() {
           {offset > 0 ? "No more deployments." : "No deployments found."}
         </div>
       ) : (
-        <div className="space-y-2">
-          {deployments.map((d) => (
-            <Link
-              key={d.id}
-              to="/projects/$projectId/applications/$applicationId/deployments"
-              params={{
-                projectId: d.project_id,
-                applicationId: d.application_id,
-              }}
-              className="hover:bg-card-hover block rounded-lg border px-4 py-3 transition-colors"
-            >
-              <DeploymentRow d={d} />
-            </Link>
-          ))}
-        </div>
+        <DeploymentsTable deployments={deployments} />
       )}
 
       {/* Pagination */}

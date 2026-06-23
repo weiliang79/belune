@@ -34,9 +34,10 @@ type healthRatio struct {
 }
 
 type deploy7dStats struct {
-	Succeeded int64 `json:"succeeded"`
-	Failed    int64 `json:"failed"`
-	Total     int64 `json:"total"`
+	Succeeded     int64   `json:"succeeded"`
+	Failed        int64   `json:"failed"`
+	Total         int64   `json:"total"`
+	MedianBuildMs float64 `json:"median_build_ms"`
 }
 
 type needsAttention struct {
@@ -95,9 +96,10 @@ func (h *Handler) GetStats(w http.ResponseWriter, r *http.Request) {
 			Total:   appH.Total + dbH.Total,
 		},
 		Deploy7d: deploy7dStats{
-			Succeeded: dep.Succeeded,
-			Failed:    dep.Failed,
-			Total:     dep.Total,
+			Succeeded:     dep.Succeeded,
+			Failed:        dep.Failed,
+			Total:         dep.Total,
+			MedianBuildMs: dep.MedianBuildMs,
 		},
 	}
 

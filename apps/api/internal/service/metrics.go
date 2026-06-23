@@ -137,6 +137,24 @@ func (s *MetricsService) RetentionCleanup(ctx context.Context) {
 	} else {
 		slog.Info("request log retention cleanup completed", "retention_days", reqLogRetentionDays)
 	}
+
+	// Audit log retention. Audit logs are compliance-sensitive: 0 (the default)
+	// means keep forever, so only prune when an operator has set a positive value.
+	auditRetentionDays := 0
+	if auditSetting, err := s.queries.GetSetting(ctx, "audit_log_retention_days"); err == nil {
+		var days int
+		if _, scanErr := fmt.Sscanf(auditSetting.Value, "%d", &days); scanErr == nil && days > 0 {
+			auditRetentionDays = days
+		}
+	}
+	if auditRetentionDays > 0 {
+		auditDaysStr := pgtype.Text{String: fmt.Sprintf("%d", auditRetentionDays), Valid: true}
+		if err := s.queries.DeleteOldAuditLogs(ctx, auditDaysStr); err != nil {
+			slog.Error("failed to delete old audit logs", "error", err)
+		} else {
+			slog.Info("audit log retention cleanup completed", "retention_days", auditRetentionDays)
+		}
+	}
 }
 
 // StartTicker collects host metrics every 1 second, publishes to Redis for live

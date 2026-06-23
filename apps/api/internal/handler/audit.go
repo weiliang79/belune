@@ -1,6 +1,8 @@
 package handler
 
 import (
+	"encoding/csv"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -9,60 +11,96 @@ import (
 	"github.com/ungweiliang/selfhost-paas/internal/store/generated"
 )
 
+// auditFilter holds the shared audit-log filter columns.
+type auditFilter struct {
+	UserID       pgtype.UUID
+	Action       pgtype.Text
+	ResourceType pgtype.Text
+	ResourceID   pgtype.Text
+	From         pgtype.Timestamptz
+	To           pgtype.Timestamptz
+}
+
+// parseAuditFilter reads the audit filter query params. Returns a non-empty
+// error message when a value is malformed.
+func parseAuditFilter(r *http.Request) (auditFilter, string) {
+	var f auditFilter
+	q := r.URL.Query()
+	if v := q.Get("user_id"); v != "" {
+		var uuid pgtype.UUID
+		if err := uuid.Scan(v); err != nil {
+			return f, "invalid user_id format"
+		}
+		f.UserID = uuid
+	}
+	if v := q.Get("action"); v != "" {
+		f.Action = pgtype.Text{String: v, Valid: true}
+	}
+	if v := q.Get("resource_type"); v != "" {
+		f.ResourceType = pgtype.Text{String: v, Valid: true}
+	}
+	if v := q.Get("resource_id"); v != "" {
+		f.ResourceID = pgtype.Text{String: v, Valid: true}
+	}
+	if v := q.Get("from"); v != "" {
+		t, err := time.Parse(time.RFC3339, v)
+		if err != nil {
+			return f, "invalid from format, expected RFC3339"
+		}
+		f.From = pgtype.Timestamptz{Time: t, Valid: true}
+	}
+	if v := q.Get("to"); v != "" {
+		t, err := time.Parse(time.RFC3339, v)
+		if err != nil {
+			return f, "invalid to format, expected RFC3339"
+		}
+		f.To = pgtype.Timestamptz{Time: t, Valid: true}
+	}
+	return f, ""
+}
+
+func (f auditFilter) listParams(limit, offset int32) generated.ListAuditLogsFilteredParams {
+	return generated.ListAuditLogsFilteredParams{
+		Limit:        limit,
+		Offset:       offset,
+		UserID:       f.UserID,
+		Action:       f.Action,
+		ResourceType: f.ResourceType,
+		ResourceID:   f.ResourceID,
+		From:         f.From,
+		To:           f.To,
+	}
+}
+
+func (f auditFilter) countParams() generated.CountAuditLogsFilteredParams {
+	return generated.CountAuditLogsFilteredParams{
+		UserID:       f.UserID,
+		Action:       f.Action,
+		ResourceType: f.ResourceType,
+		ResourceID:   f.ResourceID,
+		From:         f.From,
+		To:           f.To,
+	}
+}
+
 // ListAuditLogs returns paginated, optionally filtered audit logs (admin-only).
-// Query params: limit, offset, user_id, action, resource_type, from (RFC3339), to (RFC3339).
+// Query params: limit, offset, user_id, action, resource_type, resource_id, from, to.
 func (h *Handler) ListAuditLogs(w http.ResponseWriter, r *http.Request) {
 	limit, offset := parsePagination(r)
 
-	params := generated.ListAuditLogsFilteredParams{
-		Limit:  limit,
-		Offset: offset,
-	}
-	countParams := generated.CountAuditLogsFilteredParams{}
-
-	if v := r.URL.Query().Get("user_id"); v != "" {
-		var uuid pgtype.UUID
-		if err := uuid.Scan(v); err != nil {
-			writeError(w, http.StatusBadRequest, "invalid user_id format")
-			return
-		}
-		params.UserID = uuid
-		countParams.UserID = uuid
-	}
-	if v := r.URL.Query().Get("action"); v != "" {
-		params.Action = pgtype.Text{String: v, Valid: true}
-		countParams.Action = pgtype.Text{String: v, Valid: true}
-	}
-	if v := r.URL.Query().Get("resource_type"); v != "" {
-		params.ResourceType = pgtype.Text{String: v, Valid: true}
-		countParams.ResourceType = pgtype.Text{String: v, Valid: true}
-	}
-	if v := r.URL.Query().Get("from"); v != "" {
-		t, err := time.Parse(time.RFC3339, v)
-		if err != nil {
-			writeError(w, http.StatusBadRequest, "invalid from format, expected RFC3339")
-			return
-		}
-		params.From = pgtype.Timestamptz{Time: t, Valid: true}
-		countParams.From = pgtype.Timestamptz{Time: t, Valid: true}
-	}
-	if v := r.URL.Query().Get("to"); v != "" {
-		t, err := time.Parse(time.RFC3339, v)
-		if err != nil {
-			writeError(w, http.StatusBadRequest, "invalid to format, expected RFC3339")
-			return
-		}
-		params.To = pgtype.Timestamptz{Time: t, Valid: true}
-		countParams.To = pgtype.Timestamptz{Time: t, Valid: true}
+	f, errMsg := parseAuditFilter(r)
+	if errMsg != "" {
+		writeError(w, http.StatusBadRequest, errMsg)
+		return
 	}
 
-	logs, err := h.queries.ListAuditLogsFiltered(r.Context(), params)
+	logs, err := h.queries.ListAuditLogsFiltered(r.Context(), f.listParams(limit, offset))
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to list audit logs")
 		return
 	}
 
-	count, err := h.queries.CountAuditLogsFiltered(r.Context(), countParams)
+	count, err := h.queries.CountAuditLogsFiltered(r.Context(), f.countParams())
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to count audit logs")
 		return
@@ -72,4 +110,53 @@ func (h *Handler) ListAuditLogs(w http.ResponseWriter, r *http.Request) {
 		"items": logs,
 		"total": count,
 	})
+}
+
+// ListAuditActions returns the distinct set of audit actions, for filter UIs.
+// GET /api/audit-logs/actions
+func (h *Handler) ListAuditActions(w http.ResponseWriter, r *http.Request) {
+	actions, err := h.queries.ListDistinctAuditActions(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to list audit actions")
+		return
+	}
+	writeJSON(w, http.StatusOK, actions)
+}
+
+// ExportAuditLogs streams the filtered audit logs as CSV (admin-only). Honors the
+// same filters as ListAuditLogs. GET /api/audit-logs/export
+func (h *Handler) ExportAuditLogs(w http.ResponseWriter, r *http.Request) {
+	f, errMsg := parseAuditFilter(r)
+	if errMsg != "" {
+		writeError(w, http.StatusBadRequest, errMsg)
+		return
+	}
+
+	// Bound the export rather than streaming unboundedly.
+	logs, err := h.queries.ListAuditLogsFiltered(r.Context(), f.listParams(10000, 0))
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to export audit logs")
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/csv")
+	w.Header().Set("Content-Disposition",
+		fmt.Sprintf("attachment; filename=audit-log-%s.csv", time.Now().Format("2006-01-02")))
+
+	cw := csv.NewWriter(w)
+	defer cw.Flush()
+	_ = cw.Write([]string{"time", "action", "actor", "resource_type", "resource", "ip"})
+	for _, l := range logs {
+		resource := l.ResourceID.String
+		if l.ResourceName != "" {
+			resource = l.ResourceName
+		}
+		ts := ""
+		if l.CreatedAt.Valid {
+			ts = l.CreatedAt.Time.UTC().Format(time.RFC3339)
+		}
+		_ = cw.Write([]string{
+			ts, l.Action, l.UserEmail.String, l.ResourceType, resource, l.IpAddress.String,
+		})
+	}
 }

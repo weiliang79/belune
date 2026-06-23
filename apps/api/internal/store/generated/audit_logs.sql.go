@@ -28,14 +28,16 @@ FROM audit_logs al
 WHERE ($1::uuid IS NULL OR al.user_id = $1)
   AND ($2::text IS NULL OR al.action = $2)
   AND ($3::text IS NULL OR al.resource_type = $3)
-  AND ($4::timestamptz IS NULL OR al.created_at >= $4)
-  AND ($5::timestamptz IS NULL OR al.created_at <= $5)
+  AND ($4::text IS NULL OR al.resource_id = $4)
+  AND ($5::timestamptz IS NULL OR al.created_at >= $5)
+  AND ($6::timestamptz IS NULL OR al.created_at <= $6)
 `
 
 type CountAuditLogsFilteredParams struct {
 	UserID       pgtype.UUID        `json:"user_id"`
 	Action       pgtype.Text        `json:"action"`
 	ResourceType pgtype.Text        `json:"resource_type"`
+	ResourceID   pgtype.Text        `json:"resource_id"`
 	From         pgtype.Timestamptz `json:"from"`
 	To           pgtype.Timestamptz `json:"to"`
 }
@@ -45,6 +47,7 @@ func (q *Queries) CountAuditLogsFiltered(ctx context.Context, arg CountAuditLogs
 		arg.UserID,
 		arg.Action,
 		arg.ResourceType,
+		arg.ResourceID,
 		arg.From,
 		arg.To,
 	)
@@ -76,6 +79,15 @@ func (q *Queries) CreateAuditLog(ctx context.Context, arg CreateAuditLogParams) 
 		arg.Details,
 		arg.IpAddress,
 	)
+	return err
+}
+
+const deleteOldAuditLogs = `-- name: DeleteOldAuditLogs :exec
+DELETE FROM audit_logs WHERE created_at < NOW() - ($1 || ' days')::INTERVAL
+`
+
+func (q *Queries) DeleteOldAuditLogs(ctx context.Context, dollar_1 pgtype.Text) error {
+	_, err := q.db.Exec(ctx, deleteOldAuditLogs, dollar_1)
 	return err
 }
 
@@ -138,14 +150,21 @@ func (q *Queries) ListAuditLogs(ctx context.Context, arg ListAuditLogsParams) ([
 
 const listAuditLogsFiltered = `-- name: ListAuditLogsFiltered :many
 SELECT al.id, al.user_id, al.action, al.resource_type, al.resource_id, al.details, al.ip_address, al.created_at,
-       u.email AS user_email, u.username AS user_username
+       u.email AS user_email, u.username AS user_username,
+       -- Empty-string fallback so sqlc's non-null string scan never hits a NULL
+       -- (rows whose resource isn't an app/project/db resolve to no name).
+       COALESCE(app.name, proj.name, db.name, '')::text AS resource_name
 FROM audit_logs al
 LEFT JOIN users u ON u.id = al.user_id
+LEFT JOIN applications app ON al.resource_type = 'application' AND app.id::text = al.resource_id
+LEFT JOIN projects proj ON al.resource_type = 'project' AND proj.id::text = al.resource_id
+LEFT JOIN databases db ON al.resource_type = 'database' AND db.id::text = al.resource_id
 WHERE ($3::uuid IS NULL OR al.user_id = $3)
   AND ($4::text IS NULL OR al.action = $4)
   AND ($5::text IS NULL OR al.resource_type = $5)
-  AND ($6::timestamptz IS NULL OR al.created_at >= $6)
-  AND ($7::timestamptz IS NULL OR al.created_at <= $7)
+  AND ($6::text IS NULL OR al.resource_id = $6)
+  AND ($7::timestamptz IS NULL OR al.created_at >= $7)
+  AND ($8::timestamptz IS NULL OR al.created_at <= $8)
 ORDER BY al.created_at DESC
 LIMIT $1 OFFSET $2
 `
@@ -156,6 +175,7 @@ type ListAuditLogsFilteredParams struct {
 	UserID       pgtype.UUID        `json:"user_id"`
 	Action       pgtype.Text        `json:"action"`
 	ResourceType pgtype.Text        `json:"resource_type"`
+	ResourceID   pgtype.Text        `json:"resource_id"`
 	From         pgtype.Timestamptz `json:"from"`
 	To           pgtype.Timestamptz `json:"to"`
 }
@@ -171,8 +191,12 @@ type ListAuditLogsFilteredRow struct {
 	CreatedAt    pgtype.Timestamptz `json:"created_at"`
 	UserEmail    pgtype.Text        `json:"user_email"`
 	UserUsername pgtype.Text        `json:"user_username"`
+	ResourceName string             `json:"resource_name"`
 }
 
+// resource_name resolves resource_id to the app/project/db name. Comparing
+// <table>.id::text = resource_id avoids casting the (possibly non-uuid)
+// resource_id to uuid, which would error for ids like 'settings'.
 func (q *Queries) ListAuditLogsFiltered(ctx context.Context, arg ListAuditLogsFilteredParams) ([]ListAuditLogsFilteredRow, error) {
 	rows, err := q.db.Query(ctx, listAuditLogsFiltered,
 		arg.Limit,
@@ -180,6 +204,7 @@ func (q *Queries) ListAuditLogsFiltered(ctx context.Context, arg ListAuditLogsFi
 		arg.UserID,
 		arg.Action,
 		arg.ResourceType,
+		arg.ResourceID,
 		arg.From,
 		arg.To,
 	)
@@ -201,10 +226,35 @@ func (q *Queries) ListAuditLogsFiltered(ctx context.Context, arg ListAuditLogsFi
 			&i.CreatedAt,
 			&i.UserEmail,
 			&i.UserUsername,
+			&i.ResourceName,
 		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listDistinctAuditActions = `-- name: ListDistinctAuditActions :many
+SELECT DISTINCT action FROM audit_logs ORDER BY action ASC
+`
+
+func (q *Queries) ListDistinctAuditActions(ctx context.Context) ([]string, error) {
+	rows, err := q.db.Query(ctx, listDistinctAuditActions)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []string{}
+	for rows.Next() {
+		var action string
+		if err := rows.Scan(&action); err != nil {
+			return nil, err
+		}
+		items = append(items, action)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err

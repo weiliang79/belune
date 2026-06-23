@@ -9,3 +9,10 @@ export function useRequestLogs(params?: RequestLogFilters) {
     queryFn: () => requestLogsApi.listRequestLogs(params),
   });
 }
+
+export function useRequestSummary(params?: RequestLogFilters) {
+  return useQuery({
+    queryKey: queryKeys.requestSummary(params),
+    queryFn: () => requestLogsApi.getRequestSummary(params),
+  });
+}

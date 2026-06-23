@@ -16,7 +16,10 @@ VALUES ($1, $2, $3, $4, $5, $6)
 RETURNING *;
 
 -- name: ListUsers :many
-SELECT id, email, role, username, first_name, last_name, created_at FROM users ORDER BY created_at ASC;
+SELECT u.id, u.email, u.role, u.username, u.first_name, u.last_name, u.created_at,
+       (SELECT max(rt.last_used_at) FROM refresh_tokens rt WHERE rt.user_id = u.id) AS last_active_at
+FROM users u
+ORDER BY u.created_at ASC;
 
 -- name: UpdateUserRole :one
 UPDATE users SET role = $2 WHERE id = $1

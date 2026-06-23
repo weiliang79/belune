@@ -1,5 +1,13 @@
 -- name: ListProjectsByUser :many
-SELECT * FROM projects WHERE user_id = $1 ORDER BY created_at DESC;
+SELECT p.*, (
+    SELECT max(d.started_at)
+    FROM deployments d
+    JOIN applications a ON a.id = d.application_id
+    WHERE a.project_id = p.id
+) AS last_deployed_at
+FROM projects p
+WHERE p.user_id = $1
+ORDER BY p.created_at DESC;
 
 -- name: GetProject :one
 SELECT * FROM projects WHERE id = $1;
@@ -21,7 +29,14 @@ DELETE FROM projects WHERE id = $1;
 SELECT count(*) FROM projects;
 
 -- name: ListAllProjects :many
-SELECT * FROM projects ORDER BY created_at DESC;
+SELECT p.*, (
+    SELECT max(d.started_at)
+    FROM deployments d
+    JOIN applications a ON a.id = d.application_id
+    WHERE a.project_id = p.id
+) AS last_deployed_at
+FROM projects p
+ORDER BY p.created_at DESC;
 
 -- name: UpdateProjectOwner :one
 UPDATE projects SET user_id = $2, updated_at = NOW()

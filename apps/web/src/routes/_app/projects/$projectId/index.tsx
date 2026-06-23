@@ -3,6 +3,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { Database, DatabaseIcon, Globe, LayersIcon, PlusIcon } from "lucide-react";
 import { useApplications } from "@/lib/hooks/use-applications";
 import { useDatabases } from "@/lib/hooks/use-databases";
+import { useProjectMetrics } from "@/lib/hooks/use-project-metrics";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
@@ -32,6 +33,7 @@ function ProjectOverview() {
     useApplications(projectId);
   const { data: databases, isLoading: databasesLoading } =
     useDatabases(projectId);
+  const { data: serviceMetrics } = useProjectMetrics(projectId);
 
   const [appDialogOpen, setAppDialogOpen] = useState(false);
   const [dbDialogOpen, setDbDialogOpen] = useState(false);
@@ -157,10 +159,12 @@ function ProjectOverview() {
       ) : (
         <div className="overflow-hidden rounded-xl border">
           {/* Column header */}
-          <div className="text-text-faint bg-elev/40 hidden grid-cols-[minmax(0,2.2fr)_minmax(0,1.4fr)_140px_120px] gap-3 px-4 py-2 text-xs font-medium md:grid">
+          <div className="text-text-faint bg-elev/40 hidden grid-cols-[minmax(0,2fr)_140px_minmax(0,1.4fr)_80px_104px_104px] gap-3 px-4 py-2 text-xs font-medium md:grid">
             <span>Name / Type</span>
-            <span>Source</span>
             <span>Status</span>
+            <span>Port · Domain</span>
+            <span>CPU</span>
+            <span>Memory</span>
             <span>Actions</span>
           </div>
           <div className="divide-border divide-y">
@@ -170,7 +174,16 @@ function ProjectOverview() {
               </div>
             ) : (
               items.map((item) => (
-                <ServiceRow key={item.data.id} projectId={projectId} item={item} />
+                <ServiceRow
+                  key={item.data.id}
+                  projectId={projectId}
+                  item={item}
+                  metrics={
+                    item.kind === "application"
+                      ? serviceMetrics?.[item.data.id]
+                      : undefined
+                  }
+                />
               ))
             )}
           </div>

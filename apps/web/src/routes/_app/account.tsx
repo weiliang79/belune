@@ -13,8 +13,10 @@ import {
 import { useAccentStore, type Accent } from "@/lib/stores/accent";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { formatDate } from "@/lib/utils/format";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/_app/account")({
@@ -37,16 +39,28 @@ function SettingsPage() {
       <Card>
         <CardHeader>
           <CardTitle>Account</CardTitle>
+          <p className="text-muted-foreground text-sm">
+            Your identity on this platform. Contact an admin to change your
+            email.
+          </p>
         </CardHeader>
-        <CardContent className="space-y-2 text-sm">
-          <div className="flex justify-between">
+        <CardContent className="space-y-2.5 text-sm">
+          <div className="flex items-center justify-between">
             <span className="text-muted-foreground">Email</span>
             <span className="font-mono">{user?.email}</span>
           </div>
-          <div className="flex justify-between">
+          <div className="flex items-center justify-between">
             <span className="text-muted-foreground">Role</span>
-            <span className="capitalize">{user?.role}</span>
+            <Badge variant="outline" className="uppercase">
+              {user?.role}
+            </Badge>
           </div>
+          {user?.created_at && (
+            <div className="flex items-center justify-between">
+              <span className="text-muted-foreground">Member since</span>
+              <span>{formatDate(user.created_at)}</span>
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -92,6 +106,9 @@ function ProfileCard() {
     <Card>
       <CardHeader>
         <CardTitle>Profile</CardTitle>
+        <p className="text-muted-foreground text-sm">
+          Your public display name on this platform.
+        </p>
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-4">

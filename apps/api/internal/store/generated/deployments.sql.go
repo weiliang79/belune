@@ -301,6 +301,9 @@ WHERE ($3::uuid IS NULL OR p.id = $3)
   AND ($6::timestamptz IS NULL OR d.started_at >= $6)
   AND ($7::timestamptz IS NULL OR d.started_at <= $7)
   AND ($8::uuid IS NULL OR p.user_id = $8)
+  AND ($9::text IS NULL
+       OR d.commit_sha ILIKE '%' || $9 || '%'
+       OR a.name ILIKE '%' || $9 || '%')
 ORDER BY d.started_at DESC
 LIMIT $1 OFFSET $2
 `
@@ -314,6 +317,7 @@ type ListGlobalDeploymentsFilteredParams struct {
 	From          pgtype.Timestamptz `json:"from"`
 	To            pgtype.Timestamptz `json:"to"`
 	UserID        pgtype.UUID        `json:"user_id"`
+	Search        pgtype.Text        `json:"search"`
 }
 
 type ListGlobalDeploymentsFilteredRow struct {
@@ -343,6 +347,7 @@ func (q *Queries) ListGlobalDeploymentsFiltered(ctx context.Context, arg ListGlo
 		arg.From,
 		arg.To,
 		arg.UserID,
+		arg.Search,
 	)
 	if err != nil {
 		return nil, err

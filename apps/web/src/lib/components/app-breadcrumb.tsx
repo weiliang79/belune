@@ -14,9 +14,15 @@ export interface BreadcrumbSegment {
   to?: string;
 }
 
-export function AppBreadcrumb({ items }: { items: BreadcrumbSegment[] }) {
+export function AppBreadcrumb({
+  items,
+  className,
+}: {
+  items: BreadcrumbSegment[];
+  className?: string;
+}) {
   return (
-    <Breadcrumb className="mb-4">
+    <Breadcrumb className={className}>
       <BreadcrumbList>
         {items.map((item, i) => {
           const isLast = i === items.length - 1;

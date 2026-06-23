@@ -176,6 +176,9 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService,
 			r.Delete("/api/projects/{projectId}", h.DeleteProject)
 			r.Put("/api/projects/{projectId}/transfer", h.TransferProject)
 
+			// Project runtime metrics snapshot (per-service CPU/mem/uptime/domain)
+			r.Get("/api/projects/{projectId}/metrics", h.GetProjectMetrics)
+
 			// Applications
 			r.Get("/api/projects/{projectId}/applications", h.ListApplications)
 			r.Post("/api/projects/{projectId}/applications", h.CreateApplication)
@@ -245,7 +248,11 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService,
 				r.Get("/api/settings", h.ListSettings)
 				r.Put("/api/settings", h.UpdateSettings)
 				r.Get("/api/requests", h.ListAllRequestLogs)
+				r.Get("/api/requests/summary", h.GetAllRequestsSummary)
+				r.Get("/api/server/services", h.GetServerServices)
 				r.Get("/api/audit-logs", h.ListAuditLogs)
+				r.Get("/api/audit-logs/actions", h.ListAuditActions)
+				r.Get("/api/audit-logs/export", h.ExportAuditLogs)
 				r.Get("/api/proxy/reconciler", h.GetProxyReconcilerStatus)
 				r.Get("/api/quotas", h.ListQuotas)
 				r.Get("/api/quotas/{scope}/{scopeId}", h.GetQuota)

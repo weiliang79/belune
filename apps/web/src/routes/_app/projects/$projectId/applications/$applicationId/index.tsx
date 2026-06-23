@@ -1,10 +1,16 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useApplication } from "@/lib/hooks/use-applications";
+import { useDeployments } from "@/lib/hooks/use-deployments";
+import { useAppMetricsStream } from "@/lib/hooks/use-metrics";
+import { useAuditLogs } from "@/lib/hooks/use-audit-logs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { formatDate } from "@/lib/utils/format";
-import { StatusBadge } from "@/lib/components/status-badge";
+import { Sparkline } from "@/components/ui/sparkline";
+import { formatRelativeTime, formatDuration } from "@/lib/utils/format";
+import { actionLabel, actionClass } from "@/lib/utils/audit-format";
+import { cn } from "@/lib/utils";
+import type { AppMetricPoint, Deployment, Application } from "@/lib/types";
 
 export const Route = createFileRoute(
   "/_app/projects/$projectId/applications/$applicationId/",
@@ -12,95 +18,255 @@ export const Route = createFileRoute(
   component: ApplicationOverview,
 });
 
+const CPU_COLOR = "hsl(221, 83%, 53%)";
+const MEM_COLOR = "hsl(262, 83%, 58%)";
+const NET_COLOR = "hsl(142, 71%, 45%)";
+
+function formatBytes(bytes: number | null | undefined) {
+  if (bytes == null) return "—";
+  const gb = bytes / (1024 * 1024 * 1024);
+  if (gb >= 1) return `${gb.toFixed(1)} GB`;
+  const mb = bytes / (1024 * 1024);
+  if (mb >= 1) return `${mb.toFixed(0)} MB`;
+  return `${(bytes / 1024).toFixed(0)} KB`;
+}
+
+function formatRate(bytesPerSec: number | null | undefined) {
+  if (bytesPerSec == null) return "—";
+  const mb = bytesPerSec / (1024 * 1024);
+  if (mb >= 1) return `${mb.toFixed(1)} MB/s`;
+  return `${(bytesPerSec / 1024).toFixed(0)} KB/s`;
+}
+
+function lastNonNull<K extends keyof AppMetricPoint>(
+  data: AppMetricPoint[],
+  key: K,
+): AppMetricPoint[K] | null {
+  for (let i = data.length - 1; i >= 0; i--) {
+    if (data[i][key] != null) return data[i][key];
+  }
+  return null;
+}
+
+function MetricCard({
+  label,
+  value,
+  sub,
+  values,
+  color,
+}: {
+  label: string;
+  value: string;
+  sub?: string;
+  values: (number | null)[];
+  color: string;
+}) {
+  return (
+    <Card>
+      <CardContent className="p-4">
+        <div className="flex items-center justify-between">
+          <p className="text-text-faint text-xs font-medium tracking-wide uppercase">
+            {label}
+          </p>
+          {sub && <span className="text-text-faint text-xs">{sub}</span>}
+        </div>
+        <p className="mt-1 font-mono text-2xl font-semibold">{value}</p>
+        <Sparkline className="mt-2" height={36} values={values} color={color} />
+      </CardContent>
+    </Card>
+  );
+}
+
+function BuildInfoCard({
+  app,
+  deploy,
+}: {
+  app: Application;
+  deploy: Deployment | undefined;
+}) {
+  const duration =
+    deploy?.build_started_at && deploy?.build_ended_at
+      ? formatDuration(
+          new Date(deploy.build_ended_at).getTime() -
+            new Date(deploy.build_started_at).getTime(),
+        )
+      : null;
+
+  const rows: { label: string; value: React.ReactNode }[] = [
+    {
+      label: "Image",
+      value: deploy?.image_tag ? (
+        <span className="font-mono text-xs">{deploy.image_tag}</span>
+      ) : (
+        app.source_image ?? "—"
+      ),
+    },
+    {
+      label: "Method",
+      value: (
+        <Badge variant="outline" className="capitalize">
+          {app.build_type}
+        </Badge>
+      ),
+    },
+    ...(app.type === "git"
+      ? [
+          { label: "Branch", value: app.branch ?? app.auto_deploy_branch ?? "—" },
+          {
+            label: "Commit",
+            value: deploy?.commit_sha ? (
+              <span className="font-mono text-xs">
+                {deploy.commit_sha.slice(0, 7)}
+              </span>
+            ) : (
+              "—"
+            ),
+          },
+        ]
+      : []),
+    {
+      label: "Built",
+      value: deploy ? formatRelativeTime(deploy.started_at) : "—",
+    },
+    { label: "Duration", value: duration ?? "—" },
+  ];
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Build Info</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-2.5 text-sm">
+        {rows.map((r) => (
+          <div key={r.label} className="flex items-center justify-between gap-3">
+            <span className="text-muted-foreground">{r.label}</span>
+            <span className="min-w-0 truncate text-right">{r.value}</span>
+          </div>
+        ))}
+      </CardContent>
+    </Card>
+  );
+}
+
+function RecentEventsCard({
+  projectId,
+  applicationId,
+}: {
+  projectId: string;
+  applicationId: string;
+}) {
+  const { data } = useAuditLogs({
+    limit: 6,
+    offset: 0,
+    resource_type: "application",
+    resource_id: applicationId,
+  });
+  void projectId;
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Recent Events</CardTitle>
+      </CardHeader>
+      <CardContent>
+        {!data || data.items.length === 0 ? (
+          <p className="text-muted-foreground py-4 text-center text-sm">
+            No recent events.
+          </p>
+        ) : (
+          <div className="space-y-2">
+            {data.items.map((e) => (
+              <div key={e.id} className="flex items-center gap-2 text-sm">
+                <span
+                  className={cn(
+                    "shrink-0 rounded-md px-2 py-0.5 text-xs font-medium",
+                    actionClass(e.action),
+                  )}
+                >
+                  {actionLabel(e.action)}
+                </span>
+                <span className="text-muted-foreground ml-auto shrink-0 text-xs">
+                  {e.user_email ?? "system"}
+                </span>
+                <span className="text-text-faint w-20 shrink-0 text-right text-xs">
+                  {formatRelativeTime(e.created_at)}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 function ApplicationOverview() {
   const { projectId, applicationId } = Route.useParams();
   const { data: application } = useApplication(projectId, applicationId);
+  const { data: deployments } = useDeployments(projectId, applicationId);
+  const { data: metrics } = useAppMetricsStream(projectId, applicationId, true);
 
   if (!application) {
     return (
-      <div className="grid gap-4 sm:grid-cols-2">
-        {[1, 2].map((i) => (
-          <Card key={i}>
-            <CardHeader>
-              <Skeleton className="h-5 w-36" />
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <Skeleton className="h-4 w-full" />
-              <Skeleton className="h-4 w-4/5" />
-              <Skeleton className="h-4 w-3/5" />
-            </CardContent>
-          </Card>
-        ))}
+      <div className="space-y-4">
+        <div className="grid gap-4 sm:grid-cols-3">
+          {[1, 2, 3].map((i) => (
+            <Skeleton key={i} className="h-28 rounded-xl" />
+          ))}
+        </div>
       </div>
     );
   }
 
-  return (
-    <div className="grid gap-4 sm:grid-cols-2">
-      <Card>
-        <CardHeader>
-          <CardTitle>Application Info</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-2 text-sm">
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">Type</span>
-            <Badge variant="outline" className="capitalize">{application.type}</Badge>
-          </div>
-          {application.type === "git" && (
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Build Type</span>
-              <Badge variant="outline" className="capitalize">{application.build_type}</Badge>
-            </div>
-          )}
-          {application.source_image && (
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Image</span>
-              <span className="font-mono text-xs">
-                {application.source_image}
-              </span>
-            </div>
-          )}
-          {application.source_repo && (
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Repository</span>
-              <a
-                href={application.source_repo}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="max-w-64 truncate font-mono text-xs hover:underline"
-              >
-                {application.source_repo
-                  .replace(/^https?:\/\//, "")
-                  .replace(/\.git$/, "")}
-              </a>
-            </div>
-          )}
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">Status</span>
-            <StatusBadge status={application.status} />
-          </div>
-        </CardContent>
-      </Card>
+  const cpu = lastNonNull(metrics, "cpu_percent");
+  const memUsed = lastNonNull(metrics, "memory_usage");
+  const memLimit = lastNonNull(metrics, "memory_limit");
+  const rx = lastNonNull(metrics, "network_rx_bytes");
+  const tx = lastNonNull(metrics, "network_tx_bytes");
+  const lastDeploy = deployments?.[0];
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Timestamps</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-2 text-sm">
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">Created</span>
-            <span>{formatDate(application.created_at)}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">Updated</span>
-            <span>{formatDate(application.updated_at)}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">ID</span>
-            <span className="font-mono text-xs">{application.id}</span>
-          </div>
-        </CardContent>
-      </Card>
+  return (
+    <div className="space-y-4">
+      {/* Live resource metrics */}
+      <div className="grid gap-4 sm:grid-cols-3">
+        <MetricCard
+          label="CPU"
+          value={cpu != null ? `${cpu.toFixed(0)}%` : "—"}
+          values={metrics.map((p) => p.cpu_percent)}
+          color={CPU_COLOR}
+        />
+        <MetricCard
+          label="Memory"
+          value={formatBytes(memUsed)}
+          sub={memLimit ? `/ ${formatBytes(memLimit)}` : undefined}
+          values={metrics.map((p) => p.memory_usage)}
+          color={MEM_COLOR}
+        />
+        <MetricCard
+          label="Network"
+          value={`↓ ${formatRate(rx)}`}
+          sub={`↑ ${formatRate(tx)}`}
+          values={metrics.map((p) => p.network_rx_bytes)}
+          color={NET_COLOR}
+        />
+      </div>
+
+      {/* Build info + recent events */}
+      <div className="grid gap-4 lg:grid-cols-2">
+        <BuildInfoCard app={application} deploy={lastDeploy} />
+        <RecentEventsCard projectId={projectId} applicationId={applicationId} />
+      </div>
+
+      <p className="text-text-faint text-center text-xs">
+        Live metrics stream every ~2s while this page is open ·{" "}
+        <Link
+          to="/projects/$projectId/applications/$applicationId/metrics"
+          params={{ projectId, applicationId }}
+          className="hover:text-foreground underline"
+        >
+          full metrics
+        </Link>
+      </p>
     </div>
   );
 }

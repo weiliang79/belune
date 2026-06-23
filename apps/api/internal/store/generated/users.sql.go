@@ -141,17 +141,21 @@ func (q *Queries) GetUserByUsername(ctx context.Context, username string) (User,
 }
 
 const listUsers = `-- name: ListUsers :many
-SELECT id, email, role, username, first_name, last_name, created_at FROM users ORDER BY created_at ASC
+SELECT u.id, u.email, u.role, u.username, u.first_name, u.last_name, u.created_at,
+       (SELECT max(rt.last_used_at) FROM refresh_tokens rt WHERE rt.user_id = u.id) AS last_active_at
+FROM users u
+ORDER BY u.created_at ASC
 `
 
 type ListUsersRow struct {
-	ID        pgtype.UUID        `json:"id"`
-	Email     string             `json:"email"`
-	Role      string             `json:"role"`
-	Username  string             `json:"username"`
-	FirstName string             `json:"first_name"`
-	LastName  string             `json:"last_name"`
-	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	ID           pgtype.UUID        `json:"id"`
+	Email        string             `json:"email"`
+	Role         string             `json:"role"`
+	Username     string             `json:"username"`
+	FirstName    string             `json:"first_name"`
+	LastName     string             `json:"last_name"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+	LastActiveAt interface{}        `json:"last_active_at"`
 }
 
 func (q *Queries) ListUsers(ctx context.Context) ([]ListUsersRow, error) {
@@ -171,6 +175,7 @@ func (q *Queries) ListUsers(ctx context.Context) ([]ListUsersRow, error) {
 			&i.FirstName,
 			&i.LastName,
 			&i.CreatedAt,
+			&i.LastActiveAt,
 		); err != nil {
 			return nil, err
 		}

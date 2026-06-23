@@ -18,10 +18,20 @@ type metricsResponse struct {
 	Containers   containerStats `json:"containers"`
 }
 
+type containerTypeCount struct {
+	Running int `json:"running"`
+	Total   int `json:"total"`
+}
+
 type containerStats struct {
 	Running int `json:"running"`
 	Stopped int `json:"stopped"`
+	Error   int `json:"error"`
 	Total   int `json:"total"`
+	// ByType groups managed containers into the categories the platform
+	// actually models: "application" (carries an application-id label) and
+	// "database" (everything else managed). No synthetic worker/cron buckets.
+	ByType map[string]containerTypeCount `json:"by_type"`
 }
 
 func (h *Handler) GetMetrics(w http.ResponseWriter, r *http.Request) {
@@ -44,16 +54,30 @@ func (h *Handler) GetMetrics(w http.ResponseWriter, r *http.Request) {
 		slog.Error("failed to count deployments", "error", err)
 	}
 
-	var stats containerStats
+	stats := containerStats{ByType: map[string]containerTypeCount{}}
 	containers, err := h.runtime.ListContainers(ctx)
 	if err == nil {
 		for _, c := range containers {
 			stats.Total++
-			if c.Status == status.ApplicationRunning {
+			switch c.Status {
+			case status.ApplicationRunning:
 				stats.Running++
-			} else {
+			case "dead", "restarting":
+				stats.Error++
+			default:
 				stats.Stopped++
 			}
+
+			kind := "database"
+			if _, ok := c.Labels["application-id"]; ok {
+				kind = "application"
+			}
+			tc := stats.ByType[kind]
+			tc.Total++
+			if c.Status == status.ApplicationRunning {
+				tc.Running++
+			}
+			stats.ByType[kind] = tc
 		}
 	}
 

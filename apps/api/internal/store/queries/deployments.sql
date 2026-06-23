@@ -83,6 +83,9 @@ WHERE (sqlc.narg('project_id')::uuid IS NULL OR p.id = sqlc.narg('project_id'))
   AND (sqlc.narg('from')::timestamptz IS NULL OR d.started_at >= sqlc.narg('from'))
   AND (sqlc.narg('to')::timestamptz IS NULL OR d.started_at <= sqlc.narg('to'))
   AND (sqlc.narg('user_id')::uuid IS NULL OR p.user_id = sqlc.narg('user_id'))
+  AND (sqlc.narg('search')::text IS NULL
+       OR d.commit_sha ILIKE '%' || sqlc.narg('search') || '%'
+       OR a.name ILIKE '%' || sqlc.narg('search') || '%')
 ORDER BY d.started_at DESC
 LIMIT $1 OFFSET $2;
 

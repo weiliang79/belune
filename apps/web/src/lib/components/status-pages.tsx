@@ -34,7 +34,9 @@ function StatusPageFrame({
         <span className="text-sm font-semibold">{BRAND.name}</span>
       </div>
 
-      <p className="text-brand mt-10 font-mono text-sm font-semibold">{code}</p>
+      <p className="from-text-muted to-text-faint mt-10 bg-gradient-to-b bg-clip-text text-7xl font-bold tracking-tight text-transparent select-none">
+        {code}
+      </p>
       <h1 className="mt-2 text-2xl font-semibold tracking-tight">{title}</h1>
       <p className="text-muted-foreground mt-2 max-w-md text-sm">
         {description}
@@ -53,18 +55,25 @@ export function NotFoundPage() {
       title="Page not found"
       description="The page you're looking for doesn't exist or may have been moved."
     >
-      {isAuthenticated ? (
+      <div className="flex flex-col items-center justify-center gap-2 sm:flex-row">
         <Link
-          to="/projects"
+          to={isAuthenticated ? "/projects" : "/login"}
           className={cn(buttonVariants(), "w-full sm:w-auto")}
         >
-          Back to projects
+          {isAuthenticated ? "Back to projects" : "Back to login"}
         </Link>
-      ) : (
-        <Link to="/login" className={cn(buttonVariants(), "w-full sm:w-auto")}>
-          Back to login
-        </Link>
-      )}
+        {isAuthenticated && (
+          <Link
+            to="/login"
+            className={cn(
+              buttonVariants({ variant: "outline" }),
+              "w-full sm:w-auto",
+            )}
+          >
+            Back to login
+          </Link>
+        )}
+      </div>
     </StatusPageFrame>
   );
 }

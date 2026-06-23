@@ -76,18 +76,35 @@ func (q *Queries) GetProject(ctx context.Context, id pgtype.UUID) (Project, erro
 }
 
 const listAllProjects = `-- name: ListAllProjects :many
-SELECT id, name, slug, user_id, created_at, updated_at FROM projects ORDER BY created_at DESC
+SELECT p.id, p.name, p.slug, p.user_id, p.created_at, p.updated_at, (
+    SELECT max(d.started_at)
+    FROM deployments d
+    JOIN applications a ON a.id = d.application_id
+    WHERE a.project_id = p.id
+) AS last_deployed_at
+FROM projects p
+ORDER BY p.created_at DESC
 `
 
-func (q *Queries) ListAllProjects(ctx context.Context) ([]Project, error) {
+type ListAllProjectsRow struct {
+	ID             pgtype.UUID        `json:"id"`
+	Name           string             `json:"name"`
+	Slug           string             `json:"slug"`
+	UserID         pgtype.UUID        `json:"user_id"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+	LastDeployedAt interface{}        `json:"last_deployed_at"`
+}
+
+func (q *Queries) ListAllProjects(ctx context.Context) ([]ListAllProjectsRow, error) {
 	rows, err := q.db.Query(ctx, listAllProjects)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []Project{}
+	items := []ListAllProjectsRow{}
 	for rows.Next() {
-		var i Project
+		var i ListAllProjectsRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.Name,
@@ -95,6 +112,7 @@ func (q *Queries) ListAllProjects(ctx context.Context) ([]Project, error) {
 			&i.UserID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.LastDeployedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -107,18 +125,36 @@ func (q *Queries) ListAllProjects(ctx context.Context) ([]Project, error) {
 }
 
 const listProjectsByUser = `-- name: ListProjectsByUser :many
-SELECT id, name, slug, user_id, created_at, updated_at FROM projects WHERE user_id = $1 ORDER BY created_at DESC
+SELECT p.id, p.name, p.slug, p.user_id, p.created_at, p.updated_at, (
+    SELECT max(d.started_at)
+    FROM deployments d
+    JOIN applications a ON a.id = d.application_id
+    WHERE a.project_id = p.id
+) AS last_deployed_at
+FROM projects p
+WHERE p.user_id = $1
+ORDER BY p.created_at DESC
 `
 
-func (q *Queries) ListProjectsByUser(ctx context.Context, userID pgtype.UUID) ([]Project, error) {
+type ListProjectsByUserRow struct {
+	ID             pgtype.UUID        `json:"id"`
+	Name           string             `json:"name"`
+	Slug           string             `json:"slug"`
+	UserID         pgtype.UUID        `json:"user_id"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+	LastDeployedAt interface{}        `json:"last_deployed_at"`
+}
+
+func (q *Queries) ListProjectsByUser(ctx context.Context, userID pgtype.UUID) ([]ListProjectsByUserRow, error) {
 	rows, err := q.db.Query(ctx, listProjectsByUser, userID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []Project{}
+	items := []ListProjectsByUserRow{}
 	for rows.Next() {
-		var i Project
+		var i ListProjectsByUserRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.Name,
@@ -126,6 +162,7 @@ func (q *Queries) ListProjectsByUser(ctx context.Context, userID pgtype.UUID) ([
 			&i.UserID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.LastDeployedAt,
 		); err != nil {
 			return nil, err
 		}

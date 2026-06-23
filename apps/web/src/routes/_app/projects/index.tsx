@@ -16,7 +16,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { formatDate } from "@/lib/utils/format";
+import { formatDate, formatRelativeTime } from "@/lib/utils/format";
 import { cn } from "@/lib/utils";
 import { OperatorHealthStrip } from "@/lib/components/stats/operator-health-strip";
 import type { Project } from "@/lib/types";
@@ -80,10 +80,16 @@ function ProjectCard({ project }: { project: Project }) {
             <ProjectServicesBadge projectId={project.id} />
           </div>
         </CardHeader>
-        <CardContent>
+        <CardContent className="flex items-center justify-between gap-2">
           <p className="text-text-faint text-xs">
             Created {formatDate(project.created_at)}
           </p>
+          {project.last_deployed_at && (
+            <p className="text-text-faint flex items-center gap-1 text-xs">
+              <RocketIcon aria-hidden="true" className="size-3" />
+              Deployed {formatRelativeTime(project.last_deployed_at)}
+            </p>
+          )}
         </CardContent>
       </Card>
     </Link>
@@ -244,7 +250,8 @@ function ProjectsPage() {
           />
         </div>
         <Select value={sort} onValueChange={(v) => setSort(v as SortKey)}>
-          <SelectTrigger className="w-36" aria-label="Sort projects">
+          <SelectTrigger className="w-44" aria-label="Sort projects">
+            <span className="text-text-faint mr-1">Sort:</span>
             <SelectValue />
           </SelectTrigger>
           <SelectContent>

@@ -15,6 +15,14 @@ export function useMetrics() {
   });
 }
 
+export function useServerServices() {
+  return useQuery({
+    queryKey: queryKeys.serverServices,
+    queryFn: metricsApi.getServerServices,
+    refetchInterval: 30_000,
+  });
+}
+
 export function useTriggerCleanup() {
   const qc = useQueryClient();
   return useMutation({

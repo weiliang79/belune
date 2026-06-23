@@ -57,16 +57,42 @@ export const Route = createFileRoute("/_app/quotas")({
   errorComponent: RouteError,
 });
 
+/** A quota is "near limit" when any capped resource is at ≥ 80% usage. */
+function isNearLimit(q: QuotaView): boolean {
+  const ratios = [
+    q.limits.max_applications
+      ? q.usage.applications / q.limits.max_applications
+      : 0,
+    q.limits.max_cpu ? q.usage.cpu / q.limits.max_cpu : 0,
+    q.limits.max_memory_mb
+      ? q.usage.memory_bytes / (1024 * 1024) / q.limits.max_memory_mb
+      : 0,
+  ];
+  return ratios.some((r) => r >= 0.8);
+}
+
 function QuotasPage() {
   const { data: quotas, isLoading } = useQuotas();
   const [editTarget, setEditTarget] = useState<QuotaView | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<QuotaView | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
 
+  const nearLimit = quotas?.filter(isNearLimit).length ?? 0;
+
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Quotas</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">
+          Quotas
+          {quotas && quotas.length > 0 && (
+            <span className="text-muted-foreground ml-2 text-base font-normal">
+              {quotas.length} {quotas.length === 1 ? "rule" : "rules"}
+              {nearLimit > 0 && (
+                <span className="text-status-building"> · {nearLimit} near limit</span>
+              )}
+            </span>
+          )}
+        </h1>
         <p className="text-muted-foreground text-sm">
           Aggregate caps on top of per-container limits. Unset fields mean
           unlimited.

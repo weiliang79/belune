@@ -21,9 +21,17 @@ JOIN projects p ON p.id = db.project_id
 WHERE (sqlc.narg('user_id')::uuid IS NULL OR p.user_id = sqlc.narg('user_id'));
 
 -- name: CountDeployments7d :one
+-- median_build_ms is the median build duration (build_ended_at - build_started_at)
+-- over completed builds in the window; 0 when there are none.
 SELECT count(*)                                       AS total,
        count(*) FILTER (WHERE d.status = 'success')   AS succeeded,
-       count(*) FILTER (WHERE d.status = 'failed')    AS failed
+       count(*) FILTER (WHERE d.status = 'failed')    AS failed,
+       COALESCE(
+         percentile_cont(0.5) WITHIN GROUP (
+           ORDER BY EXTRACT(EPOCH FROM (d.build_ended_at - d.build_started_at)) * 1000
+         ) FILTER (WHERE d.build_started_at IS NOT NULL AND d.build_ended_at IS NOT NULL),
+         0
+       )::float8                                      AS median_build_ms
 FROM deployments d
 JOIN applications a ON a.id = d.application_id
 JOIN projects p ON p.id = a.project_id
