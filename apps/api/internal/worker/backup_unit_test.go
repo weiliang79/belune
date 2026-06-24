@@ -75,3 +75,25 @@ func TestDBBackupMethod(t *testing.T) {
 		}
 	}
 }
+
+func TestPostgresDataDir(t *testing.T) {
+	cases := []struct {
+		version string
+		want    string
+	}{
+		{"16", "/var/lib/postgresql/data"},
+		{"17", "/var/lib/postgresql/data"},
+		{"17.4", "/var/lib/postgresql/data"},
+		{"18", "/var/lib/postgresql"},
+		{"18.1", "/var/lib/postgresql"},
+		{"18-alpine", "/var/lib/postgresql"},
+		{"19", "/var/lib/postgresql"},
+		{"latest", "/var/lib/postgresql"},
+		{"alpine", "/var/lib/postgresql"},
+	}
+	for _, c := range cases {
+		if got := postgresDataDir(c.version); got != c.want {
+			t.Errorf("postgresDataDir(%q) = %q, want %q", c.version, got, c.want)
+		}
+	}
+}

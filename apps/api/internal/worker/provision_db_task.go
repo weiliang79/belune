@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
+	"strconv"
 
 	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -149,12 +150,38 @@ func (h *TaskHandler) decryptDBCredentials(db generated.Database) (map[string]st
 	return creds, nil
 }
 
+// postgresDataDir returns the volume mount target for a Postgres image tag.
+//
+// Postgres 18+ Docker images store data in a major-version-specific subdirectory
+// and reject a volume mounted directly at /var/lib/postgresql/data (it boots into
+// a fresh PGDATA and errors that the legacy path is an "unused mount/volume").
+// For 18+ we mount the parent /var/lib/postgresql so the image's default
+// /var/lib/postgresql/<major>/docker lands inside the volume; older tags keep the
+// historical /var/lib/postgresql/data so existing volumes are unaffected.
+// See https://github.com/docker-library/postgres/pull/1259.
+func postgresDataDir(version string) string {
+	end := 0
+	for end < len(version) && version[end] >= '0' && version[end] <= '9' {
+		end++
+	}
+	// Numeric tag ("18", "18.1", "18-alpine"): use the new layout from 18 up.
+	if major, err := strconv.Atoi(version[:end]); err == nil {
+		if major >= 18 {
+			return "/var/lib/postgresql"
+		}
+		return "/var/lib/postgresql/data"
+	}
+	// Non-numeric tag ("latest", "alpine", "bookworm"): assume a current (18+)
+	// image and use the new layout.
+	return "/var/lib/postgresql"
+}
+
 // dbContainerSpec returns the per-type image, data dir, container port, env, and
 // command for a managed database.
 func dbContainerSpec(dbType, version string, creds map[string]string) (image, dataDir string, port int32, env map[string]string, cmd []string, err error) {
 	switch dbType {
 	case "postgres":
-		return fmt.Sprintf("postgres:%s", version), "/var/lib/postgresql/data", 5432, map[string]string{
+		return fmt.Sprintf("postgres:%s", version), postgresDataDir(version), 5432, map[string]string{
 			"POSTGRES_USER":     creds["user"],
 			"POSTGRES_PASSWORD": creds["password"],
 			"POSTGRES_DB":       creds["database"],
