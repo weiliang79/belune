@@ -15,6 +15,9 @@ SELECT * FROM git_provider_configs WHERE id = $1;
 -- name: GetGitProviderConfigByProvider :one
 SELECT * FROM git_provider_configs WHERE provider = $1 AND base_url = $2;
 
+-- name: ListGitProviderConfigsForProvider :many
+SELECT * FROM git_provider_configs WHERE provider = $1;
+
 -- name: ListGitProviderConfigs :many
 SELECT id, provider, base_url, client_id, app_id, app_slug, created_at, updated_at,
     (secret_encrypted IS NOT NULL AND length(secret_encrypted) > 0) AS has_secret

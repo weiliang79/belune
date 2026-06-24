@@ -95,50 +95,7 @@ func (h *Handler) HandleWebhookPush(w http.ResponseWriter, r *http.Request) {
 			slog.Warn("webhook: parse/verify failed", "application", app.Name, "error", err)
 			continue
 		}
-
-		// Check if push branch matches auto_deploy_branch
-		autoBranch := "main"
-		if app.AutoDeployBranch.Valid && app.AutoDeployBranch.String != "" {
-			autoBranch = app.AutoDeployBranch.String
-		}
-
-		if payload.Branch == autoBranch {
-			if h.triggerPushDeploy(r, app, payload.Branch, payload.CommitSHA) {
-				triggered++
-			}
-			continue
-		}
-
-		// Preview path: branch did not match auto_deploy_branch, but may match
-		// a configured preview pattern on this parent app.
-		if !app.PreviewBranchPattern.Valid || app.PreviewBranchPattern.String == "" ||
-			!app.PreviewDomainTemplate.Valid || app.PreviewDomainTemplate.String == "" {
-			slog.Debug("webhook: branch mismatch and no preview config",
-				"application", app.Name,
-				"push_branch", payload.Branch,
-				"auto_deploy_branch", autoBranch,
-			)
-			continue
-		}
-		if !preview.MatchesPattern(app.PreviewBranchPattern.String, payload.Branch) {
-			slog.Debug("webhook: branch does not match preview pattern",
-				"application", app.Name,
-				"push_branch", payload.Branch,
-				"pattern", app.PreviewBranchPattern.String,
-			)
-			continue
-		}
-
-		previewApp, err := h.ensurePreviewApp(r.Context(), app, payload.Branch)
-		if err != nil {
-			slog.Error("webhook: failed to materialize preview app",
-				"parent", app.Name,
-				"branch", payload.Branch,
-				"error", err,
-			)
-			continue
-		}
-		if h.triggerPushDeploy(r, previewApp, payload.Branch, payload.CommitSHA) {
+		if h.dispatchAppPush(r, app, payload.Branch, payload.CommitSHA) {
 			triggered++
 		}
 	}

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"strings"
 
 	"github.com/jackc/pgx/v5/pgtype"
 
@@ -130,11 +131,19 @@ func (s *GitIntegrationService) resolve(ctx context.Context, id pgtype.UUID) (ge
 }
 
 // CloneToken mints a clone token for a connection, persisting refreshed OAuth
-// tokens. It returns the token and the provider name (for BuildCloneURL).
-func (s *GitIntegrationService) CloneToken(ctx context.Context, id pgtype.UUID) (string, string, error) {
+// tokens. repoURL is the clone target; the token is only minted when repoURL is
+// on the provider's expected host, so a malicious source_repo cannot exfiltrate
+// the credential to an arbitrary host. Returns the token and the provider name
+// (for BuildCloneURL).
+func (s *GitIntegrationService) CloneToken(ctx context.Context, id pgtype.UUID, repoURL string) (string, string, error) {
 	row, integ, cfg, conn, err := s.resolve(ctx, id)
 	if err != nil {
 		return "", "", err
+	}
+	expected := providerHost(row.Provider, row.BaseUrl)
+	got := repoHost(repoURL)
+	if expected == "" || got == "" || got != expected {
+		return "", "", fmt.Errorf("source repo host %q does not match provider host %q", got, expected)
 	}
 	token, changed, err := conn.CloneToken(ctx, cfg, &integ)
 	if err != nil {
@@ -166,6 +175,35 @@ func (s *GitIntegrationService) ListBranches(ctx context.Context, id pgtype.UUID
 		return nil, err
 	}
 	return conn.ListBranches(ctx, cfg, &integ, repoFullName)
+}
+
+// providerHost returns the expected git host for a provider connection: the
+// configured base URL host for self-hosted instances, else the SaaS default.
+func providerHost(provider, baseURL string) string {
+	if baseURL != "" {
+		if u, err := url.Parse(baseURL); err == nil && u.Host != "" {
+			return strings.ToLower(u.Host)
+		}
+	}
+	switch provider {
+	case "github":
+		return "github.com"
+	case "gitlab":
+		return "gitlab.com"
+	case "bitbucket":
+		return "bitbucket.org"
+	default:
+		return "" // gitea is always self-hosted; base URL is required
+	}
+}
+
+// repoHost extracts the lowercased host from an HTTPS repo URL.
+func repoHost(repoURL string) string {
+	u, err := url.Parse(repoURL)
+	if err != nil || u.Host == "" {
+		return ""
+	}
+	return strings.ToLower(u.Host)
 }
 
 func (s *GitIntegrationService) encryptIntegration(integ providers.Integration) ([]byte, error) {

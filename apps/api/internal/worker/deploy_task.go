@@ -377,7 +377,7 @@ func (h *TaskHandler) buildFromGit(ctx context.Context, dc *deployContext) error
 	// otherwise fall back to the app-level PAT, then to an unauthenticated clone.
 	var cloneURL string
 	if dc.app.GitIntegrationID.Valid && h.GitIntegrationService != nil {
-		token, provider, err := h.GitIntegrationService.CloneToken(ctx, dc.app.GitIntegrationID)
+		token, provider, err := h.GitIntegrationService.CloneToken(ctx, dc.app.GitIntegrationID, dc.app.SourceRepo.String)
 		if err != nil {
 			slog.Warn("failed to mint integration clone token, falling back to app token", "error", err)
 		} else {

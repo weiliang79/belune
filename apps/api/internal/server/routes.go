@@ -104,6 +104,9 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService,
 				r.Use(httprate.LimitByIP(30, time.Minute))
 			}
 			r.With(withTimeout(handlerTimeout)).Post("/api/webhooks/push", h.HandleWebhookPush)
+			// Provider App/OAuth webhooks (verified against the provider app's
+			// shared webhook secret).
+			r.With(withTimeout(handlerTimeout)).Post("/api/git/webhooks/{provider}", h.HandleProviderWebhook)
 		})
 
 		// Git provider OAuth/manifest callbacks are public: they are top-level

@@ -116,6 +116,40 @@ func (q *Queries) ListGitProviderConfigs(ctx context.Context) ([]ListGitProvider
 	return items, nil
 }
 
+const listGitProviderConfigsForProvider = `-- name: ListGitProviderConfigsForProvider :many
+SELECT id, provider, base_url, client_id, app_id, app_slug, secret_encrypted, created_at, updated_at FROM git_provider_configs WHERE provider = $1
+`
+
+func (q *Queries) ListGitProviderConfigsForProvider(ctx context.Context, provider string) ([]GitProviderConfig, error) {
+	rows, err := q.db.Query(ctx, listGitProviderConfigsForProvider, provider)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GitProviderConfig{}
+	for rows.Next() {
+		var i GitProviderConfig
+		if err := rows.Scan(
+			&i.ID,
+			&i.Provider,
+			&i.BaseUrl,
+			&i.ClientID,
+			&i.AppID,
+			&i.AppSlug,
+			&i.SecretEncrypted,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const upsertGitProviderConfig = `-- name: UpsertGitProviderConfig :one
 INSERT INTO git_provider_configs (provider, base_url, client_id, app_id, app_slug, secret_encrypted)
 VALUES ($1, $2, $3, $4, $5, $6)

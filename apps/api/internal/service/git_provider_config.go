@@ -108,3 +108,24 @@ func (s *GitProviderConfigService) decryptSecret(encrypted []byte) (ProviderSecr
 func (s *GitProviderConfigService) Delete(ctx context.Context, id pgtype.UUID) error {
 	return s.queries.DeleteGitProviderConfig(ctx, id)
 }
+
+// WebhookSecrets returns the configured webhook secrets for a provider (one per
+// configured base URL). Empty secrets are skipped. Used to verify inbound
+// provider webhooks; callers try each until one verifies.
+func (s *GitProviderConfigService) WebhookSecrets(ctx context.Context, provider string) ([]string, error) {
+	rows, err := s.queries.ListGitProviderConfigsForProvider(ctx, provider)
+	if err != nil {
+		return nil, err
+	}
+	secrets := make([]string, 0, len(rows))
+	for _, row := range rows {
+		secret, decErr := s.decryptSecret(row.SecretEncrypted)
+		if decErr != nil {
+			continue
+		}
+		if secret.WebhookSecret != "" {
+			secrets = append(secrets, secret.WebhookSecret)
+		}
+	}
+	return secrets, nil
+}
