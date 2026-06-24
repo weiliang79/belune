@@ -28,6 +28,9 @@ UPDATE databases SET version = $2 WHERE id = $1 RETURNING *;
 -- name: ListDatabasesByStatus :many
 SELECT * FROM databases WHERE status = $1;
 
+-- name: ListAllDatabases :many
+SELECT * FROM databases;
+
 -- name: DeleteDatabase :exec
 DELETE FROM databases WHERE id = $1;
 

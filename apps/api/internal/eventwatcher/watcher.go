@@ -14,7 +14,13 @@ import (
 	"github.com/ungweiliang/selfhost-paas/internal/ws"
 )
 
-// Watcher monitors Docker container events and synchronizes application status.
+const (
+	labelApplicationID = "application-id"
+	labelDatabaseID    = "database-id"
+)
+
+// Watcher monitors Docker container events and synchronizes application and
+// database status with actual container state.
 type Watcher struct {
 	runtime     runtime.ContainerRuntime
 	queries     *generated.Queries
@@ -72,14 +78,21 @@ func (w *Watcher) reconcile(ctx context.Context) {
 		return
 	}
 
-	// Build map of running container app IDs
-	running := make(map[string]bool)
+	// Build maps of running container app/database IDs. Databases are also keyed
+	// by container name (which equals the slug) so databases provisioned before
+	// the database-id label existed are still recognized as running and not
+	// falsely flipped to stopped.
+	runningApps := make(map[string]bool)
+	runningDBs := make(map[string]bool)
+	runningNames := make(map[string]bool)
 	for _, c := range containers {
-		appID, ok := c.Labels["application-id"]
-		if !ok {
-			continue
+		runningNames[c.Name] = true
+		if appID, ok := c.Labels[labelApplicationID]; ok {
+			runningApps[appID] = true
 		}
-		running[appID] = true
+		if dbID, ok := c.Labels[labelDatabaseID]; ok {
+			runningDBs[dbID] = true
+		}
 	}
 
 	// Check all applications and reconcile status
@@ -91,7 +104,7 @@ func (w *Watcher) reconcile(ctx context.Context) {
 
 	for _, app := range apps {
 		appIDStr := pgUUIDToString(app.ID)
-		isRunning := running[appIDStr]
+		isRunning := runningApps[appIDStr]
 
 		if app.Status == status.ApplicationRunning && !isRunning {
 			slog.Info("eventwatcher: reconciling stopped application", "app_id", appIDStr)
@@ -102,7 +115,29 @@ func (w *Watcher) reconcile(ctx context.Context) {
 		}
 	}
 
-	slog.Info("eventwatcher: reconciliation complete", "containers", len(containers), "apps", len(apps))
+	// Check all databases and reconcile status. Only the steady running/stopped
+	// states are reconciled; transient states (creating, upgrading, backing_up,
+	// failed) are left for their owning task to resolve.
+	dbs, err := w.queries.ListAllDatabases(ctx)
+	if err != nil {
+		slog.Warn("eventwatcher: reconciliation failed to list databases", "error", err)
+		return
+	}
+
+	for _, db := range dbs {
+		dbIDStr := pgUUIDToString(db.ID)
+		isRunning := runningDBs[dbIDStr] || runningNames[db.Slug]
+
+		if db.Status == status.DatabaseRunning && !isRunning {
+			slog.Info("eventwatcher: reconciling stopped database", "database_id", dbIDStr)
+			w.updateDatabaseStatus(ctx, db.ID, dbIDStr, status.DatabaseStopped)
+		} else if db.Status == status.DatabaseStopped && isRunning {
+			slog.Info("eventwatcher: reconciling running database", "database_id", dbIDStr)
+			w.updateDatabaseStatus(ctx, db.ID, dbIDStr, status.DatabaseRunning)
+		}
+	}
+
+	slog.Info("eventwatcher: reconciliation complete", "containers", len(containers), "apps", len(apps), "databases", len(dbs))
 }
 
 // watchEvents subscribes to Docker events and processes them.
@@ -129,13 +164,21 @@ func (w *Watcher) watchEvents(ctx context.Context) error {
 	}
 }
 
-// handleEvent processes a single Docker container event.
+// handleEvent processes a single Docker container event, dispatching to the
+// application or database handler based on which managed-resource label the
+// container carries.
 func (w *Watcher) handleEvent(ctx context.Context, event runtime.ContainerEvent) {
-	appID, ok := event.Labels["application-id"]
-	if !ok || appID == "" {
+	if appID := event.Labels[labelApplicationID]; appID != "" {
+		w.handleApplicationEvent(ctx, event, appID)
 		return
 	}
+	if dbID := event.Labels[labelDatabaseID]; dbID != "" {
+		w.handleDatabaseEvent(ctx, event, dbID)
+		return
+	}
+}
 
+func (w *Watcher) handleApplicationEvent(ctx context.Context, event runtime.ContainerEvent, appID string) {
 	var appUUID pgtype.UUID
 	if err := appUUID.Scan(appID); err != nil {
 		slog.Debug("eventwatcher: invalid application-id label", "value", appID)
@@ -167,6 +210,53 @@ func (w *Watcher) handleEvent(ctx context.Context, event runtime.ContainerEvent)
 	w.updateAppStatus(ctx, appUUID, appID, newStatus)
 }
 
+// databaseStatusForEvent maps a Docker container event to a database status,
+// returning ok=false for events that should not change status.
+func databaseStatusForEvent(event runtime.ContainerEvent) (newStatus string, ok bool) {
+	switch event.Status {
+	case "start", "restart":
+		return status.DatabaseRunning, true
+	case "stop":
+		return status.DatabaseStopped, true
+	case "die":
+		// A clean stop exits 0; a non-zero exit means the container crashed
+		// (e.g. a misconfigured image), which we surface as failed.
+		if event.Labels["exitCode"] == "0" {
+			return status.DatabaseStopped, true
+		}
+		return status.DatabaseFailed, true
+	case "oom":
+		return status.DatabaseFailed, true
+	default:
+		return "", false
+	}
+}
+
+func (w *Watcher) handleDatabaseEvent(ctx context.Context, event runtime.ContainerEvent, dbID string) {
+	var dbUUID pgtype.UUID
+	if err := dbUUID.Scan(dbID); err != nil {
+		slog.Debug("eventwatcher: invalid database-id label", "value", dbID)
+		return
+	}
+
+	newStatus, ok := databaseStatusForEvent(event)
+	if !ok {
+		return
+	}
+	if event.Status == "oom" {
+		slog.Warn("eventwatcher: database container killed by OOM", "database_id", dbID, "container", event.ContainerName)
+	}
+
+	slog.Info("eventwatcher: database container event",
+		"database_id", dbID,
+		"event", event.Status,
+		"container", event.ContainerName,
+		"new_status", newStatus,
+	)
+
+	w.updateDatabaseStatus(ctx, dbUUID, dbID, newStatus)
+}
+
 func (w *Watcher) updateAppStatus(ctx context.Context, appUUID pgtype.UUID, appIDStr, newStatus string) {
 	_, err := w.queries.UpdateApplicationStatus(ctx, generated.UpdateApplicationStatusParams{
 		ID:     appUUID,
@@ -179,6 +269,21 @@ func (w *Watcher) updateAppStatus(ctx context.Context, appUUID pgtype.UUID, appI
 
 	if w.broadcaster != nil {
 		w.broadcaster.BroadcastStatus(appIDStr, newStatus)
+	}
+}
+
+func (w *Watcher) updateDatabaseStatus(ctx context.Context, dbUUID pgtype.UUID, dbIDStr, newStatus string) {
+	_, err := w.queries.UpdateDatabaseStatus(ctx, generated.UpdateDatabaseStatusParams{
+		ID:     dbUUID,
+		Status: newStatus,
+	})
+	if err != nil {
+		slog.Warn("eventwatcher: failed to update database status", "database_id", dbIDStr, "error", err)
+		return
+	}
+
+	if w.broadcaster != nil {
+		w.broadcaster.BroadcastDatabaseStatus(dbIDStr, newStatus)
 	}
 }
 

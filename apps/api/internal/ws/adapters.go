@@ -142,3 +142,15 @@ func (b *ContainerStatusBroadcaster) BroadcastStatus(applicationID, status strin
 
 	slog.Debug("ws: broadcast container status", "app_id", applicationID, "status", status)
 }
+
+// BroadcastDatabaseStatus sends a database container status update to subscribers.
+func (b *ContainerStatusBroadcaster) BroadcastDatabaseStatus(databaseID, status string) {
+	data, _ := json.Marshal(map[string]string{
+		"database_id": databaseID,
+		"status":      status,
+	})
+	channel := "database-status:" + databaseID
+	b.hub.Broadcast(channel, "status", data)
+
+	slog.Debug("ws: broadcast database status", "database_id", databaseID, "status", status)
+}

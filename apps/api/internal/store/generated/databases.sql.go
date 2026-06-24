@@ -148,6 +148,51 @@ func (q *Queries) GetDatabaseOwnerUserID(ctx context.Context, id pgtype.UUID) (p
 	return user_id, err
 }
 
+const listAllDatabases = `-- name: ListAllDatabases :many
+SELECT id, project_id, type, name, slug, version, status, internal_host, internal_port, credentials_encrypted, created_at, cpu_limit, memory_limit, host_port, image, container_port, data_dir, backup_mode, backup_command, restore_command FROM databases
+`
+
+func (q *Queries) ListAllDatabases(ctx context.Context) ([]Database, error) {
+	rows, err := q.db.Query(ctx, listAllDatabases)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Database{}
+	for rows.Next() {
+		var i Database
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.Type,
+			&i.Name,
+			&i.Slug,
+			&i.Version,
+			&i.Status,
+			&i.InternalHost,
+			&i.InternalPort,
+			&i.CredentialsEncrypted,
+			&i.CreatedAt,
+			&i.CpuLimit,
+			&i.MemoryLimit,
+			&i.HostPort,
+			&i.Image,
+			&i.ContainerPort,
+			&i.DataDir,
+			&i.BackupMode,
+			&i.BackupCommand,
+			&i.RestoreCommand,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listDatabasesByProject = `-- name: ListDatabasesByProject :many
 SELECT id, project_id, type, name, slug, version, status, internal_host, internal_port, credentials_encrypted, created_at, cpu_limit, memory_limit, host_port, image, container_port, data_dir, backup_mode, backup_command, restore_command FROM databases WHERE project_id = $1 ORDER BY created_at DESC
 `
