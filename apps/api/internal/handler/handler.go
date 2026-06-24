@@ -46,7 +46,6 @@ type Handler struct {
 	appService  *service.ApplicationService
 	projService *service.ProjectService
 	dbService   *service.DatabaseService
-	gitCredSvc  *service.GitCredentialService
 	hub         *ws.Hub
 	auditSvc    *service.AuditService
 	notifySvc   *service.NotificationService
@@ -68,7 +67,6 @@ func New(
 	appSvc *service.ApplicationService,
 	projSvc *service.ProjectService,
 	dbSvc *service.DatabaseService,
-	gitCredSvc *service.GitCredentialService,
 	hub *ws.Hub,
 	auditSvc *service.AuditService,
 	notifySvc *service.NotificationService,
@@ -89,7 +87,6 @@ func New(
 		appService:  appSvc,
 		projService: projSvc,
 		dbService:   dbSvc,
-		gitCredSvc:  gitCredSvc,
 		hub:         hub,
 		auditSvc:    auditSvc,
 		notifySvc:   notifySvc,

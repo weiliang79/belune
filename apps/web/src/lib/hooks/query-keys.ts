@@ -88,7 +88,6 @@ export const queryKeys = {
   globalDeployments: (params?: object) => ["deployments", params] as const,
   requestLogs: (params?: object) => ["requests", params] as const,
   requestSummary: (params?: object) => ["requests-summary", params] as const,
-  gitCredentials: ["git-credentials"] as const,
   auditLogs: (params?: object) => ["audit-logs", params] as const,
   auditActions: ["audit-actions"] as const,
   routeFeatures: (projectId: string, applicationId: string, domainId: string) =>

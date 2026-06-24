@@ -373,20 +373,14 @@ func (h *TaskHandler) buildFromGit(ctx context.Context, dc *deployContext) error
 	buildCtx, buildCancel := context.WithTimeout(ctx, time.Duration(h.Config.BuildTimeoutMinutes)*time.Minute)
 	defer buildCancel()
 
-	// Resolve git credentials: centralized credential takes priority, fallback to per-app token
+	// Resolve git credentials. A connected provider integration takes priority;
+	// otherwise fall back to the app-level PAT, then to an unauthenticated clone.
 	var cloneURL string
-	if dc.app.GitCredentialID.Valid {
-		cred, credErr := h.Queries.GetGitCredential(ctx, dc.app.GitCredentialID)
-		if credErr != nil {
-			slog.Warn("failed to fetch git credential, trying per-app token", "error", credErr)
-		} else {
-			tokenBytes, decErr := h.Keyring.Decrypt(cred.TokenEncrypted)
-			if decErr != nil {
-				slog.Warn("failed to decrypt centralized git credential", "error", decErr)
-			} else {
-				cloneURL = git.BuildCloneURL(cred.Provider, string(tokenBytes), cred.Username, dc.app.SourceRepo.String)
-			}
-		}
+	if dc.app.GitIntegrationID.Valid {
+		// TODO(git-integrations): mint a short-lived clone token from the connected
+		// provider account once provider token-minting lands. Until then, fall
+		// through to the app-level token / anonymous clone.
+		slog.Warn("git integration auth not yet available, falling back to app token / anonymous clone")
 	}
 	if cloneURL == "" && len(dc.app.GitCredentialsEncrypted) > 0 {
 		tokenBytes, decErr := h.Keyring.Decrypt(dc.app.GitCredentialsEncrypted)

@@ -37,7 +37,7 @@ export function updateApplication(
     cpu_limit?: number;
     memory_limit?: number;
     git_token?: string;
-    git_credential_id?: string;
+    git_integration_id?: string;
     health_check_path?: string;
   },
 ) {

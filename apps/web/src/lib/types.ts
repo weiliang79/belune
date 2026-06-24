@@ -224,15 +224,6 @@ export interface DatabaseBackup {
   error?: string;
 }
 
-export interface GitCredential {
-  id: string;
-  name: string;
-  provider: "github" | "gitlab" | "bitbucket" | "generic";
-  username: string;
-  created_at: string;
-  updated_at: string;
-}
-
 export interface RouteFeature {
   id: string;
   domain_id: string;

@@ -8,16 +8,8 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { useUpdateApplication } from "@/lib/hooks/use-applications";
 import { useFeatures } from "@/lib/hooks/use-features";
-import { useGitCredentials } from "@/lib/hooks/use-git-credentials";
 import type { Application } from "@/lib/types";
 
 interface Props {
@@ -33,7 +25,6 @@ export function ApplicationSettingsForm({
 }: Props) {
   const updateApplication = useUpdateApplication(projectId, applicationId);
   const { data: features } = useFeatures();
-  const { data: gitCredentials } = useGitCredentials();
 
   const form = useForm({
     defaultValues: {
@@ -45,9 +36,6 @@ export function ApplicationSettingsForm({
       cpu_limit: application.cpu_limit ?? 0,
       memory_limit_mb: Math.round(application.memory_limit / (1024 * 1024)),
       git_token: "",
-      git_credential_id:
-        ((application as unknown as Record<string, unknown>).git_credential_id as string) ??
-        "",
       health_check_path: application.health_check_path ?? "",
     },
     onSubmit: async ({ value }) => {
@@ -64,7 +52,6 @@ export function ApplicationSettingsForm({
               ? value.memory_limit_mb * 1024 * 1024
               : 0,
           git_token: value.git_token || undefined,
-          git_credential_id: value.git_credential_id || undefined,
           health_check_path: value.health_check_path,
         }),
         {
@@ -209,33 +196,6 @@ export function ApplicationSettingsForm({
                 )}
               />
               <form.Field
-                name="git_credential_id"
-                children={(field) => (
-                  <div className="space-y-2">
-                    <Label>Git Credential</Label>
-                    <Select
-                      value={field.state.value}
-                      onValueChange={(v) => field.handleChange(v ?? "")}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="None (use token below)" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="">None</SelectItem>
-                        {gitCredentials?.map((cred) => (
-                          <SelectItem key={cred.id} value={cred.id}>
-                            {cred.name} ({cred.provider})
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <p className="text-muted-foreground text-xs">
-                      Select a centralized credential or enter a token below.
-                    </p>
-                  </div>
-                )}
-              />
-              <form.Field
                 name="git_token"
                 children={(field) => (
                   <div className="space-y-2">
@@ -249,8 +209,8 @@ export function ApplicationSettingsForm({
                       className="font-mono"
                     />
                     <p className="text-muted-foreground text-xs">
-                      Per-app token for private repositories. Overridden when a
-                      credential is selected above.
+                      Per-app token for private repositories. Use a repo-scoped
+                      token where possible.
                     </p>
                   </div>
                 )}

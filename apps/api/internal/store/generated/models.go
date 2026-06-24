@@ -37,7 +37,6 @@ type Application struct {
 	Status                  string             `json:"status"`
 	GitCredentialsEncrypted []byte             `json:"git_credentials_encrypted"`
 	HealthCheckPath         pgtype.Text        `json:"health_check_path"`
-	GitCredentialID         pgtype.UUID        `json:"git_credential_id"`
 	CreatedAt               pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt               pgtype.Timestamptz `json:"updated_at"`
 	ParentApplicationID     pgtype.UUID        `json:"parent_application_id"`
@@ -45,6 +44,7 @@ type Application struct {
 	PreviewBranchPattern    pgtype.Text        `json:"preview_branch_pattern"`
 	PreviewDomainTemplate   pgtype.Text        `json:"preview_domain_template"`
 	LastActivityAt          pgtype.Timestamptz `json:"last_activity_at"`
+	GitIntegrationID        pgtype.UUID        `json:"git_integration_id"`
 }
 
 type ApplicationLog struct {
@@ -169,15 +169,27 @@ type EnvVar struct {
 	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
 }
 
-type GitCredential struct {
-	ID             pgtype.UUID        `json:"id"`
-	Name           string             `json:"name"`
-	Provider       string             `json:"provider"`
-	TokenEncrypted []byte             `json:"token_encrypted"`
-	Username       string             `json:"username"`
-	CreatedBy      pgtype.UUID        `json:"created_by"`
-	CreatedAt      pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+type GitIntegration struct {
+	ID              pgtype.UUID        `json:"id"`
+	Provider        string             `json:"provider"`
+	BaseUrl         string             `json:"base_url"`
+	AccountLogin    string             `json:"account_login"`
+	ConfigEncrypted []byte             `json:"config_encrypted"`
+	CreatedBy       pgtype.UUID        `json:"created_by"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+}
+
+type GitProviderConfig struct {
+	ID              pgtype.UUID        `json:"id"`
+	Provider        string             `json:"provider"`
+	BaseUrl         string             `json:"base_url"`
+	ClientID        string             `json:"client_id"`
+	AppID           string             `json:"app_id"`
+	AppSlug         string             `json:"app_slug"`
+	SecretEncrypted []byte             `json:"secret_encrypted"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
 }
 
 type HostMetric struct {

@@ -22,18 +22,40 @@ import (
 	"github.com/ungweiliang/selfhost-paas/internal/worker"
 )
 
+// parseOptionalUUID converts a possibly-empty UUID string into a pgtype.UUID.
+// An empty or unparseable string yields an invalid (NULL) UUID.
+func parseOptionalUUID(s string) pgtype.UUID {
+	var u pgtype.UUID
+	if s == "" {
+		return u
+	}
+	_ = u.Scan(s)
+	return u
+}
+
+// resolveOptionalUUID applies preserve/clear/set semantics for an optional FK on
+// update: nil pointer (key absent) preserves the current value; an empty string
+// clears it to NULL; a UUID string sets it.
+func resolveOptionalUUID(in *string, current pgtype.UUID) pgtype.UUID {
+	if in == nil {
+		return current
+	}
+	return parseOptionalUUID(*in)
+}
+
 type createApplicationRequest struct {
-	Name            string  `json:"name"`
-	Slug            string  `json:"slug"`             // optional, auto-generated from name if empty
-	Type            string  `json:"type"`             // "git" or "image"
-	SourceRepo      string  `json:"source_repo"`      // for git type
-	SourceImage     string  `json:"source_image"`     // for image type
-	DockerfilePath  string  `json:"dockerfile_path"`  // optional
-	BuildType       string  `json:"build_type"`       // dockerfile, buildpacks, railpack, image
-	CPULimit        float64 `json:"cpu_limit"`        // CPU cores (0 = unlimited)
-	MemoryLimit     int64   `json:"memory_limit"`     // bytes (0 = unlimited)
-	GitToken        string  `json:"git_token"`         // PAT for private repos; encrypted server-side
-	HealthCheckPath string  `json:"health_check_path"` // HTTP path to poll after deploy (e.g. /healthz)
+	Name             string  `json:"name"`
+	Slug             string  `json:"slug"`               // optional, auto-generated from name if empty
+	Type             string  `json:"type"`               // "git" or "image"
+	SourceRepo       string  `json:"source_repo"`        // for git type
+	SourceImage      string  `json:"source_image"`       // for image type
+	DockerfilePath   string  `json:"dockerfile_path"`    // optional
+	BuildType        string  `json:"build_type"`         // dockerfile, buildpacks, railpack, image
+	CPULimit         float64 `json:"cpu_limit"`          // CPU cores (0 = unlimited)
+	MemoryLimit      int64   `json:"memory_limit"`       // bytes (0 = unlimited)
+	GitToken         string  `json:"git_token"`          // PAT for private repos; encrypted server-side
+	HealthCheckPath  string  `json:"health_check_path"`  // HTTP path to poll after deploy (e.g. /healthz)
+	GitIntegrationID string  `json:"git_integration_id"` // optional connected provider account
 }
 
 func (h *Handler) CreateApplication(w http.ResponseWriter, r *http.Request) {
@@ -85,19 +107,20 @@ func (h *Handler) CreateApplication(w http.ResponseWriter, r *http.Request) {
 	}
 
 	app, err := h.appService.Create(r.Context(), service.CreateApplicationParams{
-		ProjectID:      projectUUID,
-		ProjectSlug:    project.Slug,
-		Name:           req.Name,
-		BaseSlug:       baseSlug,
-		Type:           req.Type,
-		SourceRepo:     req.SourceRepo,
-		SourceImage:    req.SourceImage,
-		DockerfilePath: req.DockerfilePath,
-		BuildType:      req.BuildType,
-		CPULimit:        req.CPULimit,
-		MemoryLimit:     req.MemoryLimit,
-		GitToken:        req.GitToken,
-		HealthCheckPath: req.HealthCheckPath,
+		ProjectID:        projectUUID,
+		ProjectSlug:      project.Slug,
+		Name:             req.Name,
+		BaseSlug:         baseSlug,
+		Type:             req.Type,
+		SourceRepo:       req.SourceRepo,
+		SourceImage:      req.SourceImage,
+		DockerfilePath:   req.DockerfilePath,
+		BuildType:        req.BuildType,
+		CPULimit:         req.CPULimit,
+		MemoryLimit:      req.MemoryLimit,
+		GitToken:         req.GitToken,
+		HealthCheckPath:  req.HealthCheckPath,
+		GitIntegrationID: parseOptionalUUID(req.GitIntegrationID),
 	})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to create application")
@@ -171,10 +194,10 @@ func (h *Handler) GetApplicationHealth(w http.ResponseWriter, r *http.Request) {
 		status = "pending"
 	}
 	resp := map[string]any{
-		"deployment_id":  row.ID,
-		"deploy_status":  row.Status,
-		"status":         status,
-		"message":        row.HealthMessage.String,
+		"deployment_id": row.ID,
+		"deploy_status": row.Status,
+		"status":        status,
+		"message":       row.HealthMessage.String,
 	}
 	if row.HealthCheckedAt.Valid {
 		resp["checked_at"] = row.HealthCheckedAt.Time
@@ -234,8 +257,8 @@ func (h *Handler) DeployApplication(w http.ResponseWriter, r *http.Request) {
 	// Create deployment record
 	deployment, err := h.queries.CreateDeployment(r.Context(), generated.CreateDeploymentParams{
 		ApplicationID: applicationUUID,
-		Status:      status.DeploymentPending,
-		TriggeredBy: "manual",
+		Status:        status.DeploymentPending,
+		TriggeredBy:   "manual",
 	})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to create deployment")
@@ -409,8 +432,11 @@ type updateApplicationRequest struct {
 	BuilderImage      string  `json:"builder_image"`
 	CPULimit          float64 `json:"cpu_limit"`
 	MemoryLimit       int64   `json:"memory_limit"`
-	GitToken          string  `json:"git_token"`          // PAT for private repos; encrypted server-side; empty = preserve existing
-	HealthCheckPath   string  `json:"health_check_path"`  // HTTP path to poll after deploy; empty = clear
+	GitToken          string  `json:"git_token"`         // PAT for private repos; encrypted server-side; empty = preserve existing
+	HealthCheckPath   string  `json:"health_check_path"` // HTTP path to poll after deploy; empty = clear
+	// GitIntegrationID: pointer so we can tell "absent" (preserve) from ""
+	// (clear) from a UUID (set the connected provider account).
+	GitIntegrationID *string `json:"git_integration_id"`
 }
 
 func (h *Handler) UpdateApplication(w http.ResponseWriter, r *http.Request) {
@@ -450,6 +476,7 @@ func (h *Handler) UpdateApplication(w http.ResponseWriter, r *http.Request) {
 		MemoryLimit:       req.MemoryLimit,
 		GitToken:          req.GitToken,
 		HealthCheckPath:   req.HealthCheckPath,
+		GitIntegrationID:  resolveOptionalUUID(req.GitIntegrationID, current.GitIntegrationID),
 	})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to update application")
@@ -587,8 +614,8 @@ func (h *Handler) BuildApplication(w http.ResponseWriter, r *http.Request) {
 	// Create deployment record
 	deployment, err := h.queries.CreateDeployment(r.Context(), generated.CreateDeploymentParams{
 		ApplicationID: applicationUUID,
-		Status:      status.DeploymentPending,
-		TriggeredBy: "manual",
+		Status:        status.DeploymentPending,
+		TriggeredBy:   "manual",
 	})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to create deployment")

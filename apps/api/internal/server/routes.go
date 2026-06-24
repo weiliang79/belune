@@ -162,12 +162,6 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService,
 				r.Post("/api/backups/run", h.TriggerBackupRun)
 			})
 
-			// Git credentials
-			r.Get("/api/git-credentials", h.ListGitCredentials)
-			r.Post("/api/git-credentials", h.CreateGitCredential)
-			r.Put("/api/git-credentials/{credentialId}", h.UpdateGitCredential)
-			r.Delete("/api/git-credentials/{credentialId}", h.DeleteGitCredential)
-
 			// Projects
 			r.Get("/api/projects", h.ListProjects)
 			r.Post("/api/projects", h.CreateProject)
