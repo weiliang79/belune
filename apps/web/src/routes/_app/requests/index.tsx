@@ -1,13 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useCallback, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { SearchIcon } from "lucide-react";
+import type { ColumnDef } from "@tanstack/react-table";
 import { useRequestLogs, useRequestSummary } from "@/lib/hooks/use-request-logs";
 import { useChannel } from "@/lib/hooks/use-websocket";
 import { useProjects } from "@/lib/hooks/use-projects";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Skeleton } from "@/components/ui/skeleton";
 import {
   Select,
   SelectTrigger,
@@ -15,14 +14,8 @@ import {
   SelectContent,
   SelectItem,
 } from "@/components/ui/select";
-import {
-  Table,
-  TableHeader,
-  TableBody,
-  TableRow,
-  TableHead,
-  TableCell,
-} from "@/components/ui/table";
+import { DataTable } from "@/components/ui/data-table";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatusBar, type StatusSegment } from "@/components/ui/status-bar";
 import { Sparkline } from "@/components/ui/sparkline";
 import { TimeRangeTabs } from "@/components/ui/time-range-tabs";
@@ -237,18 +230,11 @@ function RequestFilters({
   );
 }
 
-interface Column<T> {
-  key: string;
-  header: string;
-  cell: (row: T) => ReactNode;
-  className?: string;
-}
-
-const requestColumns: Column<RequestLog>[] = [
+const requestColumns: ColumnDef<RequestLog>[] = [
   {
-    key: "status",
+    id: "status",
     header: "Status",
-    cell: (log) => (
+    cell: ({ row: { original: log } }) => (
       <span
         className={cn(
           "inline-block w-11 rounded-md py-0.5 text-center font-mono text-xs font-medium",
@@ -260,9 +246,9 @@ const requestColumns: Column<RequestLog>[] = [
     ),
   },
   {
-    key: "method",
+    id: "method",
     header: "Method",
-    cell: (log) => (
+    cell: ({ row: { original: log } }) => (
       <span
         className={cn(
           "inline-block rounded-md px-1.5 py-0.5 font-mono text-xs font-medium",
@@ -274,62 +260,38 @@ const requestColumns: Column<RequestLog>[] = [
     ),
   },
   {
-    key: "path",
+    id: "path",
     header: "Path",
-    className: "max-w-[20rem] truncate font-mono text-xs",
-    cell: (log) => log.path,
+    meta: { className: "max-w-[20rem] truncate font-mono text-xs" },
+    cell: ({ row: { original: log } }) => log.path,
   },
   {
-    key: "host",
+    id: "host",
     header: "Host",
-    className: "font-mono text-xs",
-    cell: (log) => log.hostname,
+    meta: { className: "font-mono text-xs" },
+    cell: ({ row: { original: log } }) => log.hostname,
   },
   {
-    key: "client_ip",
+    id: "client_ip",
     header: "Client IP",
-    className: "font-mono text-xs",
-    cell: (log) =>
+    meta: { className: "font-mono text-xs" },
+    cell: ({ row: { original: log } }) =>
       log.client_ip ?? <span className="text-text-faint">—</span>,
   },
   {
-    key: "latency",
+    id: "latency",
     header: "Latency",
-    className: "text-text-muted whitespace-nowrap font-mono text-xs",
-    cell: (log) => `${log.latency_ms}ms`,
+    meta: { className: "text-text-muted whitespace-nowrap font-mono text-xs" },
+    cell: ({ row: { original: log } }) => `${log.latency_ms}ms`,
   },
   {
-    key: "time",
+    id: "time",
     header: "Time",
-    className: "text-text-faint whitespace-nowrap font-mono text-xs",
-    cell: (log) => new Date(log.recorded_at).toLocaleTimeString(),
+    meta: { className: "text-text-faint whitespace-nowrap font-mono text-xs" },
+    cell: ({ row: { original: log } }) =>
+      new Date(log.recorded_at).toLocaleTimeString(),
   },
 ];
-
-function RequestsTable({ logs }: { logs: RequestLog[] }) {
-  return (
-    <Table>
-      <TableHeader>
-        <TableRow>
-          {requestColumns.map((c) => (
-            <TableHead key={c.key}>{c.header}</TableHead>
-          ))}
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {logs.map((log) => (
-          <TableRow key={log.id}>
-            {requestColumns.map((c) => (
-              <TableCell key={c.key} className={c.className}>
-                {c.cell(log)}
-              </TableCell>
-            ))}
-          </TableRow>
-        ))}
-      </TableBody>
-    </Table>
-  );
-}
 
 function GlobalRequestsPage() {
   const [liveEntries, setLiveEntries] = useState<RequestLog[]>([]);
@@ -422,53 +384,30 @@ function GlobalRequestsPage() {
 
       {summary && <RequestSummaryCards summary={summary} />}
 
-      <RequestFilters filters={filters} onChange={handleFilterChange} />
-
-      <div className="space-y-3">
-        {isLoading ? (
-          <div className="space-y-2">
-            {[1, 2, 3, 4, 5].map((i) => (
-              <div
-                key={i}
-                className="flex items-center gap-3 rounded-lg border px-4 py-3"
-              >
-                <Skeleton className="h-3 w-28" />
-                <Skeleton className="h-5 w-12 rounded-full" />
-                <Skeleton className="h-3 w-12" />
-                <Skeleton className="h-3 flex-1" />
-              </div>
-            ))}
-          </div>
-        ) : allLogs.length === 0 ? (
-          <div className="text-muted-foreground rounded-lg border py-12 text-center text-sm">
-            {offset > 0 ? "No more request logs." : "No request logs found."}
-          </div>
-        ) : (
-          <RequestsTable logs={allLogs} />
-        )}
-
-        <div className="flex items-center justify-between">
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={offset === 0}
-            onClick={() => setOffset(Math.max(0, offset - PAGE_SIZE))}
-          >
-            Previous
-          </Button>
-          <span className="text-muted-foreground text-sm">
-            {offset + 1}–{offset + (history?.length ?? 0)}
-          </span>
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={!history || history.length < PAGE_SIZE}
-            onClick={() => setOffset(offset + PAGE_SIZE)}
-          >
-            Next
-          </Button>
-        </div>
-      </div>
+      <Card>
+        <CardHeader>
+          <CardTitle>Request logs</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <RequestFilters filters={filters} onChange={handleFilterChange} />
+          <DataTable
+            columns={requestColumns}
+            data={allLogs}
+            isLoading={isLoading}
+            getRowId={(log) => log.id}
+            emptyMessage={
+              offset > 0 ? "No more request logs." : "No request logs found."
+            }
+            pagination={{
+              mode: "manual",
+              offset,
+              pageSize: PAGE_SIZE,
+              hasMore: (history?.length ?? 0) === PAGE_SIZE,
+              onOffsetChange: setOffset,
+            }}
+          />
+        </CardContent>
+      </Card>
     </div>
   );
 }

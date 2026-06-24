@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { DownloadIcon, SearchIcon } from "lucide-react";
+import type { ColumnDef } from "@tanstack/react-table";
 import { RouteError } from "@/lib/components/route-error";
 import { useAuditLogs, useAuditActions } from "@/lib/hooks/use-audit-logs";
 import { useUsers } from "@/lib/hooks/use-users";
@@ -8,7 +9,7 @@ import { auditExportUrl } from "@/lib/api/audit-logs";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Skeleton } from "@/components/ui/skeleton";
+import { DataTable } from "@/components/ui/data-table";
 import {
   Select,
   SelectContent,
@@ -34,6 +35,67 @@ interface Filters {
   actorId: string;
 }
 
+const auditColumns: ColumnDef<AuditLog>[] = [
+  {
+    id: "action",
+    header: "Action",
+    accessorFn: (l) => l.action,
+    cell: ({ row: { original: log } }) => (
+      <span
+        className={cn(
+          "inline-block shrink-0 rounded-md px-2 py-0.5 text-xs font-medium",
+          actionClass(log.action),
+        )}
+      >
+        {actionLabel(log.action)}
+      </span>
+    ),
+  },
+  {
+    id: "resource",
+    header: "Resource",
+    accessorFn: (l) =>
+      [l.resource_type, l.resource_name, l.resource_id]
+        .filter(Boolean)
+        .join(" "),
+    cell: ({ row: { original: log } }) => {
+      const resource = log.resource_name || log.resource_id?.slice(0, 8);
+      return (
+        <span className="text-sm">
+          <span className="text-text-faint text-xs tracking-wide uppercase">
+            {log.resource_type}
+          </span>{" "}
+          {resource && <span className="font-medium">{resource}</span>}
+        </span>
+      );
+    },
+  },
+  {
+    id: "actor",
+    header: "Actor",
+    accessorFn: (l) => l.user_email ?? "",
+    meta: { className: "text-muted-foreground text-xs" },
+    cell: ({ row: { original: log } }) => log.user_email ?? "system",
+  },
+  {
+    id: "ip",
+    header: "IP",
+    enableGlobalFilter: false,
+    meta: { className: "text-text-faint font-mono text-xs" },
+    cell: ({ row: { original: log } }) => log.ip_address ?? "—",
+  },
+  {
+    id: "time",
+    header: "Time",
+    enableGlobalFilter: false,
+    meta: {
+      headerClassName: "text-right",
+      className: "text-text-faint text-right text-xs whitespace-nowrap",
+    },
+    cell: ({ row: { original: log } }) => formatRelativeTime(log.created_at),
+  },
+];
+
 function AuditLogPage() {
   const [offset, setOffset] = useState(0);
   const [filters, setFilters] = useState<Filters>({
@@ -55,17 +117,6 @@ function AuditLogPage() {
     setFilters((prev) => ({ ...prev, ...f }));
     setOffset(0);
   };
-
-  // Free-text search is applied client-side over the loaded page.
-  const items = useMemo(() => {
-    const q = filters.search.trim().toLowerCase();
-    if (!q || !data) return data?.items ?? [];
-    return data.items.filter((l) =>
-      [l.action, l.resource_type, l.resource_name, l.resource_id, l.user_email]
-        .filter(Boolean)
-        .some((v) => v!.toLowerCase().includes(q)),
-    );
-  }, [data, filters.search]);
 
   const handleExport = () => {
     window.open(
@@ -154,92 +205,41 @@ function AuditLogPage() {
           <CardTitle>Events</CardTitle>
         </CardHeader>
         <CardContent>
-          {isLoading ? (
-            <div className="space-y-2">
-              {[1, 2, 3, 4, 5].map((i) => (
-                <Skeleton key={i} className="h-12 w-full" />
-              ))}
-            </div>
-          ) : items.length === 0 ? (
-            <p className="text-muted-foreground py-8 text-center text-sm">
-              {offset > 0 ? "No more entries." : "No audit log entries found."}
-            </p>
-          ) : (
-            <div className="space-y-1.5">
-              {items.map((log) => (
-                <AuditLogRow key={log.id} log={log} />
-              ))}
-            </div>
-          )}
-
-          <div className="mt-4 flex items-center justify-between">
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={offset === 0}
-              onClick={() => setOffset(Math.max(0, offset - PAGE_SIZE))}
-            >
-              Previous
-            </Button>
-            <span className="text-muted-foreground text-sm">
-              {offset + 1}–{offset + (data?.items.length ?? 0)}
-            </span>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={!data || data.items.length < PAGE_SIZE}
-              onClick={() => setOffset(offset + PAGE_SIZE)}
-            >
-              Next
-            </Button>
-          </div>
+          <DataTable
+            columns={auditColumns}
+            data={data?.items ?? []}
+            isLoading={isLoading}
+            getRowId={(log) => log.id}
+            globalFilter={filters.search}
+            onGlobalFilterChange={(v) => setFilters((p) => ({ ...p, search: v }))}
+            emptyMessage={
+              filters.search.trim()
+                ? "No entries match your search."
+                : offset > 0
+                  ? "No more entries."
+                  : "No audit log entries found."
+            }
+            renderDetailPanel={({ row }) =>
+              row.original.details ? (
+                <pre className="bg-elev overflow-auto rounded p-2 text-xs">
+                  {JSON.stringify(row.original.details, null, 2)}
+                </pre>
+              ) : (
+                <span className="text-text-faint text-xs">
+                  No additional details.
+                </span>
+              )
+            }
+            pagination={{
+              mode: "manual",
+              offset,
+              pageSize: PAGE_SIZE,
+              hasMore: (data?.items.length ?? 0) === PAGE_SIZE,
+              onOffsetChange: setOffset,
+            }}
+          />
         </CardContent>
       </Card>
-    </div>
-  );
-}
-
-function AuditLogRow({ log }: { log: AuditLog }) {
-  const [expanded, setExpanded] = useState(false);
-  const resource = log.resource_name || log.resource_id?.slice(0, 8);
-
-  return (
-    <div
-      className="hover:bg-card-hover cursor-pointer rounded-md border px-3 py-2.5 transition-colors"
-      onClick={() => setExpanded(!expanded)}
-    >
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 md:flex-nowrap">
-        <span
-          className={cn(
-            "shrink-0 rounded-md px-2 py-0.5 text-xs font-medium",
-            actionClass(log.action),
-          )}
-        >
-          {actionLabel(log.action)}
-        </span>
-        <span className="text-sm">
-          <span className="text-text-faint text-xs tracking-wide uppercase">
-            {log.resource_type}
-          </span>{" "}
-          {resource && <span className="font-medium">{resource}</span>}
-        </span>
-        <span className="text-muted-foreground ml-auto shrink-0 text-xs">
-          {log.user_email ?? "system"}
-        </span>
-        {log.ip_address && (
-          <span className="text-text-faint shrink-0 font-mono text-xs">
-            {log.ip_address}
-          </span>
-        )}
-        <span className="text-text-faint w-24 shrink-0 text-right text-xs">
-          {formatRelativeTime(log.created_at)}
-        </span>
-      </div>
-      {expanded && log.details && (
-        <pre className="bg-elev mt-2 overflow-auto rounded p-2 text-xs">
-          {JSON.stringify(log.details, null, 2)}
-        </pre>
-      )}
     </div>
   );
 }

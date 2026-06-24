@@ -4,15 +4,19 @@ import { Database, DatabaseIcon, Globe, LayersIcon, PlusIcon } from "lucide-reac
 import { useApplications } from "@/lib/hooks/use-applications";
 import { useDatabases } from "@/lib/hooks/use-databases";
 import { useProjectMetrics } from "@/lib/hooks/use-project-metrics";
+import type { ColumnDef } from "@tanstack/react-table";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { DataTable } from "@/components/ui/data-table";
 import { ApplicationFormDialog } from "@/components/applications/application-form-dialog";
 import { DatabaseFormDialog } from "@/components/databases/database-form-dialog";
 import {
   ServiceRow,
   type ServiceRowItem,
 } from "@/components/projects/service-row";
+
+const serviceColumns: ColumnDef<ServiceRowItem>[] = [];
 
 export const Route = createFileRoute("/_app/projects/$projectId/")({
   component: ProjectOverview,
@@ -167,26 +171,30 @@ function ProjectOverview() {
             <span>Memory</span>
             <span>Actions</span>
           </div>
-          <div className="divide-border divide-y">
-            {items.length === 0 ? (
-              <div className="text-muted-foreground px-4 py-10 text-center text-sm">
-                No services match the current filters.
-              </div>
-            ) : (
-              items.map((item) => (
+          <DataTable
+            columns={serviceColumns}
+            data={items}
+            getRowId={(it) => it.data.id}
+            customView={{
+              wrapperProps: { className: "divide-border divide-y" },
+              item: ({ row }) => (
                 <ServiceRow
-                  key={item.data.id}
                   projectId={projectId}
-                  item={item}
+                  item={row.original}
                   metrics={
-                    item.kind === "application"
-                      ? serviceMetrics?.[item.data.id]
+                    row.original.kind === "application"
+                      ? serviceMetrics?.[row.original.data.id]
                       : undefined
                   }
                 />
-              ))
-            )}
-          </div>
+              ),
+              empty: (
+                <div className="text-muted-foreground px-4 py-10 text-center text-sm">
+                  No services match the current filters.
+                </div>
+              ),
+            }}
+          />
         </div>
       )}
     </div>

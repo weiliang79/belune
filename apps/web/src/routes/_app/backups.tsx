@@ -6,19 +6,14 @@ import {
   useBackupStatus,
   useTriggerBackup,
 } from "@/lib/hooks/use-backups";
+import type { ColumnDef } from "@tanstack/react-table";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { StatusPill } from "@/components/ui/status-pill";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { DataTable } from "@/components/ui/data-table";
+import type { BackupRun } from "@/lib/types";
 
 export const Route = createFileRoute("/_app/backups")({
   component: BackupsPage,
@@ -37,6 +32,47 @@ function formatDate(iso: string | null) {
   if (!iso) return "—";
   return new Date(iso).toLocaleString();
 }
+
+const backupColumns: ColumnDef<BackupRun>[] = [
+  {
+    id: "status",
+    header: "Status",
+    cell: ({ row: { original: run } }) => <StatusPill status={run.status} />,
+  },
+  {
+    id: "started_at",
+    header: "Started",
+    accessorKey: "started_at",
+    meta: { className: "text-muted-foreground text-sm" },
+    cell: ({ row: { original: run } }) => formatDate(run.started_at),
+  },
+  {
+    id: "finished_at",
+    header: "Finished",
+    accessorKey: "finished_at",
+    meta: { className: "text-muted-foreground text-sm" },
+    cell: ({ row: { original: run } }) => formatDate(run.finished_at),
+  },
+  {
+    id: "size_bytes",
+    header: "Size",
+    accessorKey: "size_bytes",
+    meta: { className: "text-sm" },
+    cell: ({ row: { original: run } }) => formatBytes(run.size_bytes),
+  },
+  {
+    id: "remote_key",
+    header: "Remote key",
+    meta: { className: "max-w-[200px] truncate font-mono text-xs" },
+    cell: ({ row: { original: run } }) => run.remote_key ?? "—",
+  },
+  {
+    id: "error",
+    header: "Error",
+    meta: { className: "text-destructive max-w-[240px] truncate text-xs" },
+    cell: ({ row: { original: run } }) => run.error ?? "—",
+  },
+];
 
 function BackupsPage() {
   const { data: status, isLoading: statusLoading } = useBackupStatus();
@@ -138,54 +174,14 @@ function BackupsPage() {
           <CardTitle>Recent runs</CardTitle>
         </CardHeader>
         <CardContent>
-          {runsLoading ? (
-            <div className="space-y-2">
-              {[1, 2, 3].map((i) => (
-                <Skeleton key={i} className="h-10 w-full" />
-              ))}
-            </div>
-          ) : !runs || runs.length === 0 ? (
-            <p className="text-muted-foreground py-6 text-center text-sm">
-              No backup runs yet. Click "Run Backup Now" to start one.
-            </p>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Started</TableHead>
-                  <TableHead>Finished</TableHead>
-                  <TableHead>Size</TableHead>
-                  <TableHead>Remote key</TableHead>
-                  <TableHead>Error</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {runs.map((run) => (
-                  <TableRow key={run.id}>
-                    <TableCell>
-                      <StatusPill status={run.status} />
-                    </TableCell>
-                    <TableCell className="text-muted-foreground text-sm">
-                      {formatDate(run.started_at)}
-                    </TableCell>
-                    <TableCell className="text-muted-foreground text-sm">
-                      {formatDate(run.finished_at)}
-                    </TableCell>
-                    <TableCell className="text-sm">
-                      {formatBytes(run.size_bytes)}
-                    </TableCell>
-                    <TableCell className="max-w-[200px] truncate font-mono text-xs">
-                      {run.remote_key ?? "—"}
-                    </TableCell>
-                    <TableCell className="text-destructive max-w-[240px] truncate text-xs">
-                      {run.error ?? "—"}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
+          <DataTable
+            columns={backupColumns}
+            data={runs ?? []}
+            isLoading={runsLoading}
+            getRowId={(r) => r.id}
+            enableSorting
+            emptyMessage={'No backup runs yet. Click "Run Backup Now" to start one.'}
+          />
         </CardContent>
       </Card>
     </div>

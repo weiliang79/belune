@@ -1,7 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useForm, useStore } from "@tanstack/react-form";
 import { z } from "zod";
+import type { ColumnDef } from "@tanstack/react-table";
 import { RouteError } from "@/lib/components/route-error";
 import {
   useGitCredentials,
@@ -15,15 +16,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Skeleton } from "@/components/ui/skeleton";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { DataTable, buildActionColumnDef } from "@/components/ui/data-table";
 import { cn } from "@/lib/utils";
 import {
   Dialog,
@@ -104,27 +97,72 @@ function GitCredentialsPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<GitCredential | null>(null);
 
-  if (isLoading) {
-    return (
-      <div className="space-y-6">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">
-            Git Credentials
-          </h1>
-          <p className="text-muted-foreground">
-            Manage centralized git credentials for your applications.
-          </p>
-        </div>
-        <Card>
-          <CardContent className="space-y-3 py-4">
-            {[1, 2].map((i) => (
-              <Skeleton key={i} className="h-16 w-full" />
-            ))}
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
+  const columns = useMemo<ColumnDef<GitCredential>[]>(
+    () => [
+      {
+        id: "name",
+        header: "Name",
+        accessorKey: "name",
+        cell: ({ row: { original: cred } }) => {
+          const style = providerStyle(cred.provider);
+          return (
+            <div className="flex items-center gap-2.5">
+              <span
+                className={cn(
+                  "grid size-8 shrink-0 place-items-center rounded-lg font-mono text-xs font-semibold",
+                  style.avatar,
+                )}
+              >
+                {style.short}
+              </span>
+              <span className="font-medium">{cred.name}</span>
+            </div>
+          );
+        },
+      },
+      {
+        id: "provider",
+        header: "Provider",
+        accessorFn: (cred) => providerLabel(cred.provider),
+        cell: ({ row: { original: cred } }) => {
+          const style = providerStyle(cred.provider);
+          return (
+            <Badge variant="outline" className={cn("border-0", style.badge)}>
+              {providerLabel(cred.provider)}
+            </Badge>
+          );
+        },
+      },
+      {
+        id: "username",
+        header: "Username",
+        accessorKey: "username",
+        meta: { className: "text-text-muted font-mono text-xs" },
+        cell: ({ row: { original: cred } }) => cred.username || "—",
+      },
+      {
+        id: "created_at",
+        header: "Added",
+        accessorKey: "created_at",
+        meta: { className: "text-text-faint text-sm" },
+        cell: ({ row: { original: cred } }) =>
+          formatRelativeTime(cred.created_at),
+      },
+      buildActionColumnDef({
+        meta: { headerClassName: "text-right", className: "text-right" },
+        cell: ({ row: { original: cred } }) => (
+          <CredentialActions
+            credential={cred}
+            onEdit={() => {
+              setEditing(cred);
+              setDialogOpen(true);
+            }}
+          />
+        ),
+      }),
+    ],
+    [],
+  );
 
   return (
     <div className="space-y-6">
@@ -167,42 +205,21 @@ function GitCredentialsPage() {
           <CardTitle>Credentials</CardTitle>
         </CardHeader>
         <CardContent>
-          {!credentials || credentials.length === 0 ? (
-            <p className="text-muted-foreground py-6 text-center text-sm">
-              No git credentials configured. Add one to use across applications.
-            </p>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Provider</TableHead>
-                  <TableHead>Username</TableHead>
-                  <TableHead>Added</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {credentials.map((cred) => (
-                  <CredentialRow
-                    key={cred.id}
-                    credential={cred}
-                    onEdit={() => {
-                      setEditing(cred);
-                      setDialogOpen(true);
-                    }}
-                  />
-                ))}
-              </TableBody>
-            </Table>
-          )}
+          <DataTable
+            columns={columns}
+            data={credentials ?? []}
+            isLoading={isLoading}
+            getRowId={(c) => c.id}
+            enableSorting
+            emptyMessage="No git credentials configured. Add one to use across applications."
+          />
         </CardContent>
       </Card>
     </div>
   );
 }
 
-function CredentialRow({
+function CredentialActions({
   credential,
   onEdit,
 }: {
@@ -210,79 +227,46 @@ function CredentialRow({
   onEdit: () => void;
 }) {
   const deleteCred = useDeleteGitCredential();
-  const style = providerStyle(credential.provider);
 
   return (
-    <TableRow>
-      <TableCell>
-        <div className="flex items-center gap-2.5">
-          <span
-            className={cn(
-              "grid size-8 shrink-0 place-items-center rounded-lg font-mono text-xs font-semibold",
-              style.avatar,
-            )}
-          >
-            {style.short}
-          </span>
-          <span className="font-medium">{credential.name}</span>
-        </div>
-      </TableCell>
-      <TableCell>
-        <Badge variant="outline" className={cn("border-0", style.badge)}>
-          {providerLabel(credential.provider)}
-        </Badge>
-      </TableCell>
-      <TableCell className="text-text-muted font-mono text-xs">
-        {credential.username || "—"}
-      </TableCell>
-      <TableCell className="text-text-faint text-sm">
-        {formatRelativeTime(credential.created_at)}
-      </TableCell>
-      <TableCell className="text-right">
-        <div className="flex items-center justify-end gap-1">
-          <Button size="sm" variant="ghost" onClick={onEdit}>
-            Edit
-          </Button>
-          <AlertDialog>
-            <AlertDialogTrigger
-              render={
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="text-destructive"
-                />
-              }
+    <div className="flex items-center justify-end gap-1">
+      <Button size="sm" variant="ghost" onClick={onEdit}>
+        Edit
+      </Button>
+      <AlertDialog>
+        <AlertDialogTrigger
+          render={
+            <Button size="sm" variant="ghost" className="text-destructive" />
+          }
+        >
+          Delete
+        </AlertDialogTrigger>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete {credential.name}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Applications using this credential will lose access to private
+              repositories.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                toast.promise(deleteCred.mutateAsync(credential.id), {
+                  loading: "Deleting...",
+                  success: "Credential deleted",
+                  error: (err) => err.message,
+                });
+              }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               Delete
-            </AlertDialogTrigger>
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle>Delete {credential.name}?</AlertDialogTitle>
-                <AlertDialogDescription>
-                  Applications using this credential will lose access to private
-                  repositories.
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                <AlertDialogAction
-                  onClick={() => {
-                    toast.promise(deleteCred.mutateAsync(credential.id), {
-                      loading: "Deleting...",
-                      success: "Credential deleted",
-                      error: (err) => err.message,
-                    });
-                  }}
-                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                >
-                  Delete
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
-        </div>
-      </TableCell>
-    </TableRow>
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
   );
 }
 

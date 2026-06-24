@@ -1,15 +1,14 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useCallback, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { SearchIcon } from "lucide-react";
+import type { ColumnDef } from "@tanstack/react-table";
 import { useGlobalDeployments } from "@/lib/hooks/use-global-deployments";
 import { useProjects } from "@/lib/hooks/use-projects";
 import { StatusPill } from "@/components/ui/status-pill";
 import { StatCard } from "@/lib/components/stats/stat-card";
 import { useStats } from "@/lib/hooks/use-stats";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Skeleton } from "@/components/ui/skeleton";
 import {
   Select,
   SelectTrigger,
@@ -17,14 +16,8 @@ import {
   SelectContent,
   SelectItem,
 } from "@/components/ui/select";
-import {
-  Table,
-  TableHeader,
-  TableBody,
-  TableRow,
-  TableHead,
-  TableCell,
-} from "@/components/ui/table";
+import { DataTable } from "@/components/ui/data-table";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { TimeRangeTabs } from "@/components/ui/time-range-tabs";
 import { timeRangeToDates, type TimeRange } from "@/lib/utils/time-range";
 import { formatDate, formatDuration } from "@/lib/utils/format";
@@ -153,23 +146,11 @@ function DeploymentFilters({
   );
 }
 
-/**
- * Plain column descriptors so the table is data-driven (and drops cleanly into a
- * future @tanstack/react-table DataTable). See the v0.0.x table-standardization
- * follow-up.
- */
-interface Column<T> {
-  key: string;
-  header: string;
-  cell: (row: T) => ReactNode;
-  className?: string;
-}
-
-const deploymentColumns: Column<GlobalDeployment>[] = [
+const deploymentColumns: ColumnDef<GlobalDeployment>[] = [
   {
-    key: "app",
+    id: "app",
     header: "App / Project",
-    cell: (d) => (
+    cell: ({ row: { original: d } }) => (
       <Link
         to="/projects/$projectId/applications/$applicationId/deployments"
         params={{ projectId: d.project_id, applicationId: d.application_id }}
@@ -181,14 +162,14 @@ const deploymentColumns: Column<GlobalDeployment>[] = [
     ),
   },
   {
-    key: "status",
+    id: "status",
     header: "Status",
-    cell: (d) => <StatusPill status={d.status} />,
+    cell: ({ row: { original: d } }) => <StatusPill status={d.status} />,
   },
   {
-    key: "commit",
+    id: "commit",
     header: "Commit",
-    cell: (d) =>
+    cell: ({ row: { original: d } }) =>
       d.commit_sha ? (
         <span className="font-mono text-xs">{d.commit_sha.slice(0, 7)}</span>
       ) : (
@@ -196,28 +177,30 @@ const deploymentColumns: Column<GlobalDeployment>[] = [
       ),
   },
   {
-    key: "image",
+    id: "image",
     header: "Image",
-    className: "max-w-[14rem] truncate font-mono text-xs",
-    cell: (d) =>
+    meta: { className: "max-w-[14rem] truncate font-mono text-xs" },
+    cell: ({ row: { original: d } }) =>
       d.image_tag ? d.image_tag : <span className="text-text-faint">—</span>,
   },
   {
-    key: "triggered_by",
+    id: "triggered_by",
     header: "Triggered by",
-    cell: (d) => <span className="capitalize">{d.triggered_by}</span>,
+    cell: ({ row: { original: d } }) => (
+      <span className="capitalize">{d.triggered_by}</span>
+    ),
   },
   {
-    key: "started",
+    id: "started",
     header: "Started",
-    className: "text-text-muted whitespace-nowrap",
-    cell: (d) => formatDate(d.started_at),
+    meta: { className: "text-text-muted whitespace-nowrap" },
+    cell: ({ row: { original: d } }) => formatDate(d.started_at),
   },
   {
-    key: "duration",
+    id: "duration",
     header: "Duration",
-    className: "text-text-muted whitespace-nowrap",
-    cell: (d) => {
+    meta: { className: "text-text-muted whitespace-nowrap" },
+    cell: ({ row: { original: d } }) => {
       const ms =
         d.finished_at && d.started_at
           ? new Date(d.finished_at).getTime() -
@@ -231,31 +214,6 @@ const deploymentColumns: Column<GlobalDeployment>[] = [
     },
   },
 ];
-
-function DeploymentsTable({ deployments }: { deployments: GlobalDeployment[] }) {
-  return (
-    <Table>
-      <TableHeader>
-        <TableRow>
-          {deploymentColumns.map((c) => (
-            <TableHead key={c.key}>{c.header}</TableHead>
-          ))}
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {deployments.map((d) => (
-          <TableRow key={d.id}>
-            {deploymentColumns.map((c) => (
-              <TableCell key={c.key} className={c.className}>
-                {c.cell(d)}
-              </TableCell>
-            ))}
-          </TableRow>
-        ))}
-      </TableBody>
-    </Table>
-  );
-}
 
 /** 7-day deploy outcome summary from the stats endpoint. */
 function Deploy7dStrip() {
@@ -337,56 +295,30 @@ function GlobalDeploymentsPage() {
 
       <Deploy7dStrip />
 
-      <DeploymentFilters filters={filters} onChange={handleFilterChange} />
-
-      {isLoading ? (
-        <div className="space-y-2">
-          {[1, 2, 3, 4, 5].map((i) => (
-            <div
-              key={i}
-              className="flex items-center justify-between rounded-lg border px-4 py-3"
-            >
-              <div className="flex items-center gap-3">
-                <Skeleton className="h-5 w-16 rounded-full" />
-                <div className="space-y-1">
-                  <Skeleton className="h-4 w-40" />
-                  <Skeleton className="h-3 w-24" />
-                </div>
-              </div>
-              <Skeleton className="h-3 w-32" />
-            </div>
-          ))}
-        </div>
-      ) : !deployments || deployments.length === 0 ? (
-        <div className="text-muted-foreground rounded-lg border py-12 text-center text-sm">
-          {offset > 0 ? "No more deployments." : "No deployments found."}
-        </div>
-      ) : (
-        <DeploymentsTable deployments={deployments} />
-      )}
-
-      {/* Pagination */}
-      <div className="flex items-center justify-between">
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={offset === 0}
-          onClick={() => setOffset(Math.max(0, offset - PAGE_SIZE))}
-        >
-          Previous
-        </Button>
-        <span className="text-muted-foreground text-sm">
-          Showing {offset + 1}–{offset + (deployments?.length ?? 0)}
-        </span>
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={!deployments || deployments.length < PAGE_SIZE}
-          onClick={() => setOffset(offset + PAGE_SIZE)}
-        >
-          Next
-        </Button>
-      </div>
+      <Card>
+        <CardHeader>
+          <CardTitle>Recent deployments</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <DeploymentFilters filters={filters} onChange={handleFilterChange} />
+          <DataTable
+            columns={deploymentColumns}
+            data={deployments ?? []}
+            isLoading={isLoading}
+            getRowId={(d) => d.id}
+            emptyMessage={
+              offset > 0 ? "No more deployments." : "No deployments found."
+            }
+            pagination={{
+              mode: "manual",
+              offset,
+              pageSize: PAGE_SIZE,
+              hasMore: (deployments?.length ?? 0) === PAGE_SIZE,
+              onOffsetChange: setOffset,
+            }}
+          />
+        </CardContent>
+      </Card>
     </div>
   );
 }

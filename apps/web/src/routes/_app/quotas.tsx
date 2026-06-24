@@ -3,6 +3,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { useForm, useStore } from "@tanstack/react-form";
 import { z } from "zod";
+import type { ColumnDef } from "@tanstack/react-table";
 import { RouteError } from "@/lib/components/route-error";
 import {
   useQuotas,
@@ -42,20 +43,19 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { DataTable, buildActionColumnDef } from "@/components/ui/data-table";
 import { formatBytes } from "@/lib/utils/format";
 
 export const Route = createFileRoute("/_app/quotas")({
   component: QuotasPage,
   errorComponent: RouteError,
 });
+
+function quotaTargetLabel(q: QuotaView): string {
+  return q.scope === "user"
+    ? (q.meta?.email ?? q.scope_id.slice(0, 8))
+    : (q.meta?.name ?? q.scope_id.slice(0, 8));
+}
 
 /** A quota is "near limit" when any capped resource is at ≥ 80% usage. */
 function isNearLimit(q: QuotaView): boolean {
@@ -78,6 +78,81 @@ function QuotasPage() {
   const [createOpen, setCreateOpen] = useState(false);
 
   const nearLimit = quotas?.filter(isNearLimit).length ?? 0;
+
+  const columns = useMemo<ColumnDef<QuotaView>[]>(
+    () => [
+      {
+        id: "scope",
+        header: "Scope",
+        accessorKey: "scope",
+        cell: ({ row: { original: q } }) => (
+          <Badge variant={q.scope === "user" ? "default" : "secondary"}>
+            {q.scope}
+          </Badge>
+        ),
+      },
+      {
+        id: "target",
+        header: "Target",
+        accessorFn: quotaTargetLabel,
+        meta: { className: "font-medium" },
+        cell: ({ row: { original: q } }) => quotaTargetLabel(q),
+      },
+      {
+        id: "applications",
+        header: "Applications",
+        enableSorting: false,
+        cell: ({ row: { original: q } }) => (
+          <UsageCell
+            current={q.usage.applications}
+            limit={q.limits.max_applications}
+          />
+        ),
+      },
+      {
+        id: "cpu",
+        header: "CPU",
+        enableSorting: false,
+        cell: ({ row: { original: q } }) => (
+          <UsageCell
+            current={q.usage.cpu}
+            limit={q.limits.max_cpu}
+            format={(v) => `${v.toFixed(2)} cores`}
+          />
+        ),
+      },
+      {
+        id: "memory",
+        header: "Memory",
+        enableSorting: false,
+        cell: ({ row: { original: q } }) => (
+          <UsageCell
+            current={Math.round(q.usage.memory_bytes / (1024 * 1024))}
+            limit={q.limits.max_memory_mb}
+            format={(v) => formatBytes(v * 1024 * 1024)}
+          />
+        ),
+      },
+      buildActionColumnDef({
+        meta: { headerClassName: "text-right", className: "text-right" },
+        cell: ({ row: { original: q } }) => (
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" size="sm" onClick={() => setEditTarget(q)}>
+              Edit
+            </Button>
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={() => setDeleteTarget(q)}
+            >
+              Remove
+            </Button>
+          </div>
+        ),
+      }),
+    ],
+    [],
+  );
 
   return (
     <div className="space-y-6">
@@ -107,40 +182,14 @@ function QuotasPage() {
           </Button>
         </CardHeader>
         <CardContent>
-          {isLoading ? (
-            <div className="space-y-3">
-              {[1, 2].map((i) => (
-                <div key={i} className="bg-muted h-12 animate-pulse rounded" />
-              ))}
-            </div>
-          ) : !quotas || quotas.length === 0 ? (
-            <p className="text-muted-foreground text-sm">
-              No quotas configured. Click "Set Quota" to add one.
-            </p>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Scope</TableHead>
-                  <TableHead>Target</TableHead>
-                  <TableHead>Applications</TableHead>
-                  <TableHead>CPU</TableHead>
-                  <TableHead>Memory</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {quotas.map((q) => (
-                  <QuotaRow
-                    key={`${q.scope}:${q.scope_id}`}
-                    quota={q}
-                    onEdit={() => setEditTarget(q)}
-                    onDelete={() => setDeleteTarget(q)}
-                  />
-                ))}
-              </TableBody>
-            </Table>
-          )}
+          <DataTable
+            columns={columns}
+            data={quotas ?? []}
+            isLoading={isLoading}
+            getRowId={(q) => `${q.scope}:${q.scope_id}`}
+            enableSorting
+            emptyMessage={'No quotas configured. Click "Set Quota" to add one.'}
+          />
         </CardContent>
       </Card>
 
@@ -164,64 +213,6 @@ function QuotasPage() {
         />
       )}
     </div>
-  );
-}
-
-function QuotaRow({
-  quota,
-  onEdit,
-  onDelete,
-}: {
-  quota: QuotaView;
-  onEdit: () => void;
-  onDelete: () => void;
-}) {
-  const label =
-    quota.scope === "user"
-      ? (quota.meta?.email ?? quota.scope_id.slice(0, 8))
-      : (quota.meta?.name ?? quota.scope_id.slice(0, 8));
-
-  const memUsedMB = Math.round(quota.usage.memory_bytes / (1024 * 1024));
-
-  return (
-    <TableRow>
-      <TableCell>
-        <Badge variant={quota.scope === "user" ? "default" : "secondary"}>
-          {quota.scope}
-        </Badge>
-      </TableCell>
-      <TableCell className="font-medium">{label}</TableCell>
-      <TableCell>
-        <UsageCell
-          current={quota.usage.applications}
-          limit={quota.limits.max_applications}
-        />
-      </TableCell>
-      <TableCell>
-        <UsageCell
-          current={quota.usage.cpu}
-          limit={quota.limits.max_cpu}
-          format={(v) => `${v.toFixed(2)} cores`}
-        />
-      </TableCell>
-      <TableCell>
-        <UsageCell
-          current={memUsedMB}
-          limit={quota.limits.max_memory_mb}
-          format={(v) => formatBytes(v * 1024 * 1024)}
-        />
-      </TableCell>
-      <TableCell className="text-right">
-        <div className="flex justify-end gap-2">
-          <Button variant="outline" size="sm" onClick={onEdit}>
-            Edit
-          </Button>
-          <Button variant="destructive" size="sm" onClick={onDelete}>
-            Remove
-          </Button>
-        </div>
-      </TableCell>
-    </TableRow>
   );
 }
 

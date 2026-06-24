@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useForm } from "@tanstack/react-form";
 import { z } from "zod";
+import type { ColumnDef } from "@tanstack/react-table";
 import { RouteError } from "@/lib/components/route-error";
 import { toast } from "sonner";
 import { useAuthStore } from "@/lib/stores/auth";
@@ -21,7 +22,7 @@ import { Badge } from "@/components/ui/badge";
 import { ShieldIcon, UserIcon, SearchIcon } from "lucide-react";
 import { initialsOf } from "@/lib/utils/initials";
 import { formatRelativeTime } from "@/lib/utils/format";
-import type { User } from "@/lib/types";
+import type { User, Invitation } from "@/lib/types";
 import {
   Dialog,
   DialogContent,
@@ -40,14 +41,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { DataTable, buildActionColumnDef } from "@/components/ui/data-table";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -80,6 +74,100 @@ function TeamSettingsPage() {
     id: string;
     email: string;
   } | null>(null);
+
+  const selfId = currentUser?.id;
+  const columns = useMemo<ColumnDef<User>[]>(
+    () => [
+      {
+        id: "member",
+        header: "Member",
+        // Combined accessor so the global filter matches name and email.
+        accessorFn: (u) => `${displayName(u)} ${u.email}`,
+        cell: ({ row: { original: user } }) => {
+          const name = displayName(user);
+          return (
+            <div className="flex items-center gap-2.5">
+              <span
+                className="grid size-8 shrink-0 place-items-center rounded-full text-xs font-semibold text-white"
+                style={{
+                  background:
+                    "linear-gradient(140deg, var(--brand), var(--brand-press))",
+                }}
+                aria-hidden="true"
+              >
+                {initialsOf(name)}
+              </span>
+              <div className="min-w-0">
+                <div className="flex items-center gap-1.5">
+                  <span className="truncate font-medium">{name}</span>
+                  {user.id === selfId && (
+                    <Badge variant="outline" className="px-1.5 py-0 text-[10px]">
+                      you
+                    </Badge>
+                  )}
+                </div>
+                <span className="text-text-faint truncate text-xs">
+                  {user.email}
+                </span>
+              </div>
+            </div>
+          );
+        },
+      },
+      {
+        id: "role",
+        header: "Role",
+        accessorKey: "role",
+        enableGlobalFilter: false,
+        cell: ({ row: { original: user } }) => (
+          <UserRoleCell user={user} isSelf={user.id === selfId} />
+        ),
+      },
+      {
+        id: "created_at",
+        header: "Joined",
+        accessorKey: "created_at",
+        enableGlobalFilter: false,
+        meta: { className: "text-muted-foreground text-sm" },
+        cell: ({ row: { original: user } }) =>
+          user.created_at ? formatRelativeTime(user.created_at) : "—",
+      },
+      {
+        id: "last_active_at",
+        header: "Last active",
+        accessorKey: "last_active_at",
+        enableGlobalFilter: false,
+        meta: { className: "text-muted-foreground text-sm" },
+        cell: ({ row: { original: user } }) =>
+          user.last_active_at ? formatRelativeTime(user.last_active_at) : "—",
+      },
+      buildActionColumnDef({
+        meta: { headerClassName: "text-right", className: "text-right" },
+        cell: ({ row: { original: user } }) =>
+          user.id === selfId ? null : (
+            <div className="flex justify-end gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() =>
+                  setResetPasswordUser({ id: user.id, email: user.email })
+                }
+              >
+                Reset Password
+              </Button>
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={() => setDeleteUser({ id: user.id, email: user.email })}
+              >
+                Delete
+              </Button>
+            </div>
+          ),
+      }),
+    ],
+    [selfId],
+  );
 
   return (
     <div className="space-y-6">
@@ -123,55 +211,18 @@ function TeamSettingsPage() {
           </div>
         </CardHeader>
         <CardContent>
-          {isLoading ? (
-            <div className="space-y-3">
-              {[1, 2].map((i) => (
-                <div
-                  key={i}
-                  className="bg-muted h-12 animate-pulse rounded"
-                />
-              ))}
-            </div>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Member</TableHead>
-                  <TableHead>Role</TableHead>
-                  <TableHead>Joined</TableHead>
-                  <TableHead>Last active</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {users
-                  ?.filter((user) => {
-                    const q = search.trim().toLowerCase();
-                    if (!q) return true;
-                    return (
-                      user.email.toLowerCase().includes(q) ||
-                      displayName(user).toLowerCase().includes(q)
-                    );
-                  })
-                  .map((user) => (
-                    <UserRow
-                      key={user.id}
-                      user={user}
-                      isSelf={user.id === currentUser?.id}
-                      onResetPassword={() =>
-                        setResetPasswordUser({
-                          id: user.id,
-                          email: user.email,
-                        })
-                      }
-                      onDelete={() =>
-                        setDeleteUser({ id: user.id, email: user.email })
-                      }
-                    />
-                  ))}
-              </TableBody>
-            </Table>
-          )}
+          <DataTable
+            columns={columns}
+            data={users ?? []}
+            isLoading={isLoading}
+            getRowId={(u) => u.id}
+            enableSorting
+            globalFilter={search}
+            onGlobalFilterChange={setSearch}
+            emptyMessage={
+              search.trim() ? "No members match your search." : "No members yet."
+            }
+          />
         </CardContent>
       </Card>
 
@@ -215,19 +266,8 @@ function RoleBadge({ role }: { role: string }) {
   );
 }
 
-function UserRow({
-  user,
-  isSelf,
-  onResetPassword,
-  onDelete,
-}: {
-  user: User;
-  isSelf: boolean;
-  onResetPassword: () => void;
-  onDelete: () => void;
-}) {
+function UserRoleCell({ user, isSelf }: { user: User; isSelf: boolean }) {
   const updateRole = useUpdateUserRole();
-  const name = displayName(user);
 
   const handleRoleChange = (newRole: string) => {
     if (newRole === user.role) return;
@@ -238,75 +278,24 @@ function UserRow({
     });
   };
 
+  if (isSelf) return <RoleBadge role={user.role} />;
+
   return (
-    <TableRow>
-      <TableCell>
-        <div className="flex items-center gap-2.5">
-          <span
-            className="grid size-8 shrink-0 place-items-center rounded-full text-xs font-semibold text-white"
-            style={{
-              background:
-                "linear-gradient(140deg, var(--brand), var(--brand-press))",
-            }}
-            aria-hidden="true"
-          >
-            {initialsOf(name)}
-          </span>
-          <div className="min-w-0">
-            <div className="flex items-center gap-1.5">
-              <span className="truncate font-medium">{name}</span>
-              {isSelf && (
-                <Badge variant="outline" className="px-1.5 py-0 text-[10px]">
-                  you
-                </Badge>
-              )}
-            </div>
-            <span className="text-text-faint truncate text-xs">
-              {user.email}
-            </span>
-          </div>
-        </div>
-      </TableCell>
-      <TableCell>
-        {isSelf ? (
-          <RoleBadge role={user.role} />
-        ) : (
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              render={<button type="button" className="cursor-pointer" />}
-            >
-              <RoleBadge role={user.role} />
-            </DropdownMenuTrigger>
-            <DropdownMenuContent>
-              <DropdownMenuItem onClick={() => handleRoleChange("admin")}>
-                Admin
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => handleRoleChange("member")}>
-                Member
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        )}
-      </TableCell>
-      <TableCell className="text-muted-foreground text-sm">
-        {user.created_at ? formatRelativeTime(user.created_at) : "—"}
-      </TableCell>
-      <TableCell className="text-muted-foreground text-sm">
-        {user.last_active_at ? formatRelativeTime(user.last_active_at) : "—"}
-      </TableCell>
-      <TableCell className="text-right">
-        {!isSelf && (
-          <div className="flex justify-end gap-2">
-            <Button variant="outline" size="sm" onClick={onResetPassword}>
-              Reset Password
-            </Button>
-            <Button variant="destructive" size="sm" onClick={onDelete}>
-              Delete
-            </Button>
-          </div>
-        )}
-      </TableCell>
-    </TableRow>
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        render={<button type="button" className="cursor-pointer" />}
+      >
+        <RoleBadge role={user.role} />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent>
+        <DropdownMenuItem onClick={() => handleRoleChange("admin")}>
+          Admin
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => handleRoleChange("member")}>
+          Member
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 
@@ -606,8 +595,6 @@ function PendingInvitationsCard() {
   const { data: invitations, isLoading } = useInvitations();
   const revoke = useRevokeInvitation();
 
-  if (!isLoading && (!invitations || invitations.length === 0)) return null;
-
   const handleRevoke = (id: string, email: string) => {
     toast.promise(revoke.mutateAsync(id), {
       loading: "Revoking invitation…",
@@ -616,55 +603,66 @@ function PendingInvitationsCard() {
     });
   };
 
+  const columns = useMemo<ColumnDef<Invitation>[]>(
+    () => [
+      {
+        id: "email",
+        header: "Email",
+        accessorKey: "email",
+        meta: { className: "font-medium" },
+        cell: ({ row: { original: inv } }) => inv.email,
+      },
+      {
+        id: "role",
+        header: "Role",
+        accessorKey: "role",
+        cell: ({ row: { original: inv } }) => (
+          <Badge variant={inv.role === "admin" ? "default" : "secondary"}>
+            {inv.role}
+          </Badge>
+        ),
+      },
+      {
+        id: "expires_at",
+        header: "Expires",
+        accessorKey: "expires_at",
+        meta: { className: "text-muted-foreground text-sm" },
+        cell: ({ row: { original: inv } }) =>
+          new Date(inv.expires_at).toLocaleDateString(),
+      },
+      buildActionColumnDef({
+        meta: { headerClassName: "text-right", className: "text-right" },
+        cell: ({ row: { original: inv } }) => (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => handleRevoke(inv.id, inv.email)}
+            disabled={revoke.isPending}
+          >
+            Revoke
+          </Button>
+        ),
+      }),
+    ],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [revoke.isPending],
+  );
+
+  if (!isLoading && (!invitations || invitations.length === 0)) return null;
+
   return (
     <Card>
       <CardHeader>
         <CardTitle>Pending Invitations</CardTitle>
       </CardHeader>
       <CardContent>
-        {isLoading ? (
-          <div className="space-y-3">
-            {[1, 2].map((i) => (
-              <div key={i} className="bg-muted h-10 animate-pulse rounded" />
-            ))}
-          </div>
-        ) : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Email</TableHead>
-                <TableHead>Role</TableHead>
-                <TableHead>Expires</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {invitations?.map((inv) => (
-                <TableRow key={inv.id}>
-                  <TableCell className="font-medium">{inv.email}</TableCell>
-                  <TableCell>
-                    <Badge variant={inv.role === "admin" ? "default" : "secondary"}>
-                      {inv.role}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-muted-foreground text-sm">
-                    {new Date(inv.expires_at).toLocaleDateString()}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleRevoke(inv.id, inv.email)}
-                      disabled={revoke.isPending}
-                    >
-                      Revoke
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        )}
+        <DataTable
+          columns={columns}
+          data={invitations ?? []}
+          isLoading={isLoading}
+          getRowId={(inv) => inv.id}
+          enableSorting
+        />
       </CardContent>
     </Card>
   );

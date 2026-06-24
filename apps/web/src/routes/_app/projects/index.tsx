@@ -1,6 +1,7 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { FolderIcon, PlusIcon, RocketIcon, SearchIcon } from "lucide-react";
+import type { ColumnDef, SortingState } from "@tanstack/react-table";
 import { useProjects } from "@/lib/hooks/use-projects";
 import { useApplications } from "@/lib/hooks/use-applications";
 import { useDatabases } from "@/lib/hooks/use-databases";
@@ -16,6 +17,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { DataTable } from "@/components/ui/data-table";
 import { formatDate, formatRelativeTime } from "@/lib/utils/format";
 import { cn } from "@/lib/utils";
 import { OperatorHealthStrip } from "@/lib/components/stats/operator-health-strip";
@@ -26,6 +28,22 @@ export const Route = createFileRoute("/_app/projects/")({
 });
 
 type SortKey = "recent" | "name";
+
+// Accessors only — the cards are rendered via DataTable's customView, so these
+// columns exist purely to drive the global filter (name + slug) and sorting.
+const projectColumns: ColumnDef<Project>[] = [
+  {
+    id: "name",
+    header: "Name",
+    accessorFn: (p) => `${p.name} ${p.slug}`,
+  },
+  {
+    id: "created_at",
+    header: "Created",
+    enableGlobalFilter: false,
+    accessorFn: (p) => new Date(p.created_at).getTime(),
+  },
+];
 
 /** Compact running/total badge for a project's services (apps + databases). */
 function ProjectServicesBadge({ projectId }: { projectId: string }) {
@@ -187,23 +205,10 @@ function ProjectsPage() {
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<SortKey>("recent");
 
-  const filtered = useMemo(() => {
-    if (!projects) return [];
-    const q = query.trim().toLowerCase();
-    const matches = q
-      ? projects.filter(
-          (p) =>
-            p.name.toLowerCase().includes(q) ||
-            p.slug.toLowerCase().includes(q),
-        )
-      : projects.slice();
-    matches.sort((a, b) =>
-      sort === "name"
-        ? a.name.localeCompare(b.name)
-        : new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
-    );
-    return matches;
-  }, [projects, query, sort]);
+  const sorting: SortingState =
+    sort === "name"
+      ? [{ id: "name", desc: false }]
+      : [{ id: "created_at", desc: true }];
 
   if (isLoading) {
     return (
@@ -261,18 +266,27 @@ function ProjectsPage() {
         </Select>
       </div>
 
-      {filtered.length === 0 ? (
-        <div className="text-muted-foreground rounded-xl border border-dashed py-16 text-center text-sm">
-          No projects match{" "}
-          <span className="text-foreground font-mono">{query}</span>.
-        </div>
-      ) : (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {filtered.map((project) => (
-            <ProjectCard key={project.id} project={project} />
-          ))}
-        </div>
-      )}
+      <DataTable
+        columns={projectColumns}
+        data={projects}
+        getRowId={(p) => p.id}
+        enableSorting
+        sorting={sorting}
+        globalFilter={query}
+        onGlobalFilterChange={setQuery}
+        customView={{
+          item: ({ row }) => <ProjectCard project={row.original} />,
+          wrapperProps: {
+            className: "grid gap-4 sm:grid-cols-2 lg:grid-cols-3",
+          },
+          empty: (
+            <div className="text-muted-foreground rounded-xl border border-dashed py-16 text-center text-sm">
+              No projects match{" "}
+              <span className="text-foreground font-mono">{query}</span>.
+            </div>
+          ),
+        }}
+      />
     </div>
   );
 }
