@@ -105,6 +105,14 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService,
 			}
 			r.With(withTimeout(handlerTimeout)).Post("/api/webhooks/push", h.HandleWebhookPush)
 		})
+
+		// Git provider OAuth/manifest callbacks are public: they are top-level
+		// browser redirects from the provider that carry no Authorization header,
+		// so they are guarded by a one-time state nonce instead of the JWT.
+		r.Group(func(r chi.Router) {
+			r.Use(withTimeout(handlerTimeout))
+			r.Get("/api/git/providers/github/manifest/callback", h.HandleGitHubAppManifestCallback)
+		})
 	})
 
 	// WebSocket routes: auth-protected, no body limit, no timeout (long-lived connections).
@@ -252,6 +260,11 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService,
 				r.Get("/api/quotas/{scope}/{scopeId}", h.GetQuota)
 				r.Put("/api/quotas/{scope}/{scopeId}", h.UpsertQuota)
 				r.Delete("/api/quotas/{scope}/{scopeId}", h.DeleteQuota)
+				// Git provider app configs (per-instance GitHub App / OAuth clients)
+				r.Get("/api/git/providers", h.ListGitProviderConfigs)
+				r.Put("/api/git/providers", h.SaveGitProviderConfig)
+				r.Delete("/api/git/providers/{configId}", h.DeleteGitProviderConfig)
+				r.Get("/api/git/providers/github/manifest", h.GetGitHubAppManifest)
 				// Prometheus scrape endpoint. When METRICS_BIND is configured
 				// the metrics are also exposed anonymously on that listener;
 				// this admin-gated copy is for operators browsing via the UI.

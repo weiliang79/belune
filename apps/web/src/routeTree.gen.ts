@@ -19,6 +19,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AppTeamRouteImport } from './routes/_app/team'
 import { Route as AppServerRouteImport } from './routes/_app/server'
 import { Route as AppQuotasRouteImport } from './routes/_app/quotas'
+import { Route as AppGitProvidersRouteImport } from './routes/_app/git-providers'
 import { Route as AppDashboardRouteImport } from './routes/_app/dashboard'
 import { Route as AppBackupsRouteImport } from './routes/_app/backups'
 import { Route as AppAuditRouteImport } from './routes/_app/audit'
@@ -90,6 +91,11 @@ const AppServerRoute = AppServerRouteImport.update({
 const AppQuotasRoute = AppQuotasRouteImport.update({
   id: '/quotas',
   path: '/quotas',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppGitProvidersRoute = AppGitProvidersRouteImport.update({
+  id: '/git-providers',
+  path: '/git-providers',
   getParentRoute: () => AppRoute,
 } as any)
 const AppDashboardRoute = AppDashboardRouteImport.update({
@@ -232,6 +238,7 @@ export interface FileRoutesByFullPath {
   '/audit': typeof AppAuditRoute
   '/backups': typeof AppBackupsRoute
   '/dashboard': typeof AppDashboardRoute
+  '/git-providers': typeof AppGitProvidersRoute
   '/quotas': typeof AppQuotasRoute
   '/server': typeof AppServerRoute
   '/team': typeof AppTeamRoute
@@ -266,6 +273,7 @@ export interface FileRoutesByTo {
   '/audit': typeof AppAuditRoute
   '/backups': typeof AppBackupsRoute
   '/dashboard': typeof AppDashboardRoute
+  '/git-providers': typeof AppGitProvidersRoute
   '/quotas': typeof AppQuotasRoute
   '/server': typeof AppServerRoute
   '/team': typeof AppTeamRoute
@@ -300,6 +308,7 @@ export interface FileRoutesById {
   '/_app/audit': typeof AppAuditRoute
   '/_app/backups': typeof AppBackupsRoute
   '/_app/dashboard': typeof AppDashboardRoute
+  '/_app/git-providers': typeof AppGitProvidersRoute
   '/_app/quotas': typeof AppQuotasRoute
   '/_app/server': typeof AppServerRoute
   '/_app/team': typeof AppTeamRoute
@@ -336,6 +345,7 @@ export interface FileRouteTypes {
     | '/audit'
     | '/backups'
     | '/dashboard'
+    | '/git-providers'
     | '/quotas'
     | '/server'
     | '/team'
@@ -370,6 +380,7 @@ export interface FileRouteTypes {
     | '/audit'
     | '/backups'
     | '/dashboard'
+    | '/git-providers'
     | '/quotas'
     | '/server'
     | '/team'
@@ -403,6 +414,7 @@ export interface FileRouteTypes {
     | '/_app/audit'
     | '/_app/backups'
     | '/_app/dashboard'
+    | '/_app/git-providers'
     | '/_app/quotas'
     | '/_app/server'
     | '/_app/team'
@@ -507,6 +519,13 @@ declare module '@tanstack/react-router' {
       path: '/quotas'
       fullPath: '/quotas'
       preLoaderRoute: typeof AppQuotasRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/git-providers': {
+      id: '/_app/git-providers'
+      path: '/git-providers'
+      fullPath: '/git-providers'
+      preLoaderRoute: typeof AppGitProvidersRouteImport
       parentRoute: typeof AppRoute
     }
     '/_app/dashboard': {
@@ -738,6 +757,7 @@ interface AppRouteChildren {
   AppAuditRoute: typeof AppAuditRoute
   AppBackupsRoute: typeof AppBackupsRoute
   AppDashboardRoute: typeof AppDashboardRoute
+  AppGitProvidersRoute: typeof AppGitProvidersRoute
   AppQuotasRoute: typeof AppQuotasRoute
   AppServerRoute: typeof AppServerRoute
   AppTeamRoute: typeof AppTeamRoute
@@ -753,6 +773,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppAuditRoute: AppAuditRoute,
   AppBackupsRoute: AppBackupsRoute,
   AppDashboardRoute: AppDashboardRoute,
+  AppGitProvidersRoute: AppGitProvidersRoute,
   AppQuotasRoute: AppQuotasRoute,
   AppServerRoute: AppServerRoute,
   AppTeamRoute: AppTeamRoute,

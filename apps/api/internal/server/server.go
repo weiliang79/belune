@@ -39,13 +39,14 @@ func New(cfg *config.Config, db *pgxpool.Pool, queries *generated.Queries, asynq
 	appSvc := service.NewApplicationService(db, queries, rt, cfg.Keyring)
 	projSvc := service.NewProjectService(queries, rt)
 	dbSvc := service.NewDatabaseService(queries, rt, backup.New(cfg))
+	gitProviderSvc := service.NewGitProviderConfigService(queries, cfg.Keyring)
 	quotaSvc := quota.NewService(queries)
 
 	s := &Server{
 		cfg:     cfg,
 		db:      db,
 		auth:    auth,
-		handler: handler.New(cfg, db, queries, asynqClient, rt, pm, reconciler, auth, rdb, appSvc, projSvc, dbSvc, hub, auditSvc, notifySvc, termMgr, quotaSvc, emailSvc),
+		handler: handler.New(cfg, db, queries, asynqClient, rt, pm, reconciler, auth, rdb, appSvc, projSvc, dbSvc, gitProviderSvc, hub, auditSvc, notifySvc, termMgr, quotaSvc, emailSvc),
 	}
 
 	s.router = s.setupRouter()
