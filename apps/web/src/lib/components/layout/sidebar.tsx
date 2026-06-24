@@ -10,6 +10,7 @@ import {
   Gauge,
   Database,
   GitBranch,
+  Plug,
   ShieldCheck,
   LogOut,
   Loader2,
@@ -39,6 +40,7 @@ const HOME_NAV: NavItem[] = [
 
 const SETTINGS_NAV: NavItem[] = [
   { to: "/account", label: "Account", Icon: User, exact: true },
+  { to: "/git-connections", label: "Git Connections", Icon: Plug },
   { to: "/server", label: "Server", Icon: Server, admin: true },
   { to: "/team", label: "Team", Icon: Users, admin: true },
   { to: "/quotas", label: "Quotas", Icon: Gauge, admin: true },

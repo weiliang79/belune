@@ -112,6 +112,7 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService,
 		r.Group(func(r chi.Router) {
 			r.Use(withTimeout(handlerTimeout))
 			r.Get("/api/git/providers/github/manifest/callback", h.HandleGitHubAppManifestCallback)
+			r.Get("/api/git/integrations/callback", h.HandleGitIntegrationCallback)
 		})
 	})
 
@@ -169,6 +170,12 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService,
 				r.Get("/api/backups/status", h.GetBackupStatus)
 				r.Post("/api/backups/run", h.TriggerBackupRun)
 			})
+
+			// Git connections (per-user connected provider accounts)
+			r.Get("/api/git/integrations", h.ListGitIntegrations)
+			r.Get("/api/git/integrations/available", h.ListAvailableProviders)
+			r.Get("/api/git/integrations/connect", h.StartGitIntegrationConnect)
+			r.Delete("/api/git/integrations/{integrationId}", h.DeleteGitIntegration)
 
 			// Projects
 			r.Get("/api/projects", h.ListProjects)

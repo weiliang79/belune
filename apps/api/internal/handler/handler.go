@@ -34,25 +34,26 @@ type ReconcilerStatusProvider interface {
 }
 
 type Handler struct {
-	cfg            *config.Config
-	db             *pgxpool.Pool
-	queries        *generated.Queries
-	asynq          TaskEnqueuer
-	runtime        runtime.ContainerRuntime
-	proxy          proxy.ProxyManager
-	reconciler     ReconcilerStatusProvider
-	auth           *service.AuthService
-	rdb            *redis.Client
-	appService     *service.ApplicationService
-	projService    *service.ProjectService
-	dbService      *service.DatabaseService
-	gitProviderSvc *service.GitProviderConfigService
-	hub            *ws.Hub
-	auditSvc       *service.AuditService
-	notifySvc      *service.NotificationService
-	termManager    *terminal.Manager
-	quotaSvc       *quota.Service
-	emailSvc       *email.Service
+	cfg               *config.Config
+	db                *pgxpool.Pool
+	queries           *generated.Queries
+	asynq             TaskEnqueuer
+	runtime           runtime.ContainerRuntime
+	proxy             proxy.ProxyManager
+	reconciler        ReconcilerStatusProvider
+	auth              *service.AuthService
+	rdb               *redis.Client
+	appService        *service.ApplicationService
+	projService       *service.ProjectService
+	dbService         *service.DatabaseService
+	gitProviderSvc    *service.GitProviderConfigService
+	gitIntegrationSvc *service.GitIntegrationService
+	hub               *ws.Hub
+	auditSvc          *service.AuditService
+	notifySvc         *service.NotificationService
+	termManager       *terminal.Manager
+	quotaSvc          *quota.Service
+	emailSvc          *email.Service
 }
 
 func New(
@@ -69,6 +70,7 @@ func New(
 	projSvc *service.ProjectService,
 	dbSvc *service.DatabaseService,
 	gitProviderSvc *service.GitProviderConfigService,
+	gitIntegrationSvc *service.GitIntegrationService,
 	hub *ws.Hub,
 	auditSvc *service.AuditService,
 	notifySvc *service.NotificationService,
@@ -77,25 +79,26 @@ func New(
 	emailSvc *email.Service,
 ) *Handler {
 	return &Handler{
-		cfg:            cfg,
-		db:             db,
-		queries:        queries,
-		asynq:          asynqClient,
-		runtime:        rt,
-		proxy:          pm,
-		reconciler:     reconciler,
-		auth:           auth,
-		rdb:            rdb,
-		appService:     appSvc,
-		projService:    projSvc,
-		dbService:      dbSvc,
-		gitProviderSvc: gitProviderSvc,
-		hub:            hub,
-		auditSvc:       auditSvc,
-		notifySvc:      notifySvc,
-		termManager:    termMgr,
-		quotaSvc:       quotaSvc,
-		emailSvc:       emailSvc,
+		cfg:               cfg,
+		db:                db,
+		queries:           queries,
+		asynq:             asynqClient,
+		runtime:           rt,
+		proxy:             pm,
+		reconciler:        reconciler,
+		auth:              auth,
+		rdb:               rdb,
+		appService:        appSvc,
+		projService:       projSvc,
+		dbService:         dbSvc,
+		gitProviderSvc:    gitProviderSvc,
+		gitIntegrationSvc: gitIntegrationSvc,
+		hub:               hub,
+		auditSvc:          auditSvc,
+		notifySvc:         notifySvc,
+		termManager:       termMgr,
+		quotaSvc:          quotaSvc,
+		emailSvc:          emailSvc,
 	}
 }
 

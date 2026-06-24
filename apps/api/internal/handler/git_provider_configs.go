@@ -164,8 +164,12 @@ func (h *Handler) GetGitHubAppManifest(w http.ResponseWriter, r *http.Request) {
 		"name":         "Self-Hosted PaaS",
 		"url":          base,
 		"redirect_url": base + "/api/git/providers/github/manifest/callback",
+		// setup_url receives the post-install redirect (with installation_id +
+		// state), which our unified connect callback turns into a connection.
+		"setup_url":       base + "/api/git/integrations/callback",
+		"setup_on_update": true,
 		"callback_urls": []string{
-			base + "/api/git/providers/github/oauth/callback",
+			base + "/api/git/integrations/callback",
 		},
 		"hook_attributes": map[string]any{
 			"url": base + "/api/git/webhooks/github",

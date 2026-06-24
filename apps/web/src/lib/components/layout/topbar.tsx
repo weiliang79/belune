@@ -22,6 +22,7 @@ const SECTION_LABELS: Record<string, string> = {
   quotas: "Quotas",
   backups: "Backups",
   "git-providers": "Git Providers",
+  "git-connections": "Git Connections",
   audit: "Audit Log",
 };
 

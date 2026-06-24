@@ -91,6 +91,8 @@ export const queryKeys = {
   auditLogs: (params?: object) => ["audit-logs", params] as const,
   auditActions: ["audit-actions"] as const,
   gitProviders: ["git-providers"] as const,
+  gitIntegrations: ["git-integrations"] as const,
+  gitAvailableProviders: ["git-available-providers"] as const,
   routeFeatures: (projectId: string, applicationId: string, domainId: string) =>
     [
       "projects",
