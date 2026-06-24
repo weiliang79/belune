@@ -376,11 +376,13 @@ func (h *TaskHandler) buildFromGit(ctx context.Context, dc *deployContext) error
 	// Resolve git credentials. A connected provider integration takes priority;
 	// otherwise fall back to the app-level PAT, then to an unauthenticated clone.
 	var cloneURL string
-	if dc.app.GitIntegrationID.Valid {
-		// TODO(git-integrations): mint a short-lived clone token from the connected
-		// provider account once provider token-minting lands. Until then, fall
-		// through to the app-level token / anonymous clone.
-		slog.Warn("git integration auth not yet available, falling back to app token / anonymous clone")
+	if dc.app.GitIntegrationID.Valid && h.GitIntegrationService != nil {
+		token, provider, err := h.GitIntegrationService.CloneToken(ctx, dc.app.GitIntegrationID)
+		if err != nil {
+			slog.Warn("failed to mint integration clone token, falling back to app token", "error", err)
+		} else {
+			cloneURL = git.BuildCloneURL(provider, token, "", dc.app.SourceRepo.String)
+		}
 	}
 	if cloneURL == "" && len(dc.app.GitCredentialsEncrypted) > 0 {
 		tokenBytes, decErr := h.Keyring.Decrypt(dc.app.GitCredentialsEncrypted)

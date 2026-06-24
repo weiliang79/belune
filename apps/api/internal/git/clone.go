@@ -179,6 +179,9 @@ func BuildCloneURL(provider, token, username, repoURL string) string {
 		return repoURL
 	}
 	switch provider {
+	case "github":
+		// GitHub App installation tokens authenticate as x-access-token.
+		return strings.Replace(repoURL, "https://", "https://x-access-token:"+token+"@", 1)
 	case "gitlab":
 		return strings.Replace(repoURL, "https://", "https://oauth2:"+token+"@", 1)
 	case "bitbucket":
@@ -186,7 +189,7 @@ func BuildCloneURL(provider, token, username, repoURL string) string {
 			username = "x-token-auth"
 		}
 		return strings.Replace(repoURL, "https://", "https://"+username+":"+token+"@", 1)
-	default: // github, generic
+	default: // gitea, generic PAT
 		return strings.Replace(repoURL, "https://", "https://"+token+"@", 1)
 	}
 }

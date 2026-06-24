@@ -19,6 +19,7 @@ export function createApplication(
     source_image?: string;
     dockerfile_path?: string;
     build_type?: string;
+    git_integration_id?: string;
   },
 ) {
   return api.post<Application>(`/projects/${projectId}/applications`, data);

@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"crypto/subtle"
 	"encoding/json"
 	"net/http"
 	"time"
@@ -14,6 +15,7 @@ import (
 
 const (
 	gitConnectStatePrefix = "git_connect:"
+	gitConnectStateCookie = "git_connect_state"
 	connectStateTTL       = 10 * time.Minute
 )
 
@@ -83,6 +85,51 @@ func (h *Handler) ListAvailableProviders(w http.ResponseWriter, r *http.Request)
 	writeJSON(w, http.StatusOK, result)
 }
 
+// ListIntegrationRepos returns the repositories accessible to a connection.
+func (h *Handler) ListIntegrationRepos(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "integrationId")
+	var uuid pgtype.UUID
+	if err := uuid.Scan(id); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid integration id")
+		return
+	}
+	if !h.canAccessIntegration(r, uuid) {
+		writeError(w, http.StatusForbidden, "access denied")
+		return
+	}
+	repos, err := h.gitIntegrationSvc.ListRepos(r.Context(), uuid)
+	if err != nil {
+		writeError(w, http.StatusBadGateway, "failed to list repositories")
+		return
+	}
+	writeJSON(w, http.StatusOK, repos)
+}
+
+// ListIntegrationBranches returns the branches of a repo for a connection.
+func (h *Handler) ListIntegrationBranches(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "integrationId")
+	var uuid pgtype.UUID
+	if err := uuid.Scan(id); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid integration id")
+		return
+	}
+	if !h.canAccessIntegration(r, uuid) {
+		writeError(w, http.StatusForbidden, "access denied")
+		return
+	}
+	repo := r.URL.Query().Get("repo")
+	if repo == "" {
+		writeError(w, http.StatusBadRequest, "repo is required")
+		return
+	}
+	branches, err := h.gitIntegrationSvc.ListBranches(r.Context(), uuid, repo)
+	if err != nil {
+		writeError(w, http.StatusBadGateway, "failed to list branches")
+		return
+	}
+	writeJSON(w, http.StatusOK, branches)
+}
+
 // StartGitIntegrationConnect generates a one-time state, stores the connect
 // context, and returns the provider auth URL for the browser to navigate to.
 func (h *Handler) StartGitIntegrationConnect(w http.ResponseWriter, r *http.Request) {
@@ -108,6 +155,18 @@ func (h *Handler) StartGitIntegrationConnect(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
+	// Bind the state to this browser: the public callback requires this cookie
+	// to match the state query param, so a stolen/forged state alone is useless.
+	http.SetCookie(w, &http.Cookie{
+		Name:     gitConnectStateCookie,
+		Value:    state,
+		Path:     "/api/git/integrations/callback",
+		HttpOnly: true,
+		Secure:   h.cfg.SecureCookies,
+		SameSite: http.SameSiteLaxMode,
+		MaxAge:   int(connectStateTTL.Seconds()),
+	})
+
 	redirectURI := h.cfg.PublicBaseURL + "/api/git/integrations/callback"
 	authURL, err := h.gitIntegrationSvc.AuthURL(r.Context(), provider, baseURL, redirectURI, state)
 	if err != nil {
@@ -125,6 +184,18 @@ func (h *Handler) HandleGitIntegrationCallback(w http.ResponseWriter, r *http.Re
 	state := r.URL.Query().Get("state")
 	if state == "" {
 		writeError(w, http.StatusBadRequest, "missing state")
+		return
+	}
+
+	// The state must match the browser-bound cookie set when the flow started.
+	// Clear the cookie regardless of outcome.
+	cookie, cookieErr := r.Cookie(gitConnectStateCookie)
+	http.SetCookie(w, &http.Cookie{
+		Name: gitConnectStateCookie, Value: "", Path: "/api/git/integrations/callback",
+		HttpOnly: true, Secure: h.cfg.SecureCookies, SameSite: http.SameSiteLaxMode, MaxAge: -1,
+	})
+	if cookieErr != nil || subtle.ConstantTimeCompare([]byte(cookie.Value), []byte(state)) != 1 {
+		writeError(w, http.StatusBadRequest, "state cookie mismatch")
 		return
 	}
 
@@ -161,8 +232,10 @@ func (h *Handler) DeleteGitIntegration(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// Ownership: only the creator (or an admin) may disconnect.
-	var userID pgtype.UUID
-	_ = userID.Scan(middleware.UserIDFromContext(r.Context()))
+	if !h.canAccessIntegration(r, uuid) {
+		writeError(w, http.StatusForbidden, "access denied")
+		return
+	}
 	if err := h.gitIntegrationSvc.Delete(r.Context(), uuid); err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to delete connection")
 		return

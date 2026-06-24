@@ -34,6 +34,25 @@ export function useStartGitConnect() {
   });
 }
 
+export function useIntegrationRepos(integrationId: string | undefined) {
+  return useQuery({
+    queryKey: ["git-integration-repos", integrationId],
+    queryFn: () => api.listIntegrationRepos(integrationId!),
+    enabled: !!integrationId,
+  });
+}
+
+export function useIntegrationBranches(
+  integrationId: string | undefined,
+  repo: string | undefined,
+) {
+  return useQuery({
+    queryKey: ["git-integration-branches", integrationId, repo],
+    queryFn: () => api.listIntegrationBranches(integrationId!, repo!),
+    enabled: !!integrationId && !!repo,
+  });
+}
+
 export function useDeleteGitIntegration() {
   const qc = useQueryClient();
   return useMutation({

@@ -32,3 +32,24 @@ export function startGitConnect(provider: GitProvider, baseUrl?: string) {
 export function deleteGitIntegration(id: string) {
   return api.delete<{ status: string }>(`/git/integrations/${id}`);
 }
+
+export interface IntegrationRepo {
+  full_name: string;
+  clone_url: string;
+  private: boolean;
+  default_branch: string;
+}
+
+export interface IntegrationBranch {
+  name: string;
+}
+
+export function listIntegrationRepos(id: string) {
+  return api.get<IntegrationRepo[]>(`/git/integrations/${id}/repos`);
+}
+
+export function listIntegrationBranches(id: string, repo: string) {
+  return api.get<IntegrationBranch[]>(
+    `/git/integrations/${id}/branches?repo=${encodeURIComponent(repo)}`,
+  );
+}

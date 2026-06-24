@@ -123,6 +123,8 @@ func New(cfg *config.Config) (*App, error) {
 	hub := ws.NewHub(cfg.MaxWebSocketConnsPerUser)
 
 	appSvc := service.NewApplicationService(db, queries, dockerClient, cfg.Keyring)
+	gitProviderSvc := service.NewGitProviderConfigService(queries, cfg.Keyring)
+	gitIntegrationSvc := service.NewGitIntegrationService(queries, cfg.Keyring, gitProviderSvc)
 	quotaSvc := quota.NewService(queries)
 	emailSvc, err := email.New(cfg)
 	if err != nil {
@@ -135,22 +137,23 @@ func New(cfg *config.Config) (*App, error) {
 	}
 	backupSvc := backup.New(cfg)
 	taskHandler := &worker.TaskHandler{
-		Runtime:        dockerClient,
-		Proxy:          caddyClient,
-		DB:             db,
-		Queries:        queries,
-		Chain:          buildChain,
-		Keyring:        cfg.Keyring,
-		RedisClient:    rdb,
-		Config:         cfg,
-		MetricsService: metricsSvc,
-		AppService:     appSvc,
-		QuotaService:   quotaSvc,
-		EmailService:   emailSvc,
-		BackupService:  backupSvc,
-		AuditLog:       auditSvc,
-		Notifier:       notifySvc,
-		Enqueuer:       asynqClient,
+		Runtime:               dockerClient,
+		Proxy:                 caddyClient,
+		DB:                    db,
+		Queries:               queries,
+		Chain:                 buildChain,
+		Keyring:               cfg.Keyring,
+		RedisClient:           rdb,
+		Config:                cfg,
+		MetricsService:        metricsSvc,
+		AppService:            appSvc,
+		GitIntegrationService: gitIntegrationSvc,
+		QuotaService:          quotaSvc,
+		EmailService:          emailSvc,
+		BackupService:         backupSvc,
+		AuditLog:              auditSvc,
+		Notifier:              notifySvc,
+		Enqueuer:              asynqClient,
 	}
 
 	w := worker.New(redisOpt, taskHandler)

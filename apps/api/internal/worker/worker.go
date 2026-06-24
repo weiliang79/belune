@@ -41,22 +41,23 @@ type TaskEnqueuer interface {
 
 // TaskHandler holds dependencies needed by async task handlers.
 type TaskHandler struct {
-	Runtime        runtime.ContainerRuntime
-	Proxy          proxy.ProxyManager
-	DB             *pgxpool.Pool
-	Queries        *generated.Queries
-	Chain          *build.Chain
-	Keyring        *crypto.Keyring
-	RedisClient    *redis.Client
-	Config         *config.Config
-	MetricsService *service.MetricsService
-	AppService     *service.ApplicationService
-	QuotaService   *quota.Service
-	EmailService   *email.Service
-	BackupService  *backup.Service
-	AuditLog       auditLogger
-	Notifier       notifier
-	Enqueuer       TaskEnqueuer
+	Runtime               runtime.ContainerRuntime
+	Proxy                 proxy.ProxyManager
+	DB                    *pgxpool.Pool
+	Queries               *generated.Queries
+	Chain                 *build.Chain
+	Keyring               *crypto.Keyring
+	RedisClient           *redis.Client
+	Config                *config.Config
+	MetricsService        *service.MetricsService
+	AppService            *service.ApplicationService
+	GitIntegrationService *service.GitIntegrationService
+	QuotaService          *quota.Service
+	EmailService          *email.Service
+	BackupService         *backup.Service
+	AuditLog              auditLogger
+	Notifier              notifier
+	Enqueuer              TaskEnqueuer
 }
 
 type Worker struct {

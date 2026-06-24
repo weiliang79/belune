@@ -10,7 +10,7 @@ import (
 
 func TestBuildCloneURL_GitHub(t *testing.T) {
 	url := BuildCloneURL("github", "ghp_token123", "", "https://github.com/user/repo.git")
-	assert.Equal(t, "https://ghp_token123@github.com/user/repo.git", url)
+	assert.Equal(t, "https://x-access-token:ghp_token123@github.com/user/repo.git", url)
 }
 
 func TestBuildCloneURL_GitLab(t *testing.T) {

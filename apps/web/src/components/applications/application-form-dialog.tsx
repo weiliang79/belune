@@ -16,6 +16,7 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { useCreateApplication } from "@/lib/hooks/use-applications";
 import { useFeatures } from "@/lib/hooks/use-features";
+import { IntegrationRepoPicker } from "./integration-repo-picker";
 
 function slugify(name: string): string {
   return name
@@ -47,6 +48,8 @@ export function ApplicationFormDialog({
   const [appType, setAppType] = useState<"image" | "git">("image");
   const [sourceImage, setSourceImage] = useState("");
   const [sourceRepo, setSourceRepo] = useState("");
+  const [gitSource, setGitSource] = useState<"connection" | "url">("connection");
+  const [gitIntegrationId, setGitIntegrationId] = useState("");
   const [dockerfilePath, setDockerfilePath] = useState("Dockerfile");
   const [buildType, setBuildType] = useState("dockerfile");
   const [appError, setAppError] = useState("");
@@ -59,6 +62,8 @@ export function ApplicationFormDialog({
       setAppType("image");
       setSourceImage("");
       setSourceRepo("");
+      setGitSource("connection");
+      setGitIntegrationId("");
       setDockerfilePath("Dockerfile");
       setBuildType("dockerfile");
       setAppError("");
@@ -76,7 +81,11 @@ export function ApplicationFormDialog({
       return;
     }
     if (appType === "git" && !sourceRepo.trim()) {
-      setAppError("Repository URL is required");
+      setAppError(
+        gitSource === "connection"
+          ? "Select a repository from a connected account"
+          : "Repository URL is required",
+      );
       return;
     }
     try {
@@ -90,6 +99,9 @@ export function ApplicationFormDialog({
               source_repo: sourceRepo,
               dockerfile_path: dockerfilePath,
               build_type: buildType,
+              ...(gitSource === "connection" && gitIntegrationId
+                ? { git_integration_id: gitIntegrationId }
+                : {}),
             }),
       });
       onOpenChange(false);
@@ -180,14 +192,43 @@ export function ApplicationFormDialog({
           ) : (
             <>
               <div className="space-y-2">
-                <Label htmlFor="source-repo">Repository URL</Label>
-                <Input
-                  id="source-repo"
-                  value={sourceRepo}
-                  onChange={(e) => setSourceRepo(e.target.value)}
-                  placeholder="https://github.com/user/repo.git"
-                />
+                <Label>Repository Source</Label>
+                <ToggleGroup
+                  variant="outline"
+                  value={[gitSource]}
+                  onValueChange={(v) => {
+                    if (v.length > 0) {
+                      setGitSource(v[0] as "connection" | "url");
+                      setSourceRepo("");
+                      setGitIntegrationId("");
+                    }
+                  }}
+                  className="justify-start"
+                >
+                  <ToggleGroupItem value="connection">
+                    Connected Account
+                  </ToggleGroupItem>
+                  <ToggleGroupItem value="url">Public URL</ToggleGroupItem>
+                </ToggleGroup>
               </div>
+              {gitSource === "connection" ? (
+                <IntegrationRepoPicker
+                  onSelect={({ integrationId, cloneUrl }) => {
+                    setGitIntegrationId(integrationId);
+                    setSourceRepo(cloneUrl);
+                  }}
+                />
+              ) : (
+                <div className="space-y-2">
+                  <Label htmlFor="source-repo">Repository URL</Label>
+                  <Input
+                    id="source-repo"
+                    value={sourceRepo}
+                    onChange={(e) => setSourceRepo(e.target.value)}
+                    placeholder="https://github.com/user/repo.git"
+                  />
+                </div>
+              )}
               <div className="space-y-2">
                 <Label>Build Type</Label>
                 <ToggleGroup

@@ -94,6 +94,15 @@ func (s *GitIntegrationService) Delete(ctx context.Context, id pgtype.UUID) erro
 	return s.queries.DeleteGitIntegration(ctx, id)
 }
 
+// OwnerID returns the user that created a connection, for authorization checks.
+func (s *GitIntegrationService) OwnerID(ctx context.Context, id pgtype.UUID) (pgtype.UUID, error) {
+	row, err := s.queries.GetGitIntegration(ctx, id)
+	if err != nil {
+		return pgtype.UUID{}, err
+	}
+	return row.CreatedBy, nil
+}
+
 // resolve loads a connection row, its decrypted Integration state, the provider
 // app config, and the connector.
 func (s *GitIntegrationService) resolve(ctx context.Context, id pgtype.UUID) (generated.GitIntegration, providers.Integration, providers.AppConfig, providers.Connector, error) {

@@ -40,6 +40,22 @@ func (h *Handler) canAccessDatabase(r *http.Request, databaseID pgtype.UUID) boo
 	return ownerID == userID
 }
 
+// canAccessIntegration checks if the current user created the git connection.
+// Admins bypass the check.
+func (h *Handler) canAccessIntegration(r *http.Request, integrationID pgtype.UUID) bool {
+	role := middleware.RoleFromContext(r.Context())
+	if role == "admin" {
+		return true
+	}
+	ownerID, err := h.gitIntegrationSvc.OwnerID(r.Context(), integrationID)
+	if err != nil {
+		return false
+	}
+	var userID pgtype.UUID
+	userID.Scan(middleware.UserIDFromContext(r.Context()))
+	return ownerID == userID
+}
+
 // canAccessDomain checks if the current user owns the domain's parent application's parent project.
 // Admins bypass the check.
 func (h *Handler) canAccessDomain(r *http.Request, domainID pgtype.UUID) bool {

@@ -175,6 +175,8 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService,
 			r.Get("/api/git/integrations", h.ListGitIntegrations)
 			r.Get("/api/git/integrations/available", h.ListAvailableProviders)
 			r.Get("/api/git/integrations/connect", h.StartGitIntegrationConnect)
+			r.Get("/api/git/integrations/{integrationId}/repos", h.ListIntegrationRepos)
+			r.Get("/api/git/integrations/{integrationId}/branches", h.ListIntegrationBranches)
 			r.Delete("/api/git/integrations/{integrationId}", h.DeleteGitIntegration)
 
 			// Projects
