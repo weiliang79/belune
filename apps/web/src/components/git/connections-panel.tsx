@@ -8,6 +8,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { formatRelativeTime } from "@/lib/utils/format";
 
 const PROVIDER_LABELS: Record<string, string> = {
   github: "GitHub",
@@ -15,6 +16,10 @@ const PROVIDER_LABELS: Record<string, string> = {
   bitbucket: "Bitbucket",
   gitea: "Gitea",
 };
+
+function providerGlyph(provider: string) {
+  return (PROVIDER_LABELS[provider] ?? provider).slice(0, 2);
+}
 
 export function ConnectionsPanel() {
   const { data: integrations } = useGitIntegrations();
@@ -31,36 +36,58 @@ export function ConnectionsPanel() {
         <CardContent>
           {!available || available.length === 0 ? (
             <p className="text-muted-foreground text-sm">
-              No providers are configured yet. Ask an administrator to set up a
+              No providers are available yet. Ask an administrator to set up a
               git provider first.
             </p>
           ) : (
-            <div className="flex flex-wrap gap-2">
-              {available.map((p) => (
-                <Button
-                  key={`${p.provider}:${p.base_url}`}
-                  variant="outline"
-                  disabled={startConnect.isPending}
-                  onClick={() =>
-                    startConnect.mutate({
-                      provider: p.provider,
-                      baseUrl: p.base_url || undefined,
-                    })
-                  }
-                >
-                  <Plug className="mr-1 h-4 w-4" />
-                  Connect {PROVIDER_LABELS[p.provider] ?? p.provider}
-                  {p.base_url ? ` (${p.base_url.replace(/^https?:\/\//, "")})` : ""}
-                </Button>
-              ))}
+            <div className="divide-y rounded-lg border">
+              {available.map((p) => {
+                const host = p.base_url.replace(/^https?:\/\//, "");
+                return (
+                  <button
+                    key={`${p.provider}:${p.base_url}`}
+                    type="button"
+                    disabled={startConnect.isPending}
+                    onClick={() =>
+                      startConnect.mutate({
+                        provider: p.provider,
+                        baseUrl: p.base_url || undefined,
+                      })
+                    }
+                    className="hover:bg-accent/50 flex w-full items-center gap-3 px-4 py-3 text-left transition-colors disabled:opacity-60"
+                  >
+                    <span className="bg-muted text-muted-foreground grid size-8 shrink-0 place-items-center rounded-md text-[11px] font-semibold">
+                      {providerGlyph(p.provider)}
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-sm font-medium">
+                        {PROVIDER_LABELS[p.provider] ?? p.provider}
+                        {host ? (
+                          <span className="text-muted-foreground font-normal">
+                            {" · "}
+                            <code className="text-xs">{host}</code>
+                          </span>
+                        ) : null}
+                      </span>
+                      <span className="text-muted-foreground text-xs">
+                        Connect an account
+                      </span>
+                    </span>
+                    <Plug className="text-muted-foreground h-4 w-4 shrink-0" />
+                  </button>
+                );
+              })}
             </div>
           )}
         </CardContent>
       </Card>
 
       <Card>
-        <CardHeader>
+        <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle>Your connections</CardTitle>
+          {integrations && integrations.length > 0 && (
+            <Badge variant="secondary">{integrations.length}</Badge>
+          )}
         </CardHeader>
         <CardContent>
           {!integrations || integrations.length === 0 ? (
@@ -68,36 +95,54 @@ export function ConnectionsPanel() {
               No connected accounts yet.
             </p>
           ) : (
-            <div className="divide-y">
-              {integrations.map((i) => (
-                <div
-                  key={i.id}
-                  className="flex items-center justify-between py-3"
-                >
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium">
-                        {PROVIDER_LABELS[i.provider] ?? i.provider}
-                      </span>
-                      <Badge variant="secondary">{i.account_login}</Badge>
-                    </div>
-                    {i.base_url && (
-                      <p className="text-muted-foreground text-xs">{i.base_url}</p>
-                    )}
-                  </div>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => {
-                      if (confirm(`Disconnect ${i.account_login}?`)) {
-                        del.mutate(i.id);
-                      }
-                    }}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </div>
-              ))}
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-muted-foreground border-b text-left text-xs uppercase">
+                    <th className="px-2 py-2 font-medium">Provider</th>
+                    <th className="px-2 py-2 font-medium">Account</th>
+                    <th className="px-2 py-2 font-medium">Host</th>
+                    <th className="px-2 py-2 font-medium">Connected</th>
+                    <th className="px-2 py-2" />
+                  </tr>
+                </thead>
+                <tbody className="divide-y">
+                  {integrations.map((i) => (
+                    <tr key={i.id}>
+                      <td className="px-2 py-3">
+                        <span className="flex items-center gap-2 font-medium">
+                          <span className="bg-muted text-muted-foreground grid size-6 shrink-0 place-items-center rounded text-[10px] font-semibold">
+                            {providerGlyph(i.provider)}
+                          </span>
+                          {PROVIDER_LABELS[i.provider] ?? i.provider}
+                        </span>
+                      </td>
+                      <td className="px-2 py-3">
+                        <code className="text-xs">{i.account_login}</code>
+                      </td>
+                      <td className="text-muted-foreground px-2 py-3 text-xs">
+                        {i.base_url ? i.base_url.replace(/^https?:\/\//, "") : "—"}
+                      </td>
+                      <td className="text-muted-foreground px-2 py-3 text-xs">
+                        {formatRelativeTime(i.created_at)}
+                      </td>
+                      <td className="px-2 py-3 text-right">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            if (confirm(`Disconnect ${i.account_login}?`)) {
+                              del.mutate(i.id);
+                            }
+                          }}
+                        >
+                          <Trash2 className="mr-1 h-3.5 w-3.5" /> Disconnect
+                        </Button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           )}
         </CardContent>
