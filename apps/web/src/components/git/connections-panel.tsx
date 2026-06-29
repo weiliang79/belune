@@ -1,8 +1,4 @@
-import { useEffect } from "react";
-import { createFileRoute, useSearch } from "@tanstack/react-router";
-import { toast } from "sonner";
 import { Plug, Trash2 } from "lucide-react";
-import { RouteError } from "@/lib/components/route-error";
 import {
   useGitIntegrations,
   useAvailableProviders,
@@ -13,15 +9,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 
-export const Route = createFileRoute("/_app/git-connections")({
-  component: GitConnectionsPage,
-  errorComponent: RouteError,
-  validateSearch: (search: Record<string, unknown>) => ({
-    connected: typeof search.connected === "string" ? search.connected : undefined,
-    error: typeof search.error === "string" ? search.error : undefined,
-  }),
-});
-
 const PROVIDER_LABELS: Record<string, string> = {
   github: "GitHub",
   gitlab: "GitLab",
@@ -29,28 +16,14 @@ const PROVIDER_LABELS: Record<string, string> = {
   gitea: "Gitea",
 };
 
-function GitConnectionsPage() {
-  const { connected, error } = useSearch({ from: "/_app/git-connections" });
+export function ConnectionsPanel() {
   const { data: integrations } = useGitIntegrations();
   const { data: available } = useAvailableProviders();
   const startConnect = useStartGitConnect();
   const del = useDeleteGitIntegration();
 
-  useEffect(() => {
-    if (connected) toast.success(`Connected ${PROVIDER_LABELS[connected] ?? connected}`);
-    if (error) toast.error(`Failed to connect ${PROVIDER_LABELS[error] ?? error}`);
-  }, [connected, error]);
-
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold">Git Connections</h1>
-        <p className="text-muted-foreground text-sm">
-          Connect a git account to browse and deploy your repositories without
-          managing tokens by hand.
-        </p>
-      </div>
-
       <Card>
         <CardHeader>
           <CardTitle>Connect an account</CardTitle>

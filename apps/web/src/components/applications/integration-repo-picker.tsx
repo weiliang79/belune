@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Link } from "@tanstack/react-router";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -64,8 +65,15 @@ export function IntegrationRepoPicker({ onSelect }: Props) {
   if (!integrations || integrations.length === 0) {
     return (
       <p className="text-muted-foreground text-sm">
-        No connected accounts. Connect one under Git Connections to pick a
-        repository here.
+        No connected accounts.{" "}
+        <Link
+          to="/git"
+          search={{ tab: undefined, connected: undefined, error: undefined }}
+          className="text-foreground font-medium underline underline-offset-2"
+        >
+          Connect an account
+        </Link>{" "}
+        under Git to pick a repository here.
       </p>
     );
   }

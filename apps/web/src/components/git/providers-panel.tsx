@@ -1,8 +1,6 @@
 import { useState } from "react";
-import { createFileRoute } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { Github, Trash2, ExternalLink } from "lucide-react";
-import { RouteError } from "@/lib/components/route-error";
 import {
   useGitProviderConfigs,
   useSaveGitProviderConfig,
@@ -26,18 +24,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
-export const Route = createFileRoute("/_app/git-providers")({
-  component: GitProvidersPage,
-  errorComponent: RouteError,
-});
-
 const OAUTH_PROVIDERS: { value: GitProvider; label: string; selfHosted: boolean }[] = [
   { value: "gitlab", label: "GitLab", selfHosted: true },
   { value: "bitbucket", label: "Bitbucket", selfHosted: false },
   { value: "gitea", label: "Gitea", selfHosted: true },
 ];
 
-function GitProvidersPage() {
+export function ProvidersPanel() {
   const { data: configs } = useGitProviderConfigs();
   const save = useSaveGitProviderConfig();
   const del = useDeleteGitProviderConfig();
@@ -51,7 +44,10 @@ function GitProvidersPage() {
   const origin = window.location.origin;
   const selfHosted =
     OAUTH_PROVIDERS.find((p) => p.value === oauthProvider)?.selfHosted ?? false;
-  const callbackUrl = `${origin}/api/git/providers/${oauthProvider}/oauth/callback`;
+  // All OAuth providers share one callback (git_integrations.go:170,218); it is
+  // not provider-specific. This must match the redirect_uri our connect flow
+  // sends, or the provider rejects it as an unregistered redirect URI.
+  const callbackUrl = `${origin}/api/git/integrations/callback`;
 
   const startGitHubApp = async () => {
     try {
@@ -85,14 +81,6 @@ function GitProvidersPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold">Git Providers</h1>
-        <p className="text-muted-foreground text-sm">
-          Connect a GitHub App or OAuth client so users can link their accounts
-          and deploy from their repositories.
-        </p>
-      </div>
-
       {/* GitHub App */}
       <Card>
         <CardHeader>
