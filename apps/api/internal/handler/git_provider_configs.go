@@ -170,7 +170,7 @@ func (h *Handler) GetGitHubAppManifest(w http.ResponseWriter, r *http.Request) {
 	}
 
 	manifest := map[string]any{
-		"name":         "Self-Hosted PaaS",
+		"name":         githubAppName(h.instanceName(r.Context())),
 		"url":          base,
 		"redirect_url": base + "/api/git/providers/github/manifest/callback",
 		// setup_url receives the post-install redirect (with installation_id +
@@ -238,6 +238,21 @@ func publiclyReachableURL(raw string) bool {
 		}
 	}
 	return true
+}
+
+// githubAppName sanitizes an instance name for use as a GitHub App name.
+// GitHub requires the name be globally unique and caps its length, so we
+// collapse whitespace and cap to 34 chars; the manifest page still lets the
+// admin edit it (and resolve any global collision) before creating.
+func githubAppName(name string) string {
+	name = strings.Join(strings.Fields(name), " ")
+	if name == "" {
+		name = defaultInstanceName
+	}
+	if len(name) > 34 {
+		name = strings.TrimSpace(name[:34])
+	}
+	return name
 }
 
 type githubManifestConversion struct {

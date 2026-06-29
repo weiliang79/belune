@@ -20,6 +20,7 @@ import { useSidebarStore } from "@/lib/stores/sidebar";
 import { useIsMobile } from "@/lib/hooks/use-is-mobile";
 import { logout } from "@/lib/api/auth";
 import { BRAND } from "@/lib/brand";
+import { useInstanceName } from "@/lib/hooks/use-features";
 import { initialsOf } from "@/lib/utils/initials";
 import { cn } from "@/lib/utils";
 
@@ -61,6 +62,7 @@ export function Sidebar({ mobileOpen, onMobileClose }: SidebarProps) {
   const routerState = useRouterState();
   const currentPath = routerState.location.pathname;
   const isAdmin = user?.role === "admin";
+  const instanceName = useInstanceName();
   const [isLoggingOut, setIsLoggingOut] = useState(false);
 
   // On mobile the drawer is always full-width with labels; on desktop the
@@ -158,7 +160,7 @@ export function Sidebar({ mobileOpen, onMobileClose }: SidebarProps) {
         </div>
         {expanded && (
           <div className="flex min-w-0 flex-col leading-tight">
-            <span className="truncate text-sm font-semibold">{BRAND.name}</span>
+            <span className="truncate text-sm font-semibold">{instanceName}</span>
             <span className="text-text-faint font-mono text-[11px]">
               {BRAND.version}
             </span>

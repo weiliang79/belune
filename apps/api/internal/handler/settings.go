@@ -1,8 +1,10 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
+	"strings"
 
 	"github.com/ungweiliang/selfhost-paas/internal/store/generated"
 )
@@ -10,6 +12,20 @@ import (
 type settingResponse struct {
 	Key   string `json:"key"`
 	Value string `json:"value"`
+}
+
+// defaultInstanceName is used when the operator has not set one. It seeds both
+// the GitHub App manifest name and the dashboard brand.
+const defaultInstanceName = "Self-Hosted PaaS"
+
+// instanceName returns the configured "instance_name" setting, or the default
+// when unset/blank.
+func (h *Handler) instanceName(ctx context.Context) string {
+	s, err := h.queries.GetSetting(ctx, "instance_name")
+	if err != nil || strings.TrimSpace(s.Value) == "" {
+		return defaultInstanceName
+	}
+	return strings.TrimSpace(s.Value)
 }
 
 func (h *Handler) ListSettings(w http.ResponseWriter, r *http.Request) {

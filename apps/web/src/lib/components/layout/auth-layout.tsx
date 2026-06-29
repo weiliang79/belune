@@ -6,6 +6,7 @@ import {
   ActivityIcon,
 } from "lucide-react";
 import { BRAND } from "@/lib/brand";
+import { useInstanceName } from "@/lib/hooks/use-features";
 
 const HIGHLIGHTS = [
   { Icon: GitBranchIcon, text: "Deploy from Git or a Docker image" },
@@ -27,6 +28,7 @@ export function AuthLayout({
   description?: string;
   children: ReactNode;
 }) {
+  const instanceName = useInstanceName();
   return (
     <div className="grid min-h-screen lg:grid-cols-2">
       {/* Brand panel */}
@@ -41,7 +43,7 @@ export function AuthLayout({
           <div className="grid size-9 place-items-center rounded-lg bg-white/15 backdrop-blur">
             <RocketIcon className="size-5" />
           </div>
-          <span className="text-lg font-semibold">{BRAND.name}</span>
+          <span className="text-lg font-semibold">{instanceName}</span>
         </div>
 
         <div className="max-w-sm">
@@ -78,7 +80,7 @@ export function AuthLayout({
             >
               <RocketIcon className="size-5" />
             </div>
-            <span className="text-lg font-semibold">{BRAND.name}</span>
+            <span className="text-lg font-semibold">{instanceName}</span>
           </div>
 
           <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>

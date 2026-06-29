@@ -3,6 +3,8 @@ import { RouteError } from "@/lib/components/route-error";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { StatusPill } from "@/components/ui/status-pill";
 import { Sparkline } from "@/components/ui/sparkline";
 import {
@@ -20,7 +22,7 @@ import {
 } from "@/lib/hooks/use-metrics";
 import { useSettings, useUpdateSettings } from "@/lib/hooks/use-settings";
 import { toast } from "sonner";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import type { HostMetricPoint, SettingEntry } from "@/lib/types";
 import { UPlotAreaChart } from "@/components/ui/uplot-area-chart";
 import { cn } from "@/lib/utils";
@@ -175,6 +177,24 @@ function ServerSettingsPage() {
     });
   };
 
+  const currentInstanceName =
+    settings?.find((s) => s.key === "instance_name")?.value ?? "";
+  const [instanceNameDraft, setInstanceNameDraft] = useState<string | null>(null);
+  const instanceNameValue = instanceNameDraft ?? currentInstanceName;
+
+  const handleSaveInstanceName = () => {
+    toast.promise(
+      updateSettings
+        .mutateAsync([{ key: "instance_name", value: instanceNameValue.trim() }])
+        .then(() => setInstanceNameDraft(null)),
+      {
+        loading: "Saving...",
+        success: "Instance name saved",
+        error: "Failed to save instance name",
+      },
+    );
+  };
+
   return (
     <div className="space-y-6">
       <div>
@@ -183,6 +203,36 @@ function ServerSettingsPage() {
           Platform health, resources, and maintenance.
         </p>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Instance</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          <Label htmlFor="instance-name">Instance name</Label>
+          <div className="flex max-w-md items-center gap-2">
+            <Input
+              id="instance-name"
+              value={instanceNameValue}
+              onChange={(e) => setInstanceNameDraft(e.target.value)}
+              placeholder="Self-Hosted PaaS"
+            />
+            <Button
+              onClick={handleSaveInstanceName}
+              disabled={
+                updateSettings.isPending ||
+                instanceNameValue.trim() === currentInstanceName.trim()
+              }
+            >
+              Save
+            </Button>
+          </div>
+          <p className="text-muted-foreground text-xs">
+            Shown in the sidebar and used as the default GitHub App name when
+            connecting a provider.
+          </p>
+        </CardContent>
+      </Card>
 
       {isLoading ? (
         <div className="grid grid-cols-2 gap-4 md:grid-cols-4">

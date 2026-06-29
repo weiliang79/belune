@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
@@ -373,9 +374,10 @@ func (h *Handler) ChangeOwnPassword(w http.ResponseWriter, r *http.Request) {
 }
 
 type setupRequest struct {
-	Email    string `json:"email"`
-	Password string `json:"password"`
-	Username string `json:"username"`
+	Email        string `json:"email"`
+	Password     string `json:"password"`
+	Username     string `json:"username"`
+	InstanceName string `json:"instance_name"`
 }
 
 func (h *Handler) Setup(w http.ResponseWriter, r *http.Request) {
@@ -415,6 +417,16 @@ func (h *Handler) Setup(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to create admin user")
 		return
+	}
+
+	// Persist the instance name chosen during onboarding (best-effort; failure
+	// here shouldn't fail setup since the admin is already created).
+	if name := strings.TrimSpace(req.InstanceName); name != "" {
+		if _, err := h.queries.UpsertSetting(r.Context(), generated.UpsertSettingParams{
+			Key: "instance_name", Value: name,
+		}); err != nil {
+			slog.WarnContext(r.Context(), "failed to persist instance_name during setup", "error", err)
+		}
 	}
 
 	writeJSON(w, http.StatusCreated, map[string]any{

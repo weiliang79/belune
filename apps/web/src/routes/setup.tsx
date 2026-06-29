@@ -20,6 +20,7 @@ function SetupPage() {
 
   const form = useForm({
     defaultValues: {
+      instanceName: "",
       email: "",
       password: "",
       confirmPassword: "",
@@ -32,7 +33,12 @@ function SetupPage() {
         return;
       }
       try {
-        await setup(value.email, value.password, value.username);
+        await setup(
+          value.email,
+          value.password,
+          value.username,
+          value.instanceName,
+        );
         await login(value.email, value.password);
         const user = await getMe();
         setUser(user);
@@ -61,6 +67,26 @@ function SetupPage() {
             {error}
           </div>
         )}
+        <form.Field
+          name="instanceName"
+          children={(field) => (
+            <div className="space-y-2">
+              <Label htmlFor="instanceName">Instance name</Label>
+              <Input
+                id="instanceName"
+                type="text"
+                placeholder="Self-Hosted PaaS"
+                value={field.state.value}
+                onBlur={field.handleBlur}
+                onChange={(e) => field.handleChange(e.target.value)}
+              />
+              <p className="text-muted-foreground text-xs">
+                Shown in the sidebar and used as the default GitHub App name.
+                You can change it later in Server settings.
+              </p>
+            </div>
+          )}
+        />
         <form.Field
           name="username"
           validators={{

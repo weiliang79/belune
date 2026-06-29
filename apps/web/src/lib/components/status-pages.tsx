@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { Link, useRouter } from "@tanstack/react-router";
 import { RocketIcon } from "lucide-react";
 import { Button, buttonVariants } from "@/components/ui/button";
-import { BRAND } from "@/lib/brand";
+import { useInstanceName } from "@/lib/hooks/use-features";
 import { useAuthStore } from "@/lib/stores/auth";
 import { cn } from "@/lib/utils";
 
@@ -18,6 +18,7 @@ function StatusPageFrame({
   description: string;
   children?: ReactNode;
 }) {
+  const instanceName = useInstanceName();
   return (
     <div className="flex min-h-screen flex-col items-center justify-center px-6 py-12 text-center">
       <div className="flex items-center gap-2.5">
@@ -31,7 +32,7 @@ function StatusPageFrame({
         >
           <RocketIcon className="size-4.5" />
         </div>
-        <span className="text-sm font-semibold">{BRAND.name}</span>
+        <span className="text-sm font-semibold">{instanceName}</span>
       </div>
 
       <p className="from-text-muted to-text-faint mt-10 bg-gradient-to-b bg-clip-text text-7xl font-bold tracking-tight text-transparent select-none">
