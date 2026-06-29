@@ -190,6 +190,8 @@ type GitProviderConfig struct {
 	SecretEncrypted []byte             `json:"secret_encrypted"`
 	CreatedAt       pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+	CreatedBy       pgtype.UUID        `json:"created_by"`
+	IsPublic        bool               `json:"is_public"`
 }
 
 type HostMetric struct {

@@ -10,6 +10,8 @@ export interface GitProviderConfig {
   app_id: string;
   app_slug: string;
   has_secret: boolean;
+  is_public: boolean;
+  is_owner: boolean;
 }
 
 export interface SaveGitProviderConfig {
@@ -21,6 +23,7 @@ export interface SaveGitProviderConfig {
   client_secret?: string;
   private_key?: string;
   webhook_secret?: string;
+  is_public?: boolean;
 }
 
 export interface GitHubManifest {
@@ -41,8 +44,11 @@ export function deleteGitProviderConfig(id: string) {
   return api.delete<{ status: string }>(`/git/providers/${id}`);
 }
 
-export function getGitHubManifest(org?: string) {
-  const q = org ? `?org=${encodeURIComponent(org)}` : "";
+export function getGitHubManifest(org?: string, isPublic?: boolean) {
+  const params = new URLSearchParams();
+  if (org) params.set("org", org);
+  if (isPublic) params.set("public", "true");
+  const q = params.toString() ? `?${params.toString()}` : "";
   return api.get<GitHubManifest>(`/git/providers/github/manifest${q}`);
 }
 

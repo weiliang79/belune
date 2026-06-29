@@ -40,6 +40,8 @@ type SaveGitProviderConfigParams struct {
 	AppID    string
 	AppSlug  string
 	Secret   *ProviderSecret
+	OwnerID  pgtype.UUID
+	IsPublic bool
 }
 
 // Save upserts a provider config keyed by (provider, base_url). When Secret is
@@ -65,6 +67,8 @@ func (s *GitProviderConfigService) Save(ctx context.Context, p SaveGitProviderCo
 		AppID:           p.AppID,
 		AppSlug:         p.AppSlug,
 		SecretEncrypted: secretEncrypted,
+		CreatedBy:       p.OwnerID,
+		IsPublic:        p.IsPublic,
 	})
 }
 

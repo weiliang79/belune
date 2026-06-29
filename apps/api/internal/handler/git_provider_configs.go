@@ -14,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/ungweiliang/selfhost-paas/internal/pkg/crypto"
+	"github.com/ungweiliang/selfhost-paas/internal/server/middleware"
 	"github.com/ungweiliang/selfhost-paas/internal/service"
 )
 
@@ -32,6 +33,8 @@ type providerConfigResponse struct {
 	AppID     string `json:"app_id"`
 	AppSlug   string `json:"app_slug"`
 	HasSecret bool   `json:"has_secret"`
+	IsPublic  bool   `json:"is_public"`
+	IsOwner   bool   `json:"is_owner"`
 }
 
 // ListGitProviderConfigs returns all configured provider apps (without secrets).
@@ -41,6 +44,7 @@ func (h *Handler) ListGitProviderConfigs(w http.ResponseWriter, r *http.Request)
 		writeError(w, http.StatusInternalServerError, "failed to list provider configs")
 		return
 	}
+	userID := middleware.UserIDFromContext(r.Context())
 	result := make([]providerConfigResponse, 0, len(rows))
 	for _, c := range rows {
 		result = append(result, providerConfigResponse{
@@ -51,6 +55,8 @@ func (h *Handler) ListGitProviderConfigs(w http.ResponseWriter, r *http.Request)
 			AppID:     c.AppID,
 			AppSlug:   c.AppSlug,
 			HasSecret: c.HasSecret.Bool,
+			IsPublic:  c.IsPublic,
+			IsOwner:   c.CreatedBy.Valid && uuidToString(c.CreatedBy) == userID,
 		})
 	}
 	writeJSON(w, http.StatusOK, result)
@@ -65,6 +71,7 @@ type saveGitProviderConfigRequest struct {
 	ClientSecret  string `json:"client_secret"`  // empty = preserve existing
 	PrivateKey    string `json:"private_key"`    // GitHub App only
 	WebhookSecret string `json:"webhook_secret"` // GitHub App only
+	IsPublic      bool   `json:"is_public"`
 }
 
 // SaveGitProviderConfig upserts a provider app config from manual admin entry.
@@ -81,6 +88,9 @@ func (h *Handler) SaveGitProviderConfig(w http.ResponseWriter, r *http.Request) 
 
 	secret := h.mergeProviderSecret(r.Context(), req)
 
+	var owner pgtype.UUID
+	_ = owner.Scan(middleware.UserIDFromContext(r.Context()))
+
 	cfg, err := h.gitProviderSvc.Save(r.Context(), service.SaveGitProviderConfigParams{
 		Provider: req.Provider,
 		BaseURL:  req.BaseURL,
@@ -88,13 +98,15 @@ func (h *Handler) SaveGitProviderConfig(w http.ResponseWriter, r *http.Request) 
 		AppID:    req.AppID,
 		AppSlug:  req.AppSlug,
 		Secret:   secret,
+		OwnerID:  owner,
+		IsPublic: req.IsPublic,
 	})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to save provider config")
 		return
 	}
 
-	h.audit(r, "save_git_provider_config", "git_provider_config", uuidToString(cfg.ID), map[string]any{"provider": req.Provider, "base_url": req.BaseURL})
+	h.audit(r, "save_git_provider_config", "git_provider_config", uuidToString(cfg.ID), map[string]any{"provider": req.Provider, "base_url": req.BaseURL, "is_public": req.IsPublic})
 	writeJSON(w, http.StatusOK, providerConfigResponse{
 		ID:        uuidToString(cfg.ID),
 		Provider:  cfg.Provider,
@@ -103,6 +115,8 @@ func (h *Handler) SaveGitProviderConfig(w http.ResponseWriter, r *http.Request) 
 		AppID:     cfg.AppID,
 		AppSlug:   cfg.AppSlug,
 		HasSecret: len(cfg.SecretEncrypted) > 0,
+		IsPublic:  cfg.IsPublic,
+		IsOwner:   true,
 	})
 }
 
@@ -159,12 +173,22 @@ func (h *Handler) GetGitHubAppManifest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Public visibility makes the App installable by any GitHub account (not just
+	// the owner) — required for it to be a shared/public provider.
+	isPublic := r.URL.Query().Get("public") == "true"
+
 	state, err := crypto.GenerateWebhookSecret()
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to generate state")
 		return
 	}
-	if err := h.rdb.Set(r.Context(), githubManifestStatePrefix+state, "1", manifestStateTTL).Err(); err != nil {
+	// Carry the initiating admin and chosen visibility through the (public)
+	// manifest callback, which has no session of its own.
+	statePayload, _ := json.Marshal(manifestState{
+		UserID:   middleware.UserIDFromContext(r.Context()),
+		IsPublic: isPublic,
+	})
+	if err := h.rdb.Set(r.Context(), githubManifestStatePrefix+state, statePayload, manifestStateTTL).Err(); err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to persist state")
 		return
 	}
@@ -180,7 +204,7 @@ func (h *Handler) GetGitHubAppManifest(w http.ResponseWriter, r *http.Request) {
 		"callback_urls": []string{
 			base + "/api/git/integrations/callback",
 		},
-		"public": false,
+		"public": isPublic,
 		"default_permissions": map[string]string{
 			"contents": "read",
 			"metadata": "read",
@@ -264,6 +288,14 @@ type githubManifestConversion struct {
 	PEM           string `json:"pem"`
 }
 
+// manifestState is the JSON payload stored under the one-time manifest state
+// nonce so the public callback can recover the initiating admin and the chosen
+// visibility (it carries no session of its own).
+type manifestState struct {
+	UserID   string `json:"user_id"`
+	IsPublic bool   `json:"is_public"`
+}
+
 // HandleGitHubAppManifestCallback is the public redirect target GitHub sends the
 // admin's browser to after creating the App. It is guarded by the one-time state
 // nonce (not the JWT, since a top-level redirect carries no Authorization
@@ -277,12 +309,16 @@ func (h *Handler) HandleGitHubAppManifestCallback(w http.ResponseWriter, r *http
 		return
 	}
 
-	// Validate and consume the one-time state.
-	deleted, err := h.rdb.Del(ctx, githubManifestStatePrefix+state).Result()
-	if err != nil || deleted == 0 {
+	// Validate and consume the one-time state, recovering the owner + visibility.
+	raw, err := h.rdb.GetDel(ctx, githubManifestStatePrefix+state).Result()
+	if err != nil || raw == "" {
 		writeError(w, http.StatusBadRequest, "invalid or expired state")
 		return
 	}
+	var st manifestState
+	_ = json.Unmarshal([]byte(raw), &st)
+	var owner pgtype.UUID
+	_ = owner.Scan(st.UserID)
 
 	conv, err := convertGitHubManifest(ctx, code)
 	if err != nil {
@@ -301,6 +337,8 @@ func (h *Handler) HandleGitHubAppManifestCallback(w http.ResponseWriter, r *http
 			PrivateKey:    conv.PEM,
 			WebhookSecret: conv.WebhookSecret,
 		},
+		OwnerID:  owner,
+		IsPublic: st.IsPublic,
 	}); err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to store provider config")
 		return

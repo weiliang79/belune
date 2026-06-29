@@ -21,7 +21,7 @@ func (q *Queries) DeleteGitProviderConfig(ctx context.Context, id pgtype.UUID) e
 }
 
 const getGitProviderConfig = `-- name: GetGitProviderConfig :one
-SELECT id, provider, base_url, client_id, app_id, app_slug, secret_encrypted, created_at, updated_at FROM git_provider_configs WHERE id = $1
+SELECT id, provider, base_url, client_id, app_id, app_slug, secret_encrypted, created_at, updated_at, created_by, is_public FROM git_provider_configs WHERE id = $1
 `
 
 func (q *Queries) GetGitProviderConfig(ctx context.Context, id pgtype.UUID) (GitProviderConfig, error) {
@@ -37,12 +37,14 @@ func (q *Queries) GetGitProviderConfig(ctx context.Context, id pgtype.UUID) (Git
 		&i.SecretEncrypted,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.CreatedBy,
+		&i.IsPublic,
 	)
 	return i, err
 }
 
 const getGitProviderConfigByProvider = `-- name: GetGitProviderConfigByProvider :one
-SELECT id, provider, base_url, client_id, app_id, app_slug, secret_encrypted, created_at, updated_at FROM git_provider_configs WHERE provider = $1 AND base_url = $2
+SELECT id, provider, base_url, client_id, app_id, app_slug, secret_encrypted, created_at, updated_at, created_by, is_public FROM git_provider_configs WHERE provider = $1 AND base_url = $2
 `
 
 type GetGitProviderConfigByProviderParams struct {
@@ -63,12 +65,14 @@ func (q *Queries) GetGitProviderConfigByProvider(ctx context.Context, arg GetGit
 		&i.SecretEncrypted,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.CreatedBy,
+		&i.IsPublic,
 	)
 	return i, err
 }
 
 const listGitProviderConfigs = `-- name: ListGitProviderConfigs :many
-SELECT id, provider, base_url, client_id, app_id, app_slug, created_at, updated_at,
+SELECT id, provider, base_url, client_id, app_id, app_slug, created_by, is_public, created_at, updated_at,
     (secret_encrypted IS NOT NULL AND length(secret_encrypted) > 0) AS has_secret
 FROM git_provider_configs
 ORDER BY provider, base_url
@@ -81,6 +85,8 @@ type ListGitProviderConfigsRow struct {
 	ClientID  string             `json:"client_id"`
 	AppID     string             `json:"app_id"`
 	AppSlug   string             `json:"app_slug"`
+	CreatedBy pgtype.UUID        `json:"created_by"`
+	IsPublic  bool               `json:"is_public"`
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
 	HasSecret pgtype.Bool        `json:"has_secret"`
@@ -102,6 +108,8 @@ func (q *Queries) ListGitProviderConfigs(ctx context.Context) ([]ListGitProvider
 			&i.ClientID,
 			&i.AppID,
 			&i.AppSlug,
+			&i.CreatedBy,
+			&i.IsPublic,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.HasSecret,
@@ -117,7 +125,7 @@ func (q *Queries) ListGitProviderConfigs(ctx context.Context) ([]ListGitProvider
 }
 
 const listGitProviderConfigsForProvider = `-- name: ListGitProviderConfigsForProvider :many
-SELECT id, provider, base_url, client_id, app_id, app_slug, secret_encrypted, created_at, updated_at FROM git_provider_configs WHERE provider = $1
+SELECT id, provider, base_url, client_id, app_id, app_slug, secret_encrypted, created_at, updated_at, created_by, is_public FROM git_provider_configs WHERE provider = $1
 `
 
 func (q *Queries) ListGitProviderConfigsForProvider(ctx context.Context, provider string) ([]GitProviderConfig, error) {
@@ -139,6 +147,8 @@ func (q *Queries) ListGitProviderConfigsForProvider(ctx context.Context, provide
 			&i.SecretEncrypted,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.CreatedBy,
+			&i.IsPublic,
 		); err != nil {
 			return nil, err
 		}
@@ -151,24 +161,28 @@ func (q *Queries) ListGitProviderConfigsForProvider(ctx context.Context, provide
 }
 
 const upsertGitProviderConfig = `-- name: UpsertGitProviderConfig :one
-INSERT INTO git_provider_configs (provider, base_url, client_id, app_id, app_slug, secret_encrypted)
-VALUES ($1, $2, $3, $4, $5, $6)
+INSERT INTO git_provider_configs (provider, base_url, client_id, app_id, app_slug, secret_encrypted, created_by, is_public)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 ON CONFLICT (provider, base_url) DO UPDATE SET
     client_id = EXCLUDED.client_id,
     app_id = EXCLUDED.app_id,
     app_slug = EXCLUDED.app_slug,
     secret_encrypted = COALESCE(EXCLUDED.secret_encrypted, git_provider_configs.secret_encrypted),
+    created_by = COALESCE(EXCLUDED.created_by, git_provider_configs.created_by),
+    is_public = EXCLUDED.is_public,
     updated_at = NOW()
-RETURNING id, provider, base_url, client_id, app_id, app_slug, secret_encrypted, created_at, updated_at
+RETURNING id, provider, base_url, client_id, app_id, app_slug, secret_encrypted, created_at, updated_at, created_by, is_public
 `
 
 type UpsertGitProviderConfigParams struct {
-	Provider        string `json:"provider"`
-	BaseUrl         string `json:"base_url"`
-	ClientID        string `json:"client_id"`
-	AppID           string `json:"app_id"`
-	AppSlug         string `json:"app_slug"`
-	SecretEncrypted []byte `json:"secret_encrypted"`
+	Provider        string      `json:"provider"`
+	BaseUrl         string      `json:"base_url"`
+	ClientID        string      `json:"client_id"`
+	AppID           string      `json:"app_id"`
+	AppSlug         string      `json:"app_slug"`
+	SecretEncrypted []byte      `json:"secret_encrypted"`
+	CreatedBy       pgtype.UUID `json:"created_by"`
+	IsPublic        bool        `json:"is_public"`
 }
 
 func (q *Queries) UpsertGitProviderConfig(ctx context.Context, arg UpsertGitProviderConfigParams) (GitProviderConfig, error) {
@@ -179,6 +193,8 @@ func (q *Queries) UpsertGitProviderConfig(ctx context.Context, arg UpsertGitProv
 		arg.AppID,
 		arg.AppSlug,
 		arg.SecretEncrypted,
+		arg.CreatedBy,
+		arg.IsPublic,
 	)
 	var i GitProviderConfig
 	err := row.Scan(
@@ -191,6 +207,8 @@ func (q *Queries) UpsertGitProviderConfig(ctx context.Context, arg UpsertGitProv
 		&i.SecretEncrypted,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.CreatedBy,
+		&i.IsPublic,
 	)
 	return i, err
 }

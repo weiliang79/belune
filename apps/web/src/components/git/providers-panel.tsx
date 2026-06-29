@@ -1,190 +1,33 @@
 import { useState } from "react";
-import { toast } from "sonner";
-import { Github, Trash2, ExternalLink } from "lucide-react";
+import { Trash2, ExternalLink, Plus, Lock, Users } from "lucide-react";
 import {
   useGitProviderConfigs,
-  useSaveGitProviderConfig,
   useDeleteGitProviderConfig,
 } from "@/lib/hooks/use-git-providers";
-import {
-  getGitHubManifest,
-  submitGitHubManifest,
-  type GitProvider,
-} from "@/lib/api/git-providers";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-
-const OAUTH_PROVIDERS: { value: GitProvider; label: string; selfHosted: boolean }[] = [
-  { value: "gitlab", label: "GitLab", selfHosted: true },
-  { value: "bitbucket", label: "Bitbucket", selfHosted: false },
-  { value: "gitea", label: "Gitea", selfHosted: true },
-];
+import { ProviderFormDialog } from "./provider-form-dialog";
 
 export function ProvidersPanel() {
   const { data: configs } = useGitProviderConfigs();
-  const save = useSaveGitProviderConfig();
   const del = useDeleteGitProviderConfig();
-
-  const [org, setOrg] = useState("");
-  const [oauthProvider, setOauthProvider] = useState<GitProvider>("gitlab");
-  const [baseUrl, setBaseUrl] = useState("");
-  const [clientId, setClientId] = useState("");
-  const [clientSecret, setClientSecret] = useState("");
-
-  const origin = window.location.origin;
-  const selfHosted =
-    OAUTH_PROVIDERS.find((p) => p.value === oauthProvider)?.selfHosted ?? false;
-  // All OAuth providers share one callback (git_integrations.go:170,218); it is
-  // not provider-specific. This must match the redirect_uri our connect flow
-  // sends, or the provider rejects it as an unregistered redirect URI.
-  const callbackUrl = `${origin}/api/git/integrations/callback`;
-
-  const startGitHubApp = async () => {
-    try {
-      const manifest = await getGitHubManifest(org || undefined);
-      submitGitHubManifest(manifest);
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed to start GitHub App setup");
-    }
-  };
-
-  const saveOAuth = () => {
-    if (!clientId || !clientSecret) {
-      toast.error("Client ID and secret are required");
-      return;
-    }
-    toast.promise(
-      save
-        .mutateAsync({
-          provider: oauthProvider,
-          base_url: baseUrl || undefined,
-          client_id: clientId,
-          client_secret: clientSecret,
-        })
-        .then(() => {
-          setClientId("");
-          setClientSecret("");
-        }),
-      { loading: "Saving...", success: "Provider saved", error: (e) => e.message },
-    );
-  };
+  const [dialogOpen, setDialogOpen] = useState(false);
 
   return (
     <div className="space-y-6">
-      {/* GitHub App */}
       <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Github className="h-5 w-5" /> GitHub App
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <p className="text-muted-foreground text-sm">
-            Create a GitHub App for this instance. GitHub will guide you through
-            the setup and redirect back here automatically.
-          </p>
-          <div className="flex items-end gap-2">
-            <div className="space-y-2">
-              <Label htmlFor="gh-org">Organization (optional)</Label>
-              <Input
-                id="gh-org"
-                value={org}
-                onChange={(e) => setOrg(e.target.value)}
-                placeholder="my-org (leave empty for personal account)"
-                className="w-72"
-              />
-            </div>
-            <Button onClick={startGitHubApp}>
-              <Github className="mr-1 h-4 w-4" /> Create GitHub App
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* OAuth providers */}
-      <Card>
-        <CardHeader>
-          <CardTitle>OAuth Provider</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <p className="text-muted-foreground text-sm">
-            Register an OAuth application on the provider, then enter its client
-            credentials here. Use this redirect/callback URL when registering:
-          </p>
-          <code className="bg-muted block rounded px-3 py-2 text-xs break-all">
-            {callbackUrl}
-          </code>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label>Provider</Label>
-              <Select
-                value={oauthProvider}
-                onValueChange={(v) => setOauthProvider(v as GitProvider)}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {OAUTH_PROVIDERS.map((p) => (
-                    <SelectItem key={p.value} value={p.value}>
-                      {p.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            {selfHosted && (
-              <div className="space-y-2">
-                <Label>Base URL</Label>
-                <Input
-                  value={baseUrl}
-                  onChange={(e) => setBaseUrl(e.target.value)}
-                  placeholder="https://gitlab.example.com"
-                />
-              </div>
-            )}
-            <div className="space-y-2">
-              <Label>Client ID</Label>
-              <Input
-                value={clientId}
-                onChange={(e) => setClientId(e.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Client Secret</Label>
-              <Input
-                type="password"
-                value={clientSecret}
-                onChange={(e) => setClientSecret(e.target.value)}
-                placeholder="Leave empty to keep existing"
-              />
-            </div>
-          </div>
-          <Button onClick={saveOAuth} disabled={save.isPending}>
-            Save Provider
-          </Button>
-        </CardContent>
-      </Card>
-
-      {/* Configured providers */}
-      <Card>
-        <CardHeader>
+        <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle>Configured Providers</CardTitle>
+          <Button size="sm" onClick={() => setDialogOpen(true)}>
+            <Plus className="mr-1 h-4 w-4" /> Add provider
+          </Button>
         </CardHeader>
         <CardContent>
           {!configs || configs.length === 0 ? (
             <p className="text-muted-foreground text-sm">
-              No providers configured yet.
+              No providers configured yet. Add one so users can connect their
+              accounts.
             </p>
           ) : (
             <div className="divide-y">
@@ -194,12 +37,21 @@ export function ProvidersPanel() {
                   className="flex items-center justify-between py-3"
                 >
                   <div className="space-y-1">
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                       <span className="font-medium capitalize">{c.provider}</span>
                       {c.has_secret ? (
                         <Badge variant="secondary">Configured</Badge>
                       ) : (
                         <Badge variant="outline">Missing secret</Badge>
+                      )}
+                      {c.is_public ? (
+                        <Badge variant="outline" className="gap-1">
+                          <Users className="h-3 w-3" /> Public
+                        </Badge>
+                      ) : (
+                        <Badge variant="outline" className="gap-1">
+                          <Lock className="h-3 w-3" /> Private
+                        </Badge>
                       )}
                     </div>
                     <p className="text-muted-foreground text-xs">
@@ -223,6 +75,7 @@ export function ProvidersPanel() {
                     <Button
                       variant="ghost"
                       size="icon"
+                      title="Remove provider"
                       onClick={() => {
                         if (confirm(`Remove ${c.provider} provider config?`)) {
                           del.mutate(c.id);
@@ -238,6 +91,8 @@ export function ProvidersPanel() {
           )}
         </CardContent>
       </Card>
+
+      <ProviderFormDialog open={dialogOpen} onOpenChange={setDialogOpen} />
     </div>
   );
 }

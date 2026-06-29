@@ -71,9 +71,15 @@ func (h *Handler) ListAvailableProviders(w http.ResponseWriter, r *http.Request)
 		writeError(w, http.StatusInternalServerError, "failed to list providers")
 		return
 	}
+	userID := middleware.UserIDFromContext(r.Context())
 	result := make([]availableProviderResponse, 0, len(rows))
 	for _, c := range rows {
 		if !c.HasSecret.Bool {
+			continue
+		}
+		// Visibility: public providers are offered to everyone; private ones
+		// only to the admin who created them.
+		if !c.IsPublic && !(c.CreatedBy.Valid && uuidToString(c.CreatedBy) == userID) {
 			continue
 		}
 		result = append(result, availableProviderResponse{
