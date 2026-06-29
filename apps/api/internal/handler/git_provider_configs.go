@@ -4,7 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
+	"net/url"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -149,6 +152,13 @@ func (h *Handler) DeleteGitProviderConfig(w http.ResponseWriter, r *http.Request
 // submits the manifest form to GitHub, which creates the App and redirects to
 // our public callback with a temporary code.
 func (h *Handler) GetGitHubAppManifest(w http.ResponseWriter, r *http.Request) {
+	base := h.cfg.PublicBaseURL
+	if u, err := url.Parse(base); err != nil || u.Scheme == "" || u.Host == "" {
+		writeError(w, http.StatusBadRequest,
+			"PUBLIC_BASE_URL must be set to an absolute URL (e.g. http://localhost:5173) before creating a GitHub App")
+		return
+	}
+
 	state, err := crypto.GenerateWebhookSecret()
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to generate state")
@@ -159,7 +169,6 @@ func (h *Handler) GetGitHubAppManifest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	base := h.cfg.PublicBaseURL
 	manifest := map[string]any{
 		"name":         "Self-Hosted PaaS",
 		"url":          base,
@@ -171,15 +180,29 @@ func (h *Handler) GetGitHubAppManifest(w http.ResponseWriter, r *http.Request) {
 		"callback_urls": []string{
 			base + "/api/git/integrations/callback",
 		},
-		"hook_attributes": map[string]any{
-			"url": base + "/api/git/webhooks/github",
-		},
 		"public": false,
 		"default_permissions": map[string]string{
 			"contents": "read",
 			"metadata": "read",
 		},
 		"default_events": []string{"push"},
+	}
+
+	// GitHub validates the webhook URL for public reachability at App-creation
+	// time and rejects localhost/private hosts. Only advertise a hook URL when
+	// it's publicly reachable; otherwise omit it so the App can still be created
+	// in local dev (webhooks can be added later in the App settings or via a
+	// WEBHOOK_PUBLIC_URL tunnel). webhookConfigured tells the UI which happened.
+	webhookBase := h.cfg.WebhookPublicURL
+	if webhookBase == "" {
+		webhookBase = base
+	}
+	webhookConfigured := false
+	if publiclyReachableURL(webhookBase) {
+		manifest["hook_attributes"] = map[string]any{
+			"url": webhookBase + "/api/git/webhooks/github",
+		}
+		webhookConfigured = true
 	}
 
 	// org is optional; when set, the App is created under the organization.
@@ -189,10 +212,32 @@ func (h *Handler) GetGitHubAppManifest(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{
-		"post_url": postURL,
-		"state":    state,
-		"manifest": manifest,
+		"post_url":           postURL,
+		"state":              state,
+		"manifest":           manifest,
+		"webhook_configured": webhookConfigured,
 	})
+}
+
+// publiclyReachableURL reports whether raw is an absolute http(s) URL whose host
+// GitHub (and other providers) can reach over the public Internet. Loopback,
+// .local, and RFC1918/link-local/ULA private addresses are treated as not
+// reachable so we omit webhook URLs that the provider would reject.
+func publiclyReachableURL(raw string) bool {
+	u, err := url.Parse(raw)
+	if err != nil || u.Scheme == "" || u.Host == "" {
+		return false
+	}
+	host := u.Hostname()
+	if host == "localhost" || strings.HasSuffix(host, ".local") || strings.HasSuffix(host, ".localhost") {
+		return false
+	}
+	if ip := net.ParseIP(host); ip != nil {
+		if ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsUnspecified() {
+			return false
+		}
+	}
+	return true
 }
 
 type githubManifestConversion struct {
@@ -246,7 +291,7 @@ func (h *Handler) HandleGitHubAppManifestCallback(w http.ResponseWriter, r *http
 		return
 	}
 
-	http.Redirect(w, r, h.cfg.PublicBaseURL+"/git-providers?connected=github", http.StatusFound)
+	http.Redirect(w, r, h.cfg.PublicBaseURL+"/git?tab=providers&connected=github", http.StatusFound)
 }
 
 // convertGitHubManifest exchanges a manifest code for App credentials.

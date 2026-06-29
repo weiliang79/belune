@@ -59,6 +59,12 @@ type Config struct {
 	// links in outbound emails (password reset, invitations).
 	PublicBaseURL string
 
+	// Optional public URL for inbound provider webhooks (GitHub/GitLab/etc).
+	// Falls back to PublicBaseURL when empty. Set this to a tunnel (smee.io,
+	// cloudflared) when PublicBaseURL is a localhost dev origin so GitHub will
+	// accept the App's webhook URL.
+	WebhookPublicURL string
+
 	// ServerSSHHost / ServerSSHUser are presentation-only hints shown in the
 	// database External Access card to build the SSH-tunnel command (ssh -L).
 	// When empty the UI falls back to a generic placeholder.
@@ -133,7 +139,8 @@ func Load() (*Config, error) {
 
 		MetricsBind: getEnv("METRICS_BIND", ""),
 
-		PublicBaseURL: getEnv("PUBLIC_BASE_URL", ""),
+		PublicBaseURL:    getEnv("PUBLIC_BASE_URL", ""),
+		WebhookPublicURL: getEnv("WEBHOOK_PUBLIC_URL", ""),
 
 		ServerSSHHost: getEnv("SERVER_SSH_HOST", ""),
 		ServerSSHUser: getEnv("SERVER_SSH_USER", ""),
