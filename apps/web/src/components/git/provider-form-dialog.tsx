@@ -109,7 +109,7 @@ export function ProviderFormDialog({ open, onOpenChange }: Props) {
 
   return (
     <Dialog open={open} onOpenChange={(o) => (o ? onOpenChange(true) : close())}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>Add provider</DialogTitle>
           <DialogDescription>
@@ -278,10 +278,15 @@ export function ProviderFormDialog({ open, onOpenChange }: Props) {
                   </span>
                 </Label>
                 <div className="flex items-center gap-2">
-                  <code className="bg-muted flex-1 truncate rounded px-3 py-2 text-xs">
+                  <code className="bg-muted min-w-0 flex-1 truncate rounded px-3 py-2 text-xs">
                     {callbackUrl}
                   </code>
-                  <Button variant="outline" size="sm" onClick={copyCallback}>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="shrink-0"
+                    onClick={copyCallback}
+                  >
                     {copied ? (
                       <Check className="h-4 w-4" />
                     ) : (
