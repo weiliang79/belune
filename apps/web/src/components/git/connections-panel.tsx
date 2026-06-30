@@ -5,9 +5,21 @@ import {
   useStartGitConnect,
   useDeleteGitIntegration,
 } from "@/lib/hooks/use-git-integrations";
+import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { formatRelativeTime } from "@/lib/utils/format";
 import { ProviderIcon } from "./provider-icon";
 
@@ -124,17 +136,47 @@ export function ConnectionsPanel() {
                         {formatRelativeTime(i.created_at)}
                       </td>
                       <td className="px-2 py-3 text-right">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => {
-                            if (confirm(`Disconnect ${i.account_login}?`)) {
-                              del.mutate(i.id);
+                        <AlertDialog>
+                          <AlertDialogTrigger
+                            render={
+                              <Button
+                                variant="ghost"
+                                size="icon-sm"
+                                aria-label={`Disconnect ${i.account_login}`}
+                                className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                              />
                             }
-                          }}
-                        >
-                          <Trash2 className="mr-1 h-3.5 w-3.5" /> Disconnect
-                        </Button>
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>
+                                Disconnect {i.account_login}?
+                              </AlertDialogTitle>
+                              <AlertDialogDescription>
+                                This removes the{" "}
+                                {PROVIDER_LABELS[i.provider] ?? i.provider}{" "}
+                                connection for {i.account_login}. Apps deploying
+                                through it will need a different connection.
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Cancel</AlertDialogCancel>
+                              <AlertDialogAction
+                                onClick={() =>
+                                  del.mutate(i.id, {
+                                    onSuccess: () =>
+                                      toast.success("Disconnected"),
+                                  })
+                                }
+                                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                              >
+                                Disconnect
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
                       </td>
                     </tr>
                   ))}
