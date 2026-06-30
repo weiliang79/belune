@@ -3,12 +3,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { RouteError } from "@/lib/components/route-error";
 import { useAuthStore } from "@/lib/stores/auth";
-import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from "@/components/ui/tabs";
+import { cn } from "@/lib/utils";
 import { ConnectionsPanel } from "@/components/git/connections-panel";
 import { ProvidersPanel } from "@/components/git/providers-panel";
 
@@ -67,18 +62,28 @@ function GitPage() {
       </div>
 
       {isAdmin ? (
-        <Tabs value={activeTab} onValueChange={(v) => setTab(v as GitTab)}>
-          <TabsList>
-            <TabsTrigger value="connections">Connections</TabsTrigger>
-            <TabsTrigger value="providers">Providers</TabsTrigger>
-          </TabsList>
-          <TabsContent value="connections" className="pt-4">
-            <ConnectionsPanel />
-          </TabsContent>
-          <TabsContent value="providers" className="pt-4">
-            <ProvidersPanel />
-          </TabsContent>
-        </Tabs>
+        <>
+          <nav className="flex gap-1 border-b">
+            {(["connections", "providers"] as const).map((t) => (
+              <button
+                key={t}
+                type="button"
+                onClick={() => setTab(t)}
+                className={cn(
+                  "border-b-2 px-4 py-2 text-sm font-medium capitalize transition-colors",
+                  activeTab === t
+                    ? "border-primary text-foreground"
+                    : "text-muted-foreground hover:text-foreground border-transparent",
+                )}
+              >
+                {t}
+              </button>
+            ))}
+          </nav>
+          <div className="pt-4">
+            {activeTab === "providers" ? <ProvidersPanel /> : <ConnectionsPanel />}
+          </div>
+        </>
       ) : (
         <ConnectionsPanel />
       )}
