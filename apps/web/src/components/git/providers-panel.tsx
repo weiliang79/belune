@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { toast } from "sonner";
 import { Trash2, ExternalLink, Plus, Lock, Users } from "lucide-react";
 import {
   useGitProviderConfigs,
@@ -7,6 +8,17 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { ProviderFormDialog } from "./provider-form-dialog";
 import { ProviderIcon } from "./provider-icon";
 
@@ -77,18 +89,46 @@ export function ProvidersPanel() {
                         <ExternalLink className="h-4 w-4" />
                       </a>
                     )}
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      title="Remove provider"
-                      onClick={() => {
-                        if (confirm(`Remove ${c.provider} provider config?`)) {
-                          del.mutate(c.id);
+                    <AlertDialog>
+                      <AlertDialogTrigger
+                        render={
+                          <Button
+                            variant="ghost"
+                            size="icon-sm"
+                            aria-label={`Remove ${c.provider} provider`}
+                            className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                          />
                         }
-                      }}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle className="capitalize">
+                            Remove {c.provider} provider?
+                          </AlertDialogTitle>
+                          <AlertDialogDescription>
+                            This deletes the {c.provider} provider configuration
+                            {c.base_url ? ` (${c.base_url})` : ""}. Users will no
+                            longer be able to connect new accounts through it.
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>Cancel</AlertDialogCancel>
+                          <AlertDialogAction
+                            onClick={() =>
+                              del.mutate(c.id, {
+                                onSuccess: () =>
+                                  toast.success("Provider removed"),
+                              })
+                            }
+                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                          >
+                            Remove
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
                   </div>
                 </div>
               ))}
