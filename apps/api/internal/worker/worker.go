@@ -110,6 +110,10 @@ func (w *Worker) Start() error {
 		w.handler.HandleRetentionCleanup(ctx)
 		return nil
 	})
+	mux.HandleFunc(TypeHostMetricsCleanup, func(ctx context.Context, t *asynq.Task) error {
+		w.handler.HandleHostMetricsCleanup(ctx)
+		return nil
+	})
 	mux.HandleFunc(TypeEmailSend, w.handler.HandleEmailSendTask)
 	mux.HandleFunc(TypeAuthTokenCleanup, w.handler.HandleAuthTokenCleanup)
 	mux.HandleFunc(TypeQuotaThresholdSweep, w.handler.HandleQuotaThresholdSweep)
@@ -138,9 +142,16 @@ func (w *Worker) StartScheduler() (*asynq.Scheduler, error) {
 		return nil, err
 	}
 
-	// Schedule metrics retention cleanup daily
+	// Schedule log retention cleanup daily
 	retentionTask := asynq.NewTask(TypeRetentionCleanup, nil)
 	if _, err := scheduler.Register("@every 24h", retentionTask, asynq.Queue("low")); err != nil {
+		return nil, err
+	}
+
+	// Host metrics are stored at 1-second granularity — prune hourly to keep the
+	// table bounded near its (hours-based) retention window.
+	hostMetricsCleanupTask := asynq.NewTask(TypeHostMetricsCleanup, nil)
+	if _, err := scheduler.Register("@every 1h", hostMetricsCleanupTask, asynq.Queue("low")); err != nil {
 		return nil, err
 	}
 
@@ -162,7 +173,7 @@ func (w *Worker) StartScheduler() (*asynq.Scheduler, error) {
 		return nil, err
 	}
 
-	slog.Info("starting scheduler (cleanup: 24h, retention: 24h, auth-token-cleanup: 1h, quota-sweep: 6h, backup-rotate: 24h)")
+	slog.Info("starting scheduler (cleanup: 24h, retention: 24h, host-metrics-cleanup: 1h, auth-token-cleanup: 1h, quota-sweep: 6h, backup-rotate: 24h)")
 	if err := scheduler.Start(); err != nil {
 		return nil, err
 	}

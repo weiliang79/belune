@@ -5,6 +5,8 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
+
+	"github.com/ungweiliang/selfhost-paas/internal/store/generated"
 )
 
 type hostMetricPoint struct {
@@ -44,13 +46,25 @@ func parseRangeDuration(rangeParam string) time.Time {
 	}
 }
 
-// GetHostHistoricalMetrics returns historical host metrics stored at 1-minute intervals.
+// GetHostHistoricalMetrics returns host metrics stored at 1-second granularity.
 // GET /api/metrics/host?range=1h|6h|24h|7d|14d
+// GET /api/metrics/host?from=<RFC3339>&to=<RFC3339>  (explicit window; takes precedence)
 func (h *Handler) GetHostHistoricalMetrics(w http.ResponseWriter, r *http.Request) {
-	rangeParam := r.URL.Query().Get("range")
-	since := parseRangeDuration(rangeParam)
+	q := r.URL.Query()
 
-	rows, err := h.queries.GetHostMetrics(r.Context(), pgtype.Timestamptz{Time: since, Valid: true})
+	var (
+		rows []generated.HostMetric
+		err  error
+	)
+	if from, to, ok := parseFromTo(q.Get("from"), q.Get("to")); ok {
+		rows, err = h.queries.ListHostMetricsBetween(r.Context(), generated.ListHostMetricsBetweenParams{
+			RecordedAt:   pgtype.Timestamptz{Time: from, Valid: true},
+			RecordedAt_2: pgtype.Timestamptz{Time: to, Valid: true},
+		})
+	} else {
+		since := parseRangeDuration(q.Get("range"))
+		rows, err = h.queries.GetHostMetrics(r.Context(), pgtype.Timestamptz{Time: since, Valid: true})
+	}
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to fetch host metrics")
 		return
@@ -69,4 +83,24 @@ func (h *Handler) GetHostHistoricalMetrics(w http.ResponseWriter, r *http.Reques
 	}
 
 	writeJSON(w, http.StatusOK, result)
+}
+
+// parseFromTo parses an explicit [from, to] window. Returns ok=false unless both
+// parse as RFC3339 and from is before to.
+func parseFromTo(fromParam, toParam string) (time.Time, time.Time, bool) {
+	if fromParam == "" || toParam == "" {
+		return time.Time{}, time.Time{}, false
+	}
+	from, err := time.Parse(time.RFC3339, fromParam)
+	if err != nil {
+		return time.Time{}, time.Time{}, false
+	}
+	to, err := time.Parse(time.RFC3339, toParam)
+	if err != nil {
+		return time.Time{}, time.Time{}, false
+	}
+	if !from.Before(to) {
+		return time.Time{}, time.Time{}, false
+	}
+	return from, to, true
 }

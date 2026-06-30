@@ -65,6 +65,8 @@ export const queryKeys = {
     unread: ["notifications", "unread"] as const,
   },
   hostMetrics: (range: string) => ["metrics", "host", range] as const,
+  hostMetricsRange: (from: string, to: string) =>
+    ["metrics", "host", "range", from, to] as const,
   settings: ["settings"] as const,
   databases: {
     all: (projectId: string) => ["projects", projectId, "databases"] as const,

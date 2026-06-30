@@ -40,6 +40,19 @@ export function useHostHistoricalMetrics(range: string, enabled = true) {
   });
 }
 
+// Static fetch of a fixed [from, to] window (RFC3339). No polling — a custom
+// range is a snapshot, not a live view. Disabled until both bounds are set.
+export function useHostMetricsRange(
+  from: string | undefined,
+  to: string | undefined,
+) {
+  return useQuery({
+    queryKey: queryKeys.hostMetricsRange(from ?? "", to ?? ""),
+    queryFn: () => metricsApi.getHostMetricsBetween(from!, to!),
+    enabled: !!from && !!to,
+  });
+}
+
 export function useHostMetricsStream(enabled: boolean) {
   const [data, setData] = useState<HostMetricPoint[]>([]);
 

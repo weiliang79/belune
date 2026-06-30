@@ -10,6 +10,7 @@ const (
 	TypeRestoreDB           = "restore_db"
 	TypeUpgradeDB           = "upgrade_db"
 	TypeRetentionCleanup    = "retention_cleanup"
+	TypeHostMetricsCleanup  = "host_metrics_cleanup"
 	TypeEmailSend           = "email:send"
 	TypeAuthTokenCleanup    = "auth:token_cleanup"
 	TypeQuotaThresholdSweep = "quota:threshold_sweep"

@@ -85,25 +85,30 @@ func (s *MetricsService) PersistHostMetric(ctx context.Context, point HostMetric
 	}
 }
 
-// RetentionCleanup deletes host metrics and application logs older than their configured retention periods.
-func (s *MetricsService) RetentionCleanup(ctx context.Context) {
-	// Host metrics retention
-	metricsRetentionDays := 14
-	setting, err := s.queries.GetSetting(ctx, "metrics_retention_days")
-	if err == nil {
-		var days int
-		if _, scanErr := fmt.Sscanf(setting.Value, "%d", &days); scanErr == nil && days > 0 {
-			metricsRetentionDays = days
+// HostMetricsCleanup prunes the 1-second host_metrics series to its configured
+// window. Host metrics are high-frequency, so this runs hourly on its own (hours-
+// based) setting rather than the day-based RetentionCleanup.
+func (s *MetricsService) HostMetricsCleanup(ctx context.Context) {
+	retentionHours := 24
+	if setting, err := s.queries.GetSetting(ctx, "host_metrics_retention_hours"); err == nil {
+		var hours int
+		if _, scanErr := fmt.Sscanf(setting.Value, "%d", &hours); scanErr == nil && hours > 0 {
+			retentionHours = hours
 		}
 	}
 
-	cutoff := time.Now().AddDate(0, 0, -metricsRetentionDays)
+	cutoff := time.Now().Add(-time.Duration(retentionHours) * time.Hour)
 	if err := s.queries.DeleteOldHostMetrics(ctx, pgtype.Timestamptz{Time: cutoff, Valid: true}); err != nil {
 		slog.Error("failed to delete old host metrics", "error", err)
 	} else {
-		slog.Info("metrics retention cleanup completed", "retention_days", metricsRetentionDays)
+		slog.Info("host metrics cleanup completed", "retention_hours", retentionHours)
 	}
+}
 
+// RetentionCleanup deletes application, request, and audit logs older than their
+// configured retention periods. Host metrics are pruned separately by
+// HostMetricsCleanup (hours-based, hourly).
+func (s *MetricsService) RetentionCleanup(ctx context.Context) {
 	// Application log retention
 	appLogRetentionDays := 7
 	logSetting, err := s.queries.GetSetting(ctx, "app_log_retention_days")
@@ -158,20 +163,18 @@ func (s *MetricsService) RetentionCleanup(ctx context.Context) {
 }
 
 // StartTicker collects host metrics every 1 second, publishes to Redis for live
-// SSE consumers, and persists to DB every 60 seconds. Blocks until ctx is cancelled.
+// SSE consumers, and persists every point to the DB so stored history matches the
+// 1-second live stream (the table is bounded by hourly HostMetricsCleanup).
+// Blocks until ctx is cancelled.
 func (s *MetricsService) StartTicker(ctx context.Context) {
 	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
-
-	var tickCount int
-	const persistEvery = 60 // 60 ticks × 1s = 60s
 
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			tickCount++
 			point := CollectHostStats(ctx)
 
 			data, err := json.Marshal(point)
@@ -185,9 +188,7 @@ func (s *MetricsService) StartTicker(ctx context.Context) {
 				}
 			}
 
-			if tickCount%persistEvery == 0 {
-				s.PersistHostMetric(ctx, point)
-			}
+			s.PersistHostMetric(ctx, point)
 		}
 	}
 }

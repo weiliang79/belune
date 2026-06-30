@@ -91,3 +91,43 @@ func (q *Queries) InsertHostMetric(ctx context.Context, arg InsertHostMetricPara
 	)
 	return err
 }
+
+const listHostMetricsBetween = `-- name: ListHostMetricsBetween :many
+SELECT id, cpu_percent, memory_used, memory_total, disk_used, disk_total, recorded_at
+FROM host_metrics
+WHERE recorded_at >= $1 AND recorded_at <= $2
+ORDER BY recorded_at ASC
+`
+
+type ListHostMetricsBetweenParams struct {
+	RecordedAt   pgtype.Timestamptz `json:"recorded_at"`
+	RecordedAt_2 pgtype.Timestamptz `json:"recorded_at_2"`
+}
+
+func (q *Queries) ListHostMetricsBetween(ctx context.Context, arg ListHostMetricsBetweenParams) ([]HostMetric, error) {
+	rows, err := q.db.Query(ctx, listHostMetricsBetween, arg.RecordedAt, arg.RecordedAt_2)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []HostMetric{}
+	for rows.Next() {
+		var i HostMetric
+		if err := rows.Scan(
+			&i.ID,
+			&i.CpuPercent,
+			&i.MemoryUsed,
+			&i.MemoryTotal,
+			&i.DiskUsed,
+			&i.DiskTotal,
+			&i.RecordedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}

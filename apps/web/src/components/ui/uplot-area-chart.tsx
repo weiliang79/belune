@@ -11,6 +11,9 @@ interface UPlotAreaChartProps {
   xFormatter: (ts: number) => string; // receives ms
   yDomain?: [number, number];
   height?: number;
+  // Charts sharing a syncKey link their cursors: hovering one moves the cursor
+  // and shows the tooltip on all of them at the same time point.
+  syncKey?: string;
 }
 
 function cssVar(name: string): string {
@@ -56,6 +59,7 @@ export function UPlotAreaChart({
   xFormatter,
   yDomain,
   height = 200,
+  syncKey,
 }: UPlotAreaChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const uplotRef = useRef<uPlot | null>(null);
@@ -105,6 +109,11 @@ export function UPlotAreaChart({
           if (seriesIdx !== 1 || hoveredIdx == null) return hoveredIdx;
           return nearestNonNull(u.data[1] as (number | undefined)[], hoveredIdx);
         },
+        // Link cursors across charts that share a key, matching on the x scale
+        // (the time axis) so the same time point is highlighted everywhere.
+        ...(syncKey
+          ? { sync: { key: syncKey, setSeries: false, scales: ["x", null] } }
+          : {}),
       },
       padding: [8, 0, 0, 0],
       series: [
@@ -146,13 +155,20 @@ export function UPlotAreaChart({
       hooks: {
         setCursor: [
           (u) => {
-            const idx = u.cursor.idx;
-            if (idx == null) {
-              // Don't clear tooltip here — a data shift (setData) also triggers
-              // setCursor with idx=null. Only clear on explicit mouse leave.
+            const left = u.cursor.left;
+            // Out-of-bounds cursor: the mouse left this chart, or a synced
+            // sibling that was hovered. Clear so stale tooltips don't linger.
+            if (left == null || left < 0) {
+              cursorPosRef.current = null;
+              setTooltip(null);
               return;
             }
-            const left = u.cursor.left ?? 0;
+            const idx = u.cursor.idx;
+            if (idx == null) {
+              // Transient null while data shifts under a held (in-bounds)
+              // cursor — keep the tooltip rather than flickering it off.
+              return;
+            }
             const top = u.cursor.top ?? 0;
             cursorPosRef.current = { left, top };
             // Resolve to nearest non-null independently — u.cursor.idx is the
@@ -166,7 +182,9 @@ export function UPlotAreaChart({
             if (val == null || isNaN(val)) return;
             setTooltip({
               left: left + u.bbox.left / devicePixelRatio,
-              top: top + u.bbox.top / devicePixelRatio,
+              // Anchor vertically to this series' own data point (not the raw
+              // cursor) so every synced chart's tooltip sits on its line.
+              top: u.valToPos(val, "y") + u.bbox.top / devicePixelRatio,
               value: yFormatter(val),
               time: new Date(ts).toLocaleString(),
             });
@@ -175,7 +193,7 @@ export function UPlotAreaChart({
       },
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [width, height, color, yDomain]);
+  }, [width, height, color, yDomain, syncKey]);
 
   // Live update: call setData directly without re-mounting
   const alignedData = useMemo(

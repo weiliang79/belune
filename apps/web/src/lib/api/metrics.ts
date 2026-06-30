@@ -20,3 +20,8 @@ export function triggerCleanup(retainCount?: number) {
 export function getHostHistoricalMetrics(range: string) {
   return api.get<HostMetricPoint[]>(`/metrics/host?range=${range}`);
 }
+
+export function getHostMetricsBetween(from: string, to: string) {
+  const params = new URLSearchParams({ from, to });
+  return api.get<HostMetricPoint[]>(`/metrics/host?${params.toString()}`);
+}

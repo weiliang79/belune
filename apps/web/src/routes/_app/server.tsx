@@ -1,4 +1,5 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { CalendarIcon } from "lucide-react";
 import { RouteError } from "@/lib/components/route-error";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -7,6 +8,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { StatusPill } from "@/components/ui/status-pill";
 import { Sparkline } from "@/components/ui/sparkline";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import {
   Select,
   SelectTrigger,
@@ -18,6 +25,7 @@ import {
   useTriggerCleanup,
   useHostHistoricalMetrics,
   useHostMetricsStream,
+  useHostMetricsRange,
   useServerServices,
 } from "@/lib/hooks/use-metrics";
 import { useSettings, useUpdateSettings } from "@/lib/hooks/use-settings";
@@ -27,9 +35,16 @@ import type { HostMetricPoint, SettingEntry } from "@/lib/types";
 import { UPlotAreaChart } from "@/components/ui/uplot-area-chart";
 import { cn } from "@/lib/utils";
 
+type ServerTab = "metric" | "configuration";
+type HostMetricsView = "overview" | "detail";
+type CustomRange = { from: string; to: string };
+
 export const Route = createFileRoute("/_app/server")({
   component: ServerSettingsPage,
   errorComponent: RouteError,
+  validateSearch: (search: Record<string, unknown>) => ({
+    tab: search.tab === "configuration" ? ("configuration" as const) : undefined,
+  }),
 });
 
 function formatTime(iso: string, range: string) {
@@ -69,8 +84,12 @@ const CPU_COLOR = "hsl(221, 83%, 53%)";
 const MEM_COLOR = "hsl(262, 83%, 58%)";
 const DISK_COLOR = "hsl(142, 71%, 45%)";
 
-// Preset retention windows; "0" = keep forever.
+// Live host-metrics window: the chart shows the most recent 10 minutes.
+const TEN_MIN_MS = 10 * 60 * 1000;
+
+// Day-based retention presets for the log rows. "0" = keep forever.
 const RETENTION_PRESETS = [
+  { label: "3 days", value: "3" },
   { label: "7 days", value: "7" },
   { label: "30 days", value: "30" },
   { label: "90 days", value: "90" },
@@ -78,13 +97,13 @@ const RETENTION_PRESETS = [
   { label: "Forever", value: "0" },
 ];
 
+// Host metrics are 1-second data, so they use a short hours-based window.
+const HOST_METRICS_PRESETS = [
+  { label: "1 day", value: "24" },
+  { label: "2 days", value: "48" },
+];
+
 const RETENTION_FIELDS = [
-  {
-    key: "metrics_retention_days",
-    label: "Container metrics",
-    desc: "CPU, memory, network time-series",
-    fallback: "14",
-  },
   {
     key: "app_log_retention_days",
     label: "Application logs",
@@ -92,32 +111,47 @@ const RETENTION_FIELDS = [
     fallback: "7",
   },
   {
-    key: "audit_log_retention_days",
-    label: "Audit log",
-    desc: "Member actions and system events",
-    fallback: "0",
-  },
-  {
-    key: "deploy_history_retention_days",
-    label: "Deploy history",
-    desc: "Build logs and deployment records",
-    fallback: "90",
+    key: "request_log_retention_days",
+    label: "Request logs",
+    desc: "HTTP access logs per application",
+    fallback: "3",
   },
 ] as const;
 
 function ServerSettingsPage() {
+  const { tab } = Route.useSearch();
+  const navigate = useNavigate({ from: "/server" });
+  const activeTab: ServerTab = tab === "configuration" ? "configuration" : "metric";
+  const setTab = (next: ServerTab) =>
+    navigate({
+      search: () => ({ tab: next === "configuration" ? "configuration" : undefined }),
+    });
+
   const { data: metrics, isLoading } = useMetrics();
   const { data: services } = useServerServices();
   const cleanup = useTriggerCleanup();
+
+  // Host Metrics viewer state: Overview (sparklines) vs Detail (charts), and the
+  // time window — null = Live (last 10 min, streamed), otherwise a static snapshot.
+  const [hostView, setHostView] = useState<HostMetricsView>("overview");
+  const [customRange, setCustomRange] = useState<CustomRange | null>(null);
+
+  // Overview is always live; only Detail honors the custom time range, so the
+  // live sources stay enabled regardless of the selected window.
   const { data: historicalData } = useHostHistoricalMetrics("1h");
   const { data: streamData, connected: streamConnected } =
     useHostMetricsStream(true);
-  const hostMetrics = useMemo(() => {
+  const { data: rangeData } = useHostMetricsRange(
+    customRange?.from,
+    customRange?.to,
+  );
+
+  // Live 10-minute window: Overview sparklines, and Detail when unfiltered.
+  const liveMetrics = useMemo(() => {
     const ONE_SECOND = 1_000;
-    const THIRTY_MIN = 30 * 60 * 1_000;
     // eslint-disable-next-line react-hooks/purity
     const now = Date.now();
-    const maxStart = Math.floor((now - THIRTY_MIN) / ONE_SECOND) * ONE_SECOND;
+    const maxStart = Math.floor((now - TEN_MIN_MS) / ONE_SECOND) * ONE_SECOND;
 
     // Both sources are 1s granularity — merge into a single 1s lookup
     const dataMap = new Map<number, HostMetricPoint>();
@@ -129,7 +163,7 @@ function ServerSettingsPage() {
     }
 
     // Start from the oldest real data point so there's no empty void on the
-    // left, capped at 30 minutes back
+    // left, capped at the 10-minute live window
     const oldestDataTs =
       dataMap.size > 0 ? Math.min(...dataMap.keys()) : maxStart;
     const start = Math.max(oldestDataTs, maxStart);
@@ -152,10 +186,13 @@ function ServerSettingsPage() {
     return grid;
   }, [historicalData, streamData]);
 
-  // Most recent point with real data, for the compact metric cards.
+  // Detail plots the custom window when filtered, else the live grid.
+  const detailMetrics = customRange ? (rangeData ?? []) : liveMetrics;
+
+  // Most recent live point, for the Overview metric cards.
   const latest = useMemo(
-    () => [...hostMetrics].reverse().find((p) => p.cpu_percent != null),
-    [hostMetrics],
+    () => [...liveMetrics].reverse().find((p) => p.cpu_percent != null),
+    [liveMetrics],
   );
 
   const { data: settings } = useSettings();
@@ -195,6 +232,18 @@ function ServerSettingsPage() {
     );
   };
 
+  // In a custom window, format x-axis labels with date+time when the span exceeds
+  // a day; otherwise time-only keeps short windows readable.
+  const chartRange = useMemo(() => {
+    if (!customRange) return "1h";
+    const spanMs =
+      new Date(customRange.to).getTime() - new Date(customRange.from).getTime();
+    return spanMs > 24 * 60 * 60 * 1000 ? "7d" : "24h";
+  }, [customRange]);
+
+  // Overview is always live; Detail is live unless a custom window is applied.
+  const showingLive = hostView === "overview" || customRange === null;
+
   return (
     <div className="space-y-6">
       <div>
@@ -204,37 +253,120 @@ function ServerSettingsPage() {
         </p>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Instance</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-2">
-          <Label htmlFor="instance-name">Instance name</Label>
-          <div className="flex max-w-md items-center gap-2">
-            <Input
-              id="instance-name"
-              value={instanceNameValue}
-              onChange={(e) => setInstanceNameDraft(e.target.value)}
-              placeholder="Self-Hosted PaaS"
-            />
-            <Button
-              onClick={handleSaveInstanceName}
-              disabled={
-                updateSettings.isPending ||
-                instanceNameValue.trim() === currentInstanceName.trim()
-              }
-            >
-              Save
-            </Button>
-          </div>
-          <p className="text-muted-foreground text-xs">
-            Shown in the sidebar and used as the default GitHub App name when
-            connecting a provider.
-          </p>
-        </CardContent>
-      </Card>
+      <nav className="flex gap-1 border-b">
+        {(
+          [
+            { value: "metric", label: "Overview" },
+            { value: "configuration", label: "Configuration" },
+          ] as const
+        ).map((t) => (
+          <button
+            key={t.value}
+            type="button"
+            onClick={() => setTab(t.value)}
+            className={cn(
+              "border-b-2 px-4 py-2 text-sm font-medium transition-colors",
+              activeTab === t.value
+                ? "border-primary text-foreground"
+                : "text-muted-foreground hover:text-foreground border-transparent",
+            )}
+          >
+            {t.label}
+          </button>
+        ))}
+      </nav>
 
-      {isLoading ? (
+      {activeTab === "configuration" ? (
+        <div className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Instance</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              <Label htmlFor="instance-name">Instance name</Label>
+              <div className="flex max-w-md items-center gap-2">
+                <Input
+                  id="instance-name"
+                  value={instanceNameValue}
+                  onChange={(e) => setInstanceNameDraft(e.target.value)}
+                  placeholder="Self-Hosted PaaS"
+                />
+                <Button
+                  onClick={handleSaveInstanceName}
+                  disabled={
+                    updateSettings.isPending ||
+                    instanceNameValue.trim() === currentInstanceName.trim()
+                  }
+                >
+                  Save
+                </Button>
+              </div>
+              <p className="text-muted-foreground text-xs">
+                Shown in the sidebar and used as the default GitHub App name when
+                connecting a provider.
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Metrics Retention</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <RetentionRow
+                field={{
+                  key: "host_metrics_retention_hours",
+                  label: "Host metrics (1-second)",
+                  desc: "CPU / memory / disk time-series",
+                  fallback: "24",
+                }}
+                presets={HOST_METRICS_PRESETS}
+                settings={settings}
+                disabled={updateSettings.isPending}
+                onSave={handleSaveRetention}
+              />
+              {RETENTION_FIELDS.map((field) => (
+                <RetentionRow
+                  key={field.key}
+                  field={field}
+                  presets={RETENTION_PRESETS}
+                  settings={settings}
+                  disabled={updateSettings.isPending}
+                  onSave={handleSaveRetention}
+                />
+              ))}
+              <p className="text-muted-foreground border-t pt-3 text-xs">
+                Host metrics are stored at 1-second granularity and pruned hourly
+                to the selected window. Logs are pruned daily.
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Maintenance</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium">Cleanup old deployments</p>
+                  <p className="text-muted-foreground text-sm">
+                    Remove old deployment records, images, and dangling volumes.
+                    Keeps the 3 most recent deployments per service.
+                  </p>
+                </div>
+                <Button
+                  variant="outline"
+                  onClick={handleCleanup}
+                  disabled={cleanup.isPending}
+                >
+                  {cleanup.isPending ? "Running..." : "Run Cleanup"}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      ) : isLoading ? (
         <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
           {Array.from({ length: 4 }).map((_, i) => (
             <Card key={i}>
@@ -248,7 +380,114 @@ function ServerSettingsPage() {
           ))}
         </div>
       ) : metrics ? (
-        <>
+        <div className="space-y-6">
+          <Card>
+            <CardHeader>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <CardTitle>Host Metrics</CardTitle>
+                  {showingLive ? (
+                    <Badge variant={streamConnected ? "default" : "secondary"}>
+                      {streamConnected ? "LIVE" : "Connecting..."}
+                    </Badge>
+                  ) : (
+                    <Badge variant="outline">Snapshot</Badge>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  <ToggleGroup
+                    variant="outline"
+                    size="sm"
+                    value={[hostView]}
+                    onValueChange={(v) =>
+                      v.length > 0 && setHostView(v[0] as HostMetricsView)
+                    }
+                    aria-label="Host metrics view"
+                  >
+                    <ToggleGroupItem value="overview">Overview</ToggleGroupItem>
+                    <ToggleGroupItem value="detail">Detail</ToggleGroupItem>
+                  </ToggleGroup>
+                  {/* The time filter only applies to Detail; Overview stays live. */}
+                  {hostView === "detail" && (
+                    <HostRangeControl
+                      value={customRange}
+                      onChange={setCustomRange}
+                    />
+                  )}
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {hostView === "overview" ? (
+                latest ? (
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                    <HostMetricCard
+                      label="CPU"
+                      value={`${(latest.cpu_percent ?? 0).toFixed(0)}%`}
+                      percent={latest.cpu_percent ?? 0}
+                      values={liveMetrics.map((p) => p.cpu_percent)}
+                      color={CPU_COLOR}
+                    />
+                    <HostMetricCard
+                      label="Memory"
+                      value={formatBytes(latest.memory_used)}
+                      percent={pct(latest.memory_used, latest.memory_total)}
+                      values={liveMetrics.map((p) => p.memory_used)}
+                      color={MEM_COLOR}
+                    />
+                    <HostMetricCard
+                      label="Disk"
+                      value={formatBytes(latest.disk_used)}
+                      percent={pct(latest.disk_used, latest.disk_total)}
+                      values={liveMetrics.map((p) => p.disk_used)}
+                      color={DISK_COLOR}
+                    />
+                  </div>
+                ) : (
+                  <HostMetricsEmpty live />
+                )
+              ) : detailMetrics.length > 0 ? (
+                <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+                  <HostChart
+                    title="CPU Usage (%)"
+                    data={detailMetrics}
+                    dataKey="cpu_percent"
+                    range={chartRange}
+                    color={CPU_COLOR}
+                    formatter={(v: number) => `${v.toFixed(1)}%`}
+                    domain={[0, 100]}
+                  />
+                  <HostChart
+                    title="Memory Usage"
+                    data={detailMetrics}
+                    dataKey="memory_used"
+                    range={chartRange}
+                    color={MEM_COLOR}
+                    formatter={(v: number) => formatBytes(v)}
+                    domain={[
+                      0,
+                      Math.max(...detailMetrics.map((m) => m.memory_total ?? 0)),
+                    ]}
+                  />
+                  <HostChart
+                    title="Disk Usage"
+                    data={detailMetrics}
+                    dataKey="disk_used"
+                    range={chartRange}
+                    color={DISK_COLOR}
+                    formatter={(v: number) => formatBytes(v)}
+                    domain={[
+                      0,
+                      Math.max(...detailMetrics.map((m) => m.disk_total ?? 0)),
+                    ]}
+                  />
+                </div>
+              ) : (
+                <HostMetricsEmpty live={customRange === null} />
+              )}
+            </CardContent>
+          </Card>
+
           <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
             <StatCard title="Projects" value={metrics.projects} />
             <StatCard
@@ -357,135 +596,123 @@ function ServerSettingsPage() {
               </CardContent>
             </Card>
           </div>
-
-          <Card>
-            <CardHeader>
-              <div className="flex items-center gap-2">
-                <CardTitle>Host Metrics</CardTitle>
-                <Badge variant={streamConnected ? "default" : "secondary"}>
-                  {streamConnected ? "LIVE" : "Connecting..."}
-                </Badge>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              {latest && (
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                  <HostMetricCard
-                    label="CPU"
-                    value={`${(latest.cpu_percent ?? 0).toFixed(0)}%`}
-                    percent={latest.cpu_percent ?? 0}
-                    values={hostMetrics.map((p) => p.cpu_percent)}
-                    color={CPU_COLOR}
-                  />
-                  <HostMetricCard
-                    label="Memory"
-                    value={formatBytes(latest.memory_used)}
-                    percent={pct(latest.memory_used, latest.memory_total)}
-                    values={hostMetrics.map((p) => p.memory_used)}
-                    color={MEM_COLOR}
-                  />
-                  <HostMetricCard
-                    label="Disk"
-                    value={formatBytes(latest.disk_used)}
-                    percent={pct(latest.disk_used, latest.disk_total)}
-                    values={hostMetrics.map((p) => p.disk_used)}
-                    color={DISK_COLOR}
-                  />
-                </div>
-              )}
-
-              {hostMetrics && hostMetrics.length > 0 ? (
-                <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-                  <HostChart
-                    title="CPU Usage (%)"
-                    data={hostMetrics}
-                    dataKey="cpu_percent"
-                    range="1h"
-                    color={CPU_COLOR}
-                    formatter={(v: number) => `${v.toFixed(1)}%`}
-                    domain={[0, 100]}
-                  />
-                  <HostChart
-                    title="Memory Usage"
-                    data={hostMetrics}
-                    dataKey="memory_used"
-                    range="1h"
-                    color={MEM_COLOR}
-                    formatter={(v: number) => formatBytes(v)}
-                    domain={[
-                      0,
-                      Math.max(...hostMetrics.map((m) => m.memory_total ?? 0)),
-                    ]}
-                  />
-                  <HostChart
-                    title="Disk Usage"
-                    data={hostMetrics}
-                    dataKey="disk_used"
-                    range="1h"
-                    color={DISK_COLOR}
-                    formatter={(v: number) => formatBytes(v)}
-                    domain={[
-                      0,
-                      Math.max(...hostMetrics.map((m) => m.disk_total ?? 0)),
-                    ]}
-                  />
-                </div>
-              ) : (
-                <p className="text-muted-foreground py-8 text-center text-sm">
-                  No metrics data available yet. Data is collected every second.
-                </p>
-              )}
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Metrics Retention</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {RETENTION_FIELDS.map((field) => (
-                <RetentionRow
-                  key={field.key}
-                  field={field}
-                  settings={settings}
-                  disabled={updateSettings.isPending}
-                  onSave={handleSaveRetention}
-                />
-              ))}
-              <p className="text-muted-foreground border-t pt-3 text-xs">
-                1-second data is kept for 1h, rolled up to 1-minute for 24h,
-                5-minute for 7 days, then hourly until the retention limit.
-                "Forever" disables pruning for that category.
-              </p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Maintenance</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium">Cleanup old deployments</p>
-                  <p className="text-muted-foreground text-sm">
-                    Remove old deployment records, images, and dangling volumes.
-                    Keeps the 3 most recent deployments per service.
-                  </p>
-                </div>
-                <Button
-                  variant="outline"
-                  onClick={handleCleanup}
-                  disabled={cleanup.isPending}
-                >
-                  {cleanup.isPending ? "Running..." : "Run Cleanup"}
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </>
+        </div>
       ) : null}
     </div>
+  );
+}
+
+function HostMetricsEmpty({ live }: { live: boolean }) {
+  return (
+    <p className="text-muted-foreground py-8 text-center text-sm">
+      {live
+        ? "No metrics data available yet. Data is collected every second."
+        : "No metrics in the selected window."}
+    </p>
+  );
+}
+
+/** datetime-local string (local time, minute precision) for a Date. */
+function toLocalInputValue(d: Date) {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(
+    d.getHours(),
+  )}:${pad(d.getMinutes())}`;
+}
+
+function formatRangeLabel(iso: string) {
+  return new Date(iso).toLocaleString([], {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function HostRangeControl({
+  value,
+  onChange,
+}: {
+  value: CustomRange | null;
+  onChange: (next: CustomRange | null) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
+
+  const handleOpenChange = (next: boolean) => {
+    if (next) {
+      const now = new Date();
+      const start = value ? new Date(value.from) : new Date(now.getTime() - TEN_MIN_MS);
+      const end = value ? new Date(value.to) : now;
+      setFrom(toLocalInputValue(start));
+      setTo(toLocalInputValue(end));
+    }
+    setOpen(next);
+  };
+
+  const apply = () => {
+    if (!from || !to) return;
+    const fromIso = new Date(from).toISOString();
+    const toIso = new Date(to).toISOString();
+    if (new Date(fromIso) >= new Date(toIso)) {
+      toast.error("Start time must be before end time");
+      return;
+    }
+    onChange({ from: fromIso, to: toIso });
+    setOpen(false);
+  };
+
+  const goLive = () => {
+    onChange(null);
+    setOpen(false);
+  };
+
+  return (
+    <Popover open={open} onOpenChange={handleOpenChange}>
+      <PopoverTrigger
+        render={<Button variant="outline" size="sm" className="gap-1.5" />}
+      >
+        <CalendarIcon className="size-3.5 shrink-0" />
+        <span className="max-w-[200px] truncate">
+          {value
+            ? `${formatRangeLabel(value.from)} – ${formatRangeLabel(value.to)}`
+            : "Live (10m)"}
+        </span>
+      </PopoverTrigger>
+      <PopoverContent align="end" className="w-72 space-y-3">
+        <div className="space-y-1.5">
+          <Label htmlFor="metric-from" className="text-xs">
+            Start
+          </Label>
+          <Input
+            id="metric-from"
+            type="datetime-local"
+            value={from}
+            onChange={(e) => setFrom(e.target.value)}
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="metric-to" className="text-xs">
+            End
+          </Label>
+          <Input
+            id="metric-to"
+            type="datetime-local"
+            value={to}
+            onChange={(e) => setTo(e.target.value)}
+          />
+        </div>
+        <div className="flex items-center justify-between gap-2 pt-1">
+          <Button variant="ghost" size="sm" onClick={goLive} disabled={!value}>
+            Live
+          </Button>
+          <Button size="sm" onClick={apply}>
+            Apply
+          </Button>
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 }
 
@@ -562,11 +789,13 @@ function HostMetricCard({
 
 function RetentionRow({
   field,
+  presets,
   settings,
   disabled,
   onSave,
 }: {
   field: { key: string; label: string; desc: string; fallback: string };
+  presets: { label: string; value: string }[];
   settings: SettingEntry[] | undefined;
   disabled: boolean;
   onSave: (key: string, value: string) => void;
@@ -575,15 +804,12 @@ function RetentionRow({
     settings?.find((s) => s.key === field.key)?.value ?? field.fallback;
 
   // Surface the current value even if it isn't one of the presets.
-  const presets = [...RETENTION_PRESETS];
-  if (!presets.some((p) => p.value === current)) {
-    presets.unshift({
-      label: current === "0" ? "Forever" : `${current} days`,
-      value: current,
-    });
+  const options = [...presets];
+  if (!options.some((p) => p.value === current)) {
+    options.unshift({ label: current, value: current });
   }
   const currentLabel =
-    presets.find((p) => p.value === current)?.label ?? current;
+    options.find((p) => p.value === current)?.label ?? current;
 
   return (
     <div className="flex items-center justify-between gap-4">
@@ -602,7 +828,7 @@ function RetentionRow({
           <span className="truncate">{currentLabel}</span>
         </SelectTrigger>
         <SelectContent>
-          {presets.map((p) => (
+          {options.map((p) => (
             <SelectItem key={p.value} value={p.value}>
               {p.label}
             </SelectItem>
@@ -643,6 +869,7 @@ function HostChart({
         xFormatter={(ts) => formatTime(new Date(ts).toISOString(), range)}
         yDomain={domain}
         height={200}
+        syncKey="host-metrics-detail"
       />
     </div>
   );
