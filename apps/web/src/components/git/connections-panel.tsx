@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { formatRelativeTime } from "@/lib/utils/format";
+import { ProviderIcon } from "./provider-icon";
 
 const PROVIDER_LABELS: Record<string, string> = {
   github: "GitHub",
@@ -16,10 +17,6 @@ const PROVIDER_LABELS: Record<string, string> = {
   bitbucket: "Bitbucket",
   gitea: "Gitea",
 };
-
-function providerGlyph(provider: string) {
-  return (PROVIDER_LABELS[provider] ?? provider).slice(0, 2);
-}
 
 export function ConnectionsPanel() {
   const { data: integrations } = useGitIntegrations();
@@ -56,8 +53,8 @@ export function ConnectionsPanel() {
                     }
                     className="hover:bg-accent/50 flex w-full items-center gap-3 px-4 py-3 text-left transition-colors disabled:opacity-60"
                   >
-                    <span className="bg-muted text-muted-foreground grid size-8 shrink-0 place-items-center rounded-md text-[11px] font-semibold">
-                      {providerGlyph(p.provider)}
+                    <span className="bg-muted text-foreground grid size-8 shrink-0 place-items-center rounded-md">
+                      <ProviderIcon provider={p.provider} className="size-4" />
                     </span>
                     <span className="min-w-0 flex-1">
                       <span className="block text-sm font-medium">
@@ -111,8 +108,8 @@ export function ConnectionsPanel() {
                     <tr key={i.id}>
                       <td className="px-2 py-3">
                         <span className="flex items-center gap-2 font-medium">
-                          <span className="bg-muted text-muted-foreground grid size-6 shrink-0 place-items-center rounded text-[10px] font-semibold">
-                            {providerGlyph(i.provider)}
+                          <span className="bg-muted text-foreground grid size-6 shrink-0 place-items-center rounded">
+                            <ProviderIcon provider={i.provider} className="size-3.5" />
                           </span>
                           {PROVIDER_LABELS[i.provider] ?? i.provider}
                         </span>

@@ -19,6 +19,7 @@ import {
   submitGitHubManifest,
   type GitProvider,
 } from "@/lib/api/git-providers";
+import { ProviderIcon } from "./provider-icon";
 
 interface Props {
   open: boolean;
@@ -135,6 +136,7 @@ export function ProviderFormDialog({ open, onOpenChange }: Props) {
                       : "text-muted-foreground hover:bg-accent/50",
                   )}
                 >
+                  <ProviderIcon provider={p.value} className="size-5" />
                   {p.label}
                 </button>
               ))}

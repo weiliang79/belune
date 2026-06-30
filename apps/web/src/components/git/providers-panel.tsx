@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ProviderFormDialog } from "./provider-form-dialog";
+import { ProviderIcon } from "./provider-icon";
 
 export function ProvidersPanel() {
   const { data: configs } = useGitProviderConfigs();
@@ -38,6 +39,10 @@ export function ProvidersPanel() {
                 >
                   <div className="space-y-1">
                     <div className="flex flex-wrap items-center gap-2">
+                      <ProviderIcon
+                        provider={c.provider}
+                        className="text-foreground size-4"
+                      />
                       <span className="font-medium capitalize">{c.provider}</span>
                       {c.has_secret ? (
                         <Badge variant="secondary">Configured</Badge>
