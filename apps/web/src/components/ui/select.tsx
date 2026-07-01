@@ -3,8 +3,47 @@ import { Select as SelectPrimitive } from "@base-ui/react/select";
 import { ChevronDownIcon, CheckIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-function Select<Value = string>({ ...props }: SelectPrimitive.Root.Props<Value>) {
-  return <SelectPrimitive.Root data-slot="select" {...props} />;
+// Base UI's <Select.Value> resolves its display label from the root's `items`
+// map (value -> label); without it, it falls back to rendering the raw value.
+// Walk the SelectItem children to build that map so every call site shows the
+// label — matching the Radix/shadcn behaviour — without passing `items` by hand.
+function collectSelectItems(
+  children: React.ReactNode,
+  acc: Record<string, React.ReactNode>,
+) {
+  React.Children.forEach(children, (child) => {
+    if (!React.isValidElement(child)) return;
+    if (child.type === SelectItem) {
+      const { value, children: label } = child.props as {
+        value?: unknown;
+        children?: React.ReactNode;
+      };
+      if (value != null) acc[String(value)] = label;
+      return;
+    }
+    const nested = (child.props as { children?: React.ReactNode })?.children;
+    if (nested != null) collectSelectItems(nested, acc);
+  });
+  return acc;
+}
+
+function Select<Value = string>({
+  items,
+  children,
+  ...props
+}: SelectPrimitive.Root.Props<Value>) {
+  // Respect an explicit `items` prop; otherwise derive it from the children.
+  const derivedItems = React.useMemo(() => {
+    if (items != null) return items;
+    const map = collectSelectItems(children, {});
+    return Object.keys(map).length > 0 ? map : undefined;
+  }, [items, children]);
+
+  return (
+    <SelectPrimitive.Root data-slot="select" items={derivedItems} {...props}>
+      {children}
+    </SelectPrimitive.Root>
+  );
 }
 
 function SelectTrigger({
