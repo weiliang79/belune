@@ -1,5 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { listBackupRuns, getBackupStatus, triggerBackupRun } from "@/lib/api/backups";
+import {
+  listBackupRuns,
+  getBackupStatus,
+  triggerBackupRun,
+  testBackupRemote,
+} from "@/lib/api/backups";
 import { queryKeys } from "./query-keys";
 
 export function useBackupRuns() {
@@ -23,8 +28,19 @@ export function useTriggerBackup() {
   return useMutation({
     mutationFn: triggerBackupRun,
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: queryKeys.backups.runs });
-      qc.invalidateQueries({ queryKey: queryKeys.backups.status });
+      const refresh = () => {
+        qc.invalidateQueries({ queryKey: queryKeys.backups.runs });
+        qc.invalidateQueries({ queryKey: queryKeys.backups.status });
+      };
+      // The task is async: the 202 returns before the worker inserts the
+      // "running" run row. A single invalidate would refetch too early and
+      // miss it, so re-poll a few times until the row (and its result) appear.
+      refresh();
+      [1000, 2500, 5000].forEach((ms) => setTimeout(refresh, ms));
     },
   });
+}
+
+export function useTestBackupRemote() {
+  return useMutation({ mutationFn: testBackupRemote });
 }

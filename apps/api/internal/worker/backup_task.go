@@ -47,7 +47,7 @@ func (h *TaskHandler) HandleBackupNowTask(ctx context.Context, t *asynq.Task) er
 
 	if _, err := os.Stat(scriptPath); os.IsNotExist(err) {
 		msg := fmt.Sprintf("backup script not found at %s; use 'systemctl start paas-backup.service' instead", scriptPath)
-		h.finaliseRun(ctx, run.ID, 0, pgtype.Text{}, msg)
+		h.finaliseRun(ctx, run.ID, 0, pgtype.Text{}, msg, "")
 		notFoundErr := errors.New(msg)
 		metrics.RecordBackupRun("local", notFoundErr, time.Since(start))
 		recordSpanErr(span, notFoundErr)
@@ -59,7 +59,7 @@ func (h *TaskHandler) HandleBackupNowTask(ctx context.Context, t *asynq.Task) er
 
 	if execErr != nil {
 		errMsg := fmt.Sprintf("%v\n%s", execErr, string(out))
-		h.finaliseRun(ctx, run.ID, 0, pgtype.Text{}, errMsg)
+		h.finaliseRun(ctx, run.ID, 0, pgtype.Text{}, errMsg, string(out))
 		metrics.RecordBackupRun("local", execErr, time.Since(start))
 		recordSpanErr(span, execErr)
 		return errors.Join(fmt.Errorf("backup script failed: %w", execErr), asynq.SkipRetry)
@@ -81,7 +81,7 @@ func (h *TaskHandler) HandleBackupNowTask(ctx context.Context, t *asynq.Task) er
 		remoteKey = pgtype.Text{String: remoteKeyStr, Valid: true}
 	}
 
-	h.finaliseRun(ctx, run.ID, sizeBytes, remoteKey, "")
+	h.finaliseRun(ctx, run.ID, sizeBytes, remoteKey, "", string(out))
 
 	destination := "local"
 	if remoteKeyStr != "" {
@@ -117,10 +117,11 @@ func (h *TaskHandler) HandleBackupRotateTask(ctx context.Context, t *asynq.Task)
 	return nil
 }
 
-// finaliseRun updates the backup_run record with the final status and
-// optional error message. Logs and swallows DB errors — the backup itself
-// already succeeded or failed; we don't want a DB hiccup to mask that.
-func (h *TaskHandler) finaliseRun(ctx context.Context, id pgtype.UUID, sizeBytes int64, remoteKey pgtype.Text, errMsg string) {
+// finaliseRun updates the backup_run record with the final status, optional
+// error message, and the full script output (log). Logs and swallows DB errors
+// — the backup itself already succeeded or failed; we don't want a DB hiccup to
+// mask that.
+func (h *TaskHandler) finaliseRun(ctx context.Context, id pgtype.UUID, sizeBytes int64, remoteKey pgtype.Text, errMsg, log string) {
 	if h.Queries == nil || !id.Valid {
 		return
 	}
@@ -139,6 +140,7 @@ func (h *TaskHandler) finaliseRun(ctx context.Context, id pgtype.UUID, sizeBytes
 		RemoteKey:  remoteKey,
 		SizeBytes:  sizeBytes,
 		Error:      errText,
+		Log:        log,
 	}); err != nil {
 		slog.Warn("backup_now: failed to update run record", "error", err)
 	}

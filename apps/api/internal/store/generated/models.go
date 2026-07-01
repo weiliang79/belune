@@ -89,6 +89,7 @@ type BackupRun struct {
 	RemoteKey  pgtype.Text        `json:"remote_key"`
 	SizeBytes  int64              `json:"size_bytes"`
 	Error      pgtype.Text        `json:"error"`
+	Log        string             `json:"log"`
 }
 
 type Database struct {

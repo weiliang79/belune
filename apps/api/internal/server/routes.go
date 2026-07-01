@@ -172,6 +172,7 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService,
 				r.Get("/api/backups", h.ListBackupRuns)
 				r.Get("/api/backups/status", h.GetBackupStatus)
 				r.Post("/api/backups/run", h.TriggerBackupRun)
+				r.Post("/api/backups/test", h.TestBackupRemote)
 			})
 
 			// Git connections (per-user connected provider accounts)

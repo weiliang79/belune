@@ -4,6 +4,7 @@ import {
   useBackupRuns,
   useBackupStatus,
   useTriggerBackup,
+  useTestBackupRemote,
 } from "@/lib/hooks/use-backups";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -12,7 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { DataTable } from "@/components/ui/data-table";
 import { formatBytes } from "@/lib/utils/format";
-import type { BackupRun } from "@/lib/types";
+import type { BackupRun, BackupStatus } from "@/lib/types";
 
 function formatDate(iso: string | null) {
   if (!iso) return "—";
@@ -52,12 +53,6 @@ const backupColumns: ColumnDef<BackupRun>[] = [
     header: "Remote key",
     meta: { className: "max-w-[200px] truncate font-mono text-xs" },
     cell: ({ row: { original: run } }) => run.remote_key ?? "—",
-  },
-  {
-    id: "error",
-    header: "Error",
-    meta: { className: "text-destructive max-w-[240px] truncate text-xs" },
-    cell: ({ row: { original: run } }) => run.error ?? "—",
   },
 ];
 
@@ -156,6 +151,8 @@ export function SystemBackupsPanel() {
         </CardContent>
       </Card>
 
+      <RemoteStorageCard status={status} loading={statusLoading} />
+
       <Card>
         <CardHeader>
           <CardTitle>Recent runs</CardTitle>
@@ -168,10 +165,103 @@ export function SystemBackupsPanel() {
             getRowId={(r) => r.id}
             enableSorting
             emptyMessage={'No backup runs yet. Click "Run Backup Now" to start one.'}
+            renderDetailPanel={({ row }) => {
+              const { log, error } = row.original;
+              const text = log?.trim() || error?.trim();
+              return text ? (
+                <pre className="bg-elev max-h-96 overflow-auto rounded p-3 font-mono text-xs whitespace-pre-wrap">
+                  {text}
+                </pre>
+              ) : (
+                <span className="text-text-faint text-xs">
+                  No log captured for this run.
+                </span>
+              );
+            }}
           />
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+// RemoteStorageCard shows the off-host (S3-compatible) destination for
+// control-plane backups. It is read-only: this destination is configured via
+// BACKUP_S3_* env vars in .env (kept out of the database so a total-loss
+// restore can still find where its own backups live). A "Test connection"
+// button verifies reachability without mutating anything.
+function RemoteStorageCard({
+  status,
+  loading,
+}: {
+  status: BackupStatus | undefined;
+  loading: boolean;
+}) {
+  const test = useTestBackupRemote();
+  const remote = status?.remote ?? null;
+
+  const handleTest = () => {
+    toast.promise(test.mutateAsync(), {
+      loading: "Testing connection…",
+      success: "Connection OK — bucket reachable",
+      error: (err) => err.message ?? "Connection failed",
+    });
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center justify-between gap-2">
+          <div>
+            <CardTitle>Remote storage</CardTitle>
+            <p className="text-muted-foreground text-sm">
+              Off-host destination for control-plane backups.
+            </p>
+          </div>
+          {remote && (
+            <Button
+              onClick={handleTest}
+              disabled={test.isPending}
+              variant="outline"
+              size="sm"
+            >
+              {test.isPending ? "Testing…" : "Test connection"}
+            </Button>
+          )}
+        </div>
+      </CardHeader>
+      <CardContent>
+        {loading ? (
+          <div className="space-y-2">
+            <Skeleton className="h-4 w-48" />
+            <Skeleton className="h-4 w-40" />
+          </div>
+        ) : remote ? (
+          <div className="grid grid-cols-2 gap-4 text-sm md:grid-cols-4">
+            <StatusItem
+              label="Endpoint"
+              value={remote.endpoint || "AWS S3 (regional)"}
+            />
+            <StatusItem label="Region" value={remote.region || "—"} />
+            <StatusItem label="Bucket" value={remote.bucket || "—"} />
+            <StatusItem label="Prefix" value={remote.prefix || "—"} />
+          </div>
+        ) : (
+          <p className="text-muted-foreground text-sm">
+            Remote storage is disabled — control-plane backups are kept on-host
+            only.
+          </p>
+        )}
+        <p className="text-text-faint mt-4 text-xs">
+          Configured via{" "}
+          <code className="font-mono">BACKUP_REMOTE_ENABLED</code> and{" "}
+          <code className="font-mono">BACKUP_S3_*</code> in{" "}
+          <code className="font-mono">.env</code> on the server (restart the API
+          to apply). Kept out of the database so a full restore can still locate
+          its backups. Per-database backups use project destinations instead.
+        </p>
+      </CardContent>
+    </Card>
   );
 }
 

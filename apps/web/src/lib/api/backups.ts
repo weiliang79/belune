@@ -12,3 +12,7 @@ export function getBackupStatus() {
 export function triggerBackupRun() {
   return api.post<{ status: string }>("/backups/run");
 }
+
+export function testBackupRemote() {
+  return api.post<{ status: string }>("/backups/test");
+}

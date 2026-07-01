@@ -322,6 +322,15 @@ export interface BackupRun {
   remote_key: string | null;
   size_bytes: number;
   error: string | null;
+  log: string;
+}
+
+export interface BackupRemoteConfig {
+  endpoint: string;
+  region: string;
+  bucket: string;
+  prefix: string;
+  use_ssl: boolean;
 }
 
 export interface BackupStatus {
@@ -329,6 +338,7 @@ export interface BackupStatus {
   last_attempted_at: string | null;
   last_error: string | null;
   remote_enabled: boolean;
+  remote: BackupRemoteConfig | null;
   retention: { days: number; count: number };
 }
 

@@ -156,6 +156,27 @@ func (s *Service) LatestKey(ctx context.Context) (string, time.Time, error) {
 
 // EnsureBucket creates the configured bucket if it does not already exist.
 // This is used in tests and can be called during initial provisioning.
+// Check verifies the remote storage is reachable and the configured bucket
+// exists, without mutating anything. Used by the admin "Test connection"
+// action. Returns an error describing the failure (unreachable, bad
+// credentials, or missing bucket).
+func (s *Service) Check(ctx context.Context) error {
+	if !s.Enabled() {
+		return fmt.Errorf("remote backup storage is not configured")
+	}
+	if err := s.init(); err != nil {
+		return err
+	}
+	exists, err := s.client.BucketExists(ctx, s.cfg.BackupS3Bucket)
+	if err != nil {
+		return fmt.Errorf("reach bucket: %w", err)
+	}
+	if !exists {
+		return fmt.Errorf("bucket %q does not exist", s.cfg.BackupS3Bucket)
+	}
+	return nil
+}
+
 func (s *Service) EnsureBucket(ctx context.Context) error {
 	if err := s.init(); err != nil {
 		return err

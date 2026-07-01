@@ -73,6 +73,33 @@ curl -sSL https://railpack.com/install.sh | sudo bash
 echo "==> Downloading Go modules..."
 cd /workspaces/selfhost-paas/apps/api && go mod download
 
+echo "==> Setting up /opt/paas install mirror (control-plane backup)..."
+# The control-plane backup worker shells out to $PAAS_DIR/scripts/backup.sh
+# (default /opt/paas/scripts/backup.sh) and that script treats its dir as a real
+# install: it needs a docker-compose.yml and a .env alongside the script, plus
+# bin/paas-backup-upload for remote upload. In a real install everything
+# co-locates under /opt/paas; here we mirror that layout with symlinks into the
+# repo so "Run Backup Now" works locally.
+#
+# Notes:
+#  - COMPOSE_PROJECT_NAME=infra points `docker compose ps` at the already-running
+#    devcontainer project so the script finds the live postgres/caddy containers.
+#  - We deliberately do NOT set BACKUP_REMOTE_ENABLED here: the script sources
+#    this .env right before the upload helper, so a value would override the real
+#    one the worker inherits from the repo .env (via `task dev:api` dotenv). With
+#    BACKUP_REMOTE_ENABLED=true + minio-paas running, backups upload for real.
+#  - Recreated on every rebuild since /opt lives inside the container.
+REPO=/workspaces/selfhost-paas
+sudo mkdir -p /opt/paas/scripts /opt/paas/backups /opt/paas/bin
+sudo ln -sfn "$REPO/scripts/backup.sh" /opt/paas/scripts/backup.sh
+sudo ln -sfn "$REPO/infra/docker-compose.yml" /opt/paas/docker-compose.yml
+printf 'POSTGRES_USER=paas\nPOSTGRES_DB=paas\nCOMPOSE_PROJECT_NAME=infra\n' \
+  | sudo tee /opt/paas/.env >/dev/null
+# Chown before building so the vscode-owned `go build` can write into bin/.
+sudo chown -R vscode:vscode /opt/paas
+# Build the upload helper (same binary install.sh/update.sh extract on a server).
+go build -o /opt/paas/bin/paas-backup-upload ./cmd/backup-upload
+
 echo "==> Installing Docker CLI (best-effort)..."
 # The Docker socket is bind-mounted; we just need the CLI binary.
 # Wrapped in || true so a transient apt failure doesn't break the whole setup.
