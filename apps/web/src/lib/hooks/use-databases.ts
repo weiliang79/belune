@@ -1,4 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { queryKeys } from "./query-keys";
 import * as databasesApi from "@/lib/api/databases";
 
@@ -57,6 +58,44 @@ export function useDeleteDatabase(projectId: string) {
       qc.invalidateQueries({ queryKey: queryKeys.projects.detail(projectId) });
     },
   });
+}
+
+// Lifecycle hooks refresh both the database detail and the project's database
+// list so the row status updates without waiting for the next poll.
+function useDatabaseLifecycle(
+  projectId: string,
+  databaseId: string,
+  mutationFn: () => Promise<unknown>,
+) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn,
+    onSuccess: () => {
+      qc.invalidateQueries({
+        queryKey: queryKeys.databases.detail(projectId, databaseId),
+      });
+      qc.invalidateQueries({ queryKey: queryKeys.databases.all(projectId) });
+    },
+    onError: (error: Error) => toast.error(error.message),
+  });
+}
+
+export function useStopDatabase(projectId: string, databaseId: string) {
+  return useDatabaseLifecycle(projectId, databaseId, () =>
+    databasesApi.stopDatabase(projectId, databaseId),
+  );
+}
+
+export function useStartDatabase(projectId: string, databaseId: string) {
+  return useDatabaseLifecycle(projectId, databaseId, () =>
+    databasesApi.startDatabase(projectId, databaseId),
+  );
+}
+
+export function useRestartDatabase(projectId: string, databaseId: string) {
+  return useDatabaseLifecycle(projectId, databaseId, () =>
+    databasesApi.restartDatabase(projectId, databaseId),
+  );
 }
 
 export function useUpdateDatabase(projectId: string, databaseId: string) {

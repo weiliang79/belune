@@ -36,6 +36,9 @@ import {
   useDatabaseBackups,
   useBackupDatabase,
   useUpgradeDatabase,
+  useStopDatabase,
+  useStartDatabase,
+  useRestartDatabase,
 } from "@/lib/hooks/use-databases";
 import { useProject } from "@/lib/hooks/use-projects";
 import {
@@ -93,6 +96,9 @@ function DatabaseDetailPage() {
   const { data: db, isLoading } = useDatabase(projectId, databaseId);
   const { data: project } = useProject(projectId);
   const deleteDb = useDeleteDatabase(projectId);
+  const stop = useStopDatabase(projectId, databaseId);
+  const start = useStartDatabase(projectId, databaseId);
+  const restart = useRestartDatabase(projectId, databaseId);
 
   const activeTab: DbTab = tab ?? "overview";
   const setTab = (next: DbTab) =>
@@ -146,23 +152,96 @@ function DatabaseDetailPage() {
   return (
     <div className="space-y-6">
 
-      <div className="flex items-start gap-3">
-        <div className="bg-elev text-text-muted grid size-11 shrink-0 place-items-center rounded-xl">
-          <DatabaseIcon aria-hidden="true" className="size-5" />
-        </div>
-        <div className="min-w-0">
-          <h1 className="truncate text-2xl font-semibold tracking-tight">
-            {db.name}
-          </h1>
-          <p className="text-text-faint truncate font-mono text-sm">
-            {db.slug}
-          </p>
-          <div className="mt-2 flex items-center gap-2">
-            <Badge variant="outline" className="font-mono">
-              {imageLabel(db)}
-            </Badge>
-            <StatusBadge status={db.status} />
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="flex items-start gap-3">
+          <div className="bg-elev text-text-muted grid size-11 shrink-0 place-items-center rounded-xl">
+            <DatabaseIcon aria-hidden="true" className="size-5" />
           </div>
+          <div className="min-w-0">
+            <h1 className="truncate text-2xl font-semibold tracking-tight">
+              {db.name}
+            </h1>
+            <p className="text-text-faint truncate font-mono text-sm">
+              {db.slug}
+            </p>
+            <div className="mt-2 flex items-center gap-2">
+              <Badge variant="outline" className="font-mono">
+                {imageLabel(db)}
+              </Badge>
+              <StatusBadge status={db.status} />
+            </div>
+          </div>
+        </div>
+        <div className="flex gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => {
+              toast.promise(restart.mutateAsync(), {
+                loading: "Restarting...",
+                success: "Database restarted",
+                error: (err) => err.message,
+              });
+            }}
+            disabled={restart.isPending || db.status !== "running"}
+          >
+            Restart
+          </Button>
+          {db.status === "running" ? (
+            <AlertDialog>
+              <AlertDialogTrigger
+                render={
+                  <Button size="sm" variant="outline" disabled={stop.isPending} />
+                }
+              >
+                {stop.isPending ? "Stopping..." : "Stop"}
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Stop {db.name}?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    This will stop the running container. You can start it again
+                    later. Connected services will lose access until it&apos;s
+                    running again.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction
+                    onClick={() => {
+                      toast.promise(stop.mutateAsync(), {
+                        loading: "Stopping...",
+                        success: "Database stopped",
+                        error: (err) => err.message,
+                      });
+                    }}
+                  >
+                    Stop
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          ) : (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                toast.promise(start.mutateAsync(), {
+                  loading: "Starting...",
+                  success: "Database started",
+                  error: (err) => err.message,
+                });
+              }}
+              disabled={
+                start.isPending ||
+                db.status === "creating" ||
+                db.status === "upgrading" ||
+                db.status === "backing_up"
+              }
+            >
+              {start.isPending ? "Starting..." : "Start"}
+            </Button>
+          )}
         </div>
       </div>
 

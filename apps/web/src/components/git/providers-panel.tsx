@@ -19,6 +19,12 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipPositioner,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { ProviderFormDialog } from "./provider-form-dialog";
 import { ProviderIcon } from "./provider-icon";
 
@@ -79,29 +85,47 @@ export function ProvidersPanel() {
                   </div>
                   <div className="flex items-center gap-2">
                     {c.app_slug && (
-                      <a
-                        href={`https://github.com/apps/${c.app_slug}`}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="text-muted-foreground hover:text-foreground"
-                        title="Open on GitHub"
-                      >
-                        <ExternalLink className="h-4 w-4" />
-                      </a>
+                      <Tooltip>
+                        <TooltipTrigger
+                          render={
+                            <a
+                              href={`https://github.com/apps/${c.app_slug}`}
+                              target="_blank"
+                              rel="noreferrer"
+                              aria-label="Configure GitHub App"
+                              className="text-muted-foreground hover:text-foreground"
+                            />
+                          }
+                        >
+                          <ExternalLink className="h-4 w-4" />
+                        </TooltipTrigger>
+                        <TooltipPositioner>
+                          <TooltipContent>Configure GitHub App</TooltipContent>
+                        </TooltipPositioner>
+                      </Tooltip>
                     )}
                     <AlertDialog>
-                      <AlertDialogTrigger
-                        render={
-                          <Button
-                            variant="ghost"
-                            size="icon-sm"
-                            aria-label={`Remove ${c.provider} provider`}
-                            className="text-destructive hover:bg-destructive/10 hover:text-destructive"
-                          />
-                        }
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </AlertDialogTrigger>
+                      <Tooltip>
+                        <TooltipTrigger
+                          render={
+                            <AlertDialogTrigger
+                              render={
+                                <Button
+                                  variant="ghost"
+                                  size="icon-sm"
+                                  aria-label={`Remove ${c.provider} provider`}
+                                  className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                                />
+                              }
+                            />
+                          }
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </TooltipTrigger>
+                        <TooltipPositioner>
+                          <TooltipContent>Remove provider</TooltipContent>
+                        </TooltipPositioner>
+                      </Tooltip>
                       <AlertDialogContent>
                         <AlertDialogHeader>
                           <AlertDialogTitle className="capitalize">

@@ -14,7 +14,14 @@ import { useUsers } from "@/lib/hooks/use-users";
 import { useProjects } from "@/lib/hooks/use-projects";
 import type { QuotaLimits, QuotaScope, QuotaView } from "@/lib/api/quotas";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Pencil, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipPositioner,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
@@ -136,17 +143,42 @@ function QuotasPage() {
       buildActionColumnDef({
         meta: { headerClassName: "text-right", className: "text-right" },
         cell: ({ row: { original: q } }) => (
-          <div className="flex justify-end gap-2">
-            <Button variant="outline" size="sm" onClick={() => setEditTarget(q)}>
-              Edit
-            </Button>
-            <Button
-              variant="destructive"
-              size="sm"
-              onClick={() => setDeleteTarget(q)}
-            >
-              Remove
-            </Button>
+          <div className="flex justify-end gap-1">
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    aria-label="Edit quota"
+                    onClick={() => setEditTarget(q)}
+                  />
+                }
+              >
+                <Pencil className="h-4 w-4" />
+              </TooltipTrigger>
+              <TooltipPositioner>
+                <TooltipContent>Edit</TooltipContent>
+              </TooltipPositioner>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    aria-label="Remove quota"
+                    className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                    onClick={() => setDeleteTarget(q)}
+                  />
+                }
+              >
+                <Trash2 className="h-4 w-4" />
+              </TooltipTrigger>
+              <TooltipPositioner>
+                <TooltipContent>Remove</TooltipContent>
+              </TooltipPositioner>
+            </Tooltip>
           </div>
         ),
       }),

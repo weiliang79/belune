@@ -20,6 +20,12 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipPositioner,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { formatRelativeTime } from "@/lib/utils/format";
 import { ProviderIcon } from "./provider-icon";
 
@@ -137,18 +143,27 @@ export function ConnectionsPanel() {
                       </td>
                       <td className="px-2 py-3 text-right">
                         <AlertDialog>
-                          <AlertDialogTrigger
-                            render={
-                              <Button
-                                variant="ghost"
-                                size="icon-sm"
-                                aria-label={`Disconnect ${i.account_login}`}
-                                className="text-destructive hover:bg-destructive/10 hover:text-destructive"
-                              />
-                            }
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </AlertDialogTrigger>
+                          <Tooltip>
+                            <TooltipTrigger
+                              render={
+                                <AlertDialogTrigger
+                                  render={
+                                    <Button
+                                      variant="ghost"
+                                      size="icon-sm"
+                                      aria-label={`Disconnect ${i.account_login}`}
+                                      className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                                    />
+                                  }
+                                />
+                              }
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </TooltipTrigger>
+                            <TooltipPositioner>
+                              <TooltipContent>Disconnect</TooltipContent>
+                            </TooltipPositioner>
+                          </Tooltip>
                           <AlertDialogContent>
                             <AlertDialogHeader>
                               <AlertDialogTitle>

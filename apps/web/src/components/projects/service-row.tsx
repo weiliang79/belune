@@ -4,7 +4,6 @@ import { useQueryClient } from "@tanstack/react-query";
 import {
   AppWindowIcon,
   ArrowUpRightIcon,
-  DatabaseBackupIcon,
   DatabaseIcon,
   Loader2Icon,
   MoreHorizontalIcon,
@@ -25,8 +24,10 @@ import {
   useStopApplication,
 } from "@/lib/hooks/use-applications";
 import {
-  useBackupDatabase,
   useDeleteDatabase,
+  useRestartDatabase,
+  useStartDatabase,
+  useStopDatabase,
 } from "@/lib/hooks/use-databases";
 import { queryKeys } from "@/lib/hooks/query-keys";
 import { Badge } from "@/components/ui/badge";
@@ -50,6 +51,43 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipPositioner,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+
+// Icon-only row action with a hover/focus tooltip label.
+function IconAction({
+  label,
+  onClick,
+  children,
+}: {
+  label: string;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label={label}
+            onClick={onClick}
+          />
+        }
+      >
+        {children}
+      </TooltipTrigger>
+      <TooltipPositioner>
+        <TooltipContent>{label}</TooltipContent>
+      </TooltipPositioner>
+    </Tooltip>
+  );
+}
 
 const TRANSIENT = new Set([
   "building",
@@ -210,49 +248,37 @@ function ApplicationRow({
   } else if (status === "running") {
     primary = (
       <>
-        <Button
-          variant="ghost"
-          size="icon"
-          title="Stop"
-          aria-label="Stop"
+        <IconAction
+          label="Stop"
           onClick={() => stop.mutate(undefined, onSuccess)}
         >
           <SquareIcon aria-hidden="true" className="size-4" />
-        </Button>
-        <Button
-          variant="ghost"
-          size="icon"
-          title="Restart"
-          aria-label="Restart"
+        </IconAction>
+        <IconAction
+          label="Restart"
           onClick={() => restart.mutate(undefined, onSuccess)}
         >
           <RotateCcwIcon aria-hidden="true" className="size-4" />
-        </Button>
+        </IconAction>
       </>
     );
   } else if (status === "failed" || status === "error" || status === "crashed") {
     primary = (
-      <Button
-        variant="ghost"
-        size="icon"
-        title="Restart"
-        aria-label="Restart"
+      <IconAction
+        label="Restart"
         onClick={() => restart.mutate(undefined, onSuccess)}
       >
         <RotateCcwIcon aria-hidden="true" className="size-4" />
-      </Button>
+      </IconAction>
     );
   } else {
     primary = (
-      <Button
-        variant="ghost"
-        size="icon"
-        title="Start"
-        aria-label="Start"
+      <IconAction
+        label="Start"
         onClick={() => start.mutate(undefined, onSuccess)}
       >
         <PlayIcon aria-hidden="true" className="size-4" />
-      </Button>
+      </IconAction>
     );
   }
 
@@ -361,11 +387,50 @@ function DatabaseRow({
   db: Database;
 }) {
   const navigate = useNavigate();
-  const backup = useBackupDatabase(projectId, db.id);
+  const stop = useStopDatabase(projectId, db.id);
+  const start = useStartDatabase(projectId, db.id);
+  const restart = useRestartDatabase(projectId, db.id);
   const del = useDeleteDatabase(projectId);
   const [confirmOpen, setConfirmOpen] = useState(false);
 
-  const busy = isTransient(db.status) || backup.isPending;
+  const status = db.status.toLowerCase();
+  const busy =
+    isTransient(status) ||
+    stop.isPending ||
+    start.isPending ||
+    restart.isPending;
+
+  let primary: React.ReactNode = null;
+  if (busy) {
+    primary = (
+      <Button variant="ghost" size="icon" disabled aria-label="Working">
+        <Loader2Icon aria-hidden="true" className="size-4 animate-spin" />
+      </Button>
+    );
+  } else if (status === "running") {
+    primary = (
+      <>
+        <IconAction label="Stop" onClick={() => stop.mutate()}>
+          <SquareIcon aria-hidden="true" className="size-4" />
+        </IconAction>
+        <IconAction label="Restart" onClick={() => restart.mutate()}>
+          <RotateCcwIcon aria-hidden="true" className="size-4" />
+        </IconAction>
+      </>
+    );
+  } else if (status === "failed" || status === "error") {
+    primary = (
+      <IconAction label="Restart" onClick={() => restart.mutate()}>
+        <RotateCcwIcon aria-hidden="true" className="size-4" />
+      </IconAction>
+    );
+  } else {
+    primary = (
+      <IconAction label="Start" onClick={() => start.mutate()}>
+        <PlayIcon aria-hidden="true" className="size-4" />
+      </IconAction>
+    );
+  }
 
   const open = () =>
     navigate({
@@ -385,26 +450,7 @@ function DatabaseRow({
       port={db.internal_port ?? undefined}
       actions={
         <>
-          <Button
-            variant="ghost"
-            size="icon"
-            title="Back up now"
-            aria-label="Back up now"
-            disabled={busy}
-            onClick={() =>
-              toast.promise(backup.mutateAsync(), {
-                loading: "Starting backup…",
-                success: "Backup started",
-                error: (err) => err.message,
-              })
-            }
-          >
-            {backup.isPending ? (
-              <Loader2Icon aria-hidden="true" className="size-4 animate-spin" />
-            ) : (
-              <DatabaseBackupIcon aria-hidden="true" className="size-4" />
-            )}
-          </Button>
+          {primary}
           <DropdownMenu>
             <DropdownMenuTrigger
               render={

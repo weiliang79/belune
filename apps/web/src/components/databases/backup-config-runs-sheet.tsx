@@ -25,6 +25,12 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipPositioner,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -233,15 +239,23 @@ export function BackupConfigRunsSheet({
                 </div>
                 <div className="flex items-center gap-1">
                   {b.status !== "running" && (b.log || b.error) && (
-                    <Button
-                      variant="ghost"
-                      size="icon-sm"
-                      aria-label="View log"
-                      title="View log"
-                      onClick={() => setLogRun(b)}
-                    >
-                      <ScrollText className="h-4 w-4" />
-                    </Button>
+                    <Tooltip>
+                      <TooltipTrigger
+                        render={
+                          <Button
+                            variant="ghost"
+                            size="icon-sm"
+                            aria-label="View log"
+                            onClick={() => setLogRun(b)}
+                          />
+                        }
+                      >
+                        <ScrollText className="h-4 w-4" />
+                      </TooltipTrigger>
+                      <TooltipPositioner>
+                        <TooltipContent>View log</TooltipContent>
+                      </TooltipPositioner>
+                    </Tooltip>
                   )}
                   {b.status === "succeeded" && (
                     <AlertDialog>
@@ -275,17 +289,26 @@ export function BackupConfigRunsSheet({
                   )}
                   {b.status !== "running" && (
                     <AlertDialog>
-                      <AlertDialogTrigger
-                        render={
-                          <Button
-                            variant="ghost"
-                            size="icon-sm"
-                            aria-label="Delete backup"
-                          />
-                        }
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </AlertDialogTrigger>
+                      <Tooltip>
+                        <TooltipTrigger
+                          render={
+                            <AlertDialogTrigger
+                              render={
+                                <Button
+                                  variant="ghost"
+                                  size="icon-sm"
+                                  aria-label="Delete backup"
+                                />
+                              }
+                            />
+                          }
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </TooltipTrigger>
+                        <TooltipPositioner>
+                          <TooltipContent>Delete backup</TooltipContent>
+                        </TooltipPositioner>
+                      </Tooltip>
                       <AlertDialogContent>
                         <AlertDialogHeader>
                           <AlertDialogTitle>Delete this backup?</AlertDialogTitle>

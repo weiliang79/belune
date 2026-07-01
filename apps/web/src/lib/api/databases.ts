@@ -105,3 +105,21 @@ export function upgradeDatabase(
 export function deleteDatabase(projectId: string, databaseId: string) {
   return api.delete<void>(`/projects/${projectId}/databases/${databaseId}`);
 }
+
+export function stopDatabase(projectId: string, databaseId: string) {
+  return api.post<Database>(
+    `/projects/${projectId}/databases/${databaseId}/stop`,
+  );
+}
+
+export function startDatabase(projectId: string, databaseId: string) {
+  return api.post<Database>(
+    `/projects/${projectId}/databases/${databaseId}/start`,
+  );
+}
+
+export function restartDatabase(projectId: string, databaseId: string) {
+  return api.post<Database>(
+    `/projects/${projectId}/databases/${databaseId}/restart`,
+  );
+}

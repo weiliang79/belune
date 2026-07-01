@@ -822,6 +822,129 @@ func (h *Handler) UpgradeDatabase(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusAccepted, map[string]string{"status": status.DatabaseUpgrading})
 }
 
+// StopDatabase stops the managed database container without removing it.
+func (h *Handler) StopDatabase(w http.ResponseWriter, r *http.Request) {
+	databaseID := chi.URLParam(r, "databaseId")
+	var dbUUID pgtype.UUID
+	if err := dbUUID.Scan(databaseID); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid database id")
+		return
+	}
+
+	if !h.canAccessDatabase(r, dbUUID) {
+		writeError(w, http.StatusForbidden, "access denied")
+		return
+	}
+
+	db, err := h.queries.GetDatabase(r.Context(), dbUUID)
+	if err != nil {
+		writeError(w, http.StatusNotFound, "database not found")
+		return
+	}
+
+	// The database container name matches its slug (see provision/delete paths).
+	if err := h.runtime.StopContainer(r.Context(), db.Slug); err != nil {
+		slog.Error("failed to stop database container", "container", db.Slug, "error", err)
+		writeError(w, http.StatusInternalServerError, "failed to stop database")
+		return
+	}
+
+	updated, err := h.queries.UpdateDatabaseStatus(r.Context(), generated.UpdateDatabaseStatusParams{
+		ID:     dbUUID,
+		Status: status.DatabaseStopped,
+	})
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to update database status")
+		return
+	}
+
+	h.audit(r, "stop_database", "database", databaseID, nil)
+	writeJSON(w, http.StatusOK, databaseResponse{Database: updated})
+}
+
+// StartDatabase starts a stopped database container.
+func (h *Handler) StartDatabase(w http.ResponseWriter, r *http.Request) {
+	databaseID := chi.URLParam(r, "databaseId")
+	var dbUUID pgtype.UUID
+	if err := dbUUID.Scan(databaseID); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid database id")
+		return
+	}
+
+	if !h.canAccessDatabase(r, dbUUID) {
+		writeError(w, http.StatusForbidden, "access denied")
+		return
+	}
+
+	db, err := h.queries.GetDatabase(r.Context(), dbUUID)
+	if err != nil {
+		writeError(w, http.StatusNotFound, "database not found")
+		return
+	}
+
+	if err := h.runtime.StartContainer(r.Context(), db.Slug); err != nil {
+		slog.Error("failed to start database container", "container", db.Slug, "error", err)
+		writeError(w, http.StatusInternalServerError, "failed to start database")
+		return
+	}
+
+	updated, err := h.queries.UpdateDatabaseStatus(r.Context(), generated.UpdateDatabaseStatusParams{
+		ID:     dbUUID,
+		Status: status.DatabaseRunning,
+	})
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to update database status")
+		return
+	}
+
+	h.audit(r, "start_database", "database", databaseID, nil)
+	writeJSON(w, http.StatusOK, databaseResponse{Database: updated})
+}
+
+// RestartDatabase stops and starts the existing database container (no recreate).
+func (h *Handler) RestartDatabase(w http.ResponseWriter, r *http.Request) {
+	databaseID := chi.URLParam(r, "databaseId")
+	var dbUUID pgtype.UUID
+	if err := dbUUID.Scan(databaseID); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid database id")
+		return
+	}
+
+	if !h.canAccessDatabase(r, dbUUID) {
+		writeError(w, http.StatusForbidden, "access denied")
+		return
+	}
+
+	db, err := h.queries.GetDatabase(r.Context(), dbUUID)
+	if err != nil {
+		writeError(w, http.StatusNotFound, "database not found")
+		return
+	}
+
+	if err := h.runtime.StopContainer(r.Context(), db.Slug); err != nil {
+		slog.Error("failed to stop database container for restart", "container", db.Slug, "error", err)
+		writeError(w, http.StatusInternalServerError, "failed to restart database")
+		return
+	}
+	if err := h.runtime.StartContainer(r.Context(), db.Slug); err != nil {
+		slog.Error("failed to start database container for restart", "container", db.Slug, "error", err)
+		writeError(w, http.StatusInternalServerError, "failed to restart database")
+		return
+	}
+
+	updated, err := h.queries.UpdateDatabaseStatus(r.Context(), generated.UpdateDatabaseStatusParams{
+		ID:     dbUUID,
+		Status: status.DatabaseRunning,
+	})
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to update database status")
+		return
+	}
+
+	h.audit(r, "restart_database", "database", databaseID, nil)
+	writeJSON(w, http.StatusOK, databaseResponse{Database: updated})
+}
+
 func (h *Handler) DeleteDatabase(w http.ResponseWriter, r *http.Request) {
 	databaseID := chi.URLParam(r, "databaseId")
 	var dbUUID pgtype.UUID
