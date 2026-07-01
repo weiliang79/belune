@@ -14,13 +14,39 @@ import (
 )
 
 type DatabaseService struct {
-	queries *generated.Queries
-	runtime runtime.ContainerRuntime
-	backups *backup.Service // optional; nil disables remote backup cleanup
+	queries      *generated.Queries
+	runtime      runtime.ContainerRuntime
+	backups      *backup.Service           // optional; nil disables global remote backup cleanup
+	destinations *BackupDestinationService // optional; routes config-backup remote cleanup
 }
 
-func NewDatabaseService(queries *generated.Queries, rt runtime.ContainerRuntime, backups *backup.Service) *DatabaseService {
-	return &DatabaseService{queries: queries, runtime: rt, backups: backups}
+func NewDatabaseService(queries *generated.Queries, rt runtime.ContainerRuntime, backups *backup.Service, destinations *BackupDestinationService) *DatabaseService {
+	return &DatabaseService{queries: queries, runtime: rt, backups: backups, destinations: destinations}
+}
+
+// deleteRemoteBackup removes a backup's remote object, routing to the config's
+// project destination when the run came from a config, or the global target
+// otherwise. Best-effort.
+func (s *DatabaseService) deleteRemoteBackup(ctx context.Context, b generated.DatabaseBackup) {
+	if !b.RemoteKey.Valid {
+		return
+	}
+	if b.BackupConfigID.Valid && s.destinations != nil {
+		client, err := s.destinations.ClientForConfig(ctx, b.BackupConfigID)
+		if err != nil {
+			slog.Warn("could not resolve destination for remote backup cleanup", "key", b.RemoteKey.String, "error", err)
+			return
+		}
+		if err := client.DeleteFrom(ctx, []string{b.RemoteKey.String}); err != nil {
+			slog.Warn("could not remove remote backup", "key", b.RemoteKey.String, "error", err)
+		}
+		return
+	}
+	if s.backups != nil && s.backups.Enabled() {
+		if err := s.backups.Delete(ctx, []string{b.RemoteKey.String}); err != nil {
+			slog.Warn("could not remove remote backup", "key", b.RemoteKey.String, "error", err)
+		}
+	}
 }
 
 // DeleteBackup removes a single backup belonging to dbID: its local file, S3
@@ -39,11 +65,7 @@ func (s *DatabaseService) DeleteBackup(ctx context.Context, dbID, backupID pgtyp
 			slog.Warn("could not remove backup file", "path", b.LocalPath.String, "error", err)
 		}
 	}
-	if b.RemoteKey.Valid && s.backups != nil && s.backups.Enabled() {
-		if err := s.backups.Delete(ctx, []string{b.RemoteKey.String}); err != nil {
-			slog.Warn("could not remove remote backup", "key", b.RemoteKey.String, "error", err)
-		}
-	}
+	s.deleteRemoteBackup(ctx, b)
 	return s.queries.DeleteDatabaseBackup(ctx, backupID)
 }
 
@@ -55,21 +77,15 @@ func (s *DatabaseService) cleanupBackups(ctx context.Context, dbID pgtype.UUID) 
 		slog.Warn("could not list backups during db deletion", "error", err)
 		return
 	}
-	var remoteKeys []string
 	for _, b := range rows {
 		if b.LocalPath.Valid {
 			if err := os.Remove(b.LocalPath.String); err != nil && !os.IsNotExist(err) {
 				slog.Warn("could not remove backup file during db deletion", "path", b.LocalPath.String, "error", err)
 			}
 		}
-		if b.RemoteKey.Valid {
-			remoteKeys = append(remoteKeys, b.RemoteKey.String)
-		}
-	}
-	if len(remoteKeys) > 0 && s.backups != nil && s.backups.Enabled() {
-		if err := s.backups.Delete(ctx, remoteKeys); err != nil {
-			slog.Warn("could not remove remote backups during db deletion", "count", len(remoteKeys), "error", err)
-		}
+		// Route remote cleanup per backup (config backups live in project
+		// destinations; ad-hoc runs in the global target).
+		s.deleteRemoteBackup(ctx, b)
 	}
 }
 

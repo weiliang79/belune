@@ -526,22 +526,35 @@ func databaseBackupEnabled(db generated.Database) bool {
 }
 
 type databaseBackupResponse struct {
-	ID         string     `json:"id"`
-	Status     string     `json:"status"`
-	SizeBytes  int64      `json:"size_bytes"`
-	HasRemote  bool       `json:"has_remote"`
-	StartedAt  time.Time  `json:"started_at"`
-	FinishedAt *time.Time `json:"finished_at,omitempty"`
-	Error      string     `json:"error,omitempty"`
+	ID             string     `json:"id"`
+	Status         string     `json:"status"`
+	SizeBytes      int64      `json:"size_bytes"`
+	HasRemote      bool       `json:"has_remote"`
+	RemoteKey      string     `json:"remote_key,omitempty"`
+	ConfigID       *string    `json:"config_id,omitempty"`
+	TargetDatabase string     `json:"target_database,omitempty"`
+	StartedAt      time.Time  `json:"started_at"`
+	FinishedAt     *time.Time `json:"finished_at,omitempty"`
+	Error          string     `json:"error,omitempty"`
+	Log            string     `json:"log,omitempty"`
 }
 
 func toBackupResponse(b generated.DatabaseBackup) databaseBackupResponse {
 	resp := databaseBackupResponse{
-		ID:        uuidToString(b.ID),
-		Status:    b.Status,
-		SizeBytes: b.SizeBytes,
-		HasRemote: b.RemoteKey.Valid,
-		StartedAt: b.StartedAt.Time,
+		ID:             uuidToString(b.ID),
+		Status:         b.Status,
+		SizeBytes:      b.SizeBytes,
+		HasRemote:      b.RemoteKey.Valid,
+		TargetDatabase: b.TargetDatabase,
+		Log:            b.Log,
+		StartedAt:      b.StartedAt.Time,
+	}
+	if b.RemoteKey.Valid {
+		resp.RemoteKey = b.RemoteKey.String
+	}
+	if b.BackupConfigID.Valid {
+		s := uuidToString(b.BackupConfigID)
+		resp.ConfigID = &s
 	}
 	if b.FinishedAt.Valid {
 		t := b.FinishedAt.Time

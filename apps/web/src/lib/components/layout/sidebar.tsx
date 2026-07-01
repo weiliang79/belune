@@ -8,7 +8,6 @@ import {
   Server,
   Users,
   Gauge,
-  Database,
   GitBranch,
   ShieldCheck,
   LogOut,
@@ -44,7 +43,6 @@ const SETTINGS_NAV: NavItem[] = [
   { to: "/server", label: "Server", Icon: Server, admin: true },
   { to: "/team", label: "Team", Icon: Users, admin: true },
   { to: "/quotas", label: "Quotas", Icon: Gauge, admin: true },
-  { to: "/backups", label: "Backups", Icon: Database, admin: true },
   { to: "/audit", label: "Audit Log", Icon: ShieldCheck, admin: true },
 ];
 

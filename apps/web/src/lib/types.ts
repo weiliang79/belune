@@ -219,9 +219,50 @@ export interface DatabaseBackup {
   status: "running" | "succeeded" | "failed";
   size_bytes: number;
   has_remote: boolean;
+  remote_key?: string;
+  config_id?: string;
+  target_database?: string;
   started_at: string;
   finished_at?: string;
   error?: string;
+  log?: string;
+}
+
+export type BackupProvider = "s3" | "r2" | "b2" | "wasabi" | "minio" | "other";
+
+export interface BackupDestination {
+  id: string;
+  project_id: string;
+  name: string;
+  provider: BackupProvider;
+  endpoint: string;
+  region: string;
+  bucket: string;
+  prefix: string;
+  use_ssl: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DatabaseBackupConfig {
+  id: string;
+  database_id: string;
+  destination_id: string;
+  prefix: string;
+  schedule: string;
+  keep_latest?: number;
+  enabled: boolean;
+  databases: string[]; // specific databases to back up; empty = all
+  all_databases: boolean;
+  last_run_at?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ProjectBackupActivity extends DatabaseBackup {
+  database_id: string;
+  database_name: string;
+  database_slug: string;
 }
 
 export interface RouteFeature {

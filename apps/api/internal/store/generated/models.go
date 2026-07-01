@@ -66,6 +66,21 @@ type AuditLog struct {
 	CreatedAt    pgtype.Timestamptz `json:"created_at"`
 }
 
+type BackupDestination struct {
+	ID                   pgtype.UUID        `json:"id"`
+	ProjectID            pgtype.UUID        `json:"project_id"`
+	Name                 string             `json:"name"`
+	Provider             string             `json:"provider"`
+	Endpoint             string             `json:"endpoint"`
+	Region               string             `json:"region"`
+	Bucket               string             `json:"bucket"`
+	UseSsl               bool               `json:"use_ssl"`
+	CredentialsEncrypted []byte             `json:"credentials_encrypted"`
+	CreatedAt            pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
+	Prefix               string             `json:"prefix"`
+}
+
 type BackupRun struct {
 	ID         pgtype.UUID        `json:"id"`
 	StartedAt  pgtype.Timestamptz `json:"started_at"`
@@ -100,15 +115,32 @@ type Database struct {
 }
 
 type DatabaseBackup struct {
-	ID         pgtype.UUID        `json:"id"`
-	DatabaseID pgtype.UUID        `json:"database_id"`
-	StartedAt  pgtype.Timestamptz `json:"started_at"`
-	FinishedAt pgtype.Timestamptz `json:"finished_at"`
-	Status     string             `json:"status"`
-	LocalPath  pgtype.Text        `json:"local_path"`
-	RemoteKey  pgtype.Text        `json:"remote_key"`
-	SizeBytes  int64              `json:"size_bytes"`
-	Error      pgtype.Text        `json:"error"`
+	ID             pgtype.UUID        `json:"id"`
+	DatabaseID     pgtype.UUID        `json:"database_id"`
+	StartedAt      pgtype.Timestamptz `json:"started_at"`
+	FinishedAt     pgtype.Timestamptz `json:"finished_at"`
+	Status         string             `json:"status"`
+	LocalPath      pgtype.Text        `json:"local_path"`
+	RemoteKey      pgtype.Text        `json:"remote_key"`
+	SizeBytes      int64              `json:"size_bytes"`
+	Error          pgtype.Text        `json:"error"`
+	BackupConfigID pgtype.UUID        `json:"backup_config_id"`
+	Log            string             `json:"log"`
+	TargetDatabase string             `json:"target_database"`
+}
+
+type DatabaseBackupConfig struct {
+	ID             pgtype.UUID        `json:"id"`
+	DatabaseID     pgtype.UUID        `json:"database_id"`
+	DestinationID  pgtype.UUID        `json:"destination_id"`
+	Prefix         string             `json:"prefix"`
+	Schedule       string             `json:"schedule"`
+	KeepLatest     pgtype.Int4        `json:"keep_latest"`
+	Enabled        bool               `json:"enabled"`
+	LastRunAt      pgtype.Timestamptz `json:"last_run_at"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+	TargetDatabase string             `json:"target_database"`
 }
 
 type Deployment struct {

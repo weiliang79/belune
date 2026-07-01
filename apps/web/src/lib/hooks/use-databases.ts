@@ -103,9 +103,13 @@ export function useBackupDatabase(projectId: string, databaseId: string) {
   return useMutation({
     mutationFn: () => databasesApi.backupDatabase(projectId, databaseId),
     onSuccess: () => {
-      qc.invalidateQueries({
-        queryKey: queryKeys.databases.backups(projectId, databaseId),
-      });
+      const key = queryKeys.databases.backups(projectId, databaseId);
+      // The worker inserts the "running" run row shortly after the task is
+      // enqueued; re-poll briefly so it shows up without a manual refresh.
+      qc.invalidateQueries({ queryKey: key });
+      [1000, 2500, 5000].forEach((ms) =>
+        setTimeout(() => qc.invalidateQueries({ queryKey: key }), ms),
+      );
     },
   });
 }

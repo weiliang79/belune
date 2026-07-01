@@ -21,7 +21,7 @@ func (q *Queries) DeleteDatabaseBackup(ctx context.Context, id pgtype.UUID) erro
 }
 
 const getDatabaseBackup = `-- name: GetDatabaseBackup :one
-SELECT id, database_id, started_at, finished_at, status, local_path, remote_key, size_bytes, error FROM database_backups
+SELECT id, database_id, started_at, finished_at, status, local_path, remote_key, size_bytes, error, backup_config_id, log, target_database FROM database_backups
 WHERE id = $1
 `
 
@@ -38,12 +38,15 @@ func (q *Queries) GetDatabaseBackup(ctx context.Context, id pgtype.UUID) (Databa
 		&i.RemoteKey,
 		&i.SizeBytes,
 		&i.Error,
+		&i.BackupConfigID,
+		&i.Log,
+		&i.TargetDatabase,
 	)
 	return i, err
 }
 
 const getLastSucceededDatabaseBackup = `-- name: GetLastSucceededDatabaseBackup :one
-SELECT id, database_id, started_at, finished_at, status, local_path, remote_key, size_bytes, error FROM database_backups
+SELECT id, database_id, started_at, finished_at, status, local_path, remote_key, size_bytes, error, backup_config_id, log, target_database FROM database_backups
 WHERE database_id = $1 AND status = 'succeeded'
 ORDER BY finished_at DESC
 LIMIT 1
@@ -62,18 +65,27 @@ func (q *Queries) GetLastSucceededDatabaseBackup(ctx context.Context, databaseID
 		&i.RemoteKey,
 		&i.SizeBytes,
 		&i.Error,
+		&i.BackupConfigID,
+		&i.Log,
+		&i.TargetDatabase,
 	)
 	return i, err
 }
 
 const insertDatabaseBackup = `-- name: InsertDatabaseBackup :one
-INSERT INTO database_backups (database_id)
-VALUES ($1)
-RETURNING id, database_id, started_at, finished_at, status, local_path, remote_key, size_bytes, error
+INSERT INTO database_backups (database_id, backup_config_id, target_database)
+VALUES ($1, $2, $3)
+RETURNING id, database_id, started_at, finished_at, status, local_path, remote_key, size_bytes, error, backup_config_id, log, target_database
 `
 
-func (q *Queries) InsertDatabaseBackup(ctx context.Context, databaseID pgtype.UUID) (DatabaseBackup, error) {
-	row := q.db.QueryRow(ctx, insertDatabaseBackup, databaseID)
+type InsertDatabaseBackupParams struct {
+	DatabaseID     pgtype.UUID `json:"database_id"`
+	BackupConfigID pgtype.UUID `json:"backup_config_id"`
+	TargetDatabase string      `json:"target_database"`
+}
+
+func (q *Queries) InsertDatabaseBackup(ctx context.Context, arg InsertDatabaseBackupParams) (DatabaseBackup, error) {
+	row := q.db.QueryRow(ctx, insertDatabaseBackup, arg.DatabaseID, arg.BackupConfigID, arg.TargetDatabase)
 	var i DatabaseBackup
 	err := row.Scan(
 		&i.ID,
@@ -85,12 +97,15 @@ func (q *Queries) InsertDatabaseBackup(ctx context.Context, databaseID pgtype.UU
 		&i.RemoteKey,
 		&i.SizeBytes,
 		&i.Error,
+		&i.BackupConfigID,
+		&i.Log,
+		&i.TargetDatabase,
 	)
 	return i, err
 }
 
 const listDatabaseBackups = `-- name: ListDatabaseBackups :many
-SELECT id, database_id, started_at, finished_at, status, local_path, remote_key, size_bytes, error FROM database_backups
+SELECT id, database_id, started_at, finished_at, status, local_path, remote_key, size_bytes, error, backup_config_id, log, target_database FROM database_backups
 WHERE database_id = $1
 ORDER BY started_at DESC
 LIMIT $2
@@ -120,6 +135,120 @@ func (q *Queries) ListDatabaseBackups(ctx context.Context, arg ListDatabaseBacku
 			&i.RemoteKey,
 			&i.SizeBytes,
 			&i.Error,
+			&i.BackupConfigID,
+			&i.Log,
+			&i.TargetDatabase,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listDatabaseBackupsByConfig = `-- name: ListDatabaseBackupsByConfig :many
+SELECT id, database_id, started_at, finished_at, status, local_path, remote_key, size_bytes, error, backup_config_id, log, target_database FROM database_backups
+WHERE backup_config_id = $1
+ORDER BY started_at DESC
+LIMIT $2
+`
+
+type ListDatabaseBackupsByConfigParams struct {
+	BackupConfigID pgtype.UUID `json:"backup_config_id"`
+	Limit          int32       `json:"limit"`
+}
+
+func (q *Queries) ListDatabaseBackupsByConfig(ctx context.Context, arg ListDatabaseBackupsByConfigParams) ([]DatabaseBackup, error) {
+	rows, err := q.db.Query(ctx, listDatabaseBackupsByConfig, arg.BackupConfigID, arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []DatabaseBackup{}
+	for rows.Next() {
+		var i DatabaseBackup
+		if err := rows.Scan(
+			&i.ID,
+			&i.DatabaseID,
+			&i.StartedAt,
+			&i.FinishedAt,
+			&i.Status,
+			&i.LocalPath,
+			&i.RemoteKey,
+			&i.SizeBytes,
+			&i.Error,
+			&i.BackupConfigID,
+			&i.Log,
+			&i.TargetDatabase,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listProjectDatabaseBackups = `-- name: ListProjectDatabaseBackups :many
+SELECT b.id, b.database_id, b.started_at, b.finished_at, b.status, b.local_path, b.remote_key, b.size_bytes, b.error, b.backup_config_id, b.log, b.target_database, d.name AS database_name, d.slug AS database_slug
+FROM database_backups b
+JOIN databases d ON d.id = b.database_id
+WHERE d.project_id = $1
+ORDER BY b.started_at DESC
+LIMIT $2
+`
+
+type ListProjectDatabaseBackupsParams struct {
+	ProjectID pgtype.UUID `json:"project_id"`
+	Limit     int32       `json:"limit"`
+}
+
+type ListProjectDatabaseBackupsRow struct {
+	ID             pgtype.UUID        `json:"id"`
+	DatabaseID     pgtype.UUID        `json:"database_id"`
+	StartedAt      pgtype.Timestamptz `json:"started_at"`
+	FinishedAt     pgtype.Timestamptz `json:"finished_at"`
+	Status         string             `json:"status"`
+	LocalPath      pgtype.Text        `json:"local_path"`
+	RemoteKey      pgtype.Text        `json:"remote_key"`
+	SizeBytes      int64              `json:"size_bytes"`
+	Error          pgtype.Text        `json:"error"`
+	BackupConfigID pgtype.UUID        `json:"backup_config_id"`
+	Log            string             `json:"log"`
+	TargetDatabase string             `json:"target_database"`
+	DatabaseName   string             `json:"database_name"`
+	DatabaseSlug   string             `json:"database_slug"`
+}
+
+func (q *Queries) ListProjectDatabaseBackups(ctx context.Context, arg ListProjectDatabaseBackupsParams) ([]ListProjectDatabaseBackupsRow, error) {
+	rows, err := q.db.Query(ctx, listProjectDatabaseBackups, arg.ProjectID, arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListProjectDatabaseBackupsRow{}
+	for rows.Next() {
+		var i ListProjectDatabaseBackupsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.DatabaseID,
+			&i.StartedAt,
+			&i.FinishedAt,
+			&i.Status,
+			&i.LocalPath,
+			&i.RemoteKey,
+			&i.SizeBytes,
+			&i.Error,
+			&i.BackupConfigID,
+			&i.Log,
+			&i.TargetDatabase,
+			&i.DatabaseName,
+			&i.DatabaseSlug,
 		); err != nil {
 			return nil, err
 		}
@@ -138,7 +267,8 @@ SET finished_at = $2,
     local_path  = $4,
     remote_key  = $5,
     size_bytes  = $6,
-    error       = $7
+    error       = $7,
+    log         = $8
 WHERE id = $1
 `
 
@@ -150,6 +280,7 @@ type UpdateDatabaseBackupParams struct {
 	RemoteKey  pgtype.Text        `json:"remote_key"`
 	SizeBytes  int64              `json:"size_bytes"`
 	Error      pgtype.Text        `json:"error"`
+	Log        string             `json:"log"`
 }
 
 func (q *Queries) UpdateDatabaseBackup(ctx context.Context, arg UpdateDatabaseBackupParams) error {
@@ -161,6 +292,7 @@ func (q *Queries) UpdateDatabaseBackup(ctx context.Context, arg UpdateDatabaseBa
 		arg.RemoteKey,
 		arg.SizeBytes,
 		arg.Error,
+		arg.Log,
 	)
 	return err
 }

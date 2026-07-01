@@ -8,6 +8,10 @@ services:
       - "8080:8080"
     env_file:
       - ../.env
+    volumes:
+      # Persist managed-database logical dumps (DATABASE_BACKUP_DIR=/data/backups/databases)
+      # so local restore works across container recreation.
+      - paasdata:/data
     depends_on:
       postgres:
         condition: service_healthy
@@ -101,3 +105,4 @@ volumes:
   caddydata:
   caddyconfig:
   caddylogs:
+  paasdata:

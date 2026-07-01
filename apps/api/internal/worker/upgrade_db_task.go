@@ -107,7 +107,7 @@ func (h *TaskHandler) HandleUpgradeDBTask(ctx context.Context, t *asynq.Task) er
 	}
 
 	// 3. Restore the dump into the new-version container.
-	if err := h.applyRestoreArchive(ctx, dbNew, creds, "logical", dumpPath); err != nil {
+	if err := h.applyRestoreArchive(ctx, dbNew, creds, "logical", dumpPath, ""); err != nil {
 		return h.rollbackUpgrade(ctx, dbNew, creds, oldVersion, hostPort, dumpPath,
 			fmt.Sprintf("restore into target version: %v", err))
 	}
@@ -119,13 +119,16 @@ func (h *TaskHandler) HandleUpgradeDBTask(ctx context.Context, t *asynq.Task) er
 // dumpForUpgrade produces a logical dump recorded as a succeeded backup row and
 // returns the local path used as the upgrade's rollback artifact.
 func (h *TaskHandler) dumpForUpgrade(ctx context.Context, db generated.Database, creds map[string]string) (string, error) {
-	run, err := h.Queries.InsertDatabaseBackup(ctx, db.ID)
+	run, err := h.Queries.InsertDatabaseBackup(ctx, generated.InsertDatabaseBackupParams{DatabaseID: db.ID})
 	if err != nil {
 		return "", fmt.Errorf("insert backup run: %w", err)
 	}
 
+	lg := &runLog{}
+	lg.step("Pre-upgrade dump started (engine=%s)", db.Type)
+
 	if err := os.MkdirAll(h.Config.DatabaseBackupDir, 0o755); err != nil {
-		h.failDatabaseBackup(ctx, run.ID, fmt.Sprintf("create backup dir: %v", err))
+		h.failDatabaseBackupLog(ctx, run.ID, fmt.Sprintf("create backup dir: %v", err), lg)
 		return "", err
 	}
 	fileName := fmt.Sprintf("%s-preupgrade-%s.backup.gz", db.Slug, time.Now().UTC().Format("20060102T150405Z"))
@@ -133,19 +136,19 @@ func (h *TaskHandler) dumpForUpgrade(ctx context.Context, db generated.Database,
 
 	f, err := os.Create(localPath)
 	if err != nil {
-		h.failDatabaseBackup(ctx, run.ID, fmt.Sprintf("create backup file: %v", err))
+		h.failDatabaseBackupLog(ctx, run.ID, fmt.Sprintf("create backup file: %v", err), lg)
 		return "", err
 	}
-	archiveErr := h.writeBackupArchive(ctx, db, creds, "logical", f)
+	archiveErr := h.writeBackupArchive(ctx, db, creds, "logical", f, lg, "")
 	closeErr := f.Close()
 	if archiveErr != nil {
 		_ = os.Remove(localPath)
-		h.failDatabaseBackup(ctx, run.ID, archiveErr.Error())
+		h.failDatabaseBackupLog(ctx, run.ID, archiveErr.Error(), lg)
 		return "", archiveErr
 	}
 	if closeErr != nil {
 		_ = os.Remove(localPath)
-		h.failDatabaseBackup(ctx, run.ID, closeErr.Error())
+		h.failDatabaseBackupLog(ctx, run.ID, closeErr.Error(), lg)
 		return "", closeErr
 	}
 
@@ -161,18 +164,22 @@ func (h *TaskHandler) dumpForUpgrade(ctx context.Context, db generated.Database,
 	if sizeBytes < minPreUpgradeDumpBytes {
 		_ = os.Remove(localPath)
 		msg := fmt.Sprintf("pre-upgrade dump is suspiciously small (%d bytes); aborting before volume wipe", sizeBytes)
-		h.failDatabaseBackup(ctx, run.ID, msg)
+		h.failDatabaseBackupLog(ctx, run.ID, msg, lg)
 		return "", errors.New(msg)
 	}
+	lg.step("Archive written: %s (%d bytes)", fileName, sizeBytes)
 
 	remoteKey := pgtype.Text{}
 	if h.BackupService != nil && h.BackupService.Enabled() {
 		if key, upErr := h.BackupService.Upload(ctx, localPath); upErr != nil {
+			lg.step("S3 upload failed (keeping local copy): %v", upErr)
 			slog.Warn("upgrade: pre-upgrade dump S3 upload failed; keeping local copy", "database_id", formatUUID(db.ID), "error", upErr)
 		} else {
 			remoteKey = pgtype.Text{String: key, Valid: true}
+			lg.step("Uploaded to S3: %s", key)
 		}
 	}
+	lg.step("Pre-upgrade dump succeeded")
 	h.finaliseDatabaseBackup(ctx, run.ID, generated.UpdateDatabaseBackupParams{
 		ID:         run.ID,
 		FinishedAt: pgtype.Timestamptz{Time: time.Now(), Valid: true},
@@ -180,6 +187,7 @@ func (h *TaskHandler) dumpForUpgrade(ctx context.Context, db generated.Database,
 		LocalPath:  pgtype.Text{String: localPath, Valid: true},
 		RemoteKey:  remoteKey,
 		SizeBytes:  sizeBytes,
+		Log:        lg.String(),
 	})
 	return localPath, nil
 }
@@ -209,7 +217,7 @@ func (h *TaskHandler) rollbackUpgrade(ctx context.Context, db generated.Database
 		h.failDatabase(ctx, db.ID, fmt.Sprintf("upgrade failed (%s); rollback not ready: %v", reason, err))
 		return errors.Join(fmt.Errorf("rollback not ready: %w", err), asynq.SkipRetry)
 	}
-	if err := h.applyRestoreArchive(ctx, dbOld, creds, "logical", dumpPath); err != nil {
+	if err := h.applyRestoreArchive(ctx, dbOld, creds, "logical", dumpPath, ""); err != nil {
 		h.failDatabase(ctx, db.ID, fmt.Sprintf("upgrade failed (%s); rollback restore failed: %v", reason, err))
 		return errors.Join(fmt.Errorf("rollback restore: %w", err), asynq.SkipRetry)
 	}

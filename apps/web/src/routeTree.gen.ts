@@ -21,7 +21,6 @@ import { Route as AppServerRouteImport } from './routes/_app/server'
 import { Route as AppQuotasRouteImport } from './routes/_app/quotas'
 import { Route as AppGitRouteImport } from './routes/_app/git'
 import { Route as AppDashboardRouteImport } from './routes/_app/dashboard'
-import { Route as AppBackupsRouteImport } from './routes/_app/backups'
 import { Route as AppAuditRouteImport } from './routes/_app/audit'
 import { Route as AppAccountRouteImport } from './routes/_app/account'
 import { Route as AppRequestsIndexRouteImport } from './routes/_app/requests/index'
@@ -32,6 +31,7 @@ import { Route as AppProjectsProjectIdRouteImport } from './routes/_app/projects
 import { Route as AppProjectsProjectIdIndexRouteImport } from './routes/_app/projects/$projectId/index'
 import { Route as AppProjectsProjectIdSettingsRouteImport } from './routes/_app/projects/$projectId/settings'
 import { Route as AppProjectsProjectIdEnvRouteImport } from './routes/_app/projects/$projectId/env'
+import { Route as AppProjectsProjectIdBackupsRouteImport } from './routes/_app/projects/$projectId/backups'
 import { Route as AppProjectsProjectIdDatabasesDatabaseIdRouteImport } from './routes/_app/projects/$projectId/databases/$databaseId'
 import { Route as AppProjectsProjectIdApplicationsApplicationIdRouteImport } from './routes/_app/projects/$projectId/applications/$applicationId'
 import { Route as AppProjectsProjectIdApplicationsApplicationIdIndexRouteImport } from './routes/_app/projects/$projectId/applications/$applicationId/index'
@@ -103,11 +103,6 @@ const AppDashboardRoute = AppDashboardRouteImport.update({
   path: '/dashboard',
   getParentRoute: () => AppRoute,
 } as any)
-const AppBackupsRoute = AppBackupsRouteImport.update({
-  id: '/backups',
-  path: '/backups',
-  getParentRoute: () => AppRoute,
-} as any)
 const AppAuditRoute = AppAuditRouteImport.update({
   id: '/audit',
   path: '/audit',
@@ -160,6 +155,12 @@ const AppProjectsProjectIdEnvRoute = AppProjectsProjectIdEnvRouteImport.update({
   path: '/env',
   getParentRoute: () => AppProjectsProjectIdRoute,
 } as any)
+const AppProjectsProjectIdBackupsRoute =
+  AppProjectsProjectIdBackupsRouteImport.update({
+    id: '/backups',
+    path: '/backups',
+    getParentRoute: () => AppProjectsProjectIdRoute,
+  } as any)
 const AppProjectsProjectIdDatabasesDatabaseIdRoute =
   AppProjectsProjectIdDatabasesDatabaseIdRouteImport.update({
     id: '/databases/$databaseId',
@@ -236,7 +237,6 @@ export interface FileRoutesByFullPath {
   '/setup': typeof SetupRoute
   '/account': typeof AppAccountRoute
   '/audit': typeof AppAuditRoute
-  '/backups': typeof AppBackupsRoute
   '/dashboard': typeof AppDashboardRoute
   '/git': typeof AppGitRoute
   '/quotas': typeof AppQuotasRoute
@@ -247,6 +247,7 @@ export interface FileRoutesByFullPath {
   '/deployments/': typeof AppDeploymentsIndexRoute
   '/projects/': typeof AppProjectsIndexRoute
   '/requests/': typeof AppRequestsIndexRoute
+  '/projects/$projectId/backups': typeof AppProjectsProjectIdBackupsRoute
   '/projects/$projectId/env': typeof AppProjectsProjectIdEnvRoute
   '/projects/$projectId/settings': typeof AppProjectsProjectIdSettingsRoute
   '/projects/$projectId/': typeof AppProjectsProjectIdIndexRoute
@@ -271,7 +272,6 @@ export interface FileRoutesByTo {
   '/setup': typeof SetupRoute
   '/account': typeof AppAccountRoute
   '/audit': typeof AppAuditRoute
-  '/backups': typeof AppBackupsRoute
   '/dashboard': typeof AppDashboardRoute
   '/git': typeof AppGitRoute
   '/quotas': typeof AppQuotasRoute
@@ -281,6 +281,7 @@ export interface FileRoutesByTo {
   '/deployments': typeof AppDeploymentsIndexRoute
   '/projects': typeof AppProjectsIndexRoute
   '/requests': typeof AppRequestsIndexRoute
+  '/projects/$projectId/backups': typeof AppProjectsProjectIdBackupsRoute
   '/projects/$projectId/env': typeof AppProjectsProjectIdEnvRoute
   '/projects/$projectId/settings': typeof AppProjectsProjectIdSettingsRoute
   '/projects/$projectId': typeof AppProjectsProjectIdIndexRoute
@@ -306,7 +307,6 @@ export interface FileRoutesById {
   '/setup': typeof SetupRoute
   '/_app/account': typeof AppAccountRoute
   '/_app/audit': typeof AppAuditRoute
-  '/_app/backups': typeof AppBackupsRoute
   '/_app/dashboard': typeof AppDashboardRoute
   '/_app/git': typeof AppGitRoute
   '/_app/quotas': typeof AppQuotasRoute
@@ -317,6 +317,7 @@ export interface FileRoutesById {
   '/_app/deployments/': typeof AppDeploymentsIndexRoute
   '/_app/projects/': typeof AppProjectsIndexRoute
   '/_app/requests/': typeof AppRequestsIndexRoute
+  '/_app/projects/$projectId/backups': typeof AppProjectsProjectIdBackupsRoute
   '/_app/projects/$projectId/env': typeof AppProjectsProjectIdEnvRoute
   '/_app/projects/$projectId/settings': typeof AppProjectsProjectIdSettingsRoute
   '/_app/projects/$projectId/': typeof AppProjectsProjectIdIndexRoute
@@ -343,7 +344,6 @@ export interface FileRouteTypes {
     | '/setup'
     | '/account'
     | '/audit'
-    | '/backups'
     | '/dashboard'
     | '/git'
     | '/quotas'
@@ -354,6 +354,7 @@ export interface FileRouteTypes {
     | '/deployments/'
     | '/projects/'
     | '/requests/'
+    | '/projects/$projectId/backups'
     | '/projects/$projectId/env'
     | '/projects/$projectId/settings'
     | '/projects/$projectId/'
@@ -378,7 +379,6 @@ export interface FileRouteTypes {
     | '/setup'
     | '/account'
     | '/audit'
-    | '/backups'
     | '/dashboard'
     | '/git'
     | '/quotas'
@@ -388,6 +388,7 @@ export interface FileRouteTypes {
     | '/deployments'
     | '/projects'
     | '/requests'
+    | '/projects/$projectId/backups'
     | '/projects/$projectId/env'
     | '/projects/$projectId/settings'
     | '/projects/$projectId'
@@ -412,7 +413,6 @@ export interface FileRouteTypes {
     | '/setup'
     | '/_app/account'
     | '/_app/audit'
-    | '/_app/backups'
     | '/_app/dashboard'
     | '/_app/git'
     | '/_app/quotas'
@@ -423,6 +423,7 @@ export interface FileRouteTypes {
     | '/_app/deployments/'
     | '/_app/projects/'
     | '/_app/requests/'
+    | '/_app/projects/$projectId/backups'
     | '/_app/projects/$projectId/env'
     | '/_app/projects/$projectId/settings'
     | '/_app/projects/$projectId/'
@@ -535,13 +536,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppDashboardRouteImport
       parentRoute: typeof AppRoute
     }
-    '/_app/backups': {
-      id: '/_app/backups'
-      path: '/backups'
-      fullPath: '/backups'
-      preLoaderRoute: typeof AppBackupsRouteImport
-      parentRoute: typeof AppRoute
-    }
     '/_app/audit': {
       id: '/_app/audit'
       path: '/audit'
@@ -610,6 +604,13 @@ declare module '@tanstack/react-router' {
       path: '/env'
       fullPath: '/projects/$projectId/env'
       preLoaderRoute: typeof AppProjectsProjectIdEnvRouteImport
+      parentRoute: typeof AppProjectsProjectIdRoute
+    }
+    '/_app/projects/$projectId/backups': {
+      id: '/_app/projects/$projectId/backups'
+      path: '/backups'
+      fullPath: '/projects/$projectId/backups'
+      preLoaderRoute: typeof AppProjectsProjectIdBackupsRouteImport
       parentRoute: typeof AppProjectsProjectIdRoute
     }
     '/_app/projects/$projectId/databases/$databaseId': {
@@ -732,6 +733,7 @@ const AppProjectsProjectIdApplicationsApplicationIdRouteWithChildren =
   )
 
 interface AppProjectsProjectIdRouteChildren {
+  AppProjectsProjectIdBackupsRoute: typeof AppProjectsProjectIdBackupsRoute
   AppProjectsProjectIdEnvRoute: typeof AppProjectsProjectIdEnvRoute
   AppProjectsProjectIdSettingsRoute: typeof AppProjectsProjectIdSettingsRoute
   AppProjectsProjectIdIndexRoute: typeof AppProjectsProjectIdIndexRoute
@@ -740,6 +742,7 @@ interface AppProjectsProjectIdRouteChildren {
 }
 
 const AppProjectsProjectIdRouteChildren: AppProjectsProjectIdRouteChildren = {
+  AppProjectsProjectIdBackupsRoute: AppProjectsProjectIdBackupsRoute,
   AppProjectsProjectIdEnvRoute: AppProjectsProjectIdEnvRoute,
   AppProjectsProjectIdSettingsRoute: AppProjectsProjectIdSettingsRoute,
   AppProjectsProjectIdIndexRoute: AppProjectsProjectIdIndexRoute,
@@ -755,7 +758,6 @@ const AppProjectsProjectIdRouteWithChildren =
 interface AppRouteChildren {
   AppAccountRoute: typeof AppAccountRoute
   AppAuditRoute: typeof AppAuditRoute
-  AppBackupsRoute: typeof AppBackupsRoute
   AppDashboardRoute: typeof AppDashboardRoute
   AppGitRoute: typeof AppGitRoute
   AppQuotasRoute: typeof AppQuotasRoute
@@ -771,7 +773,6 @@ interface AppRouteChildren {
 const AppRouteChildren: AppRouteChildren = {
   AppAccountRoute: AppAccountRoute,
   AppAuditRoute: AppAuditRoute,
-  AppBackupsRoute: AppBackupsRoute,
   AppDashboardRoute: AppDashboardRoute,
   AppGitRoute: AppGitRoute,
   AppQuotasRoute: AppQuotasRoute,

@@ -7,6 +7,10 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { useState } from "react";
+import { BackupConfigFormDialog } from "@/components/databases/backup-config-form-dialog";
+import { BackupConfigRunsSheet } from "@/components/databases/backup-config-runs-sheet";
+import { useDatabaseBackupConfigs } from "@/lib/hooks/use-database-backup-configs";
+import { useBackupDestinations } from "@/lib/hooks/use-backup-destinations";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -31,8 +35,6 @@ import {
   useSetDatabaseExternalAccess,
   useDatabaseBackups,
   useBackupDatabase,
-  useRestoreDatabase,
-  useDeleteDatabaseBackup,
   useUpgradeDatabase,
 } from "@/lib/hooks/use-databases";
 import { useProject } from "@/lib/hooks/use-projects";
@@ -42,8 +44,7 @@ import {
   Trash2,
   TriangleAlert as AlertTriangleIcon,
   DatabaseBackup as DatabaseBackupIcon,
-  RotateCcw,
-  Cloud,
+  Plus,
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useBreadcrumbLabel } from "@/lib/hooks/use-breadcrumb";
@@ -51,7 +52,7 @@ import { StatusBadge } from "@/lib/components/status-badge";
 import { CopyButton } from "@/lib/components/copy-button";
 import { formatBytes } from "@/lib/utils/format";
 import { cn } from "@/lib/utils";
-import type { Database, DatabaseBackup } from "@/lib/types";
+import type { Database, DatabaseBackupConfig } from "@/lib/types";
 
 // Engines with an in-image logical-dump tool (pg_dump/mysqldump/mongodump).
 // redis (cache) has no logical backup. "other" is backed up when a backup mode
@@ -73,18 +74,33 @@ function dbUpgradable(db: Database): boolean {
   return db.type === "postgres" || db.type === "mysql" || db.type === "mongo";
 }
 
+type DbTab = "overview" | "backups" | "advanced";
+
 export const Route = createFileRoute(
   "/_app/projects/$projectId/databases/$databaseId",
 )({
   component: DatabaseDetailPage,
+  validateSearch: (search: Record<string, unknown>): { tab?: DbTab } =>
+    search.tab === "backups" || search.tab === "advanced"
+      ? { tab: search.tab as DbTab }
+      : {},
 });
 
 function DatabaseDetailPage() {
   const { projectId, databaseId } = Route.useParams();
+  const { tab } = Route.useSearch();
   const navigate = useNavigate();
   const { data: db, isLoading } = useDatabase(projectId, databaseId);
   const { data: project } = useProject(projectId);
   const deleteDb = useDeleteDatabase(projectId);
+
+  const activeTab: DbTab = tab ?? "overview";
+  const setTab = (next: DbTab) =>
+    navigate({
+      to: ".",
+      search: () => ({ tab: next === "overview" ? undefined : next }),
+      replace: true,
+    });
 
   useBreadcrumbLabel(projectId, project?.name);
   useBreadcrumbLabel(databaseId, db?.name);
@@ -176,66 +192,6 @@ function DatabaseDetailPage() {
         </Card>
       )}
 
-      {db.status === "running" && db.credentials && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Connection Details</CardTitle>
-            <CardDescription>
-              Use these credentials to connect from your services on the
-              internal network.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-3">
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-muted-foreground">Host</span>
-                <div className="flex items-center gap-1">
-                  <code className="text-xs">{db.internal_host}</code>
-                  <CopyButton value={db.internal_host} />
-                </div>
-              </div>
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-muted-foreground">Port</span>
-                <div className="flex items-center gap-1">
-                  <code className="text-xs">{db.internal_port}</code>
-                  <CopyButton value={String(db.internal_port)} />
-                </div>
-              </div>
-              <Separator />
-              {Object.entries(db.credentials).map(([key, value]) => (
-                <div
-                  key={key}
-                  className="flex items-center justify-between text-sm"
-                >
-                  <span className="text-muted-foreground">{key}</span>
-                  <div className="flex items-center gap-1">
-                    <code className="text-xs">{value}</code>
-                    <CopyButton value={value} />
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            {db.connection_string && (
-              <>
-                <Separator />
-                <div className="space-y-2">
-                  <p className="text-muted-foreground text-sm">
-                    Connection String
-                  </p>
-                  <div className="bg-muted flex items-center justify-between rounded-md px-3 py-2">
-                    <code className="text-xs break-all">
-                      {db.connection_string}
-                    </code>
-                    <CopyButton value={db.connection_string} />
-                  </div>
-                </div>
-              </>
-            )}
-          </CardContent>
-        </Card>
-      )}
-
       {db.status === "failed" && (
         <Card>
           <CardContent className="space-y-1 py-6">
@@ -246,65 +202,177 @@ function DatabaseDetailPage() {
               A failed provision or reconfigure usually leaves the data volume
               intact. If an upgrade was interrupted, recover from the most
               recent pre-upgrade backup. Otherwise remove the database from the
-              Danger Zone below if you no longer need it.
+              Danger Zone (Advanced tab) if you no longer need it.
             </p>
           </CardContent>
         </Card>
       )}
 
-      {db.status === "running" && <ExternalAccessCard db={db} />}
+      <nav className="flex gap-1 border-b">
+        {(
+          [
+            { value: "overview", label: "Overview" },
+            { value: "backups", label: "Backups" },
+            { value: "advanced", label: "Advanced" },
+          ] as const
+        ).map((t) => (
+          <button
+            key={t.value}
+            type="button"
+            onClick={() => setTab(t.value)}
+            className={cn(
+              "border-b-2 px-4 py-2 text-sm font-medium transition-colors",
+              activeTab === t.value
+                ? "border-primary text-foreground"
+                : "text-muted-foreground hover:text-foreground border-transparent",
+            )}
+          >
+            {t.label}
+          </button>
+        ))}
+      </nav>
 
-      {db.status === "running" && <AdvancedCard db={db} />}
+      {activeTab === "overview" && (
+        <div className="space-y-6">
+          {db.status === "running" && db.credentials ? (
+            <Card>
+              <CardHeader>
+                <CardTitle>Connection Details</CardTitle>
+                <CardDescription>
+                  Use these credentials to connect from your services on the
+                  internal network.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-muted-foreground">Host</span>
+                    <div className="flex items-center gap-1">
+                      <code className="text-xs">{db.internal_host}</code>
+                      <CopyButton value={db.internal_host} />
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-muted-foreground">Port</span>
+                    <div className="flex items-center gap-1">
+                      <code className="text-xs">{db.internal_port}</code>
+                      <CopyButton value={String(db.internal_port)} />
+                    </div>
+                  </div>
+                  <Separator />
+                  {Object.entries(db.credentials).map(([key, value]) => (
+                    <div
+                      key={key}
+                      className="flex items-center justify-between text-sm"
+                    >
+                      <span className="text-muted-foreground">{key}</span>
+                      <div className="flex items-center gap-1">
+                        <code className="text-xs">{value}</code>
+                        <CopyButton value={value} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
 
-      {db.status === "running" && dbBackupEnabled(db) && (
-        <BackupsCard db={db} />
+                {db.connection_string && (
+                  <>
+                    <Separator />
+                    <div className="space-y-2">
+                      <p className="text-muted-foreground text-sm">
+                        Connection String
+                      </p>
+                      <div className="bg-muted flex items-center justify-between rounded-md px-3 py-2">
+                        <code className="text-xs break-all">
+                          {db.connection_string}
+                        </code>
+                        <CopyButton value={db.connection_string} />
+                      </div>
+                    </div>
+                  </>
+                )}
+              </CardContent>
+            </Card>
+          ) : (
+            db.status !== "failed" && (
+              <Card>
+                <CardContent className="text-muted-foreground py-6 text-sm">
+                  Connection details appear once the database is running.
+                </CardContent>
+              </Card>
+            )
+          )}
+
+          {db.status === "running" && <ExternalAccessCard db={db} />}
+        </div>
       )}
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-destructive">Danger Zone</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium">Delete this database</p>
-              <p className="text-muted-foreground text-xs">
-                This will permanently delete the database, its data, and
-                container.
-              </p>
-            </div>
-            <AlertDialog>
-              <AlertDialogTrigger
-                render={<Button variant="destructive" size="sm" />}
-              >
-                <Trash2 className="mr-1 size-4" />
-                Delete
-              </AlertDialogTrigger>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>Delete database?</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    This will permanently delete &quot;{db.name}&quot; and all
-                    its data. This action cannot be undone.
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel>Cancel</AlertDialogCancel>
-                  <AlertDialogAction
-                    onClick={handleDelete}
-                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+      {activeTab === "backups" && (
+        <div className="space-y-6">
+          {db.status === "running" && dbBackupEnabled(db) ? (
+            <BackupsTab db={db} />
+          ) : (
+            <Card>
+              <CardContent className="text-muted-foreground py-6 text-sm">
+                {dbBackupEnabled(db)
+                  ? "Backups are available once the database is running."
+                  : "Backups are not supported for this database type."}
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      )}
+
+      {activeTab === "advanced" && (
+        <div className="space-y-6">
+          {db.status === "running" && <AdvancedCard db={db} />}
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-destructive">Danger Zone</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium">Delete this database</p>
+                  <p className="text-muted-foreground text-xs">
+                    This will permanently delete the database, its data, and
+                    container.
+                  </p>
+                </div>
+                <AlertDialog>
+                  <AlertDialogTrigger
+                    render={<Button variant="destructive" size="sm" />}
                   >
-                    {deleteDb.isPending ? (
-                      <Loader2 className="mr-1 h-4 w-4 animate-spin" />
-                    ) : null}
+                    <Trash2 className="mr-1 size-4" />
                     Delete
-                  </AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
-          </div>
-        </CardContent>
-      </Card>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Delete database?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        This will permanently delete &quot;{db.name}&quot; and
+                        all its data. This action cannot be undone.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                      <AlertDialogAction
+                        onClick={handleDelete}
+                        className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                      >
+                        {deleteDb.isPending ? (
+                          <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                        ) : null}
+                        Delete
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
     </div>
   );
 }
@@ -634,32 +702,40 @@ function AdvancedCard({ db }: { db: Database }) {
   );
 }
 
-function backupStatusTone(status: DatabaseBackup["status"]): string {
-  switch (status) {
-    case "succeeded":
-      return "text-status-ready";
-    case "failed":
-      return "text-status-error";
-    default:
-      return "text-status-building";
-  }
-}
-
-function BackupsCard({ db }: { db: Database }) {
-  const { data: backups, isLoading } = useDatabaseBackups(db.project_id, db.id);
+function BackupsTab({ db }: { db: Database }) {
+  const { data: configs, isLoading } = useDatabaseBackupConfigs(
+    db.project_id,
+    db.id,
+  );
+  const { data: destinations } = useBackupDestinations(db.project_id);
+  const { data: backups } = useDatabaseBackups(db.project_id, db.id);
   const backup = useBackupDatabase(db.project_id, db.id);
-  const restore = useRestoreDatabase(db.project_id, db.id);
-  const deleteBackup = useDeleteDatabaseBackup(db.project_id, db.id);
 
-  const handleDeleteBackup = (backupId: string) => {
-    toast.promise(deleteBackup.mutateAsync(backupId), {
-      loading: "Deleting backup…",
-      success: "Backup deleted",
-      error: (err) => err.message,
-    });
+  const [formOpen, setFormOpen] = useState(false);
+  const [editing, setEditing] = useState<DatabaseBackupConfig | null>(null);
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const [selected, setSelected] = useState<DatabaseBackupConfig | null>(null);
+
+  const destName = (id: string) =>
+    destinations?.find((d) => d.id === id)?.name ?? "Unknown destination";
+  const noDestinations = destinations?.length === 0;
+  const anyRunning = backups?.some((b) => b.status === "running") ?? false;
+
+  const openAdd = () => {
+    setEditing(null);
+    setFormOpen(true);
+  };
+  const openManage = (cfg: DatabaseBackupConfig) => {
+    setSelected(cfg);
+    setSheetOpen(true);
+  };
+  const openEdit = (cfg: DatabaseBackupConfig) => {
+    setSheetOpen(false);
+    setEditing(cfg);
+    setFormOpen(true);
   };
 
-  const handleBackup = () => {
+  const handleAdHocBackup = () => {
     toast.promise(backup.mutateAsync(), {
       loading: "Starting backup…",
       success: "Backup started",
@@ -667,158 +743,101 @@ function BackupsCard({ db }: { db: Database }) {
     });
   };
 
-  const handleRestore = (backupId: string) => {
-    toast.promise(restore.mutateAsync(backupId), {
-      loading: "Starting restore…",
-      success: "Restore started — the database stays online",
-      error: (err) => err.message,
-    });
-  };
-
   return (
     <Card>
       <CardHeader>
-        <div className="flex items-start justify-between gap-3">
+        <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <CardTitle>Backups</CardTitle>
             <CardDescription>
-              Online logical dumps. No downtime; restore replaces current data.
+              Schedule recurring backups to a project destination, or run an
+              ad-hoc backup now.
             </CardDescription>
           </div>
-          <Button
-            size="sm"
-            onClick={handleBackup}
-            disabled={
-              backup.isPending || backups?.some((b) => b.status === "running")
-            }
-          >
-            <DatabaseBackupIcon className="mr-1 h-4 w-4" />
-            Back up now
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={handleAdHocBackup}
+              disabled={backup.isPending || anyRunning}
+            >
+              <DatabaseBackupIcon className="mr-1 h-4 w-4" />
+              Back up now
+            </Button>
+            <Button size="sm" onClick={openAdd} disabled={noDestinations}>
+              <Plus className="mr-1 h-4 w-4" />
+              Add Backup
+            </Button>
+          </div>
         </div>
       </CardHeader>
       <CardContent>
+        {noDestinations && (
+          <p className="text-text-faint mb-3 text-sm">
+            Add a destination on the project{" "}
+            <span className="font-medium">Backups</span> tab before scheduling
+            backups.
+          </p>
+        )}
         {isLoading ? (
           <Skeleton className="h-16 w-full" />
-        ) : !backups || backups.length === 0 ? (
+        ) : !configs || configs.length === 0 ? (
           <p className="text-text-faint py-4 text-center text-sm">
-            No backups yet. Create one to enable point-in-time restore.
+            No scheduled backups yet.
           </p>
         ) : (
           <ul className="divide-border divide-y">
-            {backups.map((b) => (
+            {configs.map((c) => (
               <li
-                key={b.id}
+                key={c.id}
                 className="flex items-center justify-between gap-3 py-3"
               >
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span
-                      className={cn(
-                        "text-sm font-medium capitalize",
-                        backupStatusTone(b.status),
-                      )}
-                    >
-                      {b.status === "running" && (
-                        <Loader2 className="mr-1 inline h-3 w-3 animate-spin" />
-                      )}
-                      {b.status}
-                    </span>
-                    {b.has_remote && (
-                      <Cloud
-                        className="text-text-faint h-3.5 w-3.5"
-                        aria-label="Uploaded to S3"
-                      />
-                    )}
-                    {b.status === "succeeded" && (
-                      <span className="text-text-faint text-xs">
-                        {formatBytes(b.size_bytes)}
-                      </span>
+                <div className="min-w-0 space-y-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="font-medium">{destName(c.destination_id)}</span>
+                    {c.enabled ? (
+                      <Badge variant="outline">Active</Badge>
+                    ) : (
+                      <Badge variant="secondary">Disabled</Badge>
                     )}
                   </div>
                   <p className="text-text-faint text-xs">
-                    {new Date(b.started_at).toLocaleString()}
+                    <code className="font-mono">{c.schedule}</code>
+                    {c.all_databases
+                      ? " · all databases"
+                      : ` · ${c.databases.join(", ")}`}
+                    {c.prefix ? ` · ${c.prefix}` : ""}
+                    {c.keep_latest != null ? ` · keep ${c.keep_latest}` : ""}
                   </p>
-                  {b.error && (
-                    <p className="text-status-error mt-0.5 truncate text-xs">
-                      {b.error}
-                    </p>
-                  )}
                 </div>
-                <div className="flex items-center gap-2">
-                  {b.status === "succeeded" && (
-                    <AlertDialog>
-                      <AlertDialogTrigger
-                        render={<Button variant="outline" size="sm" />}
-                      >
-                        <RotateCcw className="mr-1 h-4 w-4" />
-                        Restore
-                      </AlertDialogTrigger>
-                      <AlertDialogContent>
-                        <AlertDialogHeader>
-                          <AlertDialogTitle>
-                            Restore this backup?
-                          </AlertDialogTitle>
-                          <AlertDialogDescription>
-                            This replaces the current contents of{" "}
-                            <span className="font-medium">{db.name}</span> with
-                            the backup from{" "}
-                            {new Date(b.started_at).toLocaleString()}. Data
-                            written since then will be lost. The database stays
-                            online during the restore.
-                          </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                          <AlertDialogCancel>Cancel</AlertDialogCancel>
-                          <AlertDialogAction
-                            onClick={() => handleRestore(b.id)}
-                          >
-                            Restore
-                          </AlertDialogAction>
-                        </AlertDialogFooter>
-                      </AlertDialogContent>
-                    </AlertDialog>
-                  )}
-                  {b.status !== "running" && (
-                    <AlertDialog>
-                      <AlertDialogTrigger
-                        render={
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            aria-label="Delete backup"
-                          />
-                        }
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </AlertDialogTrigger>
-                      <AlertDialogContent>
-                        <AlertDialogHeader>
-                          <AlertDialogTitle>
-                            Delete this backup?
-                          </AlertDialogTitle>
-                          <AlertDialogDescription>
-                            Permanently removes this backup (local file and any
-                            S3 copy). This can't be undone.
-                          </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                          <AlertDialogCancel>Cancel</AlertDialogCancel>
-                          <AlertDialogAction
-                            onClick={() => handleDeleteBackup(b.id)}
-                          >
-                            Delete
-                          </AlertDialogAction>
-                        </AlertDialogFooter>
-                      </AlertDialogContent>
-                    </AlertDialog>
-                  )}
-                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => openManage(c)}
+                >
+                  Manage
+                </Button>
               </li>
             ))}
           </ul>
         )}
       </CardContent>
+
+      <BackupConfigFormDialog
+        projectId={db.project_id}
+        databaseId={db.id}
+        config={editing}
+        open={formOpen}
+        onOpenChange={setFormOpen}
+      />
+      <BackupConfigRunsSheet
+        db={db}
+        config={selected}
+        destinationName={selected ? destName(selected.destination_id) : undefined}
+        open={sheetOpen}
+        onOpenChange={setSheetOpen}
+        onEdit={openEdit}
+      />
     </Card>
   );
 }

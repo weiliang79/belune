@@ -309,6 +309,24 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService,
 			r.Post("/api/projects/{projectId}/databases/{databaseId}/restore", h.RestoreDatabase)
 			r.Post("/api/projects/{projectId}/databases/{databaseId}/upgrade", h.UpgradeDatabase)
 			r.Delete("/api/projects/{projectId}/databases/{databaseId}", h.DeleteDatabase)
+
+			// Scheduled backup configurations per database
+			r.Get("/api/projects/{projectId}/databases/{databaseId}/backup-configs", h.ListDatabaseBackupConfigs)
+			r.Post("/api/projects/{projectId}/databases/{databaseId}/backup-configs", h.CreateDatabaseBackupConfig)
+			r.Put("/api/projects/{projectId}/databases/{databaseId}/backup-configs/{configId}", h.UpdateDatabaseBackupConfig)
+			r.Delete("/api/projects/{projectId}/databases/{databaseId}/backup-configs/{configId}", h.DeleteDatabaseBackupConfig)
+			r.Post("/api/projects/{projectId}/databases/{databaseId}/backup-configs/{configId}/run", h.RunDatabaseBackupConfig)
+
+			// Project-scoped backup destinations (managed by project members)
+			r.Get("/api/projects/{projectId}/backup-destinations", h.ListBackupDestinations)
+			r.Post("/api/projects/{projectId}/backup-destinations", h.CreateBackupDestination)
+			r.Post("/api/projects/{projectId}/backup-destinations/test", h.TestBackupDestinationParams)
+			r.Put("/api/projects/{projectId}/backup-destinations/{destId}", h.UpdateBackupDestination)
+			r.Delete("/api/projects/{projectId}/backup-destinations/{destId}", h.DeleteBackupDestination)
+			r.Post("/api/projects/{projectId}/backup-destinations/{destId}/test", h.TestBackupDestination)
+
+			// Project backup activity (recent runs across the project's databases)
+			r.Get("/api/projects/{projectId}/backups", h.ListProjectBackups)
 		})
 
 		// Streaming routes: SSE / long-poll — no timeout, no body limit.

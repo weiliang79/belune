@@ -25,7 +25,7 @@ func TestDBDumpSpec(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.dbType, func(t *testing.T) {
-			spec := dbDumpSpec(c.dbType, creds)
+			spec := dbDumpSpec(c.dbType, creds, "")
 			if spec.ok != c.ok {
 				t.Fatalf("ok = %v, want %v", spec.ok, c.ok)
 			}
@@ -39,6 +39,39 @@ func TestDBDumpSpec(t *testing.T) {
 			}
 			if !strings.Contains(restore, c.restoreContain) {
 				t.Errorf("restore %q missing %q", restore, c.restoreContain)
+			}
+		})
+	}
+}
+
+func TestDbDumpSpecTarget(t *testing.T) {
+	creds := map[string]string{
+		"user": "u", "password": "p", "database": "managed", "root_password": "rp",
+		"username": "mu",
+	}
+	cases := []struct {
+		name         string
+		dbType       string
+		target       string
+		dumpContains string
+	}{
+		{"pg default", "postgres", "", "pg_dump -U 'u' -d 'managed'"},
+		{"pg specific", "postgres", "postgres", "pg_dump -U 'u' -d 'postgres'"},
+		{"pg cluster", "postgres", "*", "pg_dumpall -U 'u'"},
+		{"pg multi", "postgres", "one,two", "pg_dump -U 'u' -d 'one' --create --clean --if-exists --no-owner && PGPASSWORD='p' pg_dump -U 'u' -d 'two' --create"},
+		{"mysql default", "mysql", "", "mysqldump --single-transaction --routines --triggers -u root 'managed'"},
+		{"mysql cluster", "mysql", "*", "mysqldump --single-transaction --routines --triggers -u root --all-databases"},
+		{"mysql multi", "mysql", "one,two", "mysqldump --single-transaction --routines --triggers -u root --databases 'one' 'two'"},
+		{"mongo default", "mongo", "", "mongodump --username 'mu'"},
+		{"mongo specific", "mongo", "other", "--db 'other' --archive"},
+		{"mongo multi", "mongo", "a,b", "--nsInclude 'a.*' --nsInclude 'b.*' --archive"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			spec := dbDumpSpec(c.dbType, creds, c.target)
+			dump := strings.Join(spec.dump, " ")
+			if !strings.Contains(dump, c.dumpContains) {
+				t.Errorf("dump %q missing %q", dump, c.dumpContains)
 			}
 		})
 	}

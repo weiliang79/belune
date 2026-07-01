@@ -48,6 +48,7 @@ type Handler struct {
 	dbService         *service.DatabaseService
 	gitProviderSvc    *service.GitProviderConfigService
 	gitIntegrationSvc *service.GitIntegrationService
+	backupDestSvc     *service.BackupDestinationService
 	hub               *ws.Hub
 	auditSvc          *service.AuditService
 	notifySvc         *service.NotificationService
@@ -71,6 +72,7 @@ func New(
 	dbSvc *service.DatabaseService,
 	gitProviderSvc *service.GitProviderConfigService,
 	gitIntegrationSvc *service.GitIntegrationService,
+	backupDestSvc *service.BackupDestinationService,
 	hub *ws.Hub,
 	auditSvc *service.AuditService,
 	notifySvc *service.NotificationService,
@@ -93,6 +95,7 @@ func New(
 		dbService:         dbSvc,
 		gitProviderSvc:    gitProviderSvc,
 		gitIntegrationSvc: gitIntegrationSvc,
+		backupDestSvc:     backupDestSvc,
 		hub:               hub,
 		auditSvc:          auditSvc,
 		notifySvc:         notifySvc,

@@ -143,12 +143,19 @@ function AlertDialogDescription({
 
 function AlertDialogAction({
   className,
+  variant = "default",
+  size = "default",
   ...props
-}: React.ComponentProps<typeof Button>) {
+}: AlertDialogPrimitive.Close.Props &
+  Pick<React.ComponentProps<typeof Button>, "variant" | "size">) {
+  // Wrap the base-ui Close so confirming the action also dismisses the dialog
+  // (the onClick handler still runs). Without this, a confirm whose row isn't
+  // removed (e.g. restore, upgrade) would leave the dialog open.
   return (
-    <Button
+    <AlertDialogPrimitive.Close
       data-slot="alert-dialog-action"
       className={cn(className)}
+      render={<Button variant={variant} size={size} />}
       {...props}
     />
   );

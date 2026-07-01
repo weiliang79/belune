@@ -16,4 +16,5 @@ const (
 	TypeQuotaThresholdSweep = "quota:threshold_sweep"
 	TypeBackupNow           = "backup:now"
 	TypeBackupRotate        = "backup:rotate"
+	TypeBackupSchedSweep    = "backup:sched_sweep"
 )

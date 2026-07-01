@@ -25,6 +25,12 @@ FROM alpine:3.20
 RUN apk add --no-cache ca-certificates tzdata git && \
     addgroup -S paas && adduser -S -G paas paas
 COPY --from=backend /paas /usr/local/bin/paas
+# Writable, persistable location for managed-database logical dumps. The default
+# DatabaseBackupDir (/opt/paas/backups/databases) is not creatable by the non-root
+# paas user, so point it at a dir we own here. Mount a volume on /data in
+# docker-compose.prod.yml so dumps survive container recreation (needed for restore).
+RUN mkdir -p /data/backups/databases && chown -R paas:paas /data
+ENV DATABASE_BACKUP_DIR=/data/backups/databases
 USER paas
 EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \

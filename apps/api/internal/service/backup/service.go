@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/minio/minio-go/v7"
-	"github.com/minio/minio-go/v7/pkg/credentials"
 
 	"github.com/ungweiliang/selfhost-paas/internal/config"
 )
@@ -232,17 +231,8 @@ func (s *Service) init() error {
 		return fmt.Errorf("remote backup is not enabled (BACKUP_REMOTE_ENABLED=false or BACKUP_S3_BUCKET empty)")
 	}
 
-	endpoint := s.cfg.BackupS3Endpoint
-	if endpoint == "" {
-		// AWS S3 regional endpoint
-		endpoint = fmt.Sprintf("s3.%s.amazonaws.com", s.cfg.BackupS3Region)
-	}
-
-	client, err := minio.New(endpoint, &minio.Options{
-		Creds:  credentials.NewStaticV4(s.cfg.BackupS3AccessKey, s.cfg.BackupS3SecretKey, ""),
-		Secure: s.cfg.BackupS3UseSSL,
-		Region: s.cfg.BackupS3Region,
-	})
+	client, err := newMinioClient(s.cfg.BackupS3Endpoint, s.cfg.BackupS3Region,
+		s.cfg.BackupS3AccessKey, s.cfg.BackupS3SecretKey, s.cfg.BackupS3UseSSL)
 	if err != nil {
 		return fmt.Errorf("create s3 client: %w", err)
 	}

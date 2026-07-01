@@ -33,9 +33,10 @@ import { toast } from "sonner";
 import { useMemo, useState } from "react";
 import type { HostMetricPoint, SettingEntry } from "@/lib/types";
 import { UPlotAreaChart } from "@/components/ui/uplot-area-chart";
+import { SystemBackupsPanel } from "@/components/backups/system-backups-panel";
 import { cn } from "@/lib/utils";
 
-type ServerTab = "metric" | "configuration";
+type ServerTab = "metric" | "configuration" | "backups";
 type HostMetricsView = "overview" | "detail";
 type CustomRange = { from: string; to: string };
 
@@ -43,7 +44,10 @@ export const Route = createFileRoute("/_app/server")({
   component: ServerSettingsPage,
   errorComponent: RouteError,
   validateSearch: (search: Record<string, unknown>) => ({
-    tab: search.tab === "configuration" ? ("configuration" as const) : undefined,
+    tab:
+      search.tab === "configuration" || search.tab === "backups"
+        ? (search.tab as ServerTab)
+        : undefined,
   }),
 });
 
@@ -121,10 +125,11 @@ const RETENTION_FIELDS = [
 function ServerSettingsPage() {
   const { tab } = Route.useSearch();
   const navigate = useNavigate({ from: "/server" });
-  const activeTab: ServerTab = tab === "configuration" ? "configuration" : "metric";
+  const activeTab: ServerTab =
+    tab === "configuration" || tab === "backups" ? tab : "metric";
   const setTab = (next: ServerTab) =>
     navigate({
-      search: () => ({ tab: next === "configuration" ? "configuration" : undefined }),
+      search: () => ({ tab: next === "metric" ? undefined : next }),
     });
 
   const { data: metrics, isLoading } = useMetrics();
@@ -257,6 +262,7 @@ function ServerSettingsPage() {
         {(
           [
             { value: "metric", label: "Overview" },
+            { value: "backups", label: "Backups" },
             { value: "configuration", label: "Configuration" },
           ] as const
         ).map((t) => (
@@ -276,7 +282,9 @@ function ServerSettingsPage() {
         ))}
       </nav>
 
-      {activeTab === "configuration" ? (
+      {activeTab === "backups" ? (
+        <SystemBackupsPanel />
+      ) : activeTab === "configuration" ? (
         <div className="space-y-6">
           <Card>
             <CardHeader>

@@ -136,6 +136,7 @@ func New(cfg *config.Config) (*App, error) {
 		return nil, fmt.Errorf("load email templates: %w", err)
 	}
 	backupSvc := backup.New(cfg)
+	backupDestSvc := service.NewBackupDestinationService(queries, cfg.Keyring)
 	taskHandler := &worker.TaskHandler{
 		Runtime:               dockerClient,
 		Proxy:                 caddyClient,
@@ -151,6 +152,7 @@ func New(cfg *config.Config) (*App, error) {
 		QuotaService:          quotaSvc,
 		EmailService:          emailSvc,
 		BackupService:         backupSvc,
+		BackupDestinations:    backupDestSvc,
 		AuditLog:              auditSvc,
 		Notifier:              notifySvc,
 		Enqueuer:              asynqClient,

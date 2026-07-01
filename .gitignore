@@ -42,3 +42,6 @@ infra/caddy/logs/
 # Test
 coverage/
 *.out
+
+# Local dev backup dump dir (DATABASE_BACKUP_DIR)
+.paas-data/

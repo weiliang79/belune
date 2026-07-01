@@ -38,7 +38,8 @@ func New(cfg *config.Config, db *pgxpool.Pool, queries *generated.Queries, asynq
 	auth := service.NewAuthService(queries, cfg.JWTSecret, cfg.JWTExpiryHours, cfg.JWTRefreshHours, rdb)
 	appSvc := service.NewApplicationService(db, queries, rt, cfg.Keyring)
 	projSvc := service.NewProjectService(queries, rt)
-	dbSvc := service.NewDatabaseService(queries, rt, backup.New(cfg))
+	backupDestSvc := service.NewBackupDestinationService(queries, cfg.Keyring)
+	dbSvc := service.NewDatabaseService(queries, rt, backup.New(cfg), backupDestSvc)
 	gitProviderSvc := service.NewGitProviderConfigService(queries, cfg.Keyring)
 	gitIntegrationSvc := service.NewGitIntegrationService(queries, cfg.Keyring, gitProviderSvc)
 	quotaSvc := quota.NewService(queries)
@@ -47,7 +48,7 @@ func New(cfg *config.Config, db *pgxpool.Pool, queries *generated.Queries, asynq
 		cfg:     cfg,
 		db:      db,
 		auth:    auth,
-		handler: handler.New(cfg, db, queries, asynqClient, rt, pm, reconciler, auth, rdb, appSvc, projSvc, dbSvc, gitProviderSvc, gitIntegrationSvc, hub, auditSvc, notifySvc, termMgr, quotaSvc, emailSvc),
+		handler: handler.New(cfg, db, queries, asynqClient, rt, pm, reconciler, auth, rdb, appSvc, projSvc, dbSvc, gitProviderSvc, gitIntegrationSvc, backupDestSvc, hub, auditSvc, notifySvc, termMgr, quotaSvc, emailSvc),
 	}
 
 	s.router = s.setupRouter()

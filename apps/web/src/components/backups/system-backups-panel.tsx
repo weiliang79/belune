@@ -1,32 +1,18 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { RouteError } from "@/lib/components/route-error";
 import { toast } from "sonner";
+import type { ColumnDef } from "@tanstack/react-table";
 import {
   useBackupRuns,
   useBackupStatus,
   useTriggerBackup,
 } from "@/lib/hooks/use-backups";
-import type { ColumnDef } from "@tanstack/react-table";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { StatusPill } from "@/components/ui/status-pill";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { DataTable } from "@/components/ui/data-table";
+import { formatBytes } from "@/lib/utils/format";
 import type { BackupRun } from "@/lib/types";
-
-export const Route = createFileRoute("/_app/backups")({
-  component: BackupsPage,
-  errorComponent: RouteError,
-});
-
-function formatBytes(bytes: number) {
-  if (bytes === 0) return "—";
-  const mb = bytes / (1024 * 1024);
-  if (mb >= 1) return `${mb.toFixed(1)} MB`;
-  const kb = bytes / 1024;
-  return `${kb.toFixed(0)} KB`;
-}
 
 function formatDate(iso: string | null) {
   if (!iso) return "—";
@@ -58,7 +44,8 @@ const backupColumns: ColumnDef<BackupRun>[] = [
     header: "Size",
     accessorKey: "size_bytes",
     meta: { className: "text-sm" },
-    cell: ({ row: { original: run } }) => formatBytes(run.size_bytes),
+    cell: ({ row: { original: run } }) =>
+      run.size_bytes ? formatBytes(run.size_bytes) : "—",
   },
   {
     id: "remote_key",
@@ -74,7 +61,10 @@ const backupColumns: ColumnDef<BackupRun>[] = [
   },
 ];
 
-function BackupsPage() {
+// SystemBackupsPanel renders the control-plane (platform Postgres + Caddy certs)
+// disaster-recovery backup status and run history. Distinct from per-database
+// backups, which live on each project's Backups tab.
+export function SystemBackupsPanel() {
   const { data: status, isLoading: statusLoading } = useBackupStatus();
   const { data: runs, isLoading: runsLoading } = useBackupRuns();
   const trigger = useTriggerBackup();
@@ -92,35 +82,33 @@ function BackupsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Backups</h1>
-          <p className="text-muted-foreground text-sm">
-            Database and configuration backups.
-          </p>
-        </div>
-        <Button
-          onClick={handleTrigger}
-          disabled={trigger.isPending || isRunning}
-        >
-          {isRunning
-            ? "Backup in progress…"
-            : trigger.isPending
-              ? "Queueing…"
-              : "Run Backup Now"}
-        </Button>
-      </div>
-
-      {/* Status card */}
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
-            <CardTitle>Status</CardTitle>
-            {status && (
-              <Badge variant={lastRunFailed ? "destructive" : "default"}>
-                {lastRunFailed ? "Last run failed" : "Healthy"}
-              </Badge>
-            )}
+            <div>
+              <CardTitle>System Backup</CardTitle>
+              <p className="text-muted-foreground text-sm">
+                Platform database and configuration (control-plane) backups.
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              {status && (
+                <Badge variant={lastRunFailed ? "destructive" : "default"}>
+                  {lastRunFailed ? "Last run failed" : "Healthy"}
+                </Badge>
+              )}
+              <Button
+                onClick={handleTrigger}
+                disabled={trigger.isPending || isRunning}
+                size="sm"
+              >
+                {isRunning
+                  ? "Backup in progress…"
+                  : trigger.isPending
+                    ? "Queueing…"
+                    : "Run Backup Now"}
+              </Button>
+            </div>
           </div>
         </CardHeader>
         <CardContent>
@@ -168,7 +156,6 @@ function BackupsPage() {
         </CardContent>
       </Card>
 
-      {/* Run history */}
       <Card>
         <CardHeader>
           <CardTitle>Recent runs</CardTitle>

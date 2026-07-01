@@ -55,6 +55,7 @@ type TaskHandler struct {
 	QuotaService          *quota.Service
 	EmailService          *email.Service
 	BackupService         *backup.Service
+	BackupDestinations    *service.BackupDestinationService
 	AuditLog              auditLogger
 	Notifier              notifier
 	Enqueuer              TaskEnqueuer
@@ -119,6 +120,10 @@ func (w *Worker) Start() error {
 	mux.HandleFunc(TypeQuotaThresholdSweep, w.handler.HandleQuotaThresholdSweep)
 	mux.HandleFunc(TypeBackupNow, w.handler.HandleBackupNowTask)
 	mux.HandleFunc(TypeBackupRotate, w.handler.HandleBackupRotateTask)
+	mux.HandleFunc(TypeBackupSchedSweep, func(ctx context.Context, t *asynq.Task) error {
+		w.handler.HandleBackupScheduleSweep(ctx)
+		return nil
+	})
 
 	// Reconcile any database left mid-upgrade by a previous crash/restart before
 	// accepting new work — upgrades never auto-retry, so these would otherwise sit
@@ -173,7 +178,13 @@ func (w *Worker) StartScheduler() (*asynq.Scheduler, error) {
 		return nil, err
 	}
 
-	slog.Info("starting scheduler (cleanup: 24h, retention: 24h, host-metrics-cleanup: 1h, auth-token-cleanup: 1h, quota-sweep: 6h, backup-rotate: 24h)")
+	// Per-database scheduled-backup sweep every minute — enqueues due configs.
+	backupSweepTask := asynq.NewTask(TypeBackupSchedSweep, nil)
+	if _, err := scheduler.Register("@every 1m", backupSweepTask, asynq.Queue("low")); err != nil {
+		return nil, err
+	}
+
+	slog.Info("starting scheduler (cleanup: 24h, retention: 24h, host-metrics-cleanup: 1h, auth-token-cleanup: 1h, quota-sweep: 6h, backup-rotate: 24h, backup-sched-sweep: 1m)")
 	if err := scheduler.Start(); err != nil {
 		return nil, err
 	}

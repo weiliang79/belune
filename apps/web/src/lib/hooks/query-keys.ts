@@ -74,7 +74,13 @@ export const queryKeys = {
       ["projects", projectId, "databases", databaseId] as const,
     backups: (projectId: string, databaseId: string) =>
       ["projects", projectId, "databases", databaseId, "backups"] as const,
+    backupConfigs: (projectId: string, databaseId: string) =>
+      ["projects", projectId, "databases", databaseId, "backup-configs"] as const,
   },
+  backupDestinations: (projectId: string) =>
+    ["projects", projectId, "backup-destinations"] as const,
+  projectBackups: (projectId: string) =>
+    ["projects", projectId, "project-backups"] as const,
   applicationLogs: {
     history: (projectId: string, applicationId: string, params?: object) =>
       [
