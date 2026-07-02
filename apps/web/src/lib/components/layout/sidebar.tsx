@@ -38,9 +38,9 @@ const HOME_NAV: NavItem[] = [
 ];
 
 const SETTINGS_NAV: NavItem[] = [
-  { to: "/account", label: "Account", Icon: User, exact: true },
-  { to: "/git", label: "Git", Icon: GitBranch },
   { to: "/server", label: "Server", Icon: Server, admin: true },
+  { to: "/git", label: "Git", Icon: GitBranch },
+  { to: "/account", label: "Account", Icon: User, exact: true },
   { to: "/team", label: "Team", Icon: Users, admin: true },
   { to: "/quotas", label: "Quotas", Icon: Gauge, admin: true },
   { to: "/audit", label: "Audit Log", Icon: ShieldCheck, admin: true },
