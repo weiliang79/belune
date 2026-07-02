@@ -107,16 +107,16 @@ function ApplicationLayout() {
   const tabs: { to: string; label: string; exact?: boolean; count?: number }[] =
     [
       { to: basePath, label: "Overview", exact: true },
+      { to: `${basePath}/env`, label: "Env Vars" },
+      { to: `${basePath}/domains`, label: "Domains", count: domains?.length },
       {
         to: `${basePath}/deployments`,
         label: "Deployments",
         count: deployments?.length,
       },
-      { to: `${basePath}/metrics`, label: "Metrics" },
-      { to: `${basePath}/logs`, label: "Logs" },
-      { to: `${basePath}/env`, label: "Env Vars" },
-      { to: `${basePath}/domains`, label: "Domains", count: domains?.length },
       { to: `${basePath}/previews`, label: "Previews" },
+      { to: `${basePath}/logs`, label: "Logs" },
+      { to: `${basePath}/metrics`, label: "Metrics" },
       { to: `${basePath}/terminal`, label: "Terminal" },
       { to: `${basePath}/settings`, label: "Settings" },
     ];
