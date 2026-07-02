@@ -12,12 +12,30 @@ import { StatusPill } from "@/components/ui/status-pill";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { DataTable } from "@/components/ui/data-table";
+import { CopyButton } from "@/lib/components/copy-button";
 import { formatBytes } from "@/lib/utils/format";
 import type { BackupRun, BackupStatus } from "@/lib/types";
 
 function formatDate(iso: string | null) {
   if (!iso) return "—";
   return new Date(iso).toLocaleString();
+}
+
+// The install path the restore script and archives live under. Kept in sync
+// with PAAS_DIR (default /opt/paas); shown in the restore instructions so an
+// operator has the exact command without guessing paths.
+const PAAS_DIR = "/opt/paas";
+
+// buildRestoreCommand constructs the exact restore.sh invocation for a run.
+// Archives are named after their remote key's basename (backup.sh writes the
+// same filename locally and remotely). Encrypted (.age) archives need the age
+// identity file, so we append a placeholder to remind the operator.
+function buildRestoreCommand(run: BackupRun): string | null {
+  if (!run.remote_key) return null;
+  const filename = run.remote_key.split("/").pop() ?? run.remote_key;
+  const archive = `${PAAS_DIR}/backups/${filename}`;
+  const identity = filename.endsWith(".age") ? " <age-identity-file>" : "";
+  return `bash ${PAAS_DIR}/scripts/restore.sh ${archive}${identity}`;
 }
 
 const backupColumns: ColumnDef<BackupRun>[] = [
@@ -166,22 +184,121 @@ export function SystemBackupsPanel() {
             enableSorting
             emptyMessage={'No backup runs yet. Click "Run Backup Now" to start one.'}
             renderDetailPanel={({ row }) => {
-              const { log, error } = row.original;
+              const run = row.original;
+              const { log, error } = run;
               const text = log?.trim() || error?.trim();
-              return text ? (
-                <pre className="bg-elev max-h-96 overflow-auto rounded p-3 font-mono text-xs whitespace-pre-wrap">
-                  {text}
-                </pre>
-              ) : (
-                <span className="text-text-faint text-xs">
-                  No log captured for this run.
-                </span>
+              const restoreCmd =
+                run.status === "succeeded" ? buildRestoreCommand(run) : null;
+              return (
+                <div className="space-y-3">
+                  {restoreCmd && (
+                    <div>
+                      <p className="text-muted-foreground mb-1 text-xs font-medium">
+                        Restore from this backup (run on the server host)
+                      </p>
+                      <div className="bg-elev flex items-center gap-2 rounded p-2">
+                        <code className="flex-1 font-mono text-xs break-all">
+                          {restoreCmd}
+                        </code>
+                        <CopyButton value={restoreCmd} />
+                      </div>
+                    </div>
+                  )}
+                  {text ? (
+                    <pre className="bg-elev max-h-96 overflow-auto rounded p-3 font-mono text-xs whitespace-pre-wrap">
+                      {text}
+                    </pre>
+                  ) : (
+                    <span className="text-text-faint text-xs">
+                      No log captured for this run.
+                    </span>
+                  )}
+                </div>
               );
             }}
           />
         </CardContent>
       </Card>
+
+      <RestoreHelpCard remoteEnabled={!!status?.remote_enabled} />
     </div>
+  );
+}
+
+// RestoreHelpCard documents how to restore a control-plane backup. There is no
+// in-app restore action by design: a restore drops and recreates the platform
+// database and overwrites .env, so it must be run from the host shell (it also
+// needs to work when the API itself is down). This card makes the CLI path
+// discoverable instead of hidden in a runbook.
+function RestoreHelpCard({ remoteEnabled }: { remoteEnabled: boolean }) {
+  const example = `bash ${PAAS_DIR}/scripts/restore.sh ${PAAS_DIR}/backups/paas-backup-<timestamp>.tar.gz`;
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Restoring a backup</CardTitle>
+        <p className="text-muted-foreground text-sm">
+          Restore is a host operation, not an in-app action — it drops and
+          rebuilds the platform database, so it runs from the server shell and
+          works even when this dashboard is down.
+        </p>
+      </CardHeader>
+      <CardContent className="space-y-4 text-sm">
+        <ol className="text-muted-foreground list-decimal space-y-2 pl-5">
+          <li>
+            SSH into the server host (where the platform runs, at{" "}
+            <code className="font-mono text-xs">{PAAS_DIR}</code>).
+          </li>
+          <li>
+            Locate the archive:{" "}
+            {remoteEnabled ? (
+              <>
+                either the local copy under{" "}
+                <code className="font-mono text-xs">{PAAS_DIR}/backups/</code> or
+                download the object from your remote bucket (the run's{" "}
+                <span className="font-medium">Remote key</span> above).
+              </>
+            ) : (
+              <>
+                under{" "}
+                <code className="font-mono text-xs">{PAAS_DIR}/backups/</code>.
+              </>
+            )}
+          </li>
+          <li>
+            Preview first with{" "}
+            <code className="font-mono text-xs">--dry-run</code>, then run the
+            restore. Expand any successful run above and use{" "}
+            <span className="font-medium">Copy restore command</span> to get the
+            exact command.
+          </li>
+        </ol>
+
+        <div>
+          <p className="text-muted-foreground mb-1 text-xs font-medium">
+            Verify an archive (safe, makes no changes)
+          </p>
+          <div className="bg-elev flex items-center gap-2 rounded p-2">
+            <code className="flex-1 font-mono text-xs break-all">
+              {example} --dry-run
+            </code>
+            <CopyButton value={`${example} --dry-run`} />
+          </div>
+        </div>
+
+        <p className="text-text-faint text-xs">
+          Encrypted (<code className="font-mono">.age</code>) archives require
+          the age identity file as a second argument. The restore prompts for
+          confirmation and writes a{" "}
+          <code className="font-mono">pre-restore-&lt;timestamp&gt;.sql</code>{" "}
+          snapshot before overwriting, so a bad restore can be rolled back. Full
+          procedure:{" "}
+          <code className="font-mono text-xs">
+            docs/runbooks/disaster-recovery.md
+          </code>
+          .
+        </p>
+      </CardContent>
+    </Card>
   );
 }
 

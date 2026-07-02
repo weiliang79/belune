@@ -244,13 +244,18 @@
   body {
     @apply bg-background text-foreground;
   }
-  /* Monospace for technical strings (IDs, hashes, ports, domains, log lines) */
+  /* Monospace for technical strings (IDs, hashes, ports, domains, log lines).
+     Disable ligatures/contextual alternates: Geist Mono merges sequences like
+     "--" and "<>" into combined glyphs, which visually swallows adjacent spaces
+     and hyphens in shell commands, connection strings, and logs. We want every
+     character rendered literally here. */
   code,
   kbd,
   pre,
   samp {
     font-family: var(--font-mono);
-    font-feature-settings: "ss01";
+    font-feature-settings: "ss01", "liga" 0, "calt" 0;
+    font-variant-ligatures: none;
   }
   ::selection {
     background: var(--brand-soft);

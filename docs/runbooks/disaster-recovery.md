@@ -33,8 +33,11 @@ S3-compatible object storage automatically. Enable with `BACKUP_REMOTE_ENABLED=t
 and the `BACKUP_S3_*` variables — see [`install.md` § 8](./install.md#8-backups)
 for the full variable list.
 
-Backup status and a manual trigger are available in the dashboard under
-**Settings → Backups**.
+Backup status, a manual trigger, and restore instructions are available in the
+dashboard under **Server → Backups** (admin only). Restore itself is a host/CLI
+operation (see below) — there is intentionally no in-app restore button, since a
+restore rebuilds the platform database and must work even when the dashboard is
+down.
 
 ### Encrypted backups
 
@@ -57,6 +60,10 @@ Encrypted archives have the `.tar.gz.age` extension. Store the private key (`~/.
 
 Single table or row was deleted accidentally; the host is still running.
 
+> This is a *selective* (single-table) restore done by hand, so you manage the
+> `paas` service yourself. A *full-database* restore via `restore.sh` stops and
+> starts `paas` for you — see Scenario 2.
+
 1. **Stop the API** to prevent further writes:
    ```bash
    docker compose stop paas
@@ -65,8 +72,7 @@ Single table or row was deleted accidentally; the host is still running.
 3. Extract the Postgres dump from the backup to a temporary location:
    ```bash
    tar -xzf paas-backup-<timestamp>.tar.gz
-   # or decrypt first:
-   # bash scripts/restore.sh paas-backup-<timestamp>.tar.gz.age ~/.age/paas.key
+   # (for an encrypted archive, decrypt it first with age)
    ```
 4. Restore only the affected table from the dump (using `pg_restore` selective restore, or by copying INSERT statements manually).
 5. Restart the API: `docker compose start paas`
@@ -95,7 +101,14 @@ The original host is lost. A new server has been provisioned.
    ```
    This creates `/opt/paas` with `docker-compose.yml` and a template `.env`.
 
-3. **Restore the backup**:
+3. **Preview the backup first** (optional but recommended — makes no changes):
+   ```bash
+   bash /opt/paas/scripts/restore.sh --dry-run /tmp/paas-backup-<timestamp>.tar.gz
+   ```
+   This verifies the archive is readable and prints exactly what it contains
+   (`.env`, `postgres.sql` size, Caddy TLS data).
+
+4. **Restore the backup**:
    ```bash
    # Unencrypted:
    bash /opt/paas/scripts/restore.sh /tmp/paas-backup-<timestamp>.tar.gz
@@ -105,20 +118,34 @@ The original host is lost. A new server has been provisioned.
    ```
 
    `restore.sh` will:
-   - Decrypt the archive (if `.age`)
+   - Decrypt the archive (if `.age`) and verify its integrity
+   - Show a manifest and prompt for confirmation (type `restore`); pass `--yes`
+     to skip the prompt for non-interactive use
    - Restore `.env`
+   - **Wait for Postgres to be ready** (up to 30s) before touching it
+   - **Stop the `paas` service** so it releases its database connections
+     (Postgres refuses to drop a database with active sessions) — you do *not*
+     need to stop it manually first
+   - **Snapshot the current database** to
+     `/opt/paas/backups/pre-restore-<timestamp>.sql` before overwriting, so a
+     bad restore can be rolled back
    - Drop and recreate the Postgres database from the dump
    - Restore Caddy TLS data
-   - Restart the `paas` service
+   - **Bring the `paas` service back up** (`docker compose up -d paas`) — but
+     only on success; if the restore fails, `paas` stays stopped so it can't
+     connect to a half-restored database
 
-4. **Verify DNS** points to the new host's IP for all configured domains.
+   If the restore fails partway, the script prints the exact commands to roll
+   back to the pre-restore snapshot and restart `paas`.
 
-5. **Verify TLS** — Caddy will attempt to renew certificates if they are near expiry. Check logs:
+5. **Verify DNS** points to the new host's IP for all configured domains.
+
+6. **Verify TLS** — Caddy will attempt to renew certificates if they are near expiry. Check logs:
    ```bash
    docker compose logs caddy --tail 50
    ```
 
-6. **Smoke test** — log in, check the dashboard, deploy a test application.
+7. **Smoke test** — log in, check the dashboard, deploy a test application.
 
 ---
 
@@ -131,15 +158,26 @@ Symptoms: Postgres container crash-loops, logs show `invalid page` or `could not
 3. **Start Postgres only**: `docker compose up -d postgres`
 4. **Restore from the latest backup**:
    ```bash
-   bash scripts/restore.sh paas-backup-<timestamp>.tar.gz[.age] [identity-file]
+   bash /opt/paas/scripts/restore.sh paas-backup-<timestamp>.tar.gz[.age] [identity-file]
    ```
-5. Bring up remaining services: `docker compose up -d`
+   The script waits for the freshly-started Postgres to become ready, performs
+   the restore, and brings `paas` back up (which also starts `redis` via its
+   dependency) on success.
+5. **Bring up anything still down** (e.g. `caddy`): `docker compose up -d`
 
 ---
 
 ## Verifying a backup
 
-Before you need it, verify a backup is readable:
+Before you need it, verify a backup is readable. The simplest way is a dry-run
+restore, which decrypts, verifies integrity, and prints the manifest without
+changing anything:
+
+```bash
+bash /opt/paas/scripts/restore.sh --dry-run paas-backup-<timestamp>.tar.gz[.age] [identity-file]
+```
+
+Or inspect manually:
 
 ```bash
 # Check archive integrity
@@ -169,7 +207,7 @@ For S3 remote backups the same policy applies to objects in the configured
 bucket prefix — old objects are deleted automatically after each successful run.
 
 If you need to trigger a one-off backup outside the schedule, either use the
-**Settings → Backups → Run Backup Now** button in the dashboard or run the
+**Server → Backups → Run Backup Now** button in the dashboard or run the
 script directly:
 
 ```bash
