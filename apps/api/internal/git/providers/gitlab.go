@@ -1,6 +1,7 @@
 package providers
 
 import (
+	"crypto/subtle"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -16,8 +17,12 @@ type gitLabPushEvent struct {
 
 // ParseGitLabWebhook parses a GitLab push webhook payload and verifies the token.
 func ParseGitLabWebhook(body []byte, token string, secret string) (repoURL, branch, commitSHA string, err error) {
-	// Verify token (simple string comparison)
-	if secret != "" && token != secret {
+	// Verify the shared token in constant time. Fail closed: a missing secret
+	// cannot verify.
+	if secret == "" {
+		return "", "", "", fmt.Errorf("no webhook secret configured")
+	}
+	if subtle.ConstantTimeCompare([]byte(token), []byte(secret)) != 1 {
 		return "", "", "", fmt.Errorf("token mismatch")
 	}
 

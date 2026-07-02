@@ -39,13 +39,15 @@ func VerifyAndParseWebhook(provider string, header http.Header, body []byte, sec
 // parseGiteaWebhook verifies the HMAC-SHA256 hex signature (X-Gitea-Signature,
 // no prefix) and parses the GitHub-shaped push payload.
 func parseGiteaWebhook(body []byte, signature, secret string) (PushEvent, error) {
-	if secret != "" {
-		mac := hmac.New(sha256.New, []byte(secret))
-		mac.Write(body)
-		expected := hex.EncodeToString(mac.Sum(nil))
-		if !hmac.Equal([]byte(signature), []byte(expected)) {
-			return PushEvent{}, fmt.Errorf("signature mismatch")
-		}
+	// Fail closed: a missing secret cannot verify the signature.
+	if secret == "" {
+		return PushEvent{}, fmt.Errorf("no webhook secret configured")
+	}
+	mac := hmac.New(sha256.New, []byte(secret))
+	mac.Write(body)
+	expected := hex.EncodeToString(mac.Sum(nil))
+	if !hmac.Equal([]byte(signature), []byte(expected)) {
+		return PushEvent{}, fmt.Errorf("signature mismatch")
 	}
 	var ev struct {
 		Ref        string `json:"ref"`
@@ -67,17 +69,19 @@ func parseGiteaWebhook(body []byte, signature, secret string) (PushEvent, error)
 // parseBitbucketWebhook verifies the HMAC-SHA256 signature (X-Hub-Signature:
 // sha256=<hex>) and parses the Bitbucket push payload.
 func parseBitbucketWebhook(body []byte, signature, secret string) (PushEvent, error) {
-	if secret != "" {
-		sig, found := strings.CutPrefix(signature, "sha256=")
-		if !found {
-			return PushEvent{}, fmt.Errorf("invalid signature format")
-		}
-		mac := hmac.New(sha256.New, []byte(secret))
-		mac.Write(body)
-		expected := hex.EncodeToString(mac.Sum(nil))
-		if !hmac.Equal([]byte(sig), []byte(expected)) {
-			return PushEvent{}, fmt.Errorf("signature mismatch")
-		}
+	// Fail closed: a missing secret cannot verify the signature.
+	if secret == "" {
+		return PushEvent{}, fmt.Errorf("no webhook secret configured")
+	}
+	sig, found := strings.CutPrefix(signature, "sha256=")
+	if !found {
+		return PushEvent{}, fmt.Errorf("invalid signature format")
+	}
+	mac := hmac.New(sha256.New, []byte(secret))
+	mac.Write(body)
+	expected := hex.EncodeToString(mac.Sum(nil))
+	if !hmac.Equal([]byte(sig), []byte(expected)) {
+		return PushEvent{}, fmt.Errorf("signature mismatch")
 	}
 	var ev struct {
 		Push struct {

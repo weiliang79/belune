@@ -19,11 +19,12 @@ type gitHubPushEvent struct {
 
 // ParseGitHubWebhook parses a GitHub push webhook payload and verifies the HMAC signature.
 func ParseGitHubWebhook(body []byte, signature string, secret string) (repoURL, branch, commitSHA string, err error) {
-	// Verify HMAC-SHA256 signature
-	if secret != "" {
-		if err := verifyGitHubSignature(body, signature, secret); err != nil {
-			return "", "", "", err
-		}
+	// Verify HMAC-SHA256 signature. Fail closed: a missing secret cannot verify.
+	if secret == "" {
+		return "", "", "", fmt.Errorf("no webhook secret configured")
+	}
+	if err := verifyGitHubSignature(body, signature, secret); err != nil {
+		return "", "", "", err
 	}
 
 	var event gitHubPushEvent
