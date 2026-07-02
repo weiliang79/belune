@@ -104,15 +104,21 @@ function ApplicationLayout() {
   const basePath = `/projects/${projectId}/applications/${applicationId}`;
   const primaryDomain = domains?.[0]?.hostname;
   const uptimeSeconds = projectMetrics?.[applicationId]?.uptime_seconds;
-  const tabs: { to: string; label: string; exact?: boolean; count?: number }[] =
+  const isDeploying = deployments?.some(
+    (d) =>
+      d.status === "pending" ||
+      d.status === "building" ||
+      d.status === "deploying",
+  );
+  const tabs: { to: string; label: string; exact?: boolean; live?: boolean }[] =
     [
       { to: basePath, label: "Overview", exact: true },
       { to: `${basePath}/env`, label: "Env Vars" },
-      { to: `${basePath}/domains`, label: "Domains", count: domains?.length },
+      { to: `${basePath}/domains`, label: "Domains" },
       {
         to: `${basePath}/deployments`,
         label: "Deployments",
-        count: deployments?.length,
+        live: isDeploying,
       },
       { to: `${basePath}/previews`, label: "Previews" },
       { to: `${basePath}/logs`, label: "Logs" },
@@ -282,9 +288,13 @@ function ApplicationLayout() {
               )}
             >
               {tab.label}
-              {tab.count != null && tab.count > 0 && (
-                <span className="bg-elev text-text-muted rounded-full px-1.5 py-0.5 font-mono text-[10px] leading-none">
-                  {tab.count}
+              {tab.live && (
+                <span
+                  aria-label="Deployment in progress"
+                  className="relative flex size-2"
+                >
+                  <span className="bg-status-ready absolute inline-flex size-full animate-ping rounded-full opacity-75" />
+                  <span className="bg-status-ready relative inline-flex size-2 rounded-full" />
                 </span>
               )}
             </Link>

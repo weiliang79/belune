@@ -57,7 +57,7 @@ function ProjectLayout() {
   const tabs = [
     { to: `/projects/${projectId}`, label: "Overview" },
     { to: `/projects/${projectId}/backups`, label: "Backups" },
-    { to: `/projects/${projectId}/env`, label: "Environment Variables" },
+    { to: `/projects/${projectId}/env`, label: "Env Vars" },
     { to: `/projects/${projectId}/settings`, label: "Settings" },
   ];
 
