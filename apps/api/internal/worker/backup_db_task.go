@@ -359,7 +359,13 @@ func (h *TaskHandler) HandleBackupDBTask(ctx context.Context, t *asynq.Task) err
 	}
 	lg.step("Archive written: %s (%d bytes)", fileName, sizeBytes)
 
+	// A successful remote upload is authoritative, so we drop the local archive
+	// afterwards — otherwise the server disk mirrors the bucket and grows without
+	// bound (there is no local retention cap). We keep the local copy only when
+	// there is no remote copy: upload failed, or no remote is configured, where
+	// the local file is the sole backup and is bounded by pruneDatabaseBackups.
 	remoteKey := pgtype.Text{}
+	localKept := true
 	if cfg != nil {
 		// Config-driven backup: the project destination is the whole point, so a
 		// failed upload fails the run (unlike the best-effort global path). The
@@ -374,18 +380,27 @@ func (h *TaskHandler) HandleBackupDBTask(ctx context.Context, t *asynq.Task) err
 			return fmt.Errorf("upload to destination: %w", upErr)
 		}
 		remoteKey = pgtype.Text{String: key, Valid: true}
+		removeLocalAfterUpload(localPath, lg)
+		localKept = false
 		lg.step("Uploaded to destination")
 	} else if h.BackupService != nil && h.BackupService.Enabled() {
-		// Off-host copy is best-effort: a local archive is still a valid backup.
+		// Off-host copy is best-effort: keep the local archive when the upload fails.
 		if key, upErr := h.BackupService.Upload(ctx, localPath); upErr != nil {
 			lg.step("S3 upload failed (keeping local copy): %v", upErr)
 			slog.Warn("backup_db: S3 upload failed; keeping local copy", "database_id", payload.DatabaseID, "error", upErr)
 		} else {
 			remoteKey = pgtype.Text{String: key, Valid: true}
+			removeLocalAfterUpload(localPath, lg)
+			localKept = false
 			lg.step("Uploaded to S3: %s", key)
 		}
 	} else {
 		lg.step("Stored locally: %s", localPath)
+	}
+
+	localPathText := pgtype.Text{}
+	if localKept {
+		localPathText = pgtype.Text{String: localPath, Valid: true}
 	}
 
 	lg.step("Backup succeeded")
@@ -393,7 +408,7 @@ func (h *TaskHandler) HandleBackupDBTask(ctx context.Context, t *asynq.Task) err
 		ID:         run.ID,
 		FinishedAt: pgtype.Timestamptz{Time: time.Now(), Valid: true},
 		Status:     "succeeded",
-		LocalPath:  pgtype.Text{String: localPath, Valid: true},
+		LocalPath:  localPathText,
 		RemoteKey:  remoteKey,
 		SizeBytes:  sizeBytes,
 		Log:        lg.String(),
@@ -407,6 +422,15 @@ func (h *TaskHandler) HandleBackupDBTask(ctx context.Context, t *asynq.Task) err
 
 	slog.Info("database backed up", "database_id", payload.DatabaseID, "method", method, "size_bytes", sizeBytes, "remote", remoteKey.Valid, "config", cfg != nil)
 	return nil
+}
+
+// removeLocalAfterUpload deletes the local archive once it is safely uploaded to
+// a remote target, so the server disk isn't used to mirror the bucket. A removal
+// failure is noted in the run log but does not fail the (already-uploaded) backup.
+func removeLocalAfterUpload(localPath string, lg *runLog) {
+	if err := os.Remove(localPath); err != nil && !os.IsNotExist(err) {
+		lg.step("Warning: could not remove local copy after upload: %v", err)
+	}
 }
 
 // remoteDeleter removes remote backup objects by key. nil = no remote deletion.
@@ -865,14 +889,34 @@ func (h *TaskHandler) resolveBackupFile(ctx context.Context, backup generated.Da
 	if !backup.RemoteKey.Valid {
 		return "", noop, errors.New("backup has no local file and no remote copy")
 	}
+
+	tmp := filepath.Join(os.TempDir(), "paas-restore-"+filepath.Base(backup.RemoteKey.String))
+	cleanup := func() { _ = os.Remove(tmp) }
+
+	// Config-driven backups live in their project destination, not the global
+	// env-var S3 target — download from the bucket the object was uploaded to.
+	if backup.BackupConfigID.Valid {
+		if h.BackupDestinations == nil {
+			return "", noop, errors.New("backup destinations service is not configured")
+		}
+		client, err := h.BackupDestinations.ClientForConfig(ctx, backup.BackupConfigID)
+		if err != nil {
+			return "", noop, fmt.Errorf("resolve backup destination: %w", err)
+		}
+		if err := client.Download(ctx, backup.RemoteKey.String, tmp); err != nil {
+			return "", noop, err
+		}
+		return tmp, cleanup, nil
+	}
+
+	// Ad-hoc backup: the global env-var S3 target.
 	if h.BackupService == nil || !h.BackupService.Enabled() {
 		return "", noop, errors.New("backup is remote-only but S3 is not configured")
 	}
-	tmp := filepath.Join(os.TempDir(), "paas-restore-"+filepath.Base(backup.RemoteKey.String))
 	if err := h.BackupService.Download(ctx, backup.RemoteKey.String, tmp); err != nil {
 		return "", noop, err
 	}
-	return tmp, func() { _ = os.Remove(tmp) }, nil
+	return tmp, cleanup, nil
 }
 
 func (h *TaskHandler) failDatabaseBackup(ctx context.Context, id pgtype.UUID, errMsg string) {
