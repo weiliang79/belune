@@ -1,8 +1,5 @@
-import { Link } from "@tanstack/react-router";
-import { LayersIcon, SettingsIcon } from "lucide-react";
-import { buttonVariants } from "@/components/ui/button";
+import { LayersIcon } from "lucide-react";
 import { StatusPill } from "@/components/ui/status-pill";
-import { cn } from "@/lib/utils";
 import type { Application, Database, Project } from "@/lib/types";
 
 interface Props {
@@ -82,17 +79,6 @@ export function ProjectHeader({ project, applications, databases }: Props) {
           )}
         </div>
       </div>
-
-      {project && (
-        <Link
-          to="/projects/$projectId/settings"
-          params={{ projectId: project.id }}
-          className={cn(buttonVariants({ variant: "outline" }))}
-        >
-          <SettingsIcon aria-hidden="true" className="size-4" />
-          Settings
-        </Link>
-      )}
     </div>
   );
 }
