@@ -456,6 +456,25 @@ func (h *TaskHandler) buildFromGit(ctx context.Context, dc *deployContext) error
 // createAndStart creates the container, starts it, and connects it to paas-infra.
 // On success it appends a compensator that stops and removes the container.
 func (h *TaskHandler) createAndStart(ctx context.Context, dc *deployContext) error {
+	// Load persistent volumes and ensure the backing Docker volumes exist
+	// before creating the container. Volumes are keyed by application ID + name
+	// (naming.AppVolumeName) so every redeploy reattaches the same data. The
+	// CreateDataVolume label opts them out of PruneVolumes. Previews are
+	// distinct application rows with no volume records, so they stay stateless
+	// and never mount the parent's data.
+	volRows, err := h.Queries.ListApplicationVolumes(ctx, dc.applicationID)
+	if err != nil {
+		return fmt.Errorf("load volumes: %w", err)
+	}
+	volumes := make(map[string]string, len(volRows))
+	for _, v := range volRows {
+		volName := naming.AppVolumeName(dc.payload.ApplicationID, v.Name)
+		if err := h.Runtime.CreateDataVolume(ctx, volName); err != nil {
+			return fmt.Errorf("ensure volume %s: %w", volName, err)
+		}
+		volumes[volName] = v.MountPath
+	}
+
 	containerID, err := h.Runtime.CreateContainer(ctx, runtime.ContainerConfig{
 		Name:            dc.containerName,
 		Image:           dc.imageName,
@@ -466,6 +485,10 @@ func (h *TaskHandler) createAndStart(ctx context.Context, dc *deployContext) err
 		CPULimit:        dc.app.CpuLimit,
 		MemoryLimit:     dc.app.MemoryLimit,
 		HealthCheckPath: dc.app.HealthCheckPath.String,
+		// Persistent volumes mounted at their configured paths. These mounts
+		// are writable even though ReadonlyRootfs is true — a volume mount
+		// overrides the read-only rootfs at that path.
+		Volumes: volumes,
 		// Security hardening (v0.0.9-alpha Phase 2): drop all capabilities,
 		// disallow privilege escalation, and run with a read-only rootfs +
 		// tmpfs for the conventional writable paths. Apps that need more

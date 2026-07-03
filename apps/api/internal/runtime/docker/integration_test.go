@@ -93,6 +93,48 @@ func TestIntegration_VolumeCreateRemove(t *testing.T) {
 	require.NoError(t, c.RemoveVolume(ctx, name))
 }
 
+// volumeExists reports whether a named volume is present on the daemon.
+func volumeExists(t *testing.T, c *Client, name string) bool {
+	t.Helper()
+	_, err := c.cli.VolumeInspect(context.Background(), name)
+	return err == nil
+}
+
+// TestIntegration_PruneVolumes_PreservesDataAndCache is the data-loss guard for
+// v0.0.26 application volumes: PruneVolumes must never reap persistent
+// application data (paas-data) or build caches (paas-cache). A regression here
+// silently deletes user data whenever the cleanup worker runs while an app's
+// container is absent between deploys.
+//
+// The label filter is the guarantee under test. (On Docker Engine 23.0+,
+// VolumesPrune without all=true additionally skips *named* volumes entirely, so
+// these named volumes are doubly protected; the label keeps the guard correct
+// on older daemons and if all=true is ever introduced.)
+//
+// NOTE: this calls PruneVolumes, which reaps dangling volumes on the host —
+// running it may delete unrelated leftover volumes. It is gated behind the
+// integration_docker build tag for that reason.
+func TestIntegration_PruneVolumes_PreservesDataAndCache(t *testing.T) {
+	c := newTestClient(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	// Persistent application data volume — prune MUST keep it.
+	data := uniqueName(t, "data")
+	require.NoError(t, c.CreateDataVolume(ctx, data))
+	t.Cleanup(func() { _ = c.RemoveVolume(context.Background(), data) })
+
+	// Build cache volume — prune MUST keep it (existing guarantee).
+	cache := uniqueName(t, "cache")
+	require.NoError(t, c.CreateCacheVolume(ctx, cache))
+	t.Cleanup(func() { _ = c.RemoveVolume(context.Background(), cache) })
+
+	require.NoError(t, c.PruneVolumes(ctx))
+
+	assert.True(t, volumeExists(t, c, data), "paas-data volume must survive prune")
+	assert.True(t, volumeExists(t, c, cache), "paas-cache volume must survive prune")
+}
+
 func TestIntegration_ContainerLifecycle(t *testing.T) {
 	c := newTestClient(t)
 	ensureTestImage(t, c)

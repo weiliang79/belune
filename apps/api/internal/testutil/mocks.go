@@ -96,6 +96,7 @@ func (m *MockContainerRuntime) ConnectContainerToNetwork(_ context.Context, _, _
 }
 func (m *MockContainerRuntime) CreateVolume(_ context.Context, _ string) error      { return nil }
 func (m *MockContainerRuntime) CreateCacheVolume(_ context.Context, _ string) error { return nil }
+func (m *MockContainerRuntime) CreateDataVolume(_ context.Context, _ string) error  { return nil }
 func (m *MockContainerRuntime) VolumeSize(_ context.Context, _ string) (int64, error) {
 	return 0, nil
 }

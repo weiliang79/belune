@@ -242,6 +242,11 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService,
 			r.Put("/api/projects/{projectId}/applications/{applicationId}/domains/{domainId}/features", h.UpsertRouteFeature)
 			r.Delete("/api/projects/{projectId}/applications/{applicationId}/domains/{domainId}/features/{featureId}", h.DeleteRouteFeature)
 
+			// Application persistent volumes
+			r.Get("/api/projects/{projectId}/applications/{applicationId}/volumes", h.ListApplicationVolumes)
+			r.Post("/api/projects/{projectId}/applications/{applicationId}/volumes", h.CreateApplicationVolume)
+			r.Delete("/api/projects/{projectId}/applications/{applicationId}/volumes/{volumeId}", h.DeleteApplicationVolume)
+
 			// Global deployments
 			r.Get("/api/deployments", h.GetGlobalDeployments)
 

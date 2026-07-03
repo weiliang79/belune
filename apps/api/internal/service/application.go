@@ -180,6 +180,21 @@ func (s *ApplicationService) Delete(ctx context.Context, appID pgtype.UUID, proj
 		}
 	}
 
+	// Drop persistent data volumes. They are tagged paas-data=true so
+	// PruneVolumes never reclaims them; app deletion is the only point they can
+	// be cleaned up. List them BEFORE DeleteApplication, whose ON DELETE CASCADE
+	// removes the application_volumes rows.
+	dataVols, err := s.queries.ListApplicationVolumes(ctx, appID)
+	if err != nil {
+		slog.Warn("could not list data volumes during app deletion", "application_id", appIDStr, "error", err)
+	}
+	for _, v := range dataVols {
+		volName := naming.AppVolumeName(appIDStr, v.Name)
+		if err := s.runtime.RemoveVolume(ctx, volName); err != nil {
+			slog.Debug("could not remove data volume during app deletion (may not exist)", "volume", volName, "error", err)
+		}
+	}
+
 	return s.queries.DeleteApplication(ctx, appID)
 }
 

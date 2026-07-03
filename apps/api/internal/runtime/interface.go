@@ -83,6 +83,11 @@ type ContainerRuntime interface {
 	// build cache. The cache label opts the volume out of PruneVolumes so the
 	// periodic cleanup worker cannot wipe layer history between builds.
 	CreateCacheVolume(ctx context.Context, name string) error
+	// CreateDataVolume creates (or no-ops on) a Docker volume labelled as
+	// persistent application data. The data label opts the volume out of
+	// PruneVolumes so the cleanup worker cannot delete user data while an app's
+	// container is absent between deploys. Idempotent.
+	CreateDataVolume(ctx context.Context, name string) error
 	// VolumeSize reports the on-disk size in bytes of a named volume, or
 	// (0, nil) when the volume does not exist. Used to surface per-app cache
 	// usage in the UI.

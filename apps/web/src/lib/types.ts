@@ -63,6 +63,14 @@ export interface Deployment {
   finished_at: string | null;
 }
 
+export interface ApplicationVolume {
+  id: string;
+  name: string;
+  mount_path: string;
+  size_bytes: number;
+  created_at: string;
+}
+
 export interface Domain {
   id: string;
   application_id: string;

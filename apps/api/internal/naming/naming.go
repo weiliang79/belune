@@ -65,3 +65,16 @@ func CNBLaunchCacheVolumeName(applicationID string) string {
 	}
 	return fmt.Sprintf("paas-cnb-launch-%s", applicationID[:8])
 }
+
+// AppVolumeName returns the Docker named-volume name for a persistent
+// application volume. volumeName is the already-slugified per-application name
+// (unique within the app via a DB constraint), so the result is stable across
+// redeploys and collision-free between apps. The deploy worker reconstructs
+// this name to reattach the same volume on every deploy.
+func AppVolumeName(applicationID, volumeName string) string {
+	id := applicationID
+	if len(id) >= 8 {
+		id = id[:8]
+	}
+	return fmt.Sprintf("paas-vol-%s-%s", id, volumeName)
+}

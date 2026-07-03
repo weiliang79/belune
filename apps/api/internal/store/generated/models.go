@@ -55,6 +55,15 @@ type ApplicationLog struct {
 	RecordedAt    pgtype.Timestamptz `json:"recorded_at"`
 }
 
+type ApplicationVolume struct {
+	ID            pgtype.UUID        `json:"id"`
+	ApplicationID pgtype.UUID        `json:"application_id"`
+	Name          string             `json:"name"`
+	MountPath     string             `json:"mount_path"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
+}
+
 type AuditLog struct {
 	ID           pgtype.UUID        `json:"id"`
 	UserID       pgtype.UUID        `json:"user_id"`
