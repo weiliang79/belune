@@ -19,7 +19,7 @@ func TestApplicationService_Create_FinalizesSlugAndWebhookSecret(t *testing.T) {
 
 	_, project := seedUserAndProject(t)
 	rt := &testutil.MockContainerRuntime{}
-	svc := service.NewApplicationService(testPool, testQueries, rt, testKeyring)
+	svc := service.NewApplicationService(testPool, testQueries, rt, testKeyring, t.TempDir())
 
 	app, err := svc.Create(context.Background(), service.CreateApplicationParams{
 		ProjectID:   project.ID,
@@ -55,7 +55,7 @@ func TestApplicationService_Create_EncryptsGitToken(t *testing.T) {
 
 	_, project := seedUserAndProject(t)
 	rt := &testutil.MockContainerRuntime{}
-	svc := service.NewApplicationService(testPool, testQueries, rt, testKeyring)
+	svc := service.NewApplicationService(testPool, testQueries, rt, testKeyring, t.TempDir())
 
 	const plaintextPAT = "ghp_supersecrettokenvalue123"
 	app, err := svc.Create(context.Background(), service.CreateApplicationParams{
@@ -91,7 +91,7 @@ func TestApplicationService_Delete_StopsAndRemovesAllContainerNames(t *testing.T
 
 	_, project := seedUserAndProject(t)
 	rt := &testutil.MockContainerRuntime{}
-	svc := service.NewApplicationService(testPool, testQueries, rt, testKeyring)
+	svc := service.NewApplicationService(testPool, testQueries, rt, testKeyring, t.TempDir())
 
 	app, err := svc.Create(context.Background(), service.CreateApplicationParams{
 		ProjectID:   project.ID,

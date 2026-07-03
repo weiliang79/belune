@@ -99,6 +99,12 @@ type Config struct {
 	// Local directory where managed-database logical dumps are written before
 	// (optional) upload to S3. Defaults to $PAAS_DIR/backups/databases.
 	DatabaseBackupDir string
+	// Host directory under which per-application file/config mounts are
+	// materialised (<dir>/<app-id>/<file-id>) before being bind-mounted read-only
+	// into the app container. Must be a HOST path the Docker daemon can bind —
+	// on the containerised-API deploy it must be shared into the API container at
+	// the same path. Defaults to $PAAS_DIR/filemounts.
+	FileMountsDir string
 	// Image for the short-lived helper that tars/untars a database volume during
 	// "other"-type volume-snapshot backup/restore. Must contain `tar` and `sh`.
 	DatabaseBackupHelperImage string
@@ -165,6 +171,7 @@ func Load() (*Config, error) {
 		BackupRetainCount:         getEnvInt("BACKUP_RETAIN_COUNT", 14),
 		BackupScriptPath:          getEnv("BACKUP_SCRIPT_PATH", paasDir()+"/scripts/backup.sh"),
 		DatabaseBackupDir:         getEnv("DATABASE_BACKUP_DIR", paasDir()+"/backups/databases"),
+		FileMountsDir:             getEnv("FILE_MOUNTS_DIR", paasDir()+"/filemounts"),
 		DatabaseBackupHelperImage: getEnv("DATABASE_BACKUP_HELPER_IMAGE", "alpine:3.20"),
 		DatabaseBackupRetainCount: getEnvInt("DATABASE_BACKUP_RETAIN_COUNT", 7),
 	}

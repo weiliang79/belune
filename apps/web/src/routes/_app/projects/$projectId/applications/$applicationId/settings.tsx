@@ -8,6 +8,7 @@ import { Separator } from "@/components/ui/separator";
 import { ApplicationSettingsForm } from "@/components/applications/application-settings-form";
 import { WebhookSection } from "@/components/applications/webhook-section";
 import { VolumesSection } from "@/components/applications/volumes-section";
+import { FileMountsSection } from "@/components/applications/file-mounts-section";
 import { BuildCacheSection } from "@/components/applications/build-cache-section";
 import { DeleteApplicationDialog } from "@/components/applications/delete-application-dialog";
 
@@ -63,6 +64,9 @@ function ApplicationSettingsPage() {
 
       <Separator />
       <VolumesSection projectId={projectId} applicationId={applicationId} />
+
+      <Separator />
+      <FileMountsSection projectId={projectId} applicationId={applicationId} />
 
       {application.type === "git" && (
         <>

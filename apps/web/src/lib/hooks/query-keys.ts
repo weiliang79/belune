@@ -44,6 +44,16 @@ export const queryKeys = {
         "volumes",
       ] as const,
   },
+  fileMounts: {
+    all: (projectId: string, applicationId: string) =>
+      [
+        "projects",
+        projectId,
+        "applications",
+        applicationId,
+        "file-mounts",
+      ] as const,
+  },
   domains: {
     all: (projectId: string, applicationId: string) =>
       [

@@ -122,7 +122,7 @@ func New(cfg *config.Config) (*App, error) {
 	termMgr := terminal.NewManager(cfg.MaxTerminalSessionsPerUser)
 	hub := ws.NewHub(cfg.MaxWebSocketConnsPerUser)
 
-	appSvc := service.NewApplicationService(db, queries, dockerClient, cfg.Keyring)
+	appSvc := service.NewApplicationService(db, queries, dockerClient, cfg.Keyring, cfg.FileMountsDir)
 	gitProviderSvc := service.NewGitProviderConfigService(queries, cfg.Keyring)
 	gitIntegrationSvc := service.NewGitIntegrationService(queries, cfg.Keyring, gitProviderSvc)
 	quotaSvc := quota.NewService(queries)

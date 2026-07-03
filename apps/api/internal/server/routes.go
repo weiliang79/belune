@@ -247,6 +247,13 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService,
 			r.Post("/api/projects/{projectId}/applications/{applicationId}/volumes", h.CreateApplicationVolume)
 			r.Delete("/api/projects/{projectId}/applications/{applicationId}/volumes/{volumeId}", h.DeleteApplicationVolume)
 
+			// Application file/config mounts
+			r.Get("/api/projects/{projectId}/applications/{applicationId}/file-mounts", h.ListFileMounts)
+			r.Get("/api/projects/{projectId}/applications/{applicationId}/file-mounts/{fileMountId}/reveal", h.RevealFileMount)
+			r.Post("/api/projects/{projectId}/applications/{applicationId}/file-mounts", h.CreateFileMount)
+			r.Put("/api/projects/{projectId}/applications/{applicationId}/file-mounts/{fileMountId}", h.UpdateFileMount)
+			r.Delete("/api/projects/{projectId}/applications/{applicationId}/file-mounts/{fileMountId}", h.DeleteFileMount)
+
 			// Global deployments
 			r.Get("/api/deployments", h.GetGlobalDeployments)
 

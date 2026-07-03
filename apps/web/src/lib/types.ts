@@ -71,6 +71,18 @@ export interface ApplicationVolume {
   created_at: string;
 }
 
+export interface FileMount {
+  id: string;
+  mount_path: string;
+  /** Decrypted content for non-secret mounts; empty when content_masked. */
+  content?: string;
+  is_secret: boolean;
+  file_mode: string;
+  /** True when the mount holds secret content masked in this response. */
+  content_masked: boolean;
+  created_at: string;
+}
+
 export interface Domain {
   id: string;
   application_id: string;

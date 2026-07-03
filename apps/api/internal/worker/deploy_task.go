@@ -8,6 +8,8 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"path/filepath"
+	"strconv"
 	"time"
 
 	"github.com/hibiken/asynq"
@@ -453,6 +455,70 @@ func (h *TaskHandler) buildFromGit(ctx context.Context, dc *deployContext) error
 	return nil
 }
 
+// writeFileMounts materialises the application's file/config mounts to managed
+// host files under <FileMountsDir>/<app-id>/ and returns read-only bind specs.
+// The per-app directory is cleared and rewritten every deploy so the on-disk
+// set exactly matches the DB — removed mounts and stale (possibly secret)
+// content never linger. Clearing is safe here: the previous container has
+// already been removed by this deploy stage, so nothing holds a bind to these
+// files. Returns nil when the app has no file mounts.
+func (h *TaskHandler) writeFileMounts(ctx context.Context, dc *deployContext) ([]runtime.BindMount, error) {
+	rows, err := h.Queries.ListApplicationFileMounts(ctx, dc.applicationID)
+	if err != nil {
+		return nil, fmt.Errorf("load file mounts: %w", err)
+	}
+
+	appDir := filepath.Join(h.Config.FileMountsDir, dc.payload.ApplicationID)
+	if err := os.RemoveAll(appDir); err != nil {
+		return nil, fmt.Errorf("clear file mounts dir: %w", err)
+	}
+	if len(rows) == 0 {
+		return nil, nil
+	}
+	// 0700 on the per-app dir is the host-side protection for secret content:
+	// other (non-root) host users cannot traverse into it, so the files' own
+	// modes (0644 by default, needed so a non-root *container* uid can read the
+	// bind-mounted inode) never expose secrets on the host. The container reads
+	// the bind-mounted file directly and never traverses this dir, so 0700 does
+	// not affect it.
+	if err := os.MkdirAll(appDir, 0o700); err != nil {
+		return nil, fmt.Errorf("create file mounts dir: %w", err)
+	}
+
+	binds := make([]runtime.BindMount, 0, len(rows))
+	for _, fm := range rows {
+		content, err := h.Keyring.Decrypt(fm.ContentEncrypted)
+		if err != nil {
+			return nil, fmt.Errorf("decrypt file mount %s: %w", fm.MountPath, err)
+		}
+		mode := parseFileMode(fm.FileMode)
+		// Host filename is the mount id in hex — unique, filesystem-safe, and
+		// irrelevant to the container (it sees the file at MountPath).
+		hostFile := filepath.Join(appDir, fmt.Sprintf("%x", fm.ID.Bytes))
+		if err := os.WriteFile(hostFile, content, mode); err != nil {
+			return nil, fmt.Errorf("write file mount %s: %w", fm.MountPath, err)
+		}
+		binds = append(binds, runtime.BindMount{Source: hostFile, Target: fm.MountPath})
+	}
+	return binds, nil
+}
+
+// parseFileMode parses a stored octal mode string (e.g. "0644"), falling back to
+// 0644 when empty or malformed. The value was validated on write, so the
+// fallback is defence in depth.
+func parseFileMode(mode string) os.FileMode {
+	if mode == "" {
+		return 0o644
+	}
+	parsed, err := strconv.ParseUint(mode, 8, 32)
+	if err != nil {
+		return 0o644
+	}
+	// Mask to the standard rwx bits: never honour setuid/setgid/sticky on a
+	// user-supplied mount, even though validateFileMode already rejects them.
+	return os.FileMode(parsed) & 0o777
+}
+
 // createAndStart creates the container, starts it, and connects it to paas-infra.
 // On success it appends a compensator that stops and removes the container.
 func (h *TaskHandler) createAndStart(ctx context.Context, dc *deployContext) error {
@@ -475,6 +541,14 @@ func (h *TaskHandler) createAndStart(ctx context.Context, dc *deployContext) err
 		volumes[volName] = v.MountPath
 	}
 
+	// Materialise file/config mounts to managed host files and bind them
+	// read-only. Content lives in the DB (source of truth); the host files are
+	// rewritten every deploy.
+	fileBinds, err := h.writeFileMounts(ctx, dc)
+	if err != nil {
+		return fmt.Errorf("write file mounts: %w", err)
+	}
+
 	containerID, err := h.Runtime.CreateContainer(ctx, runtime.ContainerConfig{
 		Name:            dc.containerName,
 		Image:           dc.imageName,
@@ -489,6 +563,8 @@ func (h *TaskHandler) createAndStart(ctx context.Context, dc *deployContext) err
 		// are writable even though ReadonlyRootfs is true — a volume mount
 		// overrides the read-only rootfs at that path.
 		Volumes: volumes,
+		// Read-only file/config mounts materialised above.
+		ReadOnlyBinds: fileBinds,
 		// Security hardening (v0.0.9-alpha Phase 2): drop all capabilities,
 		// disallow privilege escalation, and run with a read-only rootfs +
 		// tmpfs for the conventional writable paths. Apps that need more

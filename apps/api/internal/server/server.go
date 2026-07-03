@@ -36,7 +36,7 @@ type Server struct {
 
 func New(cfg *config.Config, db *pgxpool.Pool, queries *generated.Queries, asynqClient handler.TaskEnqueuer, rt runtime.ContainerRuntime, pm proxy.ProxyManager, reconciler handler.ReconcilerStatusProvider, rdb *redis.Client, hub *ws.Hub, auditSvc *service.AuditService, notifySvc *service.NotificationService, termMgr *terminal.Manager, emailSvc *email.Service) *Server {
 	auth := service.NewAuthService(queries, cfg.JWTSecret, cfg.JWTExpiryHours, cfg.JWTRefreshHours, rdb)
-	appSvc := service.NewApplicationService(db, queries, rt, cfg.Keyring)
+	appSvc := service.NewApplicationService(db, queries, rt, cfg.Keyring, cfg.FileMountsDir)
 	projSvc := service.NewProjectService(queries, rt)
 	backupDestSvc := service.NewBackupDestinationService(queries, cfg.Keyring)
 	dbSvc := service.NewDatabaseService(queries, rt, backup.New(cfg), backupDestSvc)

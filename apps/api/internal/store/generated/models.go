@@ -47,6 +47,17 @@ type Application struct {
 	GitIntegrationID        pgtype.UUID        `json:"git_integration_id"`
 }
 
+type ApplicationFileMount struct {
+	ID               pgtype.UUID        `json:"id"`
+	ApplicationID    pgtype.UUID        `json:"application_id"`
+	MountPath        string             `json:"mount_path"`
+	ContentEncrypted []byte             `json:"content_encrypted"`
+	IsSecret         bool               `json:"is_secret"`
+	FileMode         string             `json:"file_mode"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+}
+
 type ApplicationLog struct {
 	ID            pgtype.UUID        `json:"id"`
 	ApplicationID pgtype.UUID        `json:"application_id"`

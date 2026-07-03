@@ -49,6 +49,10 @@ func (c *Client) CreateContainer(ctx context.Context, cfg runtime.ContainerConfi
 	for hostPath, containerPath := range cfg.Volumes {
 		binds = append(binds, fmt.Sprintf("%s:%s", hostPath, containerPath))
 	}
+	// Read-only file/config mounts: bind a managed host file at a container path.
+	for _, b := range cfg.ReadOnlyBinds {
+		binds = append(binds, fmt.Sprintf("%s:%s:ro", b.Source, b.Target))
+	}
 
 	labels := map[string]string{
 		labelManagedBy: labelValue,

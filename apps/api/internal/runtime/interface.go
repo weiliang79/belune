@@ -12,6 +12,14 @@ type TerminalExecSession struct {
 	RWC    io.ReadWriteCloser // combined stdin+stdout stream (TTY mode — no mux header)
 }
 
+// BindMount is a single host-path → container-path mount. Used for read-only
+// file/config mounts, where Source is a managed host file the deploy worker
+// wrote (never a user-chosen host path).
+type BindMount struct {
+	Source string // host path
+	Target string // container path
+}
+
 type ContainerConfig struct {
 	Name            string
 	Image           string
@@ -19,6 +27,7 @@ type ContainerConfig struct {
 	Ports           map[string]string // host:container
 	HostBindIP      string            // host IP for port bindings (empty = 0.0.0.0; "127.0.0.1" = loopback only)
 	Volumes         map[string]string // host:container
+	ReadOnlyBinds   []BindMount       // host-file → container-path, mounted read-only (file/config mounts)
 	Network         string
 	Cmd             []string
 	Labels          map[string]string

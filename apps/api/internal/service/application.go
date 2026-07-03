@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"os"
+	"path/filepath"
 
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -16,14 +18,15 @@ import (
 )
 
 type ApplicationService struct {
-	db      *pgxpool.Pool
-	queries *generated.Queries
-	runtime runtime.ContainerRuntime
-	keyring *crypto.Keyring
+	db            *pgxpool.Pool
+	queries       *generated.Queries
+	runtime       runtime.ContainerRuntime
+	keyring       *crypto.Keyring
+	fileMountsDir string
 }
 
-func NewApplicationService(db *pgxpool.Pool, queries *generated.Queries, rt runtime.ContainerRuntime, keyring *crypto.Keyring) *ApplicationService {
-	return &ApplicationService{db: db, queries: queries, runtime: rt, keyring: keyring}
+func NewApplicationService(db *pgxpool.Pool, queries *generated.Queries, rt runtime.ContainerRuntime, keyring *crypto.Keyring, fileMountsDir string) *ApplicationService {
+	return &ApplicationService{db: db, queries: queries, runtime: rt, keyring: keyring, fileMountsDir: fileMountsDir}
 }
 
 // CreateApplicationParams holds the parameters for creating an application.
@@ -192,6 +195,15 @@ func (s *ApplicationService) Delete(ctx context.Context, appID pgtype.UUID, proj
 		volName := naming.AppVolumeName(appIDStr, v.Name)
 		if err := s.runtime.RemoveVolume(ctx, volName); err != nil {
 			slog.Debug("could not remove data volume during app deletion (may not exist)", "volume", volName, "error", err)
+		}
+	}
+
+	// Remove materialised file/config mounts (the DB rows cascade with the app;
+	// the host files do not). Best-effort — a leftover dir only wastes a little
+	// disk. Skip when unconfigured to avoid an accidental broad path.
+	if s.fileMountsDir != "" {
+		if err := os.RemoveAll(filepath.Join(s.fileMountsDir, appIDStr)); err != nil {
+			slog.Warn("could not remove file mounts dir during app deletion", "application_id", appIDStr, "error", err)
 		}
 	}
 
