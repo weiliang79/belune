@@ -16,12 +16,13 @@ import {
 import { useInvitations, useInviteUser, useRevokeInvitation } from "@/lib/hooks/use-invitations";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { PageHeader } from "@/components/ui/page-header";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { ShieldIcon, UserIcon, SearchIcon } from "lucide-react";
+import { ShieldIcon, UserIcon, SearchIcon, UsersIcon } from "lucide-react";
 import { initialsOf } from "@/lib/utils/initials";
-import { formatRelativeTime } from "@/lib/utils/format";
+import { formatDateTime } from "@/lib/utils/format";
 import type { User, Invitation } from "@/lib/types";
 import {
   Dialog,
@@ -130,7 +131,7 @@ function TeamSettingsPage() {
         enableGlobalFilter: false,
         meta: { className: "text-muted-foreground text-sm" },
         cell: ({ row: { original: user } }) =>
-          user.created_at ? formatRelativeTime(user.created_at) : "—",
+          user.created_at ? formatDateTime(user.created_at) : "—",
       },
       {
         id: "last_active_at",
@@ -139,7 +140,7 @@ function TeamSettingsPage() {
         enableGlobalFilter: false,
         meta: { className: "text-muted-foreground text-sm" },
         cell: ({ row: { original: user } }) =>
-          user.last_active_at ? formatRelativeTime(user.last_active_at) : "—",
+          user.last_active_at ? formatDateTime(user.last_active_at) : "—",
       },
       buildActionColumnDef({
         meta: { headerClassName: "text-right", className: "text-right" },
@@ -171,19 +172,20 @@ function TeamSettingsPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">
-          Team Members
-          {users && (
-            <span className="text-muted-foreground ml-2 text-base font-normal">
-              {users.length} {users.length === 1 ? "person" : "people"}
-            </span>
-          )}
-        </h1>
-        <p className="text-muted-foreground text-sm">
-          Manage who has access to this server and their permissions.
-        </p>
-      </div>
+      <PageHeader
+        icon={<UsersIcon className="size-5" />}
+        title={
+          <>
+            Team Members
+            {users && (
+              <span className="text-muted-foreground ml-2 text-base font-normal">
+                {users.length} {users.length === 1 ? "person" : "people"}
+              </span>
+            )}
+          </>
+        }
+        description="Manage who has access to this server and their permissions."
+      />
 
       <Card>
         <CardHeader className="flex flex-row items-center justify-between gap-3">
@@ -289,9 +291,11 @@ function UserRoleCell({ user, isSelf }: { user: User; isSelf: boolean }) {
       </DropdownMenuTrigger>
       <DropdownMenuContent>
         <DropdownMenuItem onClick={() => handleRoleChange("admin")}>
+          <ShieldIcon aria-hidden="true" />
           Admin
         </DropdownMenuItem>
         <DropdownMenuItem onClick={() => handleRoleChange("member")}>
+          <UserIcon aria-hidden="true" />
           Member
         </DropdownMenuItem>
       </DropdownMenuContent>
@@ -627,8 +631,7 @@ function PendingInvitationsCard() {
         header: "Expires",
         accessorKey: "expires_at",
         meta: { className: "text-muted-foreground text-sm" },
-        cell: ({ row: { original: inv } }) =>
-          new Date(inv.expires_at).toLocaleDateString(),
+        cell: ({ row: { original: inv } }) => formatDateTime(inv.expires_at),
       },
       buildActionColumnDef({
         meta: { headerClassName: "text-right", className: "text-right" },

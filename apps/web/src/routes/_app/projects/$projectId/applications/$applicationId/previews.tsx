@@ -16,7 +16,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { StatusBadge } from "@/lib/components/status-badge";
-import { formatDate } from "@/lib/utils/format";
+import { formatDateTimeShort } from "@/lib/utils/format";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -115,7 +115,7 @@ function PreviewsPage() {
                       </a>
                     )}
                     <div className="text-muted-foreground text-xs">
-                      Last activity: {formatDate(preview.last_activity_at)}
+                      Last activity: {formatDateTimeShort(preview.last_activity_at)}
                     </div>
                   </div>
                   <AlertDialog>

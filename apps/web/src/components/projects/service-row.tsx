@@ -1,6 +1,8 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
+import type { ColumnDef } from "@tanstack/react-table";
+import { DataTable } from "@/components/ui/data-table";
 import {
   AppWindowIcon,
   ArrowUpRightIcon,
@@ -15,7 +17,12 @@ import {
   Trash2Icon,
 } from "lucide-react";
 import { toast } from "sonner";
-import type { Application, Database, ServiceMetrics } from "@/lib/types";
+import type {
+  Application,
+  Database,
+  ProjectMetrics,
+  ServiceMetrics,
+} from "@/lib/types";
 import {
   useDeleteApplication,
   useDeployApplication,
@@ -58,15 +65,21 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 
+export type ServiceRowItem =
+  | { kind: "application"; data: Application }
+  | { kind: "database"; data: Database };
+
 // Icon-only row action with a hover/focus tooltip label.
 function IconAction({
   label,
   onClick,
   children,
+  className,
 }: {
   label: string;
   onClick: () => void;
   children: React.ReactNode;
+  className?: string;
 }) {
   return (
     <Tooltip>
@@ -77,6 +90,7 @@ function IconAction({
             size="icon"
             aria-label={label}
             onClick={onClick}
+            className={className}
           />
         }
       >
@@ -113,112 +127,12 @@ function formatBytes(bytes: number): string {
   return `${(bytes / 1024).toFixed(0)} KB`;
 }
 
-/** Shared row chrome: icon, name link, type badge, runtime columns, and actions. */
-function RowShell({
-  to,
-  params,
-  icon,
-  name,
-  slug,
-  typeLabel,
-  status,
-  metrics,
-  port,
-  actions,
-}: {
-  to: string;
-  params: Record<string, string>;
-  icon: React.ReactNode;
-  name: string;
-  slug: string;
-  typeLabel: string;
-  status: string;
-  metrics?: ServiceMetrics;
-  port?: number;
-  actions: React.ReactNode;
-}) {
-  const running = RUNNING.has(status.toLowerCase());
-  const domain = metrics?.domain;
-  const effectivePort = port ?? metrics?.port;
-
-  return (
-    <div className="hover:bg-card-hover grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-4 py-3 transition-colors md:grid-cols-[minmax(0,2fr)_140px_minmax(0,1.4fr)_80px_104px_104px]">
-      {/* Name / Type */}
-      <div className="flex min-w-0 items-center gap-3">
-        <div className="bg-elev text-text-muted grid size-9 shrink-0 place-items-center rounded-lg">
-          {icon}
-        </div>
-        <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <Link
-              to={to}
-              params={params}
-              className="hover:text-primary truncate text-sm font-medium transition-colors"
-            >
-              {name}
-            </Link>
-            <span className="text-text-faint hidden truncate font-mono text-xs lg:inline">
-              {slug}
-            </span>
-          </div>
-          <div className="mt-1 flex items-center gap-2">
-            <Badge variant="outline" className="capitalize">
-              {typeLabel}
-            </Badge>
-          </div>
-        </div>
-      </div>
-
-      {/* Status (+ uptime) */}
-      <div className="hidden flex-col items-start gap-0.5 md:flex">
-        <StatusPill status={status} />
-        {running && metrics?.uptime_seconds ? (
-          <span className="text-text-faint text-xs">
-            Up {formatUptime(metrics.uptime_seconds)}
-          </span>
-        ) : null}
-      </div>
-
-      {/* Port · Domain */}
-      <div className="text-text-faint hidden min-w-0 font-mono text-xs md:block">
-        {effectivePort ? <span>:{effectivePort}</span> : null}
-        {domain ? (
-          <div className="text-text-muted truncate">{domain}</div>
-        ) : null}
-        {!effectivePort && !domain ? "—" : null}
-      </div>
-
-      {/* CPU */}
-      <div className="text-text-muted hidden font-mono text-xs md:block">
-        {metrics && running ? `${metrics.cpu_percent.toFixed(0)}%` : "—"}
-      </div>
-
-      {/* Memory */}
-      <div className="text-text-muted hidden font-mono text-xs md:block">
-        {metrics && running && metrics.memory_used
-          ? formatBytes(metrics.memory_used)
-          : "—"}
-      </div>
-
-      {/* Actions */}
-      <div
-        className="flex items-center justify-start gap-1"
-        onClick={(e) => e.stopPropagation()}
-      >
-        {actions}
-      </div>
-    </div>
-  );
-}
-
-function ApplicationRow({
+function ApplicationActions({
   projectId,
   app,
-  metrics,
 }: {
   projectId: string;
   app: Application;
-  metrics?: ServiceMetrics;
 }) {
   const qc = useQueryClient();
   const navigate = useNavigate();
@@ -236,7 +150,8 @@ function ApplicationRow({
   const onSuccess = { onSuccess: refreshList };
 
   const status = app.status.toLowerCase();
-  const busy = isTransient(status) || stop.isPending || start.isPending || restart.isPending;
+  const busy =
+    isTransient(status) || stop.isPending || start.isPending || restart.isPending;
 
   let primary: React.ReactNode = null;
   if (busy) {
@@ -251,6 +166,7 @@ function ApplicationRow({
         <IconAction
           label="Stop"
           onClick={() => stop.mutate(undefined, onSuccess)}
+          className="text-destructive hover:bg-destructive/10 hover:text-destructive"
         >
           <SquareIcon aria-hidden="true" className="size-4" />
         </IconAction>
@@ -289,97 +205,85 @@ function ApplicationRow({
     });
 
   return (
-    <RowShell
-      to="/projects/$projectId/applications/$applicationId"
-      params={{ projectId, applicationId: app.id }}
-      icon={<AppWindowIcon aria-hidden="true" className="size-4.5" />}
-      name={app.name}
-      slug={app.slug}
-      typeLabel={app.type}
-      status={app.status}
-      metrics={metrics}
-      actions={
-        <>
-          {primary}
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              render={
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  aria-label="More actions"
-                  title="More"
-                />
+    <div className="flex items-center justify-end gap-1">
+      {primary}
+      <DropdownMenu>
+        <DropdownMenuTrigger
+          render={
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label="More actions"
+              title="More"
+            />
+          }
+        >
+          <MoreHorizontalIcon aria-hidden="true" className="size-4" />
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          <DropdownMenuItem onClick={open}>
+            <ArrowUpRightIcon aria-hidden="true" />
+            Open
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            onClick={() =>
+              navigate({
+                to: "/projects/$projectId/applications/$applicationId/logs",
+                params: { projectId, applicationId: app.id },
+              })
+            }
+          >
+            <ScrollTextIcon aria-hidden="true" />
+            View logs
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            disabled={busy}
+            onClick={() => deploy.mutate(undefined, onSuccess)}
+          >
+            <RocketIcon aria-hidden="true" />
+            Redeploy
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem
+            variant="destructive"
+            onClick={() => setConfirmOpen(true)}
+          >
+            <Trash2Icon aria-hidden="true" />
+            Delete
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+
+      <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete {app.name}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This permanently deletes the application and stops its container.
+              This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() =>
+                toast.promise(del.mutateAsync(app.id), {
+                  loading: "Deleting application…",
+                  success: `${app.name} deleted`,
+                  error: (err) => err.message,
+                })
               }
             >
-              <MoreHorizontalIcon aria-hidden="true" className="size-4" />
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={open}>
-                <ArrowUpRightIcon aria-hidden="true" />
-                Open
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() =>
-                  navigate({
-                    to: "/projects/$projectId/applications/$applicationId/logs",
-                    params: { projectId, applicationId: app.id },
-                  })
-                }
-              >
-                <ScrollTextIcon aria-hidden="true" />
-                View logs
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                disabled={busy}
-                onClick={() => deploy.mutate(undefined, onSuccess)}
-              >
-                <RocketIcon aria-hidden="true" />
-                Redeploy
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                variant="destructive"
-                onClick={() => setConfirmOpen(true)}
-              >
-                <Trash2Icon aria-hidden="true" />
-                Delete
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-
-          <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle>Delete {app.name}?</AlertDialogTitle>
-                <AlertDialogDescription>
-                  This permanently deletes the application and stops its
-                  container. This action cannot be undone.
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                <AlertDialogAction
-                  onClick={() =>
-                    toast.promise(del.mutateAsync(app.id), {
-                      loading: "Deleting application…",
-                      success: `${app.name} deleted`,
-                      error: (err) => err.message,
-                    })
-                  }
-                >
-                  Delete
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
-        </>
-      }
-    />
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
   );
 }
 
-function DatabaseRow({
+function DatabaseActions({
   projectId,
   db,
 }: {
@@ -410,7 +314,11 @@ function DatabaseRow({
   } else if (status === "running") {
     primary = (
       <>
-        <IconAction label="Stop" onClick={() => stop.mutate()}>
+        <IconAction
+          label="Stop"
+          onClick={() => stop.mutate()}
+          className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+        >
           <SquareIcon aria-hidden="true" className="size-4" />
         </IconAction>
         <IconAction label="Restart" onClick={() => restart.mutate()}>
@@ -439,95 +347,266 @@ function DatabaseRow({
     });
 
   return (
-    <RowShell
-      to="/projects/$projectId/databases/$databaseId"
-      params={{ projectId, databaseId: db.id }}
-      icon={<DatabaseIcon aria-hidden="true" className="size-4.5" />}
-      name={db.name}
-      slug={db.slug}
-      typeLabel={db.type}
-      status={db.status}
-      port={db.internal_port ?? undefined}
-      actions={
-        <>
-          {primary}
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              render={
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  aria-label="More actions"
-                  title="More"
-                />
+    <div className="flex items-center justify-end gap-1">
+      {primary}
+      <DropdownMenu>
+        <DropdownMenuTrigger
+          render={
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label="More actions"
+              title="More"
+            />
+          }
+        >
+          <MoreHorizontalIcon aria-hidden="true" className="size-4" />
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          <DropdownMenuItem onClick={open}>
+            <ArrowUpRightIcon aria-hidden="true" />
+            Open
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem
+            variant="destructive"
+            onClick={() => setConfirmOpen(true)}
+          >
+            <Trash2Icon aria-hidden="true" />
+            Delete
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+
+      <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete {db.name}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This permanently deletes the database and its volume. This action
+              cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() =>
+                toast.promise(del.mutateAsync(db.id), {
+                  loading: "Deleting database…",
+                  success: `${db.name} deleted`,
+                  error: (err) => err.message,
+                })
               }
             >
-              <MoreHorizontalIcon aria-hidden="true" className="size-4" />
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={open}>
-                <ArrowUpRightIcon aria-hidden="true" />
-                Open
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                variant="destructive"
-                onClick={() => setConfirmOpen(true)}
-              >
-                <Trash2Icon aria-hidden="true" />
-                Delete
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-
-          <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle>Delete {db.name}?</AlertDialogTitle>
-                <AlertDialogDescription>
-                  This permanently deletes the database and its volume. This
-                  action cannot be undone.
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                <AlertDialogAction
-                  onClick={() =>
-                    toast.promise(del.mutateAsync(db.id), {
-                      loading: "Deleting database…",
-                      success: `${db.name} deleted`,
-                      error: (err) => err.message,
-                    })
-                  }
-                >
-                  Delete
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
-        </>
-      }
-    />
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
   );
 }
 
-export type ServiceRowItem =
-  | { kind: "application"; data: Application }
-  | { kind: "database"; data: Database };
-
-/** A single service row (application or database) with inline lifecycle actions. */
-export function ServiceRow({
+/** Inline lifecycle controls (start/stop/restart + kebab menu) for a service. */
+export function ServiceActions({
   projectId,
   item,
-  metrics,
 }: {
   projectId: string;
   item: ServiceRowItem;
-  metrics?: ServiceMetrics;
 }) {
   return item.kind === "application" ? (
-    <ApplicationRow projectId={projectId} app={item.data} metrics={metrics} />
+    <ApplicationActions projectId={projectId} app={item.data} />
   ) : (
-    <DatabaseRow projectId={projectId} db={item.data} />
+    <DatabaseActions projectId={projectId} db={item.data} />
+  );
+}
+
+function NameCell({
+  projectId,
+  item,
+}: {
+  projectId: string;
+  item: ServiceRowItem;
+}) {
+  const isApp = item.kind === "application";
+  return (
+    <div className="flex min-w-0 items-center gap-3">
+      <div className="bg-elev text-text-muted grid size-9 shrink-0 place-items-center rounded-lg">
+        {isApp ? (
+          <AppWindowIcon aria-hidden="true" className="size-4.5" />
+        ) : (
+          <DatabaseIcon aria-hidden="true" className="size-4.5" />
+        )}
+      </div>
+      <div className="min-w-0">
+        <div className="flex items-center gap-2">
+          {isApp ? (
+            <Link
+              to="/projects/$projectId/applications/$applicationId"
+              params={{ projectId, applicationId: item.data.id }}
+              className="hover:text-primary truncate text-sm font-medium transition-colors"
+            >
+              {item.data.name}
+            </Link>
+          ) : (
+            <Link
+              to="/projects/$projectId/databases/$databaseId"
+              params={{ projectId, databaseId: item.data.id }}
+              className="hover:text-primary truncate text-sm font-medium transition-colors"
+            >
+              {item.data.name}
+            </Link>
+          )}
+          <span className="text-text-faint hidden truncate font-mono text-xs lg:inline">
+            {item.data.slug}
+          </span>
+        </div>
+        <Badge variant="outline" className="mt-1 capitalize">
+          {item.data.type}
+        </Badge>
+      </div>
+    </div>
+  );
+}
+
+function StatusCell({
+  item,
+  metrics,
+}: {
+  item: ServiceRowItem;
+  metrics?: ServiceMetrics;
+}) {
+  const running = RUNNING.has(item.data.status.toLowerCase());
+  return (
+    <div className="flex flex-col items-start gap-0.5">
+      <StatusPill status={item.data.status} />
+      {running && metrics?.uptime_seconds ? (
+        <span className="text-text-faint text-xs">
+          Up {formatUptime(metrics.uptime_seconds)}
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
+function EndpointCell({
+  item,
+  metrics,
+}: {
+  item: ServiceRowItem;
+  metrics?: ServiceMetrics;
+}) {
+  const port =
+    item.kind === "database"
+      ? (item.data.internal_port ?? undefined)
+      : undefined;
+  const effectivePort = port ?? metrics?.port;
+  const domain = metrics?.domain;
+  return (
+    <div className="text-text-faint min-w-0 font-mono text-xs">
+      {effectivePort ? <span>:{effectivePort}</span> : null}
+      {domain ? <div className="text-text-muted truncate">{domain}</div> : null}
+      {!effectivePort && !domain ? "—" : null}
+    </div>
+  );
+}
+
+function usageText(item: ServiceRowItem, metrics: ServiceMetrics | undefined) {
+  return metrics && RUNNING.has(item.data.status.toLowerCase()) ? metrics : null;
+}
+
+/**
+ * Standard column definitions for the project services table. `metricsFor`
+ * resolves live metrics per row (applications only); databases have none.
+ */
+function buildColumns(
+  projectId: string,
+  metricsFor: (item: ServiceRowItem) => ServiceMetrics | undefined,
+): ColumnDef<ServiceRowItem>[] {
+  return [
+    {
+      id: "name",
+      header: "Name / Type",
+      cell: ({ row }) => <NameCell projectId={projectId} item={row.original} />,
+    },
+    {
+      id: "status",
+      header: "Status",
+      cell: ({ row }) => (
+        <StatusCell item={row.original} metrics={metricsFor(row.original)} />
+      ),
+    },
+    {
+      id: "endpoint",
+      header: "Port · Domain",
+      meta: { className: "hidden md:table-cell", headerClassName: "hidden md:table-cell" },
+      cell: ({ row }) => (
+        <EndpointCell item={row.original} metrics={metricsFor(row.original)} />
+      ),
+    },
+    {
+      id: "cpu",
+      header: "CPU",
+      meta: {
+        className: "text-text-muted hidden font-mono text-xs md:table-cell",
+        headerClassName: "hidden md:table-cell",
+      },
+      cell: ({ row }) => {
+        const m = usageText(row.original, metricsFor(row.original));
+        return m ? `${m.cpu_percent.toFixed(0)}%` : "—";
+      },
+    },
+    {
+      id: "memory",
+      header: "Memory",
+      meta: {
+        className: "text-text-muted hidden font-mono text-xs md:table-cell",
+        headerClassName: "hidden md:table-cell",
+      },
+      cell: ({ row }) => {
+        const m = usageText(row.original, metricsFor(row.original));
+        return m && m.memory_used ? formatBytes(m.memory_used) : "—";
+      },
+    },
+    {
+      id: "actions",
+      header: "",
+      meta: { headerClassName: "text-right", className: "text-right" },
+      cell: ({ row }) => (
+        <ServiceActions projectId={projectId} item={row.original} />
+      ),
+    },
+  ];
+}
+
+/** Standard column table of a project's services (applications + databases). */
+export function ServicesTable({
+  projectId,
+  items,
+  metrics,
+  isLoading,
+}: {
+  projectId: string;
+  items: ServiceRowItem[];
+  metrics?: ProjectMetrics;
+  isLoading?: boolean;
+}) {
+  const columns = useMemo(
+    () =>
+      buildColumns(projectId, (item) =>
+        item.kind === "application" ? metrics?.[item.data.id] : undefined,
+      ),
+    [projectId, metrics],
+  );
+
+  return (
+    <DataTable
+      columns={columns}
+      data={items}
+      getRowId={(it) => it.data.id}
+      isLoading={isLoading}
+      emptyMessage="No services match the current filters."
+    />
   );
 }

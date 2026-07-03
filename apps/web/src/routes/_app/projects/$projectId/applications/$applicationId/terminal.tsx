@@ -187,11 +187,21 @@ function TerminalPage() {
             <SelectValue placeholder="Shell" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="sh">sh</SelectItem>
-            <SelectItem value="bash">bash</SelectItem>
-            <SelectItem value="ash">ash</SelectItem>
-            <SelectItem value="zsh">zsh</SelectItem>
-            <SelectItem value="fish">fish</SelectItem>
+            <SelectItem value="sh" icon={<TerminalSquare />}>
+              sh
+            </SelectItem>
+            <SelectItem value="bash" icon={<TerminalSquare />}>
+              bash
+            </SelectItem>
+            <SelectItem value="ash" icon={<TerminalSquare />}>
+              ash
+            </SelectItem>
+            <SelectItem value="zsh" icon={<TerminalSquare />}>
+              zsh
+            </SelectItem>
+            <SelectItem value="fish" icon={<TerminalSquare />}>
+              fish
+            </SelectItem>
           </SelectContent>
         </Select>
 

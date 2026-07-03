@@ -10,7 +10,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useStats } from "@/lib/hooks/use-stats";
 import { formatBytes } from "@/lib/utils/format";
 import { cn } from "@/lib/utils";
-import { StatCard, MeterRow } from "./stat-card";
+import { StatCard, MetricCard, MeterRow } from "./stat-card";
 
 function pct(part: number, total: number) {
   return total > 0 ? Math.round((part / total) * 100) : 0;
@@ -78,7 +78,7 @@ export function OperatorHealthStrip({ className }: { className?: string }) {
         footer={
           app_health.total === 0 ? undefined : (
             <>
-              <Badge variant="outline">{app_health.running} running</Badge>
+              <Badge variant="light">{app_health.running} running</Badge>
               {notRunning > 0 && (
                 <Badge variant="destructive">{notRunning} down</Badge>
               )}
@@ -88,14 +88,11 @@ export function OperatorHealthStrip({ className }: { className?: string }) {
       />
 
       {host && (
-        <Card className="h-full">
-          <CardContent className="space-y-2.5 px-4 py-3">
-            <div className="text-text-faint flex items-center gap-1.5">
-              <ServerIcon className="size-3.5" />
-              <p className="text-xs font-medium tracking-wide uppercase">
-                Host resources
-              </p>
-            </div>
+        <MetricCard
+          label="Host resources"
+          icon={<ServerIcon className="size-3.5" />}
+        >
+          <div className="mt-2.5 space-y-2.5">
             <MeterRow label="CPU" percent={host.cpu_percent} />
             <MeterRow
               label="Memory"
@@ -107,8 +104,8 @@ export function OperatorHealthStrip({ className }: { className?: string }) {
               percent={pct(host.disk_used, host.disk_total)}
               detail={`${formatBytes(host.disk_used)}/${formatBytes(host.disk_total)}`}
             />
-          </CardContent>
-        </Card>
+          </div>
+        </MetricCard>
       )}
 
       <StatCard
@@ -159,7 +156,7 @@ export function OperatorHealthStrip({ className }: { className?: string }) {
         footer={
           deploy_7d.total === 0 ? undefined : (
             <>
-              <Badge variant="outline">{deploy_7d.succeeded} succeeded</Badge>
+              <Badge variant="light">{deploy_7d.succeeded} succeeded</Badge>
               {deploy_7d.failed > 0 && (
                 <Badge variant="destructive">{deploy_7d.failed} failed</Badge>
               )}

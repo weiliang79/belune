@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useApplication } from "@/lib/hooks/use-applications";
 import { useDeployments } from "@/lib/hooks/use-deployments";
@@ -7,6 +8,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Sparkline } from "@/components/ui/sparkline";
+import { MetricCard as StatMetricCard } from "@/lib/components/stats/stat-card";
+import { CpuIcon, MemoryStickIcon, NetworkIcon } from "lucide-react";
 import { formatRelativeTime, formatDuration } from "@/lib/utils/format";
 import { actionLabel, actionClass } from "@/lib/utils/audit-format";
 import { cn } from "@/lib/utils";
@@ -50,30 +53,28 @@ function lastNonNull<K extends keyof AppMetricPoint>(
 
 function MetricCard({
   label,
+  icon,
   value,
   sub,
   values,
   color,
 }: {
   label: string;
+  icon?: ReactNode;
   value: string;
   sub?: string;
   values: (number | null)[];
   color: string;
 }) {
   return (
-    <Card>
-      <CardContent className="p-4">
-        <div className="flex items-center justify-between">
-          <p className="text-text-faint text-xs font-medium tracking-wide uppercase">
-            {label}
-          </p>
-          {sub && <span className="text-text-faint text-xs">{sub}</span>}
-        </div>
-        <p className="mt-1 font-mono text-2xl font-semibold">{value}</p>
-        <Sparkline className="mt-2" height={36} values={values} color={color} />
-      </CardContent>
-    </Card>
+    <StatMetricCard
+      label={label}
+      icon={icon}
+      aside={sub && <span className="text-text-faint text-xs">{sub}</span>}
+    >
+      <p className="mt-1 font-mono text-2xl font-semibold">{value}</p>
+      <Sparkline className="mt-2" height={36} values={values} color={color} />
+    </StatMetricCard>
   );
 }
 
@@ -231,12 +232,14 @@ function ApplicationOverview() {
       <div className="grid gap-4 sm:grid-cols-3">
         <MetricCard
           label="CPU"
+          icon={<CpuIcon className="size-3.5" />}
           value={cpu != null ? `${cpu.toFixed(0)}%` : "—"}
           values={metrics.map((p) => p.cpu_percent)}
           color={CPU_COLOR}
         />
         <MetricCard
           label="Memory"
+          icon={<MemoryStickIcon className="size-3.5" />}
           value={formatBytes(memUsed)}
           sub={memLimit ? `/ ${formatBytes(memLimit)}` : undefined}
           values={metrics.map((p) => p.memory_usage)}
@@ -244,6 +247,7 @@ function ApplicationOverview() {
         />
         <MetricCard
           label="Network"
+          icon={<NetworkIcon className="size-3.5" />}
           value={`↓ ${formatRate(rx)}`}
           sub={`↑ ${formatRate(tx)}`}
           values={metrics.map((p) => p.network_rx_bytes)}

@@ -1,11 +1,29 @@
-export function formatDate(date: string | Date): string {
-  return new Intl.DateTimeFormat("en-US", {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(new Date(date));
+const MONTHS = [
+  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+];
+
+const pad2 = (n: number) => String(n).padStart(2, "0");
+
+/**
+ * Absolute local timestamp for table cells: "YYYY-MM-DD HH:mm:ss".
+ * Built manually (not Intl) so the format is identical across locales.
+ */
+export function formatDateTime(date: string | Date): string {
+  const d = new Date(date);
+  return (
+    `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())} ` +
+    `${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`
+  );
+}
+
+/** Absolute local timestamp for summaries/detail views: "DD MMM YYYY, HH:mm". */
+export function formatDateTimeShort(date: string | Date): string {
+  const d = new Date(date);
+  return (
+    `${pad2(d.getDate())} ${MONTHS[d.getMonth()]} ${d.getFullYear()}, ` +
+    `${pad2(d.getHours())}:${pad2(d.getMinutes())}`
+  );
 }
 
 /** Compact relative time, e.g. "now", "5m", "3h", "2d", falling back to a date. */

@@ -4,19 +4,18 @@ import { Database, DatabaseIcon, Globe, LayersIcon, PlusIcon } from "lucide-reac
 import { useApplications } from "@/lib/hooks/use-applications";
 import { useDatabases } from "@/lib/hooks/use-databases";
 import { useProjectMetrics } from "@/lib/hooks/use-project-metrics";
-import type { ColumnDef } from "@tanstack/react-table";
 import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import { DataTable } from "@/components/ui/data-table";
+import { Card, CardContent } from "@/components/ui/card";
+import {
+  SegmentedControl,
+  SegmentedControlItem,
+} from "@/components/ui/segmented-control";
 import { ApplicationFormDialog } from "@/components/applications/application-form-dialog";
 import { DatabaseFormDialog } from "@/components/databases/database-form-dialog";
 import {
-  ServiceRow,
+  ServicesTable,
   type ServiceRowItem,
 } from "@/components/projects/service-row";
-
-const serviceColumns: ColumnDef<ServiceRowItem>[] = [];
 
 export const Route = createFileRoute("/_app/projects/$projectId/")({
   component: ProjectOverview,
@@ -85,35 +84,31 @@ function ProjectOverview() {
 
       {/* Filter bar */}
       <div className="flex flex-wrap items-center gap-2">
-        <ToggleGroup
-          variant="outline"
+        <SegmentedControl
           size="sm"
-          value={[typeFilter]}
-          onValueChange={(v) => v.length > 0 && setTypeFilter(v[0] as TypeFilter)}
+          value={typeFilter}
+          onValueChange={(v) => setTypeFilter(v as TypeFilter)}
         >
-          <ToggleGroupItem value="all">All types</ToggleGroupItem>
-          <ToggleGroupItem value="application">
+          <SegmentedControlItem value="all">All types</SegmentedControlItem>
+          <SegmentedControlItem value="application">
             <Globe />
             App
-          </ToggleGroupItem>
-          <ToggleGroupItem value="database">
+          </SegmentedControlItem>
+          <SegmentedControlItem value="database">
             <Database />
             Database
-          </ToggleGroupItem>
-        </ToggleGroup>
-        <ToggleGroup
-          variant="outline"
+          </SegmentedControlItem>
+        </SegmentedControl>
+        <SegmentedControl
           size="sm"
-          value={[statusFilter]}
-          onValueChange={(v) =>
-            v.length > 0 && setStatusFilter(v[0] as StatusFilter)
-          }
+          value={statusFilter}
+          onValueChange={(v) => setStatusFilter(v as StatusFilter)}
         >
-          <ToggleGroupItem value="all">All</ToggleGroupItem>
-          <ToggleGroupItem value="running">Running</ToggleGroupItem>
-          <ToggleGroupItem value="stopped">Stopped</ToggleGroupItem>
-          <ToggleGroupItem value="error">Error</ToggleGroupItem>
-        </ToggleGroup>
+          <SegmentedControlItem value="all">All</SegmentedControlItem>
+          <SegmentedControlItem value="running">Running</SegmentedControlItem>
+          <SegmentedControlItem value="stopped">Stopped</SegmentedControlItem>
+          <SegmentedControlItem value="error">Error</SegmentedControlItem>
+        </SegmentedControl>
 
         <div className="ml-auto flex items-center gap-2">
           <span className="text-text-faint text-xs">
@@ -131,20 +126,7 @@ function ProjectOverview() {
       </div>
 
       {/* Service table */}
-      {loading ? (
-        <div className="divide-border divide-y overflow-hidden rounded-xl border">
-          {[1, 2, 3].map((i) => (
-            <div key={i} className="flex items-center gap-3 px-4 py-3">
-              <Skeleton className="size-9 rounded-lg" />
-              <div className="flex-1 space-y-1.5">
-                <Skeleton className="h-4 w-40" />
-                <Skeleton className="h-3 w-24" />
-              </div>
-              <Skeleton className="h-5 w-16 rounded-full" />
-            </div>
-          ))}
-        </div>
-      ) : isEmpty ? (
+      {isEmpty ? (
         <div className="rounded-xl border border-dashed py-16 text-center">
           <LayersIcon
             aria-hidden="true"
@@ -161,41 +143,16 @@ function ProjectOverview() {
           </p>
         </div>
       ) : (
-        <div className="overflow-hidden rounded-xl border">
-          {/* Column header */}
-          <div className="text-text-faint bg-elev/40 hidden grid-cols-[minmax(0,2fr)_140px_minmax(0,1.4fr)_80px_104px_104px] gap-3 px-4 py-2 text-xs font-medium md:grid">
-            <span>Name / Type</span>
-            <span>Status</span>
-            <span>Port · Domain</span>
-            <span>CPU</span>
-            <span>Memory</span>
-            <span>Actions</span>
-          </div>
-          <DataTable
-            columns={serviceColumns}
-            data={items}
-            getRowId={(it) => it.data.id}
-            customView={{
-              wrapperProps: { className: "divide-border divide-y" },
-              item: ({ row }) => (
-                <ServiceRow
-                  projectId={projectId}
-                  item={row.original}
-                  metrics={
-                    row.original.kind === "application"
-                      ? serviceMetrics?.[row.original.data.id]
-                      : undefined
-                  }
-                />
-              ),
-              empty: (
-                <div className="text-muted-foreground px-4 py-10 text-center text-sm">
-                  No services match the current filters.
-                </div>
-              ),
-            }}
-          />
-        </div>
+        <Card>
+          <CardContent>
+            <ServicesTable
+              projectId={projectId}
+              items={items}
+              metrics={serviceMetrics}
+              isLoading={loading}
+            />
+          </CardContent>
+        </Card>
       )}
     </div>
   );

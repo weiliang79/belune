@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { toast } from "sonner";
+import { CloudIcon } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -258,12 +259,17 @@ function DestinationForm({
             value={provider}
             onValueChange={(v) => setProvider((v as BackupProvider) ?? "s3")}
           >
-            <SelectTrigger>
+            <SelectTrigger className="capitalize">
               <SelectValue placeholder="Select provider" />
             </SelectTrigger>
             <SelectContent>
               {PROVIDERS.map((p) => (
-                <SelectItem key={p.value} value={p.value}>
+                <SelectItem
+                  key={p.value}
+                  value={p.value}
+                  icon={<CloudIcon />}
+                  className="capitalize"
+                >
                   {p.label}
                 </SelectItem>
               ))}

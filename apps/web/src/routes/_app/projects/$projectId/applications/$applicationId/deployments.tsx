@@ -18,7 +18,11 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import type { Deployment } from "@/lib/types";
-import { formatDate, formatDuration } from "@/lib/utils/format";
+import {
+  formatDateTime,
+  formatDateTimeShort,
+  formatDuration,
+} from "@/lib/utils/format";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useChannel } from "@/lib/hooks/use-websocket";
 
@@ -124,7 +128,7 @@ function RollbackButton({
           <AlertDialogTitle>Rollback to this deployment?</AlertDialogTitle>
           <AlertDialogDescription>
             This will redeploy the image from{" "}
-            <strong>{formatDate(deployment.started_at)}</strong>
+            <strong>{formatDateTimeShort(deployment.started_at)}</strong>
             {deployment.commit_sha && (
               <> (commit <code>{deployment.commit_sha.slice(0, 7)}</code>)</>
             )}
@@ -219,7 +223,7 @@ function DeploymentCard({
               ) : totalDuration ? (
                 <span>{totalDuration}</span>
               ) : null}
-              <span>{formatDate(d.started_at)}</span>
+              <span>{formatDateTime(d.started_at)}</span>
             </div>
           </div>
         </div>

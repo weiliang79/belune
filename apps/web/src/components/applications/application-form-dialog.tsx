@@ -12,7 +12,10 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import {
+  SegmentedControl,
+  SegmentedControlItem,
+} from "@/components/ui/segmented-control";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { useCreateApplication } from "@/lib/hooks/use-applications";
 import { useFeatures } from "@/lib/hooks/use-features";
@@ -167,17 +170,17 @@ export function ApplicationFormDialog({
           </div>
           <div className="space-y-2">
             <Label>Source Type</Label>
-            <ToggleGroup
-              variant="outline"
-              value={[appType]}
-              onValueChange={(v) => {
-                if (v.length > 0) setAppType(v[0] as "image" | "git");
-              }}
-              className="justify-start"
+            <SegmentedControl
+              value={appType}
+              onValueChange={(v) => setAppType(v as "image" | "git")}
             >
-              <ToggleGroupItem value="image">Docker Image</ToggleGroupItem>
-              <ToggleGroupItem value="git">Git Repository</ToggleGroupItem>
-            </ToggleGroup>
+              <SegmentedControlItem value="image">
+                Docker Image
+              </SegmentedControlItem>
+              <SegmentedControlItem value="git">
+                Git Repository
+              </SegmentedControlItem>
+            </SegmentedControl>
           </div>
           {appType === "image" ? (
             <div className="space-y-2">
@@ -193,23 +196,21 @@ export function ApplicationFormDialog({
             <>
               <div className="space-y-2">
                 <Label>Repository Source</Label>
-                <ToggleGroup
-                  variant="outline"
-                  value={[gitSource]}
+                <SegmentedControl
+                  value={gitSource}
                   onValueChange={(v) => {
-                    if (v.length > 0) {
-                      setGitSource(v[0] as "connection" | "url");
-                      setSourceRepo("");
-                      setGitIntegrationId("");
-                    }
+                    setGitSource(v as "connection" | "url");
+                    setSourceRepo("");
+                    setGitIntegrationId("");
                   }}
-                  className="justify-start"
                 >
-                  <ToggleGroupItem value="connection">
+                  <SegmentedControlItem value="connection">
                     Connected Account
-                  </ToggleGroupItem>
-                  <ToggleGroupItem value="url">Public URL</ToggleGroupItem>
-                </ToggleGroup>
+                  </SegmentedControlItem>
+                  <SegmentedControlItem value="url">
+                    Public URL
+                  </SegmentedControlItem>
+                </SegmentedControl>
               </div>
               {gitSource === "connection" ? (
                 <IntegrationRepoPicker
@@ -231,22 +232,20 @@ export function ApplicationFormDialog({
               )}
               <div className="space-y-2">
                 <Label>Build Type</Label>
-                <ToggleGroup
-                  variant="outline"
-                  value={[buildType]}
-                  onValueChange={(v) => {
-                    if (v.length > 0) setBuildType(v[0]);
-                  }}
-                  className="justify-start"
+                <SegmentedControl
+                  value={buildType}
+                  onValueChange={(v) => setBuildType(v)}
                 >
-                  <ToggleGroupItem value="dockerfile">
+                  <SegmentedControlItem value="dockerfile">
                     Dockerfile
-                  </ToggleGroupItem>
-                  <ToggleGroupItem value="buildpacks">
+                  </SegmentedControlItem>
+                  <SegmentedControlItem value="buildpacks">
                     Buildpacks
-                  </ToggleGroupItem>
-                  <ToggleGroupItem value="railpack">Railpack</ToggleGroupItem>
-                </ToggleGroup>
+                  </SegmentedControlItem>
+                  <SegmentedControlItem value="railpack">
+                    Railpack
+                  </SegmentedControlItem>
+                </SegmentedControl>
                 {buildType === "railpack" &&
                   features?.buildkit_available === false && (
                     <Alert variant="warning">

@@ -1,4 +1,7 @@
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import {
+  SegmentedControl,
+  SegmentedControlItem,
+} from "@/components/ui/segmented-control";
 import type { TimeRange } from "@/lib/utils/time-range";
 
 /** Segmented 24h / 7d / 30d / All-time control. Controlled by `value`. */
@@ -12,18 +15,17 @@ export function TimeRangeTabs({
   className?: string;
 }) {
   return (
-    <ToggleGroup
-      variant="outline"
+    <SegmentedControl
       size="sm"
-      value={[value]}
-      onValueChange={(v) => v.length > 0 && onChange(v[0] as TimeRange)}
+      value={value}
+      onValueChange={(v) => onChange(v as TimeRange)}
       className={className}
       aria-label="Time range"
     >
-      <ToggleGroupItem value="24h">24h</ToggleGroupItem>
-      <ToggleGroupItem value="7d">7d</ToggleGroupItem>
-      <ToggleGroupItem value="30d">30d</ToggleGroupItem>
-      <ToggleGroupItem value="all">All time</ToggleGroupItem>
-    </ToggleGroup>
+      <SegmentedControlItem value="24h">24h</SegmentedControlItem>
+      <SegmentedControlItem value="7d">7d</SegmentedControlItem>
+      <SegmentedControlItem value="30d">30d</SegmentedControlItem>
+      <SegmentedControlItem value="all">All time</SegmentedControlItem>
+    </SegmentedControl>
   );
 }

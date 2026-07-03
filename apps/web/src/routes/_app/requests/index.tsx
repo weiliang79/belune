@@ -1,7 +1,19 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useCallback, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { SearchIcon } from "lucide-react";
+import {
+  ActivityIcon,
+  AppWindowIcon,
+  ArrowRightIcon,
+  BarChart3Icon,
+  CircleCheckIcon,
+  CircleXIcon,
+  FolderIcon,
+  GaugeIcon,
+  ListFilterIcon,
+  SearchIcon,
+  TriangleAlertIcon,
+} from "lucide-react";
 import type { ColumnDef } from "@tanstack/react-table";
 import { useRequestLogs, useRequestSummary } from "@/lib/hooks/use-request-logs";
 import { useChannel } from "@/lib/hooks/use-websocket";
@@ -18,8 +30,12 @@ import { DataTable } from "@/components/ui/data-table";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatusBar, type StatusSegment } from "@/components/ui/status-bar";
 import { Sparkline } from "@/components/ui/sparkline";
+import { StatCard, MetricCard } from "@/lib/components/stats/stat-card";
+import { PageHeader } from "@/components/ui/page-header";
+import { LiveIndicator } from "@/components/ui/live-indicator";
 import { TimeRangeTabs } from "@/components/ui/time-range-tabs";
 import { timeRangeToDates, type TimeRange } from "@/lib/utils/time-range";
+import { formatDateTime } from "@/lib/utils/format";
 import { cn } from "@/lib/utils";
 import type { RequestLog } from "@/lib/types";
 import type { RequestSummary } from "@/lib/api/request-logs";
@@ -32,11 +48,11 @@ export const Route = createFileRoute("/_app/requests/")({
 const PAGE_SIZE = 100;
 
 const STATUS_RANGES = [
-  { label: "All statuses", value: "" },
-  { label: "2xx", value: "2" },
-  { label: "3xx", value: "3" },
-  { label: "4xx", value: "4" },
-  { label: "5xx", value: "5" },
+  { label: "All statuses", value: "", Icon: ListFilterIcon },
+  { label: "2xx", value: "2", Icon: CircleCheckIcon },
+  { label: "3xx", value: "3", Icon: ArrowRightIcon },
+  { label: "4xx", value: "4", Icon: TriangleAlertIcon },
+  { label: "5xx", value: "5", Icon: CircleXIcon },
 ] as const;
 
 interface Filters {
@@ -90,29 +106,38 @@ function RequestSummaryCards({ summary }: { summary: RequestSummary }) {
   ];
 
   return (
-    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-      <div className="bg-card rounded-xl border p-4">
-        <p className="text-text-faint text-xs">Status breakdown</p>
+    <div className="grid grid-cols-1 items-stretch gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <MetricCard
+        label="Status breakdown"
+        icon={<BarChart3Icon className="size-3.5" />}
+      >
         <StatusBar segments={segments} className="mt-3" />
-      </div>
+      </MetricCard>
 
-      <div className="bg-card rounded-xl border p-4">
-        <p className="text-text-faint text-xs">Latency</p>
-        <div className="mt-1 flex items-baseline gap-5">
-          <span className="font-mono text-lg font-semibold">
-            {Math.round(p50_ms)}ms
-            <span className="text-text-faint ml-1 text-xs font-normal">P50</span>
+      <StatCard
+        label="Latency"
+        icon={<GaugeIcon className="size-3.5" />}
+        value={
+          <span className="flex flex-wrap items-baseline gap-x-4 gap-y-1 font-mono">
+            <span>
+              {Math.round(p50_ms)}ms
+              <span className="text-text-faint ml-1 text-xs font-normal">
+                P50
+              </span>
+            </span>
+            <span>
+              {Math.round(p95_ms)}ms
+              <span className="text-text-faint ml-1 text-xs font-normal">
+                P95
+              </span>
+            </span>
           </span>
-          <span className="font-mono text-lg font-semibold">
-            {Math.round(p95_ms)}ms
-            <span className="text-text-faint ml-1 text-xs font-normal">P95</span>
-          </span>
-        </div>
-      </div>
+        }
+        hint="median · 95th percentile"
+      />
 
-      <div className="bg-card rounded-xl border p-4">
-        <p className="text-text-faint text-xs">Requests</p>
-        <p className="mt-1 font-mono text-lg font-semibold">
+      <MetricCard label="Requests" icon={<ActivityIcon className="size-3.5" />}>
+        <p className="mt-1 font-mono text-2xl font-semibold tracking-tight">
           {total.toLocaleString()}
         </p>
         <Sparkline
@@ -120,19 +145,15 @@ function RequestSummaryCards({ summary }: { summary: RequestSummary }) {
           height={32}
           values={per_minute.map((p) => p.count)}
         />
-      </div>
+      </MetricCard>
 
-      <div className="bg-card rounded-xl border p-4">
-        <p className="text-text-faint text-xs">Error rate (5xx)</p>
-        <p
-          className={cn(
-            "mt-1 font-mono text-lg font-semibold",
-            error_rate > 0 && "text-status-error",
-          )}
-        >
-          {error_rate.toFixed(1)}%
-        </p>
-      </div>
+      <StatCard
+        label="Error rate (5xx)"
+        icon={<TriangleAlertIcon className="size-3.5" />}
+        tone={error_rate > 0 ? "error" : "ready"}
+        value={`${error_rate.toFixed(1)}%`}
+        hint={error_rate > 0 ? "of responses are 5xx" : "no server errors"}
+      />
     </div>
   );
 }
@@ -176,12 +197,17 @@ function RequestFilters({
         value={filters.statusRange}
         onValueChange={(v) => onChange({ ...filters, statusRange: v ?? "" })}
       >
-        <SelectTrigger className="w-36">
+        <SelectTrigger className="w-40 capitalize">
           <SelectValue placeholder="All statuses" />
         </SelectTrigger>
         <SelectContent>
           {STATUS_RANGES.map((r) => (
-            <SelectItem key={r.value} value={r.value}>
+            <SelectItem
+              key={r.value}
+              value={r.value}
+              icon={<r.Icon />}
+              className="capitalize"
+            >
               {r.label}
             </SelectItem>
           ))}
@@ -196,12 +222,14 @@ function RequestFilters({
         }
       >
         <SelectTrigger className="w-40">
-          <SelectValue placeholder="All projects" />
+          <SelectValue placeholder="All Projects" />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value="">All projects</SelectItem>
+          <SelectItem value="" icon={<FolderIcon />}>
+            All Projects
+          </SelectItem>
           {projects?.map((p) => (
-            <SelectItem key={p.id} value={p.id}>
+            <SelectItem key={p.id} value={p.id} icon={<FolderIcon />}>
               {p.name}
             </SelectItem>
           ))}
@@ -215,12 +243,14 @@ function RequestFilters({
         disabled={!filters.projectId}
       >
         <SelectTrigger className="w-44">
-          <SelectValue placeholder="All applications" />
+          <SelectValue placeholder="All Applications" />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value="">All applications</SelectItem>
+          <SelectItem value="" icon={<AppWindowIcon />}>
+            All Applications
+          </SelectItem>
           {applications?.map((a) => (
-            <SelectItem key={a.id} value={a.id}>
+            <SelectItem key={a.id} value={a.id} icon={<AppWindowIcon />}>
               {a.name}
             </SelectItem>
           ))}
@@ -288,8 +318,7 @@ const requestColumns: ColumnDef<RequestLog>[] = [
     id: "time",
     header: "Time",
     meta: { className: "text-text-faint whitespace-nowrap font-mono text-xs" },
-    cell: ({ row: { original: log } }) =>
-      new Date(log.recorded_at).toLocaleTimeString(),
+    cell: ({ row: { original: log } }) => formatDateTime(log.recorded_at),
   },
 ];
 
@@ -357,30 +386,12 @@ function GlobalRequestsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Requests</h1>
-          <p className="text-muted-foreground text-sm">
-            HTTP access logs across all applications.
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="relative flex size-2">
-            {connected && (
-              <span className="bg-status-ready absolute inline-flex size-full animate-ping rounded-full opacity-75" />
-            )}
-            <span
-              className={cn(
-                "relative inline-flex size-2 rounded-full",
-                connected ? "bg-status-ready" : "bg-text-faint",
-              )}
-            />
-          </span>
-          <span className="text-muted-foreground text-sm">
-            {connected ? "Live" : "Disconnected"}
-          </span>
-        </div>
-      </div>
+      <PageHeader
+        icon={<ActivityIcon className="size-5" />}
+        title="Requests"
+        description="HTTP access logs across all applications."
+        actions={<LiveIndicator active={connected} />}
+      />
 
       {summary && <RequestSummaryCards summary={summary} />}
 

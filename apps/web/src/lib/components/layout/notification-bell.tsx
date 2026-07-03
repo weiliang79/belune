@@ -13,7 +13,7 @@ import {
   useMarkNotificationRead,
   useMarkAllNotificationsRead,
 } from "@/lib/hooks/use-notifications";
-import { formatRelativeTime } from "@/lib/utils/format";
+import { formatDateTimeShort } from "@/lib/utils/format";
 import { cn } from "@/lib/utils";
 import type { Notification } from "@/lib/types";
 
@@ -50,7 +50,7 @@ function NotificationRow({
             {notification.title}
           </span>
           <span className="text-text-faint shrink-0 font-mono text-[11px]">
-            {formatRelativeTime(notification.created_at)}
+            {formatDateTimeShort(notification.created_at)}
           </span>
         </span>
         {notification.body && (

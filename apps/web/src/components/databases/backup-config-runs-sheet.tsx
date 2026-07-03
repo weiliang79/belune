@@ -50,7 +50,7 @@ import {
   useRunBackupConfig,
   useDeleteBackupConfig,
 } from "@/lib/hooks/use-database-backup-configs";
-import { formatBytes } from "@/lib/utils/format";
+import { formatBytes, formatDateTimeShort } from "@/lib/utils/format";
 import { cn } from "@/lib/utils";
 import type { Database, DatabaseBackup, DatabaseBackupConfig } from "@/lib/types";
 
@@ -229,7 +229,7 @@ export function BackupConfigRunsSheet({
                     )}
                   </div>
                   <p className="text-text-faint text-xs">
-                    {new Date(b.started_at).toLocaleString()}
+                    {formatDateTimeShort(b.started_at)}
                   </p>
                   {b.error && (
                     <p className="text-status-error mt-0.5 truncate text-xs">
@@ -274,7 +274,7 @@ export function BackupConfigRunsSheet({
                             This replaces the current contents of{" "}
                             <span className="font-medium">{db.name}</span> with
                             the backup from{" "}
-                            {new Date(b.started_at).toLocaleString()}. Data
+                            {formatDateTimeShort(b.started_at)}. Data
                             written since then will be lost.
                           </AlertDialogDescription>
                         </AlertDialogHeader>
@@ -344,7 +344,7 @@ export function BackupConfigRunsSheet({
               {logRun && (
                 <>
                   {logRun.status} ·{" "}
-                  {new Date(logRun.started_at).toLocaleString()}
+                  {formatDateTimeShort(logRun.started_at)}
                   {logRun.status === "succeeded"
                     ? ` · ${formatBytes(logRun.size_bytes)}`
                     : ""}

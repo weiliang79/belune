@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { toast } from "sonner";
-import { X } from "lucide-react";
+import { ClockIcon, CloudIcon, X } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -174,7 +174,7 @@ function BackupConfigForm({
               </SelectTrigger>
               <SelectContent>
                 {(destinations ?? []).map((d) => (
-                  <SelectItem key={d.id} value={d.id}>
+                  <SelectItem key={d.id} value={d.id} icon={<CloudIcon />}>
                     {d.name}
                   </SelectItem>
                 ))}
@@ -195,16 +195,23 @@ function BackupConfigForm({
                 if (v && v !== "custom") setSchedule(v);
               }}
             >
-              <SelectTrigger>
+              <SelectTrigger className="capitalize">
                 <SelectValue placeholder="Select a predefined schedule" />
               </SelectTrigger>
               <SelectContent>
                 {SCHEDULE_PRESETS.map((p) => (
-                  <SelectItem key={p.value} value={p.value}>
+                  <SelectItem
+                    key={p.value}
+                    value={p.value}
+                    icon={<ClockIcon />}
+                    className="capitalize"
+                  >
                     {p.label}
                   </SelectItem>
                 ))}
-                <SelectItem value="custom">Custom…</SelectItem>
+                <SelectItem value="custom" icon={<ClockIcon />} className="capitalize">
+                  Custom…
+                </SelectItem>
               </SelectContent>
             </Select>
             <Input

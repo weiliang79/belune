@@ -1,6 +1,15 @@
 import { useState } from "react";
 import { toast } from "sonner";
-import { MoreHorizontal } from "lucide-react";
+import {
+  ArrowRightIcon,
+  CopyIcon,
+  ListIcon,
+  LockIcon,
+  MoreHorizontal,
+  PencilIcon,
+  ShieldIcon,
+  Trash2Icon,
+} from "lucide-react";
 import {
   Card,
   CardContent,
@@ -32,6 +41,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
@@ -43,10 +53,10 @@ import type { DomainExpanded, RouteFeature } from "@/lib/types";
 import { DomainTLSBadge } from "./domain-tls-badge";
 
 const FEATURE_TYPES = [
-  { value: "basic_auth", label: "Basic Auth" },
-  { value: "headers", label: "Custom Headers" },
-  { value: "ip_allowlist", label: "IP Allowlist" },
-  { value: "redirect", label: "Redirect" },
+  { value: "basic_auth", label: "Basic Auth", Icon: LockIcon },
+  { value: "headers", label: "Custom Headers", Icon: ListIcon },
+  { value: "ip_allowlist", label: "IP Allowlist", Icon: ShieldIcon },
+  { value: "redirect", label: "Redirect", Icon: ArrowRightIcon },
 ] as const;
 
 interface Props {
@@ -134,25 +144,31 @@ export function DomainRow({ projectId, applicationId, domain, onEdit }: Props) {
                   <MoreHorizontal className="h-4 w-4" />
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
-                  <DropdownMenuItem onClick={onEdit}>Edit</DropdownMenuItem>
+                  <DropdownMenuItem onClick={onEdit}>
+                    <PencilIcon aria-hidden="true" />
+                    Edit
+                  </DropdownMenuItem>
                   <DropdownMenuItem onClick={handleCopyHostname}>
+                    <CopyIcon aria-hidden="true" />
                     Copy hostname
                   </DropdownMenuItem>
+                  <DropdownMenuSeparator />
                   <AlertDialogTrigger
                     render={
                       <DropdownMenuItem variant="destructive" />
                     }
                     nativeButton={false}
                   >
-                    Remove
+                    <Trash2Icon aria-hidden="true" />
+                    Delete
                   </AlertDialogTrigger>
                 </DropdownMenuContent>
               </DropdownMenu>
               <AlertDialogContent>
                 <AlertDialogHeader>
-                  <AlertDialogTitle>Remove {domain.hostname}?</AlertDialogTitle>
+                  <AlertDialogTitle>Delete {domain.hostname}?</AlertDialogTitle>
                   <AlertDialogDescription>
-                    This will remove the domain and all its route features.
+                    This will delete the domain and all its route features.
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
@@ -160,14 +176,14 @@ export function DomainRow({ projectId, applicationId, domain, onEdit }: Props) {
                   <AlertDialogAction
                     onClick={() => {
                       toast.promise(removeDomain.mutateAsync(domain.id), {
-                        loading: "Removing domain...",
-                        success: "Domain removed",
+                        loading: "Deleting domain...",
+                        success: "Domain deleted",
                         error: (err) => err.message,
                       });
                     }}
                     className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                   >
-                    Remove
+                    Delete
                   </AlertDialogAction>
                 </AlertDialogFooter>
               </AlertDialogContent>
@@ -232,12 +248,17 @@ export function DomainRow({ projectId, applicationId, domain, onEdit }: Props) {
                   value={newFeatureType}
                   onValueChange={(value) => setNewFeatureType(value ?? "")}
                 >
-                  <SelectTrigger className="w-40">
+                  <SelectTrigger className="w-40 capitalize">
                     <SelectValue placeholder="Select..." />
                   </SelectTrigger>
                   <SelectContent>
                     {FEATURE_TYPES.map((ft) => (
-                      <SelectItem key={ft.value} value={ft.value}>
+                      <SelectItem
+                        key={ft.value}
+                        value={ft.value}
+                        icon={<ft.Icon />}
+                        className="capitalize"
+                      >
                         {ft.label}
                       </SelectItem>
                     ))}

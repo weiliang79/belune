@@ -7,7 +7,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import {
+  SegmentedControl,
+  SegmentedControlItem,
+} from "@/components/ui/segmented-control";
 import { useUpdateApplication } from "@/lib/hooks/use-applications";
 import { useFeatures } from "@/lib/hooks/use-features";
 import type { Application } from "@/lib/types";
@@ -93,15 +96,18 @@ export function ApplicationSettingsForm({
           />
           <div className="space-y-2">
             <Label>Type</Label>
-            <ToggleGroup
-              variant="outline"
-              value={[application.type]}
+            <SegmentedControl
+              value={application.type}
+              onValueChange={() => {}}
               disabled
-              className="justify-start"
             >
-              <ToggleGroupItem value="image">Docker Image</ToggleGroupItem>
-              <ToggleGroupItem value="git">Git Repository</ToggleGroupItem>
-            </ToggleGroup>
+              <SegmentedControlItem value="image">
+                Docker Image
+              </SegmentedControlItem>
+              <SegmentedControlItem value="git">
+                Git Repository
+              </SegmentedControlItem>
+            </SegmentedControl>
           </div>
           {application.type === "git" && (
             <form.Field
@@ -112,28 +118,24 @@ export function ApplicationSettingsForm({
                 return (
                   <div className="space-y-2">
                     <Label>Build Type</Label>
-                    <ToggleGroup
-                      variant="outline"
-                      value={[effectiveValue]}
-                      onValueChange={(v) => {
-                        if (v.length > 0) {
-                          field.handleChange(
-                            v[0] === application.build_type ? "" : v[0],
-                          );
-                        }
-                      }}
-                      className="justify-start"
+                    <SegmentedControl
+                      value={effectiveValue}
+                      onValueChange={(v) =>
+                        field.handleChange(
+                          v === application.build_type ? "" : v,
+                        )
+                      }
                     >
-                      <ToggleGroupItem value="dockerfile">
+                      <SegmentedControlItem value="dockerfile">
                         Dockerfile
-                      </ToggleGroupItem>
-                      <ToggleGroupItem value="buildpacks">
+                      </SegmentedControlItem>
+                      <SegmentedControlItem value="buildpacks">
                         Buildpacks
-                      </ToggleGroupItem>
-                      <ToggleGroupItem value="railpack">
+                      </SegmentedControlItem>
+                      <SegmentedControlItem value="railpack">
                         Railpack
-                      </ToggleGroupItem>
-                    </ToggleGroup>
+                      </SegmentedControlItem>
+                    </SegmentedControl>
                     {effectiveValue === "railpack" &&
                       features?.buildkit_available === false && (
                         <Alert variant="destructive">

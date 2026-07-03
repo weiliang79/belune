@@ -131,7 +131,7 @@ function ApplicationLayout() {
     <div className="space-y-6">
 
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="flex items-start gap-3">
+        <div className="flex min-w-0 items-center gap-3">
           <div className="bg-elev text-text-muted grid size-11 shrink-0 place-items-center rounded-xl">
             <AppWindowIcon aria-hidden="true" className="size-5" />
           </div>

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "@tanstack/react-router";
+import { FolderIcon, GitBranchIcon, Link2Icon } from "lucide-react";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -95,7 +96,7 @@ export function IntegrationRepoPicker({ onSelect }: Props) {
           </SelectTrigger>
           <SelectContent>
             {integrations.map((i) => (
-              <SelectItem key={i.id} value={i.id}>
+              <SelectItem key={i.id} value={i.id} icon={<Link2Icon />}>
                 {PROVIDER_LABELS[i.provider] ?? i.provider} · {i.account_login}
               </SelectItem>
             ))}
@@ -115,7 +116,7 @@ export function IntegrationRepoPicker({ onSelect }: Props) {
             </SelectTrigger>
             <SelectContent>
               {repos?.map((r) => (
-                <SelectItem key={r.full_name} value={r.full_name}>
+                <SelectItem key={r.full_name} value={r.full_name} icon={<FolderIcon />}>
                   {r.full_name}
                 </SelectItem>
               ))}
@@ -133,7 +134,7 @@ export function IntegrationRepoPicker({ onSelect }: Props) {
             </SelectTrigger>
             <SelectContent>
               {branches?.map((b) => (
-                <SelectItem key={b.name} value={b.name}>
+                <SelectItem key={b.name} value={b.name} icon={<GitBranchIcon />}>
                   {b.name}
                 </SelectItem>
               ))}

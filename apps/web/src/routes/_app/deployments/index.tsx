@@ -1,12 +1,24 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useCallback, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { SearchIcon } from "lucide-react";
+import {
+  AppWindowIcon,
+  CircleCheckIcon,
+  CircleXIcon,
+  ClockIcon,
+  FolderIcon,
+  HammerIcon,
+  ListFilterIcon,
+  RocketIcon,
+  SearchIcon,
+  TimerIcon,
+} from "lucide-react";
 import type { ColumnDef } from "@tanstack/react-table";
 import { useGlobalDeployments } from "@/lib/hooks/use-global-deployments";
 import { useProjects } from "@/lib/hooks/use-projects";
 import { StatusPill } from "@/components/ui/status-pill";
 import { StatCard } from "@/lib/components/stats/stat-card";
+import { Badge } from "@/components/ui/badge";
 import { useStats } from "@/lib/hooks/use-stats";
 import { Input } from "@/components/ui/input";
 import {
@@ -17,10 +29,11 @@ import {
   SelectItem,
 } from "@/components/ui/select";
 import { DataTable } from "@/components/ui/data-table";
+import { PageHeader } from "@/components/ui/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { TimeRangeTabs } from "@/components/ui/time-range-tabs";
 import { timeRangeToDates, type TimeRange } from "@/lib/utils/time-range";
-import { formatDate, formatDuration } from "@/lib/utils/format";
+import { formatDateTime, formatDuration } from "@/lib/utils/format";
 import type { GlobalDeployment } from "@/lib/types";
 import * as applicationsApi from "@/lib/api/applications";
 
@@ -29,12 +42,12 @@ export const Route = createFileRoute("/_app/deployments/")({
 });
 
 const STATUSES = [
-  { label: "All statuses", value: "" },
-  { label: "Success", value: "success" },
-  { label: "Failed", value: "failed" },
-  { label: "Building", value: "building" },
-  { label: "Deploying", value: "deploying" },
-  { label: "Pending", value: "pending" },
+  { label: "All statuses", value: "", Icon: ListFilterIcon },
+  { label: "Success", value: "success", Icon: CircleCheckIcon },
+  { label: "Failed", value: "failed", Icon: CircleXIcon },
+  { label: "Building", value: "building", Icon: HammerIcon },
+  { label: "Deploying", value: "deploying", Icon: RocketIcon },
+  { label: "Pending", value: "pending", Icon: ClockIcon },
 ] as const;
 
 const PAGE_SIZE = 50;
@@ -86,12 +99,17 @@ function DeploymentFilters({
         value={filters.status}
         onValueChange={(v) => onChange({ ...filters, status: v ?? "" })}
       >
-        <SelectTrigger className="w-36">
+        <SelectTrigger className="w-40 capitalize">
           <SelectValue placeholder="All statuses" />
         </SelectTrigger>
         <SelectContent>
           {STATUSES.map((s) => (
-            <SelectItem key={s.value} value={s.value}>
+            <SelectItem
+              key={s.value}
+              value={s.value}
+              icon={<s.Icon />}
+              className="capitalize"
+            >
               {s.label}
             </SelectItem>
           ))}
@@ -109,12 +127,14 @@ function DeploymentFilters({
         }
       >
         <SelectTrigger className="w-40">
-          <SelectValue placeholder="All projects" />
+          <SelectValue placeholder="All Projects" />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value="">All projects</SelectItem>
+          <SelectItem value="" icon={<FolderIcon />}>
+            All Projects
+          </SelectItem>
           {projects?.map((p) => (
-            <SelectItem key={p.id} value={p.id}>
+            <SelectItem key={p.id} value={p.id} icon={<FolderIcon />}>
               {p.name}
             </SelectItem>
           ))}
@@ -131,12 +151,14 @@ function DeploymentFilters({
         disabled={!filters.projectId}
       >
         <SelectTrigger className="w-44">
-          <SelectValue placeholder="All applications" />
+          <SelectValue placeholder="All Applications" />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value="">All applications</SelectItem>
+          <SelectItem value="" icon={<AppWindowIcon />}>
+            All Applications
+          </SelectItem>
           {applications?.map((a) => (
-            <SelectItem key={a.id} value={a.id}>
+            <SelectItem key={a.id} value={a.id} icon={<AppWindowIcon />}>
               {a.name}
             </SelectItem>
           ))}
@@ -194,7 +216,7 @@ const deploymentColumns: ColumnDef<GlobalDeployment>[] = [
     id: "started",
     header: "Started",
     meta: { className: "text-text-muted whitespace-nowrap" },
-    cell: ({ row: { original: d } }) => formatDate(d.started_at),
+    cell: ({ row: { original: d } }) => formatDateTime(d.started_at),
   },
   {
     id: "duration",
@@ -221,10 +243,19 @@ function Deploy7dStrip() {
   if (!stats) return null;
   const { succeeded, failed, total, median_build_ms } = stats.deploy_7d;
   const rate = total > 0 ? Math.round((succeeded / total) * 100) : 0;
+  const breakdown =
+    total === 0 ? undefined : (
+      <>
+        <Badge variant="light">{succeeded} succeeded</Badge>
+        {failed > 0 && <Badge variant="destructive">{failed} failed</Badge>}
+      </>
+    );
+
   return (
-    <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+    <div className="grid grid-cols-2 items-stretch gap-4 sm:grid-cols-4">
       <StatCard
         label="Success rate · 7d"
+        icon={<CircleCheckIcon className="size-3.5" />}
         tone={total === 0 ? "default" : rate === 100 ? "ready" : "attention"}
         value={total === 0 ? "—" : `${rate}%`}
         hint={
@@ -232,20 +263,25 @@ function Deploy7dStrip() {
             ? "No deploys in 7 days"
             : `${succeeded}/${total} succeeded`
         }
+        footer={breakdown}
       />
       <StatCard
         label="Deploys · 7d"
+        icon={<RocketIcon className="size-3.5" />}
         value={total}
         hint="started in the last 7 days"
+        footer={breakdown}
       />
       <StatCard
         label="Failed · 7d"
+        icon={<CircleXIcon className="size-3.5" />}
         tone={failed === 0 ? "ready" : "error"}
         value={failed}
         hint={failed === 0 ? "All clear" : "needs attention"}
       />
       <StatCard
         label="Median build · 7d"
+        icon={<TimerIcon className="size-3.5" />}
         value={median_build_ms > 0 ? formatDuration(median_build_ms) : "—"}
         hint={median_build_ms > 0 ? "median build time" : "no completed builds"}
       />
@@ -286,12 +322,11 @@ function GlobalDeploymentsPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Deployments</h1>
-        <p className="text-muted-foreground text-sm">
-          All deployments across your applications.
-        </p>
-      </div>
+      <PageHeader
+        icon={<RocketIcon className="size-5" />}
+        title="Deployments"
+        description="All deployments across your applications."
+      />
 
       <Deploy7dStrip />
 

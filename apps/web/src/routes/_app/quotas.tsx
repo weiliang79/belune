@@ -14,8 +14,9 @@ import { useUsers } from "@/lib/hooks/use-users";
 import { useProjects } from "@/lib/hooks/use-projects";
 import type { QuotaLimits, QuotaScope, QuotaView } from "@/lib/api/quotas";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Pencil, Trash2 } from "lucide-react";
+import { FolderIcon, GaugeIcon, Pencil, Trash2, UserIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { PageHeader } from "@/components/ui/page-header";
 import {
   Tooltip,
   TooltipContent,
@@ -24,6 +25,10 @@ import {
 } from "@/components/ui/tooltip";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  SegmentedControl,
+  SegmentedControlItem,
+} from "@/components/ui/segmented-control";
 import { Badge } from "@/components/ui/badge";
 import {
   Select,
@@ -176,7 +181,7 @@ function QuotasPage() {
                 <Trash2 className="h-4 w-4" />
               </TooltipTrigger>
               <TooltipPositioner>
-                <TooltipContent>Remove</TooltipContent>
+                <TooltipContent>Delete</TooltipContent>
               </TooltipPositioner>
             </Tooltip>
           </div>
@@ -188,23 +193,26 @@ function QuotasPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">
-          Quotas
-          {quotas && quotas.length > 0 && (
-            <span className="text-muted-foreground ml-2 text-base font-normal">
-              {quotas.length} {quotas.length === 1 ? "rule" : "rules"}
-              {nearLimit > 0 && (
-                <span className="text-status-building"> · {nearLimit} near limit</span>
-              )}
-            </span>
-          )}
-        </h1>
-        <p className="text-muted-foreground text-sm">
-          Aggregate caps on top of per-container limits. Unset fields mean
-          unlimited.
-        </p>
-      </div>
+      <PageHeader
+        icon={<GaugeIcon className="size-5" />}
+        title={
+          <>
+            Quotas
+            {quotas && quotas.length > 0 && (
+              <span className="text-muted-foreground ml-2 text-base font-normal">
+                {quotas.length} {quotas.length === 1 ? "rule" : "rules"}
+                {nearLimit > 0 && (
+                  <span className="text-status-building">
+                    {" "}
+                    · {nearLimit} near limit
+                  </span>
+                )}
+              </span>
+            )}
+          </>
+        }
+        description="Aggregate caps on top of per-container limits. Unset fields mean unlimited."
+      />
 
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
@@ -383,21 +391,23 @@ function QuotaDialog({
                 children={(field) => (
                   <div className="space-y-2">
                     <Label htmlFor="scope">Scope</Label>
-                    <Select
+                    <SegmentedControl
+                      fullWidth
                       value={field.state.value}
                       onValueChange={(v) => {
                         field.handleChange(v as QuotaScope);
                         form.setFieldValue("scopeId", "");
                       }}
                     >
-                      <SelectTrigger id="scope">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="user">User</SelectItem>
-                        <SelectItem value="project">Project</SelectItem>
-                      </SelectContent>
-                    </Select>
+                      <SegmentedControlItem value="user">
+                        <UserIcon />
+                        User
+                      </SegmentedControlItem>
+                      <SegmentedControlItem value="project">
+                        <FolderIcon />
+                        Project
+                      </SegmentedControlItem>
+                    </SegmentedControl>
                   </div>
                 )}
               />
@@ -416,7 +426,13 @@ function QuotaDialog({
                       </SelectTrigger>
                       <SelectContent>
                         {targetOptions.map((o) => (
-                          <SelectItem key={o.id} value={o.id}>
+                          <SelectItem
+                            key={o.id}
+                            value={o.id}
+                            icon={
+                              scope === "user" ? <UserIcon /> : <FolderIcon />
+                            }
+                          >
                             {o.label}
                           </SelectItem>
                         ))}

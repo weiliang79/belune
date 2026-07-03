@@ -2,11 +2,13 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useForm } from "@tanstack/react-form";
 import { z } from "zod";
 import { toast } from "sonner";
+import { PlusIcon } from "lucide-react";
 import { useCreateProject } from "@/lib/hooks/use-projects";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
+import { PageHeader } from "@/components/ui/page-header";
 
 export const Route = createFileRoute("/_app/projects/new")({
   component: NewProjectPage,
@@ -47,12 +49,11 @@ function NewProjectPage() {
 
   return (
     <div className="mx-auto max-w-lg space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">New Project</h1>
-        <p className="text-muted-foreground">
-          Create a new project to organize your services.
-        </p>
-      </div>
+      <PageHeader
+        icon={<PlusIcon className="size-5" />}
+        title="New Project"
+        description="Create a new project to organize your services."
+      />
 
       <Card>
         <CardContent className="pt-6">

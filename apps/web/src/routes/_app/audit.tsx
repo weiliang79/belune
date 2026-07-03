@@ -1,6 +1,14 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
-import { DownloadIcon, SearchIcon } from "lucide-react";
+import {
+  ActivityIcon,
+  DownloadIcon,
+  ListFilterIcon,
+  ScrollTextIcon,
+  SearchIcon,
+  UserIcon,
+  UsersIcon,
+} from "lucide-react";
 import type { ColumnDef } from "@tanstack/react-table";
 import { RouteError } from "@/lib/components/route-error";
 import { useAuditLogs, useAuditActions } from "@/lib/hooks/use-audit-logs";
@@ -10,6 +18,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { DataTable } from "@/components/ui/data-table";
+import { PageHeader } from "@/components/ui/page-header";
 import {
   Select,
   SelectContent,
@@ -17,7 +26,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { formatRelativeTime } from "@/lib/utils/format";
+import { formatDateTime } from "@/lib/utils/format";
 import { actionLabel, actionClass } from "@/lib/utils/audit-format";
 import { cn } from "@/lib/utils";
 import type { AuditLog } from "@/lib/types";
@@ -92,7 +101,7 @@ const auditColumns: ColumnDef<AuditLog>[] = [
       headerClassName: "text-right",
       className: "text-text-faint text-right text-xs whitespace-nowrap",
     },
-    cell: ({ row: { original: log } }) => formatRelativeTime(log.created_at),
+    cell: ({ row: { original: log } }) => formatDateTime(log.created_at),
   },
 ];
 
@@ -130,25 +139,26 @@ function AuditLogPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">
+      <PageHeader
+        icon={<ScrollTextIcon className="size-5" />}
+        title={
+          <>
             Audit Log
             {data && (
               <span className="text-muted-foreground ml-2 text-base font-normal">
                 {data.total} {data.total === 1 ? "event" : "events"}
               </span>
             )}
-          </h1>
-          <p className="text-muted-foreground text-sm">
-            Activity log of all sensitive operations.
-          </p>
-        </div>
-        <Button variant="outline" size="sm" onClick={handleExport}>
-          <DownloadIcon aria-hidden="true" className="size-4" />
-          Export CSV
-        </Button>
-      </div>
+          </>
+        }
+        description="Activity log of all sensitive operations."
+        actions={
+          <Button variant="outline" size="sm" onClick={handleExport}>
+            <DownloadIcon aria-hidden="true" className="size-4" />
+            Export CSV
+          </Button>
+        }
+      />
 
       <div className="flex flex-wrap items-center gap-2">
         <div className="relative min-w-0 flex-1 sm:max-w-xs">
@@ -169,13 +179,20 @@ function AuditLogPage() {
           value={filters.action}
           onValueChange={(v) => update({ action: v ?? "" })}
         >
-          <SelectTrigger className="w-44">
+          <SelectTrigger className="w-44 capitalize">
             <SelectValue placeholder="All actions" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="">All actions</SelectItem>
+            <SelectItem value="" icon={<ListFilterIcon />} className="capitalize">
+              All actions
+            </SelectItem>
             {actions?.map((a) => (
-              <SelectItem key={a} value={a}>
+              <SelectItem
+                key={a}
+                value={a}
+                icon={<ActivityIcon />}
+                className="capitalize"
+              >
                 {actionLabel(a)}
               </SelectItem>
             ))}
@@ -187,12 +204,14 @@ function AuditLogPage() {
           onValueChange={(v) => update({ actorId: v ?? "" })}
         >
           <SelectTrigger className="w-44">
-            <SelectValue placeholder="All actors" />
+            <SelectValue placeholder="All Actors" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="">All actors</SelectItem>
+            <SelectItem value="" icon={<UsersIcon />}>
+              All Actors
+            </SelectItem>
             {users?.map((u) => (
-              <SelectItem key={u.id} value={u.id}>
+              <SelectItem key={u.id} value={u.id} icon={<UserIcon />}>
                 {u.email}
               </SelectItem>
             ))}

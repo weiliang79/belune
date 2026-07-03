@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/csv"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"time"
@@ -10,6 +11,26 @@ import (
 
 	"github.com/ungweiliang/selfhost-paas/internal/store/generated"
 )
+
+// auditLogDTO wraps a generated audit row but exposes `details` as raw JSON.
+// The column is JSONB (already valid JSON) yet sqlc types it as []byte, which
+// encoding/json would emit as a base64 string. The embedded field is shadowed
+// by this shallower Details, so a NULL detail marshals to `null`.
+type auditLogDTO struct {
+	generated.ListAuditLogsFilteredRow
+	Details json.RawMessage `json:"details"`
+}
+
+func toAuditLogDTOs(rows []generated.ListAuditLogsFilteredRow) []auditLogDTO {
+	out := make([]auditLogDTO, len(rows))
+	for i, r := range rows {
+		out[i] = auditLogDTO{
+			ListAuditLogsFilteredRow: r,
+			Details:                  json.RawMessage(r.Details),
+		}
+	}
+	return out
+}
 
 // auditFilter holds the shared audit-log filter columns.
 type auditFilter struct {
@@ -107,7 +128,7 @@ func (h *Handler) ListAuditLogs(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{
-		"items": logs,
+		"items": toAuditLogDTOs(logs),
 		"total": count,
 	})
 }

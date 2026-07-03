@@ -1,12 +1,20 @@
 import { useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { FolderIcon, PlusIcon, RocketIcon, SearchIcon } from "lucide-react";
+import {
+  ArrowDownAZIcon,
+  ClockIcon,
+  FolderIcon,
+  PlusIcon,
+  RocketIcon,
+  SearchIcon,
+} from "lucide-react";
 import type { ColumnDef, SortingState } from "@tanstack/react-table";
 import { useProjects } from "@/lib/hooks/use-projects";
 import { useApplications } from "@/lib/hooks/use-applications";
 import { useDatabases } from "@/lib/hooks/use-databases";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { buttonVariants } from "@/components/ui/button";
+import { PageHeader } from "@/components/ui/page-header";
 import { Input } from "@/components/ui/input";
 import { StatusPill } from "@/components/ui/status-pill";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -18,7 +26,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { DataTable } from "@/components/ui/data-table";
-import { formatDate, formatRelativeTime } from "@/lib/utils/format";
+import { formatDateTimeShort, formatRelativeTime } from "@/lib/utils/format";
 import { cn } from "@/lib/utils";
 import { OperatorHealthStrip } from "@/lib/components/stats/operator-health-strip";
 import type { Project } from "@/lib/types";
@@ -100,7 +108,7 @@ function ProjectCard({ project }: { project: Project }) {
         </CardHeader>
         <CardContent className="flex items-center justify-between gap-2">
           <p className="text-text-faint text-xs">
-            Created {formatDate(project.created_at)}
+            Created {formatDateTimeShort(project.created_at)}
           </p>
           {project.last_deployed_at && (
             <p className="text-text-faint flex items-center gap-1 text-xs">
@@ -225,18 +233,19 @@ function ProjectsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Projects</h1>
-          <p className="text-muted-foreground text-sm">
-            {projects.length} {projects.length === 1 ? "project" : "projects"}
-          </p>
-        </div>
-        <Link to="/projects/new" className={buttonVariants()}>
-          <PlusIcon aria-hidden="true" className="size-4" />
-          New Project
-        </Link>
-      </div>
+      <PageHeader
+        icon={<FolderIcon className="size-5" />}
+        title="Projects"
+        description={`${projects.length} ${
+          projects.length === 1 ? "project" : "projects"
+        }`}
+        actions={
+          <Link to="/projects/new" className={buttonVariants()}>
+            <PlusIcon aria-hidden="true" className="size-4" />
+            New Project
+          </Link>
+        }
+      />
 
       <OperatorHealthStrip />
 
@@ -255,13 +264,17 @@ function ProjectsPage() {
           />
         </div>
         <Select value={sort} onValueChange={(v) => setSort(v as SortKey)}>
-          <SelectTrigger className="w-44" aria-label="Sort projects">
+          <SelectTrigger className="w-52 capitalize" aria-label="Sort projects">
             <span className="text-text-faint mr-1">Sort:</span>
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="recent">Most recent</SelectItem>
-            <SelectItem value="name">Name</SelectItem>
+            <SelectItem value="recent" icon={<ClockIcon />} className="capitalize">
+              Most recent
+            </SelectItem>
+            <SelectItem value="name" icon={<ArrowDownAZIcon />} className="capitalize">
+              Name
+            </SelectItem>
           </SelectContent>
         </Select>
       </div>

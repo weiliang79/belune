@@ -19,8 +19,13 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipPositioner,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { Skeleton } from "@/components/ui/skeleton";
 import { DestinationFormDialog } from "./destination-form-dialog";
 import type { BackupDestination } from "@/lib/types";
@@ -32,6 +37,9 @@ export function DestinationsPanel({ projectId }: { projectId: string }) {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<BackupDestination | null>(null);
   const [testingId, setTestingId] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<BackupDestination | null>(
+    null,
+  );
 
   const openCreate = () => {
     setEditing(null);
@@ -105,63 +113,63 @@ export function DestinationsPanel({ projectId }: { projectId: string }) {
                   </p>
                 </div>
                 <div className="flex items-center gap-1">
-                  <Button
-                    variant="ghost"
-                    size="icon-sm"
-                    aria-label="Test connection"
-                    title="Test connection"
-                    disabled={testingId === d.id}
-                    onClick={() => handleTest(d)}
-                  >
-                    {testingId === d.id ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <PlugZap className="h-4 w-4" />
-                    )}
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon-sm"
-                    aria-label="Edit destination"
-                    title="Edit"
-                    onClick={() => openEdit(d)}
-                  >
-                    <Pencil className="h-4 w-4" />
-                  </Button>
-                  <AlertDialog>
-                    <AlertDialogTrigger
+                  <Tooltip>
+                    <TooltipTrigger
+                      render={
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          aria-label="Test connection"
+                          disabled={testingId === d.id}
+                          onClick={() => handleTest(d)}
+                        />
+                      }
+                    >
+                      {testingId === d.id ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <PlugZap className="h-4 w-4" />
+                      )}
+                    </TooltipTrigger>
+                    <TooltipPositioner>
+                      <TooltipContent>Test connection</TooltipContent>
+                    </TooltipPositioner>
+                  </Tooltip>
+                  <Tooltip>
+                    <TooltipTrigger
+                      render={
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          aria-label="Edit destination"
+                          onClick={() => openEdit(d)}
+                        />
+                      }
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </TooltipTrigger>
+                    <TooltipPositioner>
+                      <TooltipContent>Edit</TooltipContent>
+                    </TooltipPositioner>
+                  </Tooltip>
+                  <Tooltip>
+                    <TooltipTrigger
                       render={
                         <Button
                           variant="ghost"
                           size="icon-sm"
                           aria-label="Remove destination"
                           className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                          onClick={() => setDeleteTarget(d)}
                         />
                       }
                     >
                       <Trash2 className="h-4 w-4" />
-                    </AlertDialogTrigger>
-                    <AlertDialogContent>
-                      <AlertDialogHeader>
-                        <AlertDialogTitle>
-                          Remove {d.name}?
-                        </AlertDialogTitle>
-                        <AlertDialogDescription>
-                          This deletes the destination. It cannot be removed
-                          while a database backup configuration still uses it.
-                        </AlertDialogDescription>
-                      </AlertDialogHeader>
-                      <AlertDialogFooter>
-                        <AlertDialogCancel>Cancel</AlertDialogCancel>
-                        <AlertDialogAction
-                          onClick={() => handleDelete(d)}
-                          className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                        >
-                          Remove
-                        </AlertDialogAction>
-                      </AlertDialogFooter>
-                    </AlertDialogContent>
-                  </AlertDialog>
+                    </TooltipTrigger>
+                    <TooltipPositioner>
+                      <TooltipContent>Remove</TooltipContent>
+                    </TooltipPositioner>
+                  </Tooltip>
                 </div>
               </div>
             ))}
@@ -175,6 +183,35 @@ export function DestinationsPanel({ projectId }: { projectId: string }) {
         open={dialogOpen}
         onOpenChange={setDialogOpen}
       />
+
+      <AlertDialog
+        open={!!deleteTarget}
+        onOpenChange={(open) => {
+          if (!open) setDeleteTarget(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove {deleteTarget?.name}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This deletes the destination. It cannot be removed while a database
+              backup configuration still uses it.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (deleteTarget) handleDelete(deleteTarget);
+                setDeleteTarget(null);
+              }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Remove
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Card>
   );
 }

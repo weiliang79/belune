@@ -13,12 +13,21 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { DataTable } from "@/components/ui/data-table";
 import { CopyButton } from "@/lib/components/copy-button";
-import { formatBytes } from "@/lib/utils/format";
+import {
+  formatBytes,
+  formatDateTime,
+  formatDateTimeShort,
+} from "@/lib/utils/format";
 import type { BackupRun, BackupStatus } from "@/lib/types";
 
-function formatDate(iso: string | null) {
-  if (!iso) return "—";
-  return new Date(iso).toLocaleString();
+/** "YYYY-MM-DD HH:mm:ss" for table cells (null-safe). */
+function fmtTableDate(iso: string | null) {
+  return iso ? formatDateTime(iso) : "—";
+}
+
+/** "DD MMM YYYY, HH:mm" for summary strips (null-safe). */
+function fmtSummaryDate(iso: string | null) {
+  return iso ? formatDateTimeShort(iso) : "—";
 }
 
 // The install path the restore script and archives live under. Kept in sync
@@ -49,14 +58,14 @@ const backupColumns: ColumnDef<BackupRun>[] = [
     header: "Started",
     accessorKey: "started_at",
     meta: { className: "text-muted-foreground text-sm" },
-    cell: ({ row: { original: run } }) => formatDate(run.started_at),
+    cell: ({ row: { original: run } }) => fmtTableDate(run.started_at),
   },
   {
     id: "finished_at",
     header: "Finished",
     accessorKey: "finished_at",
     meta: { className: "text-muted-foreground text-sm" },
-    cell: ({ row: { original: run } }) => formatDate(run.finished_at),
+    cell: ({ row: { original: run } }) => fmtTableDate(run.finished_at),
   },
   {
     id: "size_bytes",
@@ -134,11 +143,11 @@ export function SystemBackupsPanel() {
             <div className="grid grid-cols-2 gap-4 text-sm md:grid-cols-4">
               <StatusItem
                 label="Last succeeded"
-                value={formatDate(status.last_succeeded_at)}
+                value={fmtSummaryDate(status.last_succeeded_at)}
               />
               <StatusItem
                 label="Last attempted"
-                value={formatDate(status.last_attempted_at)}
+                value={fmtSummaryDate(status.last_attempted_at)}
               />
               <StatusItem
                 label="Remote storage"

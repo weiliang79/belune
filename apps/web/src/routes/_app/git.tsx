@@ -1,9 +1,11 @@
 import { useEffect } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { toast } from "sonner";
+import { GitBranchIcon } from "lucide-react";
 import { RouteError } from "@/lib/components/route-error";
 import { useAuthStore } from "@/lib/stores/auth";
 import { cn } from "@/lib/utils";
+import { PageHeader } from "@/components/ui/page-header";
 import { ConnectionsPanel } from "@/components/git/connections-panel";
 import { ProvidersPanel } from "@/components/git/providers-panel";
 
@@ -53,13 +55,18 @@ function GitPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold">Git</h1>
-        <p className="text-muted-foreground text-sm">
-          Connect your git accounts to browse and deploy repositories
-          {isAdmin ? ", and register the provider apps that power them." : "."}
-        </p>
-      </div>
+      <PageHeader
+        icon={<GitBranchIcon className="size-5" />}
+        title="Git"
+        description={
+          <>
+            Connect your git accounts to browse and deploy repositories
+            {isAdmin
+              ? ", and register the provider apps that power them."
+              : "."}
+          </>
+        }
+      />
 
       {isAdmin ? (
         <>

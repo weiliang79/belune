@@ -153,23 +153,23 @@ function DatabaseDetailPage() {
     <div className="space-y-6">
 
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="flex items-start gap-3">
+        <div className="flex min-w-0 items-center gap-3">
           <div className="bg-elev text-text-muted grid size-11 shrink-0 place-items-center rounded-xl">
             <DatabaseIcon aria-hidden="true" className="size-5" />
           </div>
           <div className="min-w-0">
-            <h1 className="truncate text-2xl font-semibold tracking-tight">
-              {db.name}
-            </h1>
-            <p className="text-text-faint truncate font-mono text-sm">
-              {db.slug}
-            </p>
-            <div className="mt-2 flex items-center gap-2">
+            <div className="flex items-center gap-2.5">
+              <h1 className="truncate text-2xl font-semibold tracking-tight">
+                {db.name}
+              </h1>
               <Badge variant="outline" className="font-mono">
                 {imageLabel(db)}
               </Badge>
               <StatusBadge status={db.status} />
             </div>
+            <p className="text-text-faint truncate font-mono text-sm">
+              {db.slug}
+            </p>
           </div>
         </div>
         <div className="flex gap-2">

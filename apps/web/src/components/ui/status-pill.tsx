@@ -41,12 +41,16 @@ const TONE_BY_STATUS: Record<string, StatusTone> = {
   unknown: "neutral",
 };
 
+// Mirror the Badge variant styles (border + color/10 fill + solid text): the
+// positive/ready tone reuses `primary` and `error` reuses `destructive` so
+// pills and badges read as one system. `building` and `neutral` keep their own
+// hues but follow the same border+fill structure.
 const TONE_CLASSES: Record<StatusTone, string> = {
-  ready: "bg-status-ready-soft text-status-ready ring-status-ready-line",
+  ready: "border-primary/20 bg-primary/10 text-primary",
   building:
-    "bg-status-building-soft text-status-building ring-status-building-line",
-  error: "bg-status-error-soft text-status-error ring-status-error-line",
-  neutral: "bg-elev text-text-muted ring-border-strong",
+    "border-status-building/20 bg-status-building/10 text-status-building",
+  error: "border-destructive/20 bg-destructive/10 text-destructive",
+  neutral: "border-border-strong bg-elev text-text-muted",
 };
 
 const DOT_CLASSES: Record<StatusTone, string> = {
@@ -73,7 +77,7 @@ export function StatusPill({ status, label, className }: StatusPillProps) {
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset",
+        "inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs font-medium",
         TONE_CLASSES[tone],
         className,
       )}

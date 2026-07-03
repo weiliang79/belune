@@ -15,6 +15,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { UserIcon } from "lucide-react";
+import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -26,7 +34,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Separator } from "@/components/ui/separator";
-import { formatDate } from "@/lib/utils/format";
+import { formatDateTimeShort } from "@/lib/utils/format";
 import { useState } from "react";
 
 export const Route = createFileRoute("/_app/projects/$projectId/settings")({
@@ -72,11 +80,11 @@ function ProjectSettings() {
           </div>
           <div className="flex justify-between">
             <span className="text-muted-foreground">Created</span>
-            <span>{formatDate(project.created_at)}</span>
+            <span>{formatDateTimeShort(project.created_at)}</span>
           </div>
           <div className="flex justify-between">
             <span className="text-muted-foreground">Updated</span>
-            <span>{formatDate(project.updated_at)}</span>
+            <span>{formatDateTimeShort(project.updated_at)}</span>
           </div>
         </CardContent>
       </Card>
@@ -204,22 +212,30 @@ function TransferOwnerCard({
       <CardContent className="space-y-4">
         <div className="space-y-2">
           <Label>Owner</Label>
-          <select
-            className="border-input bg-background flex h-9 w-full rounded-md border px-3 py-1 text-sm"
+          <Select
             value={selectedUserId}
-            onChange={(e) => setSelectedUserId(e.target.value)}
+            onValueChange={(v) => setSelectedUserId(v ?? "")}
           >
-            {users?.map((user) => (
-              <option key={user.id} value={user.id}>
-                {user.email}
-                {user.id === currentOwnerId ? " (current)" : ""}
-              </option>
-            )) ?? (
-              <option value={currentOwnerId}>
-                {currentOwner?.email ?? currentOwnerId}
-              </option>
-            )}
-          </select>
+            <SelectTrigger>
+              <SelectValue placeholder="Select owner" />
+            </SelectTrigger>
+            <SelectContent>
+              {users?.map((user) => (
+                <SelectItem
+                  key={user.id}
+                  value={user.id}
+                  icon={<UserIcon />}
+                >
+                  {user.email}
+                  {user.id === currentOwnerId ? " (current)" : ""}
+                </SelectItem>
+              )) ?? (
+                <SelectItem value={currentOwnerId} icon={<UserIcon />}>
+                  {currentOwner?.email ?? currentOwnerId}
+                </SelectItem>
+              )}
+            </SelectContent>
+          </Select>
         </div>
         <Button
           onClick={handleTransfer}

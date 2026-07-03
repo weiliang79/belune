@@ -3,6 +3,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import {
+  SegmentedControl,
+  SegmentedControlItem,
+} from "@/components/ui/segmented-control";
 import { useChannel } from "@/lib/hooks/use-websocket";
 import { useApplicationLogs } from "@/lib/hooks/use-application-logs";
 
@@ -139,11 +143,13 @@ function LogsPage() {
     }
   }, [entries, follow]);
 
-  const streamTabs: { label: string; value: StreamFilter }[] = [
-    { label: "All", value: "" },
+  // The segmented control needs a non-empty value per segment, so the "All"
+  // option uses the "all" token and maps to the "" (unfiltered) StreamFilter.
+  const streamTabs = [
+    { label: "All", value: "all" },
     { label: "stdout", value: "stdout" },
     { label: "stderr", value: "stderr" },
-  ];
+  ] as const;
 
   return (
     <div className="space-y-3 pt-3">
@@ -151,21 +157,20 @@ function LogsPage() {
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-2">
           {/* Stream filter tabs */}
-          <div className="flex rounded-md border text-sm">
+          <SegmentedControl
+            size="sm"
+            value={streamFilter || "all"}
+            onValueChange={(v) =>
+              handleStreamChange(v === "all" ? "" : (v as StreamFilter))
+            }
+            aria-label="Log stream"
+          >
             {streamTabs.map((tab) => (
-              <button
-                key={tab.value}
-                onClick={() => handleStreamChange(tab.value)}
-                className={`px-3 py-1 transition-colors first:rounded-l-md last:rounded-r-md ${
-                  streamFilter === tab.value
-                    ? "bg-primary text-primary-foreground"
-                    : "text-muted-foreground hover:bg-muted"
-                }`}
-              >
+              <SegmentedControlItem key={tab.value} value={tab.value}>
                 {tab.label}
-              </button>
+              </SegmentedControlItem>
             ))}
-          </div>
+          </SegmentedControl>
 
           {/* Keyword search */}
           <Input

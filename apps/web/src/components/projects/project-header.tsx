@@ -16,13 +16,6 @@ function initials(name: string): string {
   return (parts[0][0] + parts[1][0]).toUpperCase();
 }
 
-/** Stable hue from the name so each project glyph keeps a consistent colour. */
-function hueOf(name: string): number {
-  let h = 0;
-  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) % 360;
-  return h;
-}
-
 const ERROR_STATES = new Set(["failed", "error", "crashed", "unhealthy", "exited"]);
 
 export function ProjectHeader({ project, applications, databases }: Props) {
@@ -37,16 +30,13 @@ export function ProjectHeader({ project, applications, databases }: Props) {
   const errored = services.filter((s) => ERROR_STATES.has(s.toLowerCase())).length;
 
   const name = project?.name ?? "Project";
-  const hue = hueOf(name);
-  const glyphBg = `linear-gradient(150deg, hsl(${hue} 62% 52%), hsl(${(hue + 26) % 360} 58% 38%))`;
 
   return (
     <div className="flex flex-wrap items-start justify-between gap-3">
       <div className="flex min-w-0 items-center gap-3">
         <div
           aria-hidden="true"
-          className="grid size-11 shrink-0 place-items-center rounded-xl text-sm font-semibold text-white"
-          style={{ background: glyphBg }}
+          className="bg-elev text-text-muted grid size-11 shrink-0 place-items-center rounded-xl text-sm font-semibold"
         >
           {initials(name)}
         </div>
@@ -69,7 +59,7 @@ export function ProjectHeader({ project, applications, databases }: Props) {
             )}
           </div>
           {project && (
-            <div className="text-text-faint mt-1 flex items-center gap-3 text-sm">
+            <div className="text-text-faint flex items-center gap-3 text-sm">
               <span className="truncate font-mono">{project.slug}</span>
               <span className="inline-flex items-center gap-1">
                 <LayersIcon aria-hidden="true" className="size-3.5" />

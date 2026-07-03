@@ -1,7 +1,13 @@
 import { useForm } from "@tanstack/react-form";
 import { z } from "zod";
 import { toast } from "sonner";
-import { Loader2 } from "lucide-react";
+import {
+  GlobeIcon,
+  KeyRoundIcon,
+  Loader2,
+  ShieldCheckIcon,
+  ShieldOffIcon,
+} from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -33,10 +39,10 @@ const HOSTNAME_REGEX =
   /^([a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$/;
 
 const SSL_MODES = [
-  { value: "automatic", label: "Automatic (ACME)" },
-  { value: "dns_challenge", label: "DNS Challenge" },
-  { value: "custom", label: "Custom Certificate" },
-  { value: "off", label: "Off" },
+  { value: "automatic", label: "Automatic (ACME)", Icon: ShieldCheckIcon },
+  { value: "dns_challenge", label: "DNS Challenge", Icon: GlobeIcon },
+  { value: "custom", label: "Custom Certificate", Icon: KeyRoundIcon },
+  { value: "off", label: "Off", Icon: ShieldOffIcon },
 ] as const;
 
 interface Props {
@@ -248,12 +254,17 @@ function DomainForm({
                   value={field.state.value}
                   onValueChange={(v) => field.handleChange(v ?? "automatic")}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger className="capitalize">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
                     {SSL_MODES.map((m) => (
-                      <SelectItem key={m.value} value={m.value}>
+                      <SelectItem
+                        key={m.value}
+                        value={m.value}
+                        icon={<m.Icon />}
+                        className="capitalize"
+                      >
                         {m.label}
                       </SelectItem>
                     ))}

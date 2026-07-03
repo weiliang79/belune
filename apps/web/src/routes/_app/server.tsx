@@ -1,13 +1,23 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { CalendarIcon } from "lucide-react";
+import {
+  CalendarIcon,
+  ClockIcon,
+  CpuIcon,
+  HardDriveIcon,
+  MemoryStickIcon,
+  ServerIcon,
+} from "lucide-react";
 import { RouteError } from "@/lib/components/route-error";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { LiveIndicator } from "@/components/ui/live-indicator";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { StatusPill } from "@/components/ui/status-pill";
 import { Sparkline } from "@/components/ui/sparkline";
+import { MetricCard } from "@/lib/components/stats/stat-card";
+import { PageHeader } from "@/components/ui/page-header";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import {
   Popover,
@@ -30,11 +40,12 @@ import {
 } from "@/lib/hooks/use-metrics";
 import { useSettings, useUpdateSettings } from "@/lib/hooks/use-settings";
 import { toast } from "sonner";
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import type { HostMetricPoint, SettingEntry } from "@/lib/types";
 import { UPlotAreaChart } from "@/components/ui/uplot-area-chart";
 import { SystemBackupsPanel } from "@/components/backups/system-backups-panel";
 import { cn } from "@/lib/utils";
+import { formatDateTimeShort } from "@/lib/utils/format";
 
 type ServerTab = "metric" | "configuration" | "backups";
 type HostMetricsView = "overview" | "detail";
@@ -251,12 +262,11 @@ function ServerSettingsPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Server</h1>
-        <p className="text-muted-foreground text-sm">
-          Platform health, resources, and maintenance.
-        </p>
-      </div>
+      <PageHeader
+        icon={<ServerIcon className="size-5" />}
+        title="Server"
+        description="Platform health, resources, and maintenance."
+      />
 
       <nav className="flex gap-1 border-b">
         {(
@@ -392,17 +402,15 @@ function ServerSettingsPage() {
           <Card>
             <CardHeader>
               <div className="flex flex-wrap items-center justify-between gap-3">
+                <CardTitle>Host Metrics</CardTitle>
                 <div className="flex items-center gap-2">
-                  <CardTitle>Host Metrics</CardTitle>
-                  {showingLive ? (
-                    <Badge variant={streamConnected ? "default" : "secondary"}>
-                      {streamConnected ? "LIVE" : "Connecting..."}
-                    </Badge>
-                  ) : (
-                    <Badge variant="outline">Snapshot</Badge>
+                  {/* The time filter only applies to Detail; Overview stays live. */}
+                  {hostView === "detail" && (
+                    <HostRangeControl
+                      value={customRange}
+                      onChange={setCustomRange}
+                    />
                   )}
-                </div>
-                <div className="flex items-center gap-2">
                   <ToggleGroup
                     variant="outline"
                     size="sm"
@@ -415,12 +423,13 @@ function ServerSettingsPage() {
                     <ToggleGroupItem value="overview">Overview</ToggleGroupItem>
                     <ToggleGroupItem value="detail">Detail</ToggleGroupItem>
                   </ToggleGroup>
-                  {/* The time filter only applies to Detail; Overview stays live. */}
-                  {hostView === "detail" && (
-                    <HostRangeControl
-                      value={customRange}
-                      onChange={setCustomRange}
+                  {showingLive ? (
+                    <LiveIndicator
+                      active={streamConnected}
+                      idleLabel="Connecting…"
                     />
+                  ) : (
+                    <Badge variant="outline">Snapshot</Badge>
                   )}
                 </div>
               </div>
@@ -431,6 +440,7 @@ function ServerSettingsPage() {
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                     <HostMetricCard
                       label="CPU"
+                      icon={<CpuIcon className="size-3.5" />}
                       value={`${(latest.cpu_percent ?? 0).toFixed(0)}%`}
                       percent={latest.cpu_percent ?? 0}
                       values={liveMetrics.map((p) => p.cpu_percent)}
@@ -438,6 +448,7 @@ function ServerSettingsPage() {
                     />
                     <HostMetricCard
                       label="Memory"
+                      icon={<MemoryStickIcon className="size-3.5" />}
                       value={formatBytes(latest.memory_used)}
                       percent={pct(latest.memory_used, latest.memory_total)}
                       values={liveMetrics.map((p) => p.memory_used)}
@@ -445,6 +456,7 @@ function ServerSettingsPage() {
                     />
                     <HostMetricCard
                       label="Disk"
+                      icon={<HardDriveIcon className="size-3.5" />}
                       value={formatBytes(latest.disk_used)}
                       percent={pct(latest.disk_used, latest.disk_total)}
                       values={liveMetrics.map((p) => p.disk_used)}
@@ -629,12 +641,7 @@ function toLocalInputValue(d: Date) {
 }
 
 function formatRangeLabel(iso: string) {
-  return new Date(iso).toLocaleString([], {
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  return formatDateTimeShort(iso);
 }
 
 function HostRangeControl({
@@ -765,12 +772,14 @@ function ContainerStat({
 
 function HostMetricCard({
   label,
+  icon,
   value,
   percent,
   values,
   color,
 }: {
   label: string;
+  icon?: ReactNode;
   value: string;
   percent: number;
   values: (number | null)[];
@@ -778,20 +787,18 @@ function HostMetricCard({
 }) {
   const s = loadStatus(percent);
   return (
-    <Card>
-      <CardContent className="p-4">
-        <div className="flex items-center justify-between">
-          <p className="text-text-faint text-xs font-medium tracking-wide uppercase">
-            {label}
-          </p>
-          <span className={cn("text-xs font-medium", s.className)}>
-            {s.label}
-          </span>
-        </div>
-        <p className="mt-1 font-mono text-2xl font-semibold">{value}</p>
-        <Sparkline className="mt-2" height={36} values={values} color={color} />
-      </CardContent>
-    </Card>
+    <MetricCard
+      label={label}
+      icon={icon}
+      aside={
+        <span className={cn("text-xs font-medium capitalize", s.className)}>
+          {s.label}
+        </span>
+      }
+    >
+      <p className="mt-1 font-mono text-2xl font-semibold">{value}</p>
+      <Sparkline className="mt-2" height={36} values={values} color={color} />
+    </MetricCard>
   );
 }
 
@@ -833,11 +840,16 @@ function RetentionRow({
         <SelectTrigger className="w-32">
           {/* Render the label explicitly: base-ui's items-based lookup
               mis-resolves dynamically-prepended non-preset values. */}
-          <span className="truncate">{currentLabel}</span>
+          <span className="truncate capitalize">{currentLabel}</span>
         </SelectTrigger>
         <SelectContent>
           {options.map((p) => (
-            <SelectItem key={p.value} value={p.value}>
+            <SelectItem
+              key={p.value}
+              value={p.value}
+              icon={<ClockIcon />}
+              className="capitalize"
+            >
               {p.label}
             </SelectItem>
           ))}

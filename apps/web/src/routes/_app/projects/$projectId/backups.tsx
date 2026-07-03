@@ -5,7 +5,7 @@ import { CardDescription } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { DestinationsPanel } from "@/components/backups/destinations-panel";
 import { useProjectBackups } from "@/lib/hooks/use-project-backups";
-import { formatBytes } from "@/lib/utils/format";
+import { formatBytes, formatDateTimeShort } from "@/lib/utils/format";
 import { cn } from "@/lib/utils";
 import type { ProjectBackupActivity } from "@/lib/types";
 
@@ -87,7 +87,7 @@ function ProjectBackupsPage() {
                       )}
                     </div>
                     <p className="text-text-faint text-xs">
-                      {new Date(b.started_at).toLocaleString()}
+                      {formatDateTimeShort(b.started_at)}
                     </p>
                     {b.error && (
                       <p className="text-status-error mt-0.5 truncate text-xs">

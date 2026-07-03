@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { LiveIndicator } from "@/components/ui/live-indicator";
 import { useAppMetricsContext } from "@/lib/contexts/app-metrics-context";
 import type { AppMetricPoint } from "@/lib/types";
 import { UPlotAreaChart } from "@/components/ui/uplot-area-chart";
@@ -36,15 +36,8 @@ function ApplicationMetricsPage() {
     <Card>
       <CardHeader>
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <CardTitle>Application Metrics</CardTitle>
-            <Badge variant={connected ? "default" : "secondary"}>
-              {connected ? "LIVE" : "Connecting..."}
-            </Badge>
-          </div>
-          <p className="text-muted-foreground text-xs">
-            Real-time data — collected while you view this page
-          </p>
+          <CardTitle>Application Metrics</CardTitle>
+          <LiveIndicator active={connected} idleLabel="Connecting…" />
         </div>
       </CardHeader>
       <CardContent>
@@ -121,6 +114,7 @@ function AppChart({
         yFormatter={formatter}
         xFormatter={(ts) => formatTime(ts)}
         height={200}
+        syncKey="app-metrics-detail"
       />
       <span className="sr-only" aria-live="polite">
         {summary}

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useTheme } from "next-themes";
-import { MonitorIcon, MoonIcon, SunIcon } from "lucide-react";
+import { CircleUserIcon, MonitorIcon, MoonIcon, SunIcon } from "lucide-react";
 import { RouteError } from "@/lib/components/route-error";
 import { toast } from "sonner";
 import { useAuthStore } from "@/lib/stores/auth";
@@ -13,11 +13,15 @@ import {
 import { useAccentStore, type Accent } from "@/lib/stores/accent";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { PageHeader } from "@/components/ui/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { formatDate } from "@/lib/utils/format";
-import { cn } from "@/lib/utils";
+import {
+  SegmentedControl,
+  SegmentedControlItem,
+} from "@/components/ui/segmented-control";
+import { formatDateTimeShort } from "@/lib/utils/format";
 
 export const Route = createFileRoute("/_app/account")({
   component: SettingsPage,
@@ -29,12 +33,11 @@ function SettingsPage() {
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Account</h1>
-        <p className="text-muted-foreground text-sm">
-          Manage your profile, security, and appearance.
-        </p>
-      </div>
+      <PageHeader
+        icon={<CircleUserIcon className="size-5" />}
+        title="Account"
+        description="Manage your profile, security, and appearance."
+      />
 
       <Card>
         <CardHeader>
@@ -58,7 +61,7 @@ function SettingsPage() {
           {user?.created_at && (
             <div className="flex items-center justify-between">
               <span className="text-muted-foreground">Member since</span>
-              <span>{formatDate(user.created_at)}</span>
+              <span>{formatDateTimeShort(user.created_at)}</span>
             </div>
           )}
         </CardContent>
@@ -351,32 +354,6 @@ function AlertPreferencesCard() {
   );
 }
 
-function SegmentedOption({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-pressed={active}
-      className={cn(
-        "flex flex-1 items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors",
-        active
-          ? "bg-card text-foreground ring-border-strong shadow-sm ring-1"
-          : "text-muted-foreground hover:text-foreground",
-      )}
-    >
-      {children}
-    </button>
-  );
-}
-
 function AppearanceCard() {
   const { theme, setTheme } = useTheme();
   const accent = useAccentStore((s) => s.accent);
@@ -400,38 +377,34 @@ function AppearanceCard() {
       <CardContent className="space-y-5">
         <div className="space-y-2">
           <Label>Theme</Label>
-          <div className="bg-elev flex gap-1 rounded-lg p-1">
+          <SegmentedControl fullWidth value={theme ?? ""} onValueChange={setTheme}>
             {themes.map(({ value, label, Icon }) => (
-              <SegmentedOption
-                key={value}
-                active={theme === value}
-                onClick={() => setTheme(value)}
-              >
+              <SegmentedControlItem key={value} value={value}>
                 <Icon aria-hidden="true" className="size-4" />
                 {label}
-              </SegmentedOption>
+              </SegmentedControlItem>
             ))}
-          </div>
+          </SegmentedControl>
         </div>
 
         <div className="space-y-2">
           <Label>Accent</Label>
-          <div className="bg-elev flex gap-1 rounded-lg p-1">
+          <SegmentedControl
+            fullWidth
+            value={accent}
+            onValueChange={(v) => setAccent(v as Accent)}
+          >
             {accents.map(({ value, label, swatch }) => (
-              <SegmentedOption
-                key={value}
-                active={accent === value}
-                onClick={() => setAccent(value)}
-              >
+              <SegmentedControlItem key={value} value={value}>
                 <span
                   aria-hidden="true"
                   className="size-3.5 rounded-full ring-1 ring-black/10 ring-inset"
                   style={{ background: swatch }}
                 />
                 {label}
-              </SegmentedOption>
+              </SegmentedControlItem>
             ))}
-          </div>
+          </SegmentedControl>
           <p className="text-text-faint text-xs">
             Stored on this device — applies across the dashboard.
           </p>
