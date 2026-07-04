@@ -79,3 +79,64 @@ func TestBackupConfigDue(t *testing.T) {
 		})
 	}
 }
+
+func TestVolumeBackupConfigDue(t *testing.T) {
+	now := time.Date(2026, 6, 30, 12, 30, 0, 0, time.UTC)
+
+	cases := []struct {
+		name     string
+		schedule string
+		created  time.Time
+		lastRun  pgtype.Timestamptz
+		want     bool
+	}{
+		{
+			name:     "hourly, last run two hours ago -> due",
+			schedule: "0 * * * *",
+			lastRun:  ts(now.Add(-2 * time.Hour)),
+			want:     true,
+		},
+		{
+			name:     "hourly, last run one minute ago -> not due",
+			schedule: "0 * * * *",
+			lastRun:  ts(now.Add(-1 * time.Minute)),
+			want:     false,
+		},
+		{
+			name:     "daily, never run, created an hour ago -> not due",
+			schedule: "0 0 * * *",
+			created:  now.Add(-1 * time.Hour),
+			want:     false,
+		},
+		{
+			name:     "empty schedule (manual only) -> not due",
+			schedule: "",
+			lastRun:  ts(now.Add(-48 * time.Hour)),
+			want:     false,
+		},
+		{
+			name:     "invalid schedule -> not due",
+			schedule: "not a cron",
+			lastRun:  ts(now.Add(-48 * time.Hour)),
+			want:     false,
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			created := c.created
+			if created.IsZero() {
+				created = now.Add(-48 * time.Hour)
+			}
+			cfg := generated.ApplicationVolumeBackupConfig{
+				ID:        pgtype.UUID{Bytes: [16]byte{2}, Valid: true},
+				Schedule:  c.schedule,
+				CreatedAt: ts(created),
+				LastRunAt: c.lastRun,
+			}
+			if got := volumeBackupConfigDue(cfg, now); got != c.want {
+				t.Fatalf("volumeBackupConfigDue(%q) = %v, want %v", c.schedule, got, c.want)
+			}
+		})
+	}
+}

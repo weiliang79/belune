@@ -137,6 +137,9 @@ func (h *TaskHandler) HandleBackupVolumeTask(ctx context.Context, t *asynq.Task)
 	// Remote is authoritative; drop the local copy so the server disk doesn't
 	// mirror the bucket.
 	removeLocalAfterUpload(localPath, lg)
+
+	// Retention: keep only the newest keep_latest backups for this config.
+	h.pruneVolumeConfigBackups(ctx, cfg, destClient, lg)
 	lg.step("Backup succeeded")
 
 	h.finaliseVolumeBackup(ctx, run.ID, generated.UpdateApplicationVolumeBackupParams{
@@ -222,4 +225,42 @@ func (h *TaskHandler) finaliseVolumeBackup(ctx context.Context, id pgtype.UUID, 
 	if err := h.Queries.UpdateApplicationVolumeBackup(ctx, params); err != nil {
 		slog.Warn("backup_volume: failed to update run record", "backup_id", formatUUID(id), "error", err)
 	}
+}
+
+// pruneVolumeConfigBackups keeps the newest keep_latest backups produced by a
+// config and deletes the rest (rows + local files + remote objects in the
+// config's destination). A NULL/zero keep_latest keeps all. Best-effort — a
+// failed deletion is logged and does not fail the backup.
+func (h *TaskHandler) pruneVolumeConfigBackups(ctx context.Context, cfg generated.ApplicationVolumeBackupConfig, client *backup.DestinationClient, lg *runLog) {
+	if !cfg.KeepLatest.Valid || cfg.KeepLatest.Int32 <= 0 {
+		return
+	}
+	keep := int(cfg.KeepLatest.Int32)
+	rows, err := h.Queries.ListApplicationVolumeBackupsByConfig(ctx, generated.ListApplicationVolumeBackupsByConfigParams{
+		BackupConfigID: cfg.ID,
+		Limit:          1000,
+	})
+	if err != nil {
+		slog.Warn("prune volume backups: list", "config_id", formatUUID(cfg.ID), "error", err)
+		return
+	}
+	if len(rows) <= keep {
+		return
+	}
+	for _, b := range rows[keep:] { // ListApplicationVolumeBackupsByConfig is newest-first
+		if b.LocalPath.Valid {
+			if err := os.Remove(b.LocalPath.String); err != nil && !os.IsNotExist(err) {
+				slog.Warn("prune volume backups: remove local", "path", b.LocalPath.String, "error", err)
+			}
+		}
+		if b.RemoteKey.Valid {
+			if err := client.DeleteFrom(ctx, []string{b.RemoteKey.String}); err != nil {
+				slog.Warn("prune volume backups: remove remote", "key", b.RemoteKey.String, "error", err)
+			}
+		}
+		if err := h.Queries.DeleteApplicationVolumeBackup(ctx, b.ID); err != nil {
+			slog.Warn("prune volume backups: delete row", "backup_id", formatUUID(b.ID), "error", err)
+		}
+	}
+	lg.step("Pruned old backups, keeping latest %d", keep)
 }

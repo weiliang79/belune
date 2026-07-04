@@ -103,6 +103,17 @@ type ApplicationVolumeBackupConfig struct {
 	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
 }
 
+type ApplicationVolumeRestore struct {
+	ID                  pgtype.UUID        `json:"id"`
+	ApplicationVolumeID pgtype.UUID        `json:"application_volume_id"`
+	BackupID            pgtype.UUID        `json:"backup_id"`
+	StartedAt           pgtype.Timestamptz `json:"started_at"`
+	FinishedAt          pgtype.Timestamptz `json:"finished_at"`
+	Status              string             `json:"status"`
+	Error               pgtype.Text        `json:"error"`
+	Log                 pgtype.Text        `json:"log"`
+}
+
 type AuditLog struct {
 	ID           pgtype.UUID        `json:"id"`
 	UserID       pgtype.UUID        `json:"user_id"`

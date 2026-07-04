@@ -10,8 +10,10 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/hibiken/asynq"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/ungweiliang/selfhost-paas/internal/naming"
 	"github.com/ungweiliang/selfhost-paas/internal/runtime"
@@ -63,15 +65,38 @@ func (h *TaskHandler) HandleRestoreVolumeTask(ctx context.Context, t *asynq.Task
 	containerName := naming.ContainerName(appRow.ProjectSlug, appRow.Slug, appIDStr)
 	volumeName := naming.AppVolumeName(appIDStr, vol.Name)
 
+	// Record the restore run so the UI can show progress/outcome.
+	run, err := h.Queries.InsertApplicationVolumeRestore(ctx, generated.InsertApplicationVolumeRestoreParams{
+		ApplicationVolumeID: volID,
+		BackupID:            backupID,
+	})
+	if err != nil {
+		return fmt.Errorf("insert restore run: %w", err)
+	}
+
+	lg := &runLog{}
+	lg.step("Volume restore started (volume=%s, path=%s, backup=%s)", vol.Name, vol.MountPath, formatUUID(backupID))
+
 	archivePath, cleanup, err := h.resolveVolumeBackupFile(ctx, bk)
 	if err != nil {
+		h.failVolumeRestoreLog(ctx, run.ID, fmt.Sprintf("resolve backup file: %v", err), lg)
 		return fmt.Errorf("resolve backup file: %w", err)
 	}
 	defer cleanup()
+	lg.step("Backup archive ready")
 
-	if err := h.restoreAppVolume(ctx, volumeName, vol.MountPath, containerName, appRow.Status == "running", archivePath); err != nil {
+	if err := h.restoreAppVolume(ctx, volumeName, vol.MountPath, containerName, appRow.Status == "running", archivePath, lg); err != nil {
+		h.failVolumeRestoreLog(ctx, run.ID, err.Error(), lg)
 		return err
 	}
+
+	lg.step("Restore succeeded")
+	h.finaliseVolumeRestore(ctx, run.ID, generated.UpdateApplicationVolumeRestoreParams{
+		ID:         run.ID,
+		FinishedAt: pgtype.Timestamptz{Time: time.Now(), Valid: true},
+		Status:     "succeeded",
+		Log:        pgtype.Text{String: lg.String(), Valid: true},
+	})
 
 	slog.Info("volume restored", "volume_id", payload.ApplicationVolumeID, "backup_id", payload.BackupID)
 	return nil
@@ -113,7 +138,7 @@ func (h *TaskHandler) resolveVolumeBackupFile(ctx context.Context, bk generated.
 // restoreAppVolume stops the app (if running), wipes the named volume, untars
 // the archive into it, then restarts the app. Stopping is mandatory: restoring
 // under a live writer would corrupt the volume.
-func (h *TaskHandler) restoreAppVolume(ctx context.Context, volumeName, mountPath, containerName string, appRunning bool, archivePath string) error {
+func (h *TaskHandler) restoreAppVolume(ctx context.Context, volumeName, mountPath, containerName string, appRunning bool, archivePath string, lg *runLog) error {
 	helperImage := h.Config.DatabaseBackupHelperImage
 	if err := h.Runtime.PullImage(ctx, helperImage); err != nil {
 		return fmt.Errorf("pull helper image: %w", err)
@@ -126,6 +151,7 @@ func (h *TaskHandler) restoreAppVolume(ctx context.Context, volumeName, mountPat
 	defer f.Close()
 
 	if appRunning {
+		lg.step("Stopping application for restore")
 		if err := h.Runtime.StopContainer(ctx, containerName); err != nil {
 			slog.Warn("restore volume: stop app (may already be stopped)", "container", containerName, "error", err)
 		}
@@ -133,6 +159,7 @@ func (h *TaskHandler) restoreAppVolume(ctx context.Context, volumeName, mountPat
 			if err := h.Runtime.StartContainer(ctx, containerName); err != nil {
 				slog.Error("restore volume: failed to restart app after restore", "container", containerName, "error", err)
 			}
+			lg.step("Application restarted")
 		}()
 	}
 
@@ -147,11 +174,38 @@ func (h *TaskHandler) restoreAppVolume(ctx context.Context, volumeName, mountPat
 		Cmd:     []string{"sh", "-c", script, mountPath},
 		Volumes: map[string]string{volumeName: mountPath},
 	}, f, nil, &stderr)
+	lg.raw(stderr.String())
 	if err != nil {
 		return fmt.Errorf("restore helper: %w", err)
 	}
 	if exit != 0 {
 		return errors.Join(fmt.Errorf("restore tar exited %d: %s", exit, strings.TrimSpace(stderr.String())), asynq.SkipRetry)
 	}
+	lg.step("Volume contents replaced from snapshot")
 	return nil
+}
+
+func (h *TaskHandler) failVolumeRestoreLog(ctx context.Context, id pgtype.UUID, errMsg string, lg *runLog) {
+	slog.Error("volume restore failed", "restore_id", formatUUID(id), "error", errMsg)
+	logText := ""
+	if lg != nil {
+		lg.step("Restore failed: %s", errMsg)
+		logText = lg.String()
+	}
+	h.finaliseVolumeRestore(ctx, id, generated.UpdateApplicationVolumeRestoreParams{
+		ID:         id,
+		FinishedAt: pgtype.Timestamptz{Time: time.Now(), Valid: true},
+		Status:     "failed",
+		Error:      pgtype.Text{String: errMsg, Valid: true},
+		Log:        pgtype.Text{String: logText, Valid: true},
+	})
+}
+
+func (h *TaskHandler) finaliseVolumeRestore(ctx context.Context, id pgtype.UUID, params generated.UpdateApplicationVolumeRestoreParams) {
+	if !id.Valid {
+		return
+	}
+	if err := h.Queries.UpdateApplicationVolumeRestore(ctx, params); err != nil {
+		slog.Warn("restore_volume: failed to update run record", "restore_id", formatUUID(id), "error", err)
+	}
 }

@@ -96,6 +96,16 @@ export interface VolumeBackup {
   log?: string;
 }
 
+export interface VolumeRestore {
+  id: string;
+  backup_id?: string;
+  status: "running" | "succeeded" | "failed";
+  started_at: string;
+  finished_at?: string;
+  error?: string;
+  log?: string;
+}
+
 export interface FileMount {
   id: string;
   mount_path: string;

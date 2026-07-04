@@ -25,6 +25,11 @@ SELECT * FROM application_volume_backup_configs
 WHERE application_volume_id = $1
 ORDER BY created_at;
 
+-- name: ListEnabledApplicationVolumeBackupConfigs :many
+SELECT * FROM application_volume_backup_configs
+WHERE enabled AND schedule <> ''
+ORDER BY created_at;
+
 -- name: DeleteApplicationVolumeBackupConfig :exec
 DELETE FROM application_volume_backup_configs WHERE id = $1;
 
@@ -54,6 +59,34 @@ SELECT * FROM application_volume_backups WHERE id = $1;
 
 -- name: ListApplicationVolumeBackups :many
 SELECT * FROM application_volume_backups
+WHERE application_volume_id = $1
+ORDER BY started_at DESC
+LIMIT $2;
+
+-- name: ListApplicationVolumeBackupsByConfig :many
+SELECT * FROM application_volume_backups
+WHERE backup_config_id = $1
+ORDER BY started_at DESC
+LIMIT $2;
+
+-- name: DeleteApplicationVolumeBackup :exec
+DELETE FROM application_volume_backups WHERE id = $1;
+
+-- name: InsertApplicationVolumeRestore :one
+INSERT INTO application_volume_restores (application_volume_id, backup_id)
+VALUES ($1, $2)
+RETURNING *;
+
+-- name: UpdateApplicationVolumeRestore :exec
+UPDATE application_volume_restores
+SET finished_at = $2,
+    status      = $3,
+    error       = $4,
+    log         = $5
+WHERE id = $1;
+
+-- name: ListApplicationVolumeRestores :many
+SELECT * FROM application_volume_restores
 WHERE application_volume_id = $1
 ORDER BY started_at DESC
 LIMIT $2;

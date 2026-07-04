@@ -255,6 +255,7 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService,
 			r.Post("/api/projects/{projectId}/applications/{applicationId}/volumes/{volumeId}/backup-configs/{configId}/run", h.RunVolumeBackupConfig)
 			r.Get("/api/projects/{projectId}/applications/{applicationId}/volumes/{volumeId}/backups", h.ListVolumeBackups)
 			r.Post("/api/projects/{projectId}/applications/{applicationId}/volumes/{volumeId}/backups/{backupId}/restore", h.RestoreVolumeBackup)
+			r.Get("/api/projects/{projectId}/applications/{applicationId}/volumes/{volumeId}/restores", h.ListVolumeRestores)
 
 			// Application file/config mounts
 			r.Get("/api/projects/{projectId}/applications/{applicationId}/file-mounts", h.ListFileMounts)

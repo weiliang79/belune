@@ -1,24 +1,29 @@
 import { useState } from "react";
 import { toast } from "sonner";
 import {
+  ClockIcon,
   CloudIcon,
   DatabaseBackupIcon,
   RotateCcwIcon,
   ScrollTextIcon,
 } from "lucide-react";
-import type { ApplicationVolume, VolumeBackup } from "@/lib/types";
+import type { ApplicationVolume } from "@/lib/types";
 import { useBackupDestinations } from "@/lib/hooks/use-backup-destinations";
 import {
   useVolumeBackupConfigs,
   useVolumeBackups,
+  useVolumeRestores,
   useCreateVolumeBackupConfig,
+  useUpdateVolumeBackupConfig,
   useDeleteVolumeBackupConfig,
   useRunVolumeBackup,
   useRestoreVolumeBackup,
 } from "@/lib/hooks/use-volume-backups";
+import type { SaveVolumeBackupConfig } from "@/lib/api/volume-backups";
 import { formatBytes, formatRelativeTime } from "@/lib/utils/format";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import {
@@ -54,6 +59,16 @@ interface Props {
   onOpenChange: (open: boolean) => void;
 }
 
+// "manual" is a sentinel for an empty schedule (back up on demand only); Radix
+// Select cannot use an empty string as an item value.
+const SCHEDULE_PRESETS: { value: string; label: string }[] = [
+  { value: "manual", label: "Manual only (no schedule)" },
+  { value: "0 * * * *", label: "Every hour" },
+  { value: "0 0 * * *", label: "Every day at midnight" },
+  { value: "0 0 * * 0", label: "Every week (Sunday midnight)" },
+  { value: "0 0 1 * *", label: "Every month (1st, midnight)" },
+];
+
 function statusVariant(status: string): "default" | "secondary" | "destructive" {
   if (status === "succeeded") return "default";
   if (status === "failed") return "destructive";
@@ -80,10 +95,24 @@ export function VolumeBackupsDialog({
     volume.id,
     open,
   );
+  const { data: restores } = useVolumeRestores(
+    projectId,
+    applicationId,
+    volume.id,
+    open,
+  );
+  const config = configs?.[0];
+
   const createConfig = useCreateVolumeBackupConfig(
     projectId,
     applicationId,
     volume.id,
+  );
+  const updateConfig = useUpdateVolumeBackupConfig(
+    projectId,
+    applicationId,
+    volume.id,
+    config?.id ?? "",
   );
   const deleteConfig = useDeleteVolumeBackupConfig(
     projectId,
@@ -93,25 +122,52 @@ export function VolumeBackupsDialog({
   const runBackup = useRunVolumeBackup(projectId, applicationId, volume.id);
   const restore = useRestoreVolumeBackup(projectId, applicationId, volume.id);
 
-  const config = configs?.[0];
   const [destinationId, setDestinationId] = useState("");
+  const [schedule, setSchedule] = useState("");
+  const [keepLatest, setKeepLatest] = useState("");
   const [quiesce, setQuiesce] = useState(false);
-  const [logView, setLogView] = useState<VolumeBackup | null>(null);
-  const [restoreTarget, setRestoreTarget] = useState<VolumeBackup | null>(null);
+  const [enabled, setEnabled] = useState(true);
+  const [logView, setLogView] = useState<{ title: string; log: string } | null>(
+    null,
+  );
+  const [restoreTarget, setRestoreTarget] = useState<string | null>(null);
 
-  const destName = (id: string) =>
-    destinations?.find((d) => d.id === id)?.name ?? "destination";
+  // Seed the form from the loaded config once (React "adjust state during
+  // render" pattern), keyed on config id so a background refetch doesn't clobber
+  // the user's in-progress edits.
+  const [seededId, setSeededId] = useState<string | null>(null);
+  if (config && config.id !== seededId) {
+    setSeededId(config.id);
+    setDestinationId(config.destination_id);
+    setSchedule(config.schedule ?? "");
+    setKeepLatest(config.keep_latest != null ? String(config.keep_latest) : "");
+    setQuiesce(config.quiesce);
+    setEnabled(config.enabled);
+  }
+
+  const presetValue =
+    schedule === ""
+      ? "manual"
+      : (SCHEDULE_PRESETS.find((p) => p.value === schedule)?.value ?? "custom");
+
+  const buildPayload = (): SaveVolumeBackupConfig => ({
+    destination_id: destinationId,
+    schedule: schedule.trim(),
+    keep_latest: keepLatest.trim() === "" ? null : Number(keepLatest),
+    quiesce,
+    enabled,
+  });
 
   const saveConfig = () => {
     if (!destinationId) return;
-    toast.promise(
-      createConfig.mutateAsync({ destination_id: destinationId, quiesce }),
-      {
-        loading: "Saving backup config...",
-        success: "Backup configured",
-        error: (err) => err.message,
-      },
-    );
+    const mutation = config
+      ? updateConfig.mutateAsync(buildPayload())
+      : createConfig.mutateAsync(buildPayload());
+    toast.promise(mutation, {
+      loading: config ? "Saving changes..." : "Saving backup config...",
+      success: config ? "Backup config updated" : "Backup configured",
+      error: (err) => err.message,
+    });
   };
 
   const backUpNow = () => {
@@ -135,7 +191,7 @@ export function VolumeBackupsDialog({
   const doRestore = () => {
     if (!restoreTarget) return;
     toast.promise(
-      restore.mutateAsync(restoreTarget.id).then(() => setRestoreTarget(null)),
+      restore.mutateAsync(restoreTarget).then(() => setRestoreTarget(null)),
       {
         loading: "Starting restore...",
         success: "Restore started — the app will stop, restore, and restart",
@@ -144,6 +200,8 @@ export function VolumeBackupsDialog({
     );
   };
 
+  const saving = createConfig.isPending || updateConfig.isPending;
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl">
@@ -151,12 +209,12 @@ export function VolumeBackupsDialog({
           <DialogTitle>Backups — {volume.name}</DialogTitle>
           <DialogDescription>
             Snapshot <span className="font-mono">{volume.mount_path}</span> to an
-            S3-compatible destination and restore it.
+            S3-compatible destination, on a schedule or on demand, and restore it.
           </DialogDescription>
         </DialogHeader>
 
-        {/* Config */}
-        {!config ? (
+        <div className="max-h-[70vh] space-y-4 overflow-y-auto pr-1">
+          {/* Config form */}
           <div className="space-y-3">
             <div className="space-y-1.5">
               <Label>Destination</Label>
@@ -181,6 +239,58 @@ export function VolumeBackupsDialog({
                 </p>
               )}
             </div>
+
+            <div className="space-y-1.5">
+              <Label>Schedule</Label>
+              <Select
+                value={presetValue}
+                onValueChange={(v) => {
+                  if (v === "manual") setSchedule("");
+                  else if (v && v !== "custom") setSchedule(v);
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a schedule" />
+                </SelectTrigger>
+                <SelectContent>
+                  {SCHEDULE_PRESETS.map((p) => (
+                    <SelectItem key={p.value} value={p.value} icon={<ClockIcon />}>
+                      {p.label}
+                    </SelectItem>
+                  ))}
+                  <SelectItem value="custom" icon={<ClockIcon />}>
+                    Custom…
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+              {presetValue === "custom" && (
+                <Input
+                  value={schedule}
+                  onChange={(e) => setSchedule(e.target.value)}
+                  placeholder="Custom cron (e.g. 0 0 * * *)"
+                  className="font-mono"
+                />
+              )}
+              <p className="text-muted-foreground text-xs">
+                Standard 5-field cron expression. Manual only = back up on demand.
+              </p>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="vol-keep">Keep latest</Label>
+              <Input
+                id="vol-keep"
+                type="number"
+                min={1}
+                value={keepLatest}
+                onChange={(e) => setKeepLatest(e.target.value)}
+                placeholder="Keeps all if empty"
+              />
+              <p className="text-muted-foreground text-xs">
+                Optional. Only keep the latest N backups in the destination.
+              </p>
+            </div>
+
             <label className="flex items-start gap-2 text-sm">
               <input
                 type="checkbox"
@@ -196,89 +306,137 @@ export function VolumeBackupsDialog({
                 </span>
               </span>
             </label>
-            <Button
-              onClick={saveConfig}
-              disabled={!destinationId || createConfig.isPending}
-            >
-              Save backup config
-            </Button>
-          </div>
-        ) : (
-          <div className="flex items-center justify-between gap-3 rounded-lg border p-3">
-            <div className="min-w-0 text-sm">
-              <div className="flex items-center gap-2">
-                <CloudIcon aria-hidden="true" className="size-4" />
-                <span className="truncate font-medium">
-                  {destName(config.destination_id)}
-                </span>
-                {config.quiesce && <Badge variant="secondary">Quiesce</Badge>}
-              </div>
-              {config.last_run_at && (
-                <div className="text-text-faint mt-0.5 text-xs">
-                  Last run {formatRelativeTime(config.last_run_at)}
-                </div>
+
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                className="size-4"
+                checked={enabled}
+                onChange={(e) => setEnabled(e.target.checked)}
+              />
+              Enabled (run on schedule)
+            </label>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <Button onClick={saveConfig} disabled={!destinationId || saving}>
+                {config ? "Save changes" : "Save backup config"}
+              </Button>
+              {config && (
+                <>
+                  <Button
+                    variant="outline"
+                    onClick={backUpNow}
+                    disabled={runBackup.isPending}
+                  >
+                    <DatabaseBackupIcon aria-hidden="true" className="size-4" />
+                    Back up now
+                  </Button>
+                  <Button variant="outline" onClick={removeConfig}>
+                    Remove
+                  </Button>
+                  {config.last_run_at && (
+                    <span className="text-text-faint ml-auto text-xs">
+                      Last run {formatRelativeTime(config.last_run_at)}
+                    </span>
+                  )}
+                </>
               )}
             </div>
-            <div className="flex shrink-0 items-center gap-2">
-              <Button size="sm" onClick={backUpNow} disabled={runBackup.isPending}>
-                <DatabaseBackupIcon aria-hidden="true" className="size-4" />
-                Back up now
-              </Button>
-              <Button size="sm" variant="outline" onClick={removeConfig}>
-                Remove
-              </Button>
-            </div>
           </div>
-        )}
 
-        <Separator />
+          <Separator />
 
-        {/* Runs */}
-        <div className="space-y-2">
-          <div className="text-sm font-medium">Recent backups</div>
-          {!backups || backups.length === 0 ? (
-            <p className="text-muted-foreground text-sm">No backups yet.</p>
-          ) : (
-            <div className="max-h-64 space-y-2 overflow-y-auto">
-              {backups.map((b) => (
-                <div
-                  key={b.id}
-                  className="flex items-center justify-between gap-3 rounded-md border p-2.5 text-sm"
-                >
-                  <div className="flex min-w-0 items-center gap-2">
-                    <Badge variant={statusVariant(b.status)}>{b.status}</Badge>
-                    <span className="text-text-faint tabular-nums">
-                      {formatBytes(b.size_bytes)}
-                    </span>
-                    <span className="text-text-faint truncate">
-                      {formatRelativeTime(b.started_at)}
-                    </span>
+          {/* Backup runs */}
+          <div className="space-y-2">
+            <div className="text-sm font-medium">Recent backups</div>
+            {!backups || backups.length === 0 ? (
+              <p className="text-muted-foreground text-sm">No backups yet.</p>
+            ) : (
+              <div className="space-y-2">
+                {backups.map((b) => (
+                  <div
+                    key={b.id}
+                    className="flex items-center justify-between gap-3 rounded-md border p-2.5 text-sm"
+                  >
+                    <div className="flex min-w-0 items-center gap-2">
+                      <Badge variant={statusVariant(b.status)}>{b.status}</Badge>
+                      <span className="text-text-faint tabular-nums">
+                        {formatBytes(b.size_bytes)}
+                      </span>
+                      <span className="text-text-faint truncate">
+                        {formatRelativeTime(b.started_at)}
+                      </span>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-1">
+                      {b.log && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          aria-label="View log"
+                          onClick={() =>
+                            setLogView({ title: "Backup log", log: b.log ?? "" })
+                          }
+                        >
+                          <ScrollTextIcon aria-hidden="true" className="size-4" />
+                        </Button>
+                      )}
+                      {b.status === "succeeded" && b.has_remote && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setRestoreTarget(b.id)}
+                        >
+                          <RotateCcwIcon aria-hidden="true" className="size-4" />
+                          Restore
+                        </Button>
+                      )}
+                    </div>
                   </div>
-                  <div className="flex shrink-0 items-center gap-1">
-                    {b.log && (
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        aria-label="View log"
-                        onClick={() => setLogView(b)}
-                      >
-                        <ScrollTextIcon aria-hidden="true" className="size-4" />
-                      </Button>
-                    )}
-                    {b.status === "succeeded" && b.has_remote && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => setRestoreTarget(b)}
-                      >
-                        <RotateCcwIcon aria-hidden="true" className="size-4" />
-                        Restore
-                      </Button>
-                    )}
-                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Restore runs */}
+          {restores && restores.length > 0 && (
+            <>
+              <Separator />
+              <div className="space-y-2">
+                <div className="text-sm font-medium">Recent restores</div>
+                <div className="space-y-2">
+                  {restores.map((rr) => (
+                    <div
+                      key={rr.id}
+                      className="flex items-center justify-between gap-3 rounded-md border p-2.5 text-sm"
+                    >
+                      <div className="flex min-w-0 items-center gap-2">
+                        <Badge variant={statusVariant(rr.status)}>
+                          {rr.status}
+                        </Badge>
+                        <span className="text-text-faint truncate">
+                          {formatRelativeTime(rr.started_at)}
+                        </span>
+                      </div>
+                      {rr.log && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          aria-label="View restore log"
+                          onClick={() =>
+                            setLogView({
+                              title: "Restore log",
+                              log: rr.log ?? "",
+                            })
+                          }
+                        >
+                          <ScrollTextIcon aria-hidden="true" className="size-4" />
+                        </Button>
+                      )}
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
+              </div>
+            </>
           )}
         </div>
 
@@ -286,7 +444,7 @@ export function VolumeBackupsDialog({
         <Dialog open={logView !== null} onOpenChange={(o) => !o && setLogView(null)}>
           <DialogContent className="max-w-2xl">
             <DialogHeader>
-              <DialogTitle>Backup log</DialogTitle>
+              <DialogTitle>{logView?.title ?? "Log"}</DialogTitle>
             </DialogHeader>
             <pre className="bg-muted/40 max-h-96 overflow-auto rounded-md border p-3 font-mono text-xs whitespace-pre-wrap">
               {logView?.log || "No log."}
@@ -311,10 +469,7 @@ export function VolumeBackupsDialog({
             </AlertDialogHeader>
             <AlertDialogFooter>
               <AlertDialogCancel>Cancel</AlertDialogCancel>
-              <AlertDialogAction
-                onClick={doRestore}
-                disabled={restore.isPending}
-              >
+              <AlertDialogAction onClick={doRestore} disabled={restore.isPending}>
                 Restore
               </AlertDialogAction>
             </AlertDialogFooter>

@@ -29,6 +29,19 @@ export function useVolumeBackups(
   });
 }
 
+export function useVolumeRestores(
+  projectId: string,
+  applicationId: string,
+  volumeId: string,
+  enabled = true,
+) {
+  return useQuery({
+    queryKey: queryKeys.volumeRestores(projectId, applicationId, volumeId),
+    queryFn: () => api.listVolumeRestores(projectId, applicationId, volumeId),
+    enabled,
+  });
+}
+
 export function useCreateVolumeBackupConfig(
   projectId: string,
   applicationId: string,
@@ -38,6 +51,33 @@ export function useCreateVolumeBackupConfig(
   return useMutation({
     mutationFn: (data: api.SaveVolumeBackupConfig) =>
       api.createVolumeBackupConfig(projectId, applicationId, volumeId, data),
+    onSuccess: () =>
+      qc.invalidateQueries({
+        queryKey: queryKeys.volumeBackupConfigs(
+          projectId,
+          applicationId,
+          volumeId,
+        ),
+      }),
+  });
+}
+
+export function useUpdateVolumeBackupConfig(
+  projectId: string,
+  applicationId: string,
+  volumeId: string,
+  configId: string,
+) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: api.SaveVolumeBackupConfig) =>
+      api.updateVolumeBackupConfig(
+        projectId,
+        applicationId,
+        volumeId,
+        configId,
+        data,
+      ),
     onSuccess: () =>
       qc.invalidateQueries({
         queryKey: queryKeys.volumeBackupConfigs(
@@ -93,8 +133,16 @@ export function useRestoreVolumeBackup(
   applicationId: string,
   volumeId: string,
 ) {
+  const qc = useQueryClient();
   return useMutation({
     mutationFn: (backupId: string) =>
       api.restoreVolumeBackup(projectId, applicationId, volumeId, backupId),
+    onSuccess: () => {
+      // The restore run row is inserted async; re-poll shortly so it appears.
+      const key = queryKeys.volumeRestores(projectId, applicationId, volumeId);
+      [1000, 3000, 6000].forEach((ms) =>
+        setTimeout(() => qc.invalidateQueries({ queryKey: key }), ms),
+      );
+    },
   });
 }

@@ -82,6 +82,20 @@ export const queryKeys = {
       volumeId,
       "backups",
     ] as const,
+  volumeRestores: (
+    projectId: string,
+    applicationId: string,
+    volumeId: string,
+  ) =>
+    [
+      "projects",
+      projectId,
+      "applications",
+      applicationId,
+      "volumes",
+      volumeId,
+      "restores",
+    ] as const,
   domains: {
     all: (projectId: string, applicationId: string) =>
       [

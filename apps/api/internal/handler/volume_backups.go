@@ -8,6 +8,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/robfig/cron/v3"
 
 	"github.com/ungweiliang/selfhost-paas/internal/store/generated"
 	"github.com/ungweiliang/selfhost-paas/internal/worker"
@@ -104,6 +105,22 @@ type volumeBackupConfigRequest struct {
 	Quiesce       bool   `json:"quiesce"`
 }
 
+// validateVolumeBackupSchedule reports whether a config request is well-formed.
+// An empty schedule means manual-only (no scheduled runs) and is allowed; a
+// non-empty schedule must be a valid cron expression. keep_latest, when set,
+// must be positive.
+func validateVolumeBackupSchedule(req volumeBackupConfigRequest) (string, bool) {
+	if req.Schedule != "" {
+		if _, err := cron.ParseStandard(req.Schedule); err != nil {
+			return "invalid cron schedule", false
+		}
+	}
+	if req.KeepLatest != nil && *req.KeepLatest <= 0 {
+		return "keep_latest must be a positive number", false
+	}
+	return "", true
+}
+
 func (h *Handler) CreateVolumeBackupConfig(w http.ResponseWriter, r *http.Request) {
 	vol, appUUID, ok := h.resolveVolumeForBackup(w, r)
 	if !ok {
@@ -113,6 +130,10 @@ func (h *Handler) CreateVolumeBackupConfig(w http.ResponseWriter, r *http.Reques
 	var req volumeBackupConfigRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if msg, ok := validateVolumeBackupSchedule(req); !ok {
+		writeError(w, http.StatusBadRequest, msg)
 		return
 	}
 	var destUUID pgtype.UUID
@@ -162,6 +183,10 @@ func (h *Handler) UpdateVolumeBackupConfig(w http.ResponseWriter, r *http.Reques
 	var req volumeBackupConfigRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if msg, ok := validateVolumeBackupSchedule(req); !ok {
+		writeError(w, http.StatusBadRequest, msg)
 		return
 	}
 	var destUUID pgtype.UUID
@@ -341,6 +366,51 @@ func (h *Handler) RestoreVolumeBackup(w http.ResponseWriter, r *http.Request) {
 	}
 	h.audit(r, "restore_volume", "application_volume", uuidToString(vol.ID), map[string]any{"backup_id": uuidToString(bk.ID)})
 	writeJSON(w, http.StatusAccepted, map[string]string{"status": "started"})
+}
+
+type volumeRestoreResponse struct {
+	ID         string     `json:"id"`
+	BackupID   string     `json:"backup_id,omitempty"`
+	Status     string     `json:"status"`
+	StartedAt  time.Time  `json:"started_at"`
+	FinishedAt *time.Time `json:"finished_at,omitempty"`
+	Error      string     `json:"error,omitempty"`
+	Log        string     `json:"log,omitempty"`
+}
+
+// ListVolumeRestores returns the recent restore runs for a volume.
+func (h *Handler) ListVolumeRestores(w http.ResponseWriter, r *http.Request) {
+	vol, _, ok := h.resolveVolumeForBackup(w, r)
+	if !ok {
+		return
+	}
+	runs, err := h.queries.ListApplicationVolumeRestores(r.Context(), generated.ListApplicationVolumeRestoresParams{
+		ApplicationVolumeID: vol.ID,
+		Limit:               50,
+	})
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to list restores")
+		return
+	}
+	out := make([]volumeRestoreResponse, 0, len(runs))
+	for _, b := range runs {
+		resp := volumeRestoreResponse{
+			ID:        uuidToString(b.ID),
+			Status:    b.Status,
+			StartedAt: b.StartedAt.Time,
+			Error:     b.Error.String,
+			Log:       b.Log.String,
+		}
+		if b.BackupID.Valid {
+			resp.BackupID = uuidToString(b.BackupID)
+		}
+		if b.FinishedAt.Valid {
+			t := b.FinishedAt.Time
+			resp.FinishedAt = &t
+		}
+		out = append(out, resp)
+	}
+	writeJSON(w, http.StatusOK, out)
 }
 
 // configForVolume loads the {configId} path param and verifies it belongs to the

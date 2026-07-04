@@ -1,9 +1,15 @@
-import type { VolumeBackupConfig, VolumeBackup } from "@/lib/types";
+import type {
+  VolumeBackupConfig,
+  VolumeBackup,
+  VolumeRestore,
+} from "@/lib/types";
 import { api } from "./client";
 
 export interface SaveVolumeBackupConfig {
   destination_id: string;
   prefix?: string;
+  schedule?: string;
+  keep_latest?: number | null;
   quiesce: boolean;
   enabled?: boolean;
 }
@@ -30,6 +36,19 @@ export function createVolumeBackupConfig(
 ) {
   return api.post<VolumeBackupConfig>(
     `${base(projectId, applicationId, volumeId)}/backup-configs`,
+    data,
+  );
+}
+
+export function updateVolumeBackupConfig(
+  projectId: string,
+  applicationId: string,
+  volumeId: string,
+  configId: string,
+  data: SaveVolumeBackupConfig,
+) {
+  return api.put<VolumeBackupConfig>(
+    `${base(projectId, applicationId, volumeId)}/backup-configs/${configId}`,
     data,
   );
 }
@@ -76,5 +95,15 @@ export function restoreVolumeBackup(
   return api.post<{ status: string }>(
     `${base(projectId, applicationId, volumeId)}/backups/${backupId}/restore`,
     {},
+  );
+}
+
+export function listVolumeRestores(
+  projectId: string,
+  applicationId: string,
+  volumeId: string,
+) {
+  return api.get<VolumeRestore[]>(
+    `${base(projectId, applicationId, volumeId)}/restores`,
   );
 }

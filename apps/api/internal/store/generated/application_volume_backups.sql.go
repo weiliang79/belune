@@ -56,6 +56,15 @@ func (q *Queries) CreateApplicationVolumeBackupConfig(ctx context.Context, arg C
 	return i, err
 }
 
+const deleteApplicationVolumeBackup = `-- name: DeleteApplicationVolumeBackup :exec
+DELETE FROM application_volume_backups WHERE id = $1
+`
+
+func (q *Queries) DeleteApplicationVolumeBackup(ctx context.Context, id pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, deleteApplicationVolumeBackup, id)
+	return err
+}
+
 const deleteApplicationVolumeBackupConfig = `-- name: DeleteApplicationVolumeBackupConfig :exec
 DELETE FROM application_volume_backup_configs WHERE id = $1
 `
@@ -141,6 +150,33 @@ func (q *Queries) InsertApplicationVolumeBackup(ctx context.Context, arg InsertA
 	return i, err
 }
 
+const insertApplicationVolumeRestore = `-- name: InsertApplicationVolumeRestore :one
+INSERT INTO application_volume_restores (application_volume_id, backup_id)
+VALUES ($1, $2)
+RETURNING id, application_volume_id, backup_id, started_at, finished_at, status, error, log
+`
+
+type InsertApplicationVolumeRestoreParams struct {
+	ApplicationVolumeID pgtype.UUID `json:"application_volume_id"`
+	BackupID            pgtype.UUID `json:"backup_id"`
+}
+
+func (q *Queries) InsertApplicationVolumeRestore(ctx context.Context, arg InsertApplicationVolumeRestoreParams) (ApplicationVolumeRestore, error) {
+	row := q.db.QueryRow(ctx, insertApplicationVolumeRestore, arg.ApplicationVolumeID, arg.BackupID)
+	var i ApplicationVolumeRestore
+	err := row.Scan(
+		&i.ID,
+		&i.ApplicationVolumeID,
+		&i.BackupID,
+		&i.StartedAt,
+		&i.FinishedAt,
+		&i.Status,
+		&i.Error,
+		&i.Log,
+	)
+	return i, err
+}
+
 const listApplicationVolumeBackupConfigs = `-- name: ListApplicationVolumeBackupConfigs :many
 SELECT id, application_volume_id, destination_id, prefix, schedule, keep_latest, enabled, quiesce, last_run_at, created_at, updated_at FROM application_volume_backup_configs
 WHERE application_volume_id = $1
@@ -212,6 +248,129 @@ func (q *Queries) ListApplicationVolumeBackups(ctx context.Context, arg ListAppl
 			&i.SizeBytes,
 			&i.Error,
 			&i.Log,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listApplicationVolumeBackupsByConfig = `-- name: ListApplicationVolumeBackupsByConfig :many
+SELECT id, application_volume_id, backup_config_id, started_at, finished_at, status, local_path, remote_key, size_bytes, error, log FROM application_volume_backups
+WHERE backup_config_id = $1
+ORDER BY started_at DESC
+LIMIT $2
+`
+
+type ListApplicationVolumeBackupsByConfigParams struct {
+	BackupConfigID pgtype.UUID `json:"backup_config_id"`
+	Limit          int32       `json:"limit"`
+}
+
+func (q *Queries) ListApplicationVolumeBackupsByConfig(ctx context.Context, arg ListApplicationVolumeBackupsByConfigParams) ([]ApplicationVolumeBackup, error) {
+	rows, err := q.db.Query(ctx, listApplicationVolumeBackupsByConfig, arg.BackupConfigID, arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ApplicationVolumeBackup{}
+	for rows.Next() {
+		var i ApplicationVolumeBackup
+		if err := rows.Scan(
+			&i.ID,
+			&i.ApplicationVolumeID,
+			&i.BackupConfigID,
+			&i.StartedAt,
+			&i.FinishedAt,
+			&i.Status,
+			&i.LocalPath,
+			&i.RemoteKey,
+			&i.SizeBytes,
+			&i.Error,
+			&i.Log,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listApplicationVolumeRestores = `-- name: ListApplicationVolumeRestores :many
+SELECT id, application_volume_id, backup_id, started_at, finished_at, status, error, log FROM application_volume_restores
+WHERE application_volume_id = $1
+ORDER BY started_at DESC
+LIMIT $2
+`
+
+type ListApplicationVolumeRestoresParams struct {
+	ApplicationVolumeID pgtype.UUID `json:"application_volume_id"`
+	Limit               int32       `json:"limit"`
+}
+
+func (q *Queries) ListApplicationVolumeRestores(ctx context.Context, arg ListApplicationVolumeRestoresParams) ([]ApplicationVolumeRestore, error) {
+	rows, err := q.db.Query(ctx, listApplicationVolumeRestores, arg.ApplicationVolumeID, arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ApplicationVolumeRestore{}
+	for rows.Next() {
+		var i ApplicationVolumeRestore
+		if err := rows.Scan(
+			&i.ID,
+			&i.ApplicationVolumeID,
+			&i.BackupID,
+			&i.StartedAt,
+			&i.FinishedAt,
+			&i.Status,
+			&i.Error,
+			&i.Log,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listEnabledApplicationVolumeBackupConfigs = `-- name: ListEnabledApplicationVolumeBackupConfigs :many
+SELECT id, application_volume_id, destination_id, prefix, schedule, keep_latest, enabled, quiesce, last_run_at, created_at, updated_at FROM application_volume_backup_configs
+WHERE enabled AND schedule <> ''
+ORDER BY created_at
+`
+
+func (q *Queries) ListEnabledApplicationVolumeBackupConfigs(ctx context.Context) ([]ApplicationVolumeBackupConfig, error) {
+	rows, err := q.db.Query(ctx, listEnabledApplicationVolumeBackupConfigs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ApplicationVolumeBackupConfig{}
+	for rows.Next() {
+		var i ApplicationVolumeBackupConfig
+		if err := rows.Scan(
+			&i.ID,
+			&i.ApplicationVolumeID,
+			&i.DestinationID,
+			&i.Prefix,
+			&i.Schedule,
+			&i.KeepLatest,
+			&i.Enabled,
+			&i.Quiesce,
+			&i.LastRunAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -324,4 +483,32 @@ func (q *Queries) UpdateApplicationVolumeBackupConfig(ctx context.Context, arg U
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const updateApplicationVolumeRestore = `-- name: UpdateApplicationVolumeRestore :exec
+UPDATE application_volume_restores
+SET finished_at = $2,
+    status      = $3,
+    error       = $4,
+    log         = $5
+WHERE id = $1
+`
+
+type UpdateApplicationVolumeRestoreParams struct {
+	ID         pgtype.UUID        `json:"id"`
+	FinishedAt pgtype.Timestamptz `json:"finished_at"`
+	Status     string             `json:"status"`
+	Error      pgtype.Text        `json:"error"`
+	Log        pgtype.Text        `json:"log"`
+}
+
+func (q *Queries) UpdateApplicationVolumeRestore(ctx context.Context, arg UpdateApplicationVolumeRestoreParams) error {
+	_, err := q.db.Exec(ctx, updateApplicationVolumeRestore,
+		arg.ID,
+		arg.FinishedAt,
+		arg.Status,
+		arg.Error,
+		arg.Log,
+	)
+	return err
 }
