@@ -129,7 +129,11 @@ export function VolumeBackupsDrawer({
   const restore = useRestoreVolumeBackup(projectId, applicationId, volume.id);
 
   const [destinationId, setDestinationId] = useState("");
+  const [prefix, setPrefix] = useState("");
   const [schedule, setSchedule] = useState("");
+  // Sticky "Custom…" selection: the cron may equal a preset yet the user still
+  // wants the free-form field, so track custom mode explicitly.
+  const [customMode, setCustomMode] = useState(false);
   const [keepLatest, setKeepLatest] = useState("");
   const [quiesce, setQuiesce] = useState(false);
   const [enabled, setEnabled] = useState(true);
@@ -145,19 +149,26 @@ export function VolumeBackupsDrawer({
   if (config && config.id !== seededId) {
     setSeededId(config.id);
     setDestinationId(config.destination_id);
-    setSchedule(config.schedule ?? "");
+    setPrefix(config.prefix ?? "");
+    const sched = config.schedule ?? "";
+    setSchedule(sched);
+    setCustomMode(
+      sched !== "" && !SCHEDULE_PRESETS.some((p) => p.value === sched),
+    );
     setKeepLatest(config.keep_latest != null ? String(config.keep_latest) : "");
     setQuiesce(config.quiesce);
     setEnabled(config.enabled);
   }
 
-  const presetValue =
-    schedule === ""
+  const presetValue = customMode
+    ? "custom"
+    : schedule === ""
       ? "manual"
       : (SCHEDULE_PRESETS.find((p) => p.value === schedule)?.value ?? "custom");
 
   const buildPayload = (): SaveVolumeBackupConfig => ({
     destination_id: destinationId,
+    prefix: prefix.trim(),
     schedule: schedule.trim(),
     keep_latest: keepLatest.trim() === "" ? null : Number(keepLatest),
     quiesce,
@@ -247,12 +258,33 @@ export function VolumeBackupsDrawer({
             </div>
 
             <div className="space-y-1.5">
+              <Label htmlFor="vol-prefix">Prefix</Label>
+              <Input
+                id="vol-prefix"
+                value={prefix}
+                onChange={(e) => setPrefix(e.target.value)}
+                placeholder="/my-app"
+                className="font-mono"
+              />
+              <p className="text-muted-foreground text-xs">
+                Optional path inside the bucket to store backups under.
+              </p>
+            </div>
+
+            <div className="space-y-1.5">
               <Label>Schedule</Label>
               <Select
                 value={presetValue}
                 onValueChange={(v) => {
-                  if (v === "manual") setSchedule("");
-                  else if (v && v !== "custom") setSchedule(v);
+                  if (v === "manual") {
+                    setCustomMode(false);
+                    setSchedule("");
+                  } else if (v === "custom") {
+                    setCustomMode(true);
+                  } else if (v) {
+                    setCustomMode(false);
+                    setSchedule(v);
+                  }
                 }}
               >
                 <SelectTrigger>
@@ -273,8 +305,9 @@ export function VolumeBackupsDrawer({
                 <Input
                   value={schedule}
                   onChange={(e) => setSchedule(e.target.value)}
-                  placeholder="Custom cron (e.g. 0 0 * * *)"
+                  placeholder="0 0 * * *"
                   className="font-mono"
+                  aria-label="Cron expression"
                 />
               )}
               <p className="text-muted-foreground text-xs">
