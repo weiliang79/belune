@@ -215,6 +215,64 @@ func (q *Queries) ListApplicationVolumeBackupConfigs(ctx context.Context, applic
 	return items, nil
 }
 
+const listApplicationVolumeBackupConfigsForApp = `-- name: ListApplicationVolumeBackupConfigsForApp :many
+SELECT c.id, c.application_volume_id, c.destination_id, c.prefix, c.schedule, c.keep_latest, c.enabled, c.quiesce, c.last_run_at, c.created_at, c.updated_at, v.name AS volume_name, v.mount_path AS volume_mount_path
+FROM application_volume_backup_configs c
+JOIN application_volumes v ON v.id = c.application_volume_id
+WHERE v.application_id = $1
+ORDER BY v.name, c.created_at
+`
+
+type ListApplicationVolumeBackupConfigsForAppRow struct {
+	ID                  pgtype.UUID        `json:"id"`
+	ApplicationVolumeID pgtype.UUID        `json:"application_volume_id"`
+	DestinationID       pgtype.UUID        `json:"destination_id"`
+	Prefix              string             `json:"prefix"`
+	Schedule            string             `json:"schedule"`
+	KeepLatest          pgtype.Int4        `json:"keep_latest"`
+	Enabled             bool               `json:"enabled"`
+	Quiesce             bool               `json:"quiesce"`
+	LastRunAt           pgtype.Timestamptz `json:"last_run_at"`
+	CreatedAt           pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
+	VolumeName          string             `json:"volume_name"`
+	VolumeMountPath     string             `json:"volume_mount_path"`
+}
+
+func (q *Queries) ListApplicationVolumeBackupConfigsForApp(ctx context.Context, applicationID pgtype.UUID) ([]ListApplicationVolumeBackupConfigsForAppRow, error) {
+	rows, err := q.db.Query(ctx, listApplicationVolumeBackupConfigsForApp, applicationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListApplicationVolumeBackupConfigsForAppRow{}
+	for rows.Next() {
+		var i ListApplicationVolumeBackupConfigsForAppRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ApplicationVolumeID,
+			&i.DestinationID,
+			&i.Prefix,
+			&i.Schedule,
+			&i.KeepLatest,
+			&i.Enabled,
+			&i.Quiesce,
+			&i.LastRunAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.VolumeName,
+			&i.VolumeMountPath,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listApplicationVolumeBackups = `-- name: ListApplicationVolumeBackups :many
 SELECT id, application_volume_id, backup_config_id, started_at, finished_at, status, local_path, remote_key, size_bytes, error, log FROM application_volume_backups
 WHERE application_volume_id = $1

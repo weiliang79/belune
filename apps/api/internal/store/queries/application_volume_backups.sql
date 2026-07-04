@@ -30,6 +30,13 @@ SELECT * FROM application_volume_backup_configs
 WHERE enabled AND schedule <> ''
 ORDER BY created_at;
 
+-- name: ListApplicationVolumeBackupConfigsForApp :many
+SELECT c.*, v.name AS volume_name, v.mount_path AS volume_mount_path
+FROM application_volume_backup_configs c
+JOIN application_volumes v ON v.id = c.application_volume_id
+WHERE v.application_id = $1
+ORDER BY v.name, c.created_at;
+
 -- name: DeleteApplicationVolumeBackupConfig :exec
 DELETE FROM application_volume_backup_configs WHERE id = $1;
 

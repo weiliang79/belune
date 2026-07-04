@@ -1,5 +1,6 @@
 import type {
   VolumeBackupConfig,
+  AppVolumeBackupConfig,
   VolumeBackup,
   VolumeRestore,
 } from "@/lib/types";
@@ -25,6 +26,17 @@ export function listVolumeBackupConfigs(
 ) {
   return api.get<VolumeBackupConfig[]>(
     `${base(projectId, applicationId, volumeId)}/backup-configs`,
+  );
+}
+
+// listAppVolumeBackupConfigs returns every volume backup config across all of an
+// application's volumes (each carries its volume_name + mount_path).
+export function listAppVolumeBackupConfigs(
+  projectId: string,
+  applicationId: string,
+) {
+  return api.get<AppVolumeBackupConfig[]>(
+    `/projects/${projectId}/applications/${applicationId}/volume-backup-configs`,
   );
 }
 

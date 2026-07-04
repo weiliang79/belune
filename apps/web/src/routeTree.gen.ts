@@ -38,6 +38,7 @@ import { Route as AppProjectsProjectIdApplicationsApplicationIdIndexRouteImport 
 import { Route as AppProjectsProjectIdApplicationsApplicationIdTerminalRouteImport } from './routes/_app/projects/$projectId/applications/$applicationId/terminal'
 import { Route as AppProjectsProjectIdApplicationsApplicationIdSettingsRouteImport } from './routes/_app/projects/$projectId/applications/$applicationId/settings'
 import { Route as AppProjectsProjectIdApplicationsApplicationIdPreviewsRouteImport } from './routes/_app/projects/$projectId/applications/$applicationId/previews'
+import { Route as AppProjectsProjectIdApplicationsApplicationIdMountsRouteImport } from './routes/_app/projects/$projectId/applications/$applicationId/mounts'
 import { Route as AppProjectsProjectIdApplicationsApplicationIdMetricsRouteImport } from './routes/_app/projects/$projectId/applications/$applicationId/metrics'
 import { Route as AppProjectsProjectIdApplicationsApplicationIdLogsRouteImport } from './routes/_app/projects/$projectId/applications/$applicationId/logs'
 import { Route as AppProjectsProjectIdApplicationsApplicationIdEnvRouteImport } from './routes/_app/projects/$projectId/applications/$applicationId/env'
@@ -197,6 +198,12 @@ const AppProjectsProjectIdApplicationsApplicationIdPreviewsRoute =
     path: '/previews',
     getParentRoute: () => AppProjectsProjectIdApplicationsApplicationIdRoute,
   } as any)
+const AppProjectsProjectIdApplicationsApplicationIdMountsRoute =
+  AppProjectsProjectIdApplicationsApplicationIdMountsRouteImport.update({
+    id: '/mounts',
+    path: '/mounts',
+    getParentRoute: () => AppProjectsProjectIdApplicationsApplicationIdRoute,
+  } as any)
 const AppProjectsProjectIdApplicationsApplicationIdMetricsRoute =
   AppProjectsProjectIdApplicationsApplicationIdMetricsRouteImport.update({
     id: '/metrics',
@@ -258,6 +265,7 @@ export interface FileRoutesByFullPath {
   '/projects/$projectId/applications/$applicationId/env': typeof AppProjectsProjectIdApplicationsApplicationIdEnvRoute
   '/projects/$projectId/applications/$applicationId/logs': typeof AppProjectsProjectIdApplicationsApplicationIdLogsRoute
   '/projects/$projectId/applications/$applicationId/metrics': typeof AppProjectsProjectIdApplicationsApplicationIdMetricsRoute
+  '/projects/$projectId/applications/$applicationId/mounts': typeof AppProjectsProjectIdApplicationsApplicationIdMountsRoute
   '/projects/$projectId/applications/$applicationId/previews': typeof AppProjectsProjectIdApplicationsApplicationIdPreviewsRoute
   '/projects/$projectId/applications/$applicationId/settings': typeof AppProjectsProjectIdApplicationsApplicationIdSettingsRoute
   '/projects/$projectId/applications/$applicationId/terminal': typeof AppProjectsProjectIdApplicationsApplicationIdTerminalRoute
@@ -291,6 +299,7 @@ export interface FileRoutesByTo {
   '/projects/$projectId/applications/$applicationId/env': typeof AppProjectsProjectIdApplicationsApplicationIdEnvRoute
   '/projects/$projectId/applications/$applicationId/logs': typeof AppProjectsProjectIdApplicationsApplicationIdLogsRoute
   '/projects/$projectId/applications/$applicationId/metrics': typeof AppProjectsProjectIdApplicationsApplicationIdMetricsRoute
+  '/projects/$projectId/applications/$applicationId/mounts': typeof AppProjectsProjectIdApplicationsApplicationIdMountsRoute
   '/projects/$projectId/applications/$applicationId/previews': typeof AppProjectsProjectIdApplicationsApplicationIdPreviewsRoute
   '/projects/$projectId/applications/$applicationId/settings': typeof AppProjectsProjectIdApplicationsApplicationIdSettingsRoute
   '/projects/$projectId/applications/$applicationId/terminal': typeof AppProjectsProjectIdApplicationsApplicationIdTerminalRoute
@@ -328,6 +337,7 @@ export interface FileRoutesById {
   '/_app/projects/$projectId/applications/$applicationId/env': typeof AppProjectsProjectIdApplicationsApplicationIdEnvRoute
   '/_app/projects/$projectId/applications/$applicationId/logs': typeof AppProjectsProjectIdApplicationsApplicationIdLogsRoute
   '/_app/projects/$projectId/applications/$applicationId/metrics': typeof AppProjectsProjectIdApplicationsApplicationIdMetricsRoute
+  '/_app/projects/$projectId/applications/$applicationId/mounts': typeof AppProjectsProjectIdApplicationsApplicationIdMountsRoute
   '/_app/projects/$projectId/applications/$applicationId/previews': typeof AppProjectsProjectIdApplicationsApplicationIdPreviewsRoute
   '/_app/projects/$projectId/applications/$applicationId/settings': typeof AppProjectsProjectIdApplicationsApplicationIdSettingsRoute
   '/_app/projects/$projectId/applications/$applicationId/terminal': typeof AppProjectsProjectIdApplicationsApplicationIdTerminalRoute
@@ -365,6 +375,7 @@ export interface FileRouteTypes {
     | '/projects/$projectId/applications/$applicationId/env'
     | '/projects/$projectId/applications/$applicationId/logs'
     | '/projects/$projectId/applications/$applicationId/metrics'
+    | '/projects/$projectId/applications/$applicationId/mounts'
     | '/projects/$projectId/applications/$applicationId/previews'
     | '/projects/$projectId/applications/$applicationId/settings'
     | '/projects/$projectId/applications/$applicationId/terminal'
@@ -398,6 +409,7 @@ export interface FileRouteTypes {
     | '/projects/$projectId/applications/$applicationId/env'
     | '/projects/$projectId/applications/$applicationId/logs'
     | '/projects/$projectId/applications/$applicationId/metrics'
+    | '/projects/$projectId/applications/$applicationId/mounts'
     | '/projects/$projectId/applications/$applicationId/previews'
     | '/projects/$projectId/applications/$applicationId/settings'
     | '/projects/$projectId/applications/$applicationId/terminal'
@@ -434,6 +446,7 @@ export interface FileRouteTypes {
     | '/_app/projects/$projectId/applications/$applicationId/env'
     | '/_app/projects/$projectId/applications/$applicationId/logs'
     | '/_app/projects/$projectId/applications/$applicationId/metrics'
+    | '/_app/projects/$projectId/applications/$applicationId/mounts'
     | '/_app/projects/$projectId/applications/$applicationId/previews'
     | '/_app/projects/$projectId/applications/$applicationId/settings'
     | '/_app/projects/$projectId/applications/$applicationId/terminal'
@@ -655,6 +668,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppProjectsProjectIdApplicationsApplicationIdPreviewsRouteImport
       parentRoute: typeof AppProjectsProjectIdApplicationsApplicationIdRoute
     }
+    '/_app/projects/$projectId/applications/$applicationId/mounts': {
+      id: '/_app/projects/$projectId/applications/$applicationId/mounts'
+      path: '/mounts'
+      fullPath: '/projects/$projectId/applications/$applicationId/mounts'
+      preLoaderRoute: typeof AppProjectsProjectIdApplicationsApplicationIdMountsRouteImport
+      parentRoute: typeof AppProjectsProjectIdApplicationsApplicationIdRoute
+    }
     '/_app/projects/$projectId/applications/$applicationId/metrics': {
       id: '/_app/projects/$projectId/applications/$applicationId/metrics'
       path: '/metrics'
@@ -699,6 +719,7 @@ interface AppProjectsProjectIdApplicationsApplicationIdRouteChildren {
   AppProjectsProjectIdApplicationsApplicationIdEnvRoute: typeof AppProjectsProjectIdApplicationsApplicationIdEnvRoute
   AppProjectsProjectIdApplicationsApplicationIdLogsRoute: typeof AppProjectsProjectIdApplicationsApplicationIdLogsRoute
   AppProjectsProjectIdApplicationsApplicationIdMetricsRoute: typeof AppProjectsProjectIdApplicationsApplicationIdMetricsRoute
+  AppProjectsProjectIdApplicationsApplicationIdMountsRoute: typeof AppProjectsProjectIdApplicationsApplicationIdMountsRoute
   AppProjectsProjectIdApplicationsApplicationIdPreviewsRoute: typeof AppProjectsProjectIdApplicationsApplicationIdPreviewsRoute
   AppProjectsProjectIdApplicationsApplicationIdSettingsRoute: typeof AppProjectsProjectIdApplicationsApplicationIdSettingsRoute
   AppProjectsProjectIdApplicationsApplicationIdTerminalRoute: typeof AppProjectsProjectIdApplicationsApplicationIdTerminalRoute
@@ -717,6 +738,8 @@ const AppProjectsProjectIdApplicationsApplicationIdRouteChildren: AppProjectsPro
       AppProjectsProjectIdApplicationsApplicationIdLogsRoute,
     AppProjectsProjectIdApplicationsApplicationIdMetricsRoute:
       AppProjectsProjectIdApplicationsApplicationIdMetricsRoute,
+    AppProjectsProjectIdApplicationsApplicationIdMountsRoute:
+      AppProjectsProjectIdApplicationsApplicationIdMountsRoute,
     AppProjectsProjectIdApplicationsApplicationIdPreviewsRoute:
       AppProjectsProjectIdApplicationsApplicationIdPreviewsRoute,
     AppProjectsProjectIdApplicationsApplicationIdSettingsRoute:

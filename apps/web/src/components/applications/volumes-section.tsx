@@ -1,18 +1,12 @@
 import { useState } from "react";
 import { toast } from "sonner";
-import {
-  DatabaseBackupIcon,
-  HardDriveIcon,
-  InfoIcon,
-  Trash2Icon,
-} from "lucide-react";
+import { HardDriveIcon, InfoIcon, Trash2Icon } from "lucide-react";
 import {
   useVolumes,
   useCreateVolume,
   useDeleteVolume,
 } from "@/lib/hooks/use-volumes";
 import type { ApplicationVolume } from "@/lib/types";
-import { VolumeBackupsDrawer } from "./volume-backups-drawer";
 import { formatBytes } from "@/lib/utils/format";
 import { Button } from "@/components/ui/button";
 import { IconAction } from "@/components/ui/icon-action";
@@ -57,9 +51,6 @@ export function VolumesSection({ projectId, applicationId }: Props) {
     null,
   );
   const [deleteData, setDeleteData] = useState(false);
-  const [backupsTarget, setBackupsTarget] = useState<ApplicationVolume | null>(
-    null,
-  );
 
   const resetAdd = () => {
     setName("");
@@ -166,12 +157,6 @@ export function VolumesSection({ projectId, applicationId }: Props) {
                   <span className="text-text-faint mr-1 text-sm tabular-nums">
                     {formatBytes(vol.size_bytes)}
                   </span>
-                  <IconAction
-                    label="Backups"
-                    onClick={() => setBackupsTarget(vol)}
-                  >
-                    <DatabaseBackupIcon aria-hidden="true" className="size-4" />
-                  </IconAction>
                   <IconAction
                     label="Remove volume"
                     destructive
@@ -292,15 +277,6 @@ export function VolumesSection({ projectId, applicationId }: Props) {
         </AlertDialogContent>
       </AlertDialog>
 
-      {backupsTarget && (
-        <VolumeBackupsDrawer
-          projectId={projectId}
-          applicationId={applicationId}
-          volume={backupsTarget}
-          open={backupsTarget !== null}
-          onOpenChange={(o) => !o && setBackupsTarget(null)}
-        />
-      )}
     </Card>
   );
 }

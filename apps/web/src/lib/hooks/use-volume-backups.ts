@@ -1,6 +1,27 @@
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import {
+  useQuery,
+  useMutation,
+  useQueryClient,
+  type QueryClient,
+} from "@tanstack/react-query";
 import { queryKeys } from "./query-keys";
 import * as api from "@/lib/api/volume-backups";
+
+// A config change affects both the per-volume list (drawer) and the app-wide
+// list (Mounts tab), so invalidate both.
+function invalidateVolumeConfigs(
+  qc: QueryClient,
+  projectId: string,
+  applicationId: string,
+  volumeId: string,
+) {
+  qc.invalidateQueries({
+    queryKey: queryKeys.volumeBackupConfigs(projectId, applicationId, volumeId),
+  });
+  qc.invalidateQueries({
+    queryKey: queryKeys.appVolumeBackupConfigs(projectId, applicationId),
+  });
+}
 
 export function useVolumeBackupConfigs(
   projectId: string,
@@ -42,6 +63,16 @@ export function useVolumeRestores(
   });
 }
 
+export function useAppVolumeBackupConfigs(
+  projectId: string,
+  applicationId: string,
+) {
+  return useQuery({
+    queryKey: queryKeys.appVolumeBackupConfigs(projectId, applicationId),
+    queryFn: () => api.listAppVolumeBackupConfigs(projectId, applicationId),
+  });
+}
+
 export function useCreateVolumeBackupConfig(
   projectId: string,
   applicationId: string,
@@ -51,14 +82,7 @@ export function useCreateVolumeBackupConfig(
   return useMutation({
     mutationFn: (data: api.SaveVolumeBackupConfig) =>
       api.createVolumeBackupConfig(projectId, applicationId, volumeId, data),
-    onSuccess: () =>
-      qc.invalidateQueries({
-        queryKey: queryKeys.volumeBackupConfigs(
-          projectId,
-          applicationId,
-          volumeId,
-        ),
-      }),
+    onSuccess: () => invalidateVolumeConfigs(qc, projectId, applicationId, volumeId),
   });
 }
 
@@ -78,14 +102,7 @@ export function useUpdateVolumeBackupConfig(
         configId,
         data,
       ),
-    onSuccess: () =>
-      qc.invalidateQueries({
-        queryKey: queryKeys.volumeBackupConfigs(
-          projectId,
-          applicationId,
-          volumeId,
-        ),
-      }),
+    onSuccess: () => invalidateVolumeConfigs(qc, projectId, applicationId, volumeId),
   });
 }
 
@@ -98,14 +115,7 @@ export function useDeleteVolumeBackupConfig(
   return useMutation({
     mutationFn: (configId: string) =>
       api.deleteVolumeBackupConfig(projectId, applicationId, volumeId, configId),
-    onSuccess: () =>
-      qc.invalidateQueries({
-        queryKey: queryKeys.volumeBackupConfigs(
-          projectId,
-          applicationId,
-          volumeId,
-        ),
-      }),
+    onSuccess: () => invalidateVolumeConfigs(qc, projectId, applicationId, volumeId),
   });
 }
 

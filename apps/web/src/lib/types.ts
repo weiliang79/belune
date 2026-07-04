@@ -96,6 +96,11 @@ export interface VolumeBackup {
   log?: string;
 }
 
+export interface AppVolumeBackupConfig extends VolumeBackupConfig {
+  volume_name: string;
+  mount_path: string;
+}
+
 export interface VolumeRestore {
   id: string;
   backup_id?: string;

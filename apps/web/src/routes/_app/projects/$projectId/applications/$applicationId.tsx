@@ -124,6 +124,7 @@ function ApplicationLayout() {
       { to: `${basePath}/logs`, label: "Logs" },
       { to: `${basePath}/metrics`, label: "Metrics" },
       { to: `${basePath}/terminal`, label: "Terminal" },
+      { to: `${basePath}/mounts`, label: "Mounts" },
       { to: `${basePath}/settings`, label: "Settings" },
     ];
 

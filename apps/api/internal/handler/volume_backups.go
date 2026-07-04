@@ -96,6 +96,55 @@ func (h *Handler) ListVolumeBackupConfigs(w http.ResponseWriter, r *http.Request
 	writeJSON(w, http.StatusOK, out)
 }
 
+// appVolumeBackupConfigResponse is a config plus the volume it belongs to, for
+// the application-wide backup config list (across all of an app's volumes).
+type appVolumeBackupConfigResponse struct {
+	volumeBackupConfigResponse
+	VolumeName string `json:"volume_name"`
+	MountPath  string `json:"mount_path"`
+}
+
+// ListAppVolumeBackupConfigs lists every volume backup config across all volumes
+// of an application, so the Mounts tab can render a single backup-configs list.
+func (h *Handler) ListAppVolumeBackupConfigs(w http.ResponseWriter, r *http.Request) {
+	var appUUID pgtype.UUID
+	if err := appUUID.Scan(chi.URLParam(r, "applicationId")); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid application id")
+		return
+	}
+	if !h.canAccessApplication(r, appUUID) {
+		writeError(w, http.StatusForbidden, "access denied")
+		return
+	}
+	rows, err := h.queries.ListApplicationVolumeBackupConfigsForApp(r.Context(), appUUID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to list backup configs")
+		return
+	}
+	out := make([]appVolumeBackupConfigResponse, 0, len(rows))
+	for _, row := range rows {
+		resp := appVolumeBackupConfigResponse{
+			volumeBackupConfigResponse: toVolumeBackupConfigResponse(generated.ApplicationVolumeBackupConfig{
+				ID:                  row.ID,
+				ApplicationVolumeID: row.ApplicationVolumeID,
+				DestinationID:       row.DestinationID,
+				Prefix:              row.Prefix,
+				Schedule:            row.Schedule,
+				KeepLatest:          row.KeepLatest,
+				Enabled:             row.Enabled,
+				Quiesce:             row.Quiesce,
+				LastRunAt:           row.LastRunAt,
+				CreatedAt:           row.CreatedAt,
+				UpdatedAt:           row.UpdatedAt,
+			}),
+			VolumeName: row.VolumeName,
+			MountPath:  row.VolumeMountPath,
+		}
+		out = append(out, resp)
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
 type volumeBackupConfigRequest struct {
 	DestinationID string `json:"destination_id"`
 	Prefix        string `json:"prefix"`
