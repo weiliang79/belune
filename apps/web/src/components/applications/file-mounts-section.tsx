@@ -10,6 +10,7 @@ import {
 } from "@/lib/hooks/use-file-mounts";
 import type { FileMount } from "@/lib/types";
 import { Button } from "@/components/ui/button";
+import { IconAction } from "@/components/ui/icon-action";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -194,23 +195,17 @@ export function FileMountsSection({ projectId, applicationId }: Props) {
                     </div>
                   </div>
                 </div>
-                <div className="flex shrink-0 items-center gap-2">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    aria-label={`Edit ${fm.mount_path}`}
-                    onClick={() => openEdit(fm)}
-                  >
+                <div className="flex shrink-0 items-center justify-end gap-1">
+                  <IconAction label="Edit" onClick={() => openEdit(fm)}>
                     <PencilIcon aria-hidden="true" className="size-4" />
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    aria-label={`Remove ${fm.mount_path}`}
+                  </IconAction>
+                  <IconAction
+                    label="Remove"
+                    destructive
                     onClick={() => setRemoveTarget(fm)}
                   >
                     <Trash2Icon aria-hidden="true" className="size-4" />
-                  </Button>
+                  </IconAction>
                 </div>
               </div>
             ))}

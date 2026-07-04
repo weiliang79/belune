@@ -34,9 +34,15 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
+import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -75,7 +81,7 @@ function statusVariant(status: string): "default" | "secondary" | "destructive" 
   return "secondary";
 }
 
-export function VolumeBackupsDialog({
+export function VolumeBackupsDrawer({
   projectId,
   applicationId,
   volume,
@@ -203,17 +209,17 @@ export function VolumeBackupsDialog({
   const saving = createConfig.isPending || updateConfig.isPending;
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl">
-        <DialogHeader>
-          <DialogTitle>Backups — {volume.name}</DialogTitle>
-          <DialogDescription>
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent className="sm:max-w-lg">
+        <SheetHeader>
+          <SheetTitle>Backups — {volume.name}</SheetTitle>
+          <SheetDescription>
             Snapshot <span className="font-mono">{volume.mount_path}</span> to an
             S3-compatible destination, on a schedule or on demand, and restore it.
-          </DialogDescription>
-        </DialogHeader>
+          </SheetDescription>
+        </SheetHeader>
 
-        <div className="max-h-[70vh] space-y-4 overflow-y-auto pr-1">
+        <div className="space-y-4">
           {/* Config form */}
           <div className="space-y-3">
             <div className="space-y-1.5">
@@ -475,7 +481,7 @@ export function VolumeBackupsDialog({
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
-      </DialogContent>
-    </Dialog>
+      </SheetContent>
+    </Sheet>
   );
 }

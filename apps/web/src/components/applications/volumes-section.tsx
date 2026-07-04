@@ -12,9 +12,10 @@ import {
   useDeleteVolume,
 } from "@/lib/hooks/use-volumes";
 import type { ApplicationVolume } from "@/lib/types";
-import { VolumeBackupsDialog } from "./volume-backups-dialog";
+import { VolumeBackupsDrawer } from "./volume-backups-drawer";
 import { formatBytes } from "@/lib/utils/format";
 import { Button } from "@/components/ui/button";
+import { IconAction } from "@/components/ui/icon-action";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -161,30 +162,26 @@ export function VolumesSection({ projectId, applicationId }: Props) {
                     </div>
                   </div>
                 </div>
-                <div className="flex shrink-0 items-center gap-2">
-                  <span className="text-text-faint mr-2 text-sm tabular-nums">
+                <div className="flex shrink-0 items-center justify-end gap-1">
+                  <span className="text-text-faint mr-1 text-sm tabular-nums">
                     {formatBytes(vol.size_bytes)}
                   </span>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    aria-label={`Backups for volume ${vol.name}`}
+                  <IconAction
+                    label="Backups"
                     onClick={() => setBackupsTarget(vol)}
                   >
                     <DatabaseBackupIcon aria-hidden="true" className="size-4" />
-                    Backups
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    aria-label={`Remove volume ${vol.name}`}
+                  </IconAction>
+                  <IconAction
+                    label="Remove volume"
+                    destructive
                     onClick={() => {
                       setDeleteData(false);
                       setRemoveTarget(vol);
                     }}
                   >
                     <Trash2Icon aria-hidden="true" className="size-4" />
-                  </Button>
+                  </IconAction>
                 </div>
               </div>
             ))}
@@ -296,7 +293,7 @@ export function VolumesSection({ projectId, applicationId }: Props) {
       </AlertDialog>
 
       {backupsTarget && (
-        <VolumeBackupsDialog
+        <VolumeBackupsDrawer
           projectId={projectId}
           applicationId={applicationId}
           volume={backupsTarget}
