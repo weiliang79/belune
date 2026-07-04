@@ -128,6 +128,21 @@ func (s *BackupDestinationService) ClientForConfig(ctx context.Context, configID
 	return backup.NewDestinationClient(dest)
 }
 
+// ClientForVolumeBackupConfig resolves the destination client for an application
+// volume backup config id. Used by the volume restore worker (download) and by
+// config deletion (remove the config's remote objects).
+func (s *BackupDestinationService) ClientForVolumeBackupConfig(ctx context.Context, configID pgtype.UUID) (*backup.DestinationClient, error) {
+	cfg, err := s.queries.GetApplicationVolumeBackupConfig(ctx, configID)
+	if err != nil {
+		return nil, err
+	}
+	dest, err := s.Resolve(ctx, cfg.DestinationID)
+	if err != nil {
+		return nil, err
+	}
+	return backup.NewDestinationClient(dest)
+}
+
 // Test builds a client for the stored destination and verifies bucket access.
 func (s *BackupDestinationService) Test(ctx context.Context, id pgtype.UUID) error {
 	dest, err := s.Resolve(ctx, id)

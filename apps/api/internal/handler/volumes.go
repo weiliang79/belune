@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"path"
+	"regexp"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
@@ -16,6 +17,12 @@ import (
 	"github.com/ungweiliang/selfhost-paas/internal/naming"
 	"github.com/ungweiliang/selfhost-paas/internal/store/generated"
 )
+
+// safeMountPathChars restricts mount paths to a conservative character set.
+// Beyond hygiene, this keeps the value safe when it is later interpolated into
+// shell-driven volume operations (e.g. the backup/restore helper): no spaces,
+// quotes, or shell metacharacters can appear.
+var safeMountPathChars = regexp.MustCompile(`^/[A-Za-z0-9_./-]+$`)
 
 // reservedMountPaths are in-container paths a persistent volume must never
 // shadow: "/" would hide the whole rootfs, and the others are either managed
@@ -52,6 +59,9 @@ func validateMountPath(p string) error {
 	}
 	if path.Clean(p) != p {
 		return errors.New("mount_path must be a clean path (no '.', '..', '//', or trailing slash)")
+	}
+	if !safeMountPathChars.MatchString(p) {
+		return errors.New("mount_path may only contain letters, numbers, '_', '.', '-', and '/'")
 	}
 	if reservedMountPaths[p] {
 		return fmt.Errorf("mount_path %q is reserved", p)

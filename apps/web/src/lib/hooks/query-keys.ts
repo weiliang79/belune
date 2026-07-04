@@ -54,6 +54,34 @@ export const queryKeys = {
         "file-mounts",
       ] as const,
   },
+  volumeBackupConfigs: (
+    projectId: string,
+    applicationId: string,
+    volumeId: string,
+  ) =>
+    [
+      "projects",
+      projectId,
+      "applications",
+      applicationId,
+      "volumes",
+      volumeId,
+      "backup-configs",
+    ] as const,
+  volumeBackups: (
+    projectId: string,
+    applicationId: string,
+    volumeId: string,
+  ) =>
+    [
+      "projects",
+      projectId,
+      "applications",
+      applicationId,
+      "volumes",
+      volumeId,
+      "backups",
+    ] as const,
   domains: {
     all: (projectId: string, applicationId: string) =>
       [

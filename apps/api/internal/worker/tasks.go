@@ -17,4 +17,6 @@ const (
 	TypeBackupNow           = "backup:now"
 	TypeBackupRotate        = "backup:rotate"
 	TypeBackupSchedSweep    = "backup:sched_sweep"
+	TypeBackupVolume        = "backup:volume"
+	TypeRestoreVolume       = "restore:volume"
 )

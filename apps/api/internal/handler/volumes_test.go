@@ -24,6 +24,9 @@ func TestValidateMountPath(t *testing.T) {
 		{"under proc", "/proc/self", true},
 		{"under sys", "/sys/kernel", true},
 		{"under dev", "/dev/shm", true},
+		{"shell injection semicolon", "/data;rm -rf x", true},
+		{"shell metachar dollar", "/data/$(whoami)", true},
+		{"space", "/data/my data", true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

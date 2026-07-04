@@ -119,6 +119,8 @@ func (w *Worker) Start() error {
 	mux.HandleFunc(TypeAuthTokenCleanup, w.handler.HandleAuthTokenCleanup)
 	mux.HandleFunc(TypeQuotaThresholdSweep, w.handler.HandleQuotaThresholdSweep)
 	mux.HandleFunc(TypeBackupNow, w.handler.HandleBackupNowTask)
+	mux.HandleFunc(TypeBackupVolume, w.handler.HandleBackupVolumeTask)
+	mux.HandleFunc(TypeRestoreVolume, w.handler.HandleRestoreVolumeTask)
 	mux.HandleFunc(TypeBackupRotate, w.handler.HandleBackupRotateTask)
 	mux.HandleFunc(TypeBackupSchedSweep, func(ctx context.Context, t *asynq.Task) error {
 		w.handler.HandleBackupScheduleSweep(ctx)

@@ -71,6 +71,31 @@ export interface ApplicationVolume {
   created_at: string;
 }
 
+export interface VolumeBackupConfig {
+  id: string;
+  application_volume_id: string;
+  destination_id: string;
+  prefix: string;
+  schedule: string;
+  keep_latest?: number;
+  enabled: boolean;
+  quiesce: boolean;
+  last_run_at?: string;
+  created_at: string;
+}
+
+export interface VolumeBackup {
+  id: string;
+  status: "running" | "succeeded" | "failed";
+  size_bytes: number;
+  has_remote: boolean;
+  config_id?: string;
+  started_at: string;
+  finished_at?: string;
+  error?: string;
+  log?: string;
+}
+
 export interface FileMount {
   id: string;
   mount_path: string;

@@ -75,6 +75,34 @@ type ApplicationVolume struct {
 	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
 }
 
+type ApplicationVolumeBackup struct {
+	ID                  pgtype.UUID        `json:"id"`
+	ApplicationVolumeID pgtype.UUID        `json:"application_volume_id"`
+	BackupConfigID      pgtype.UUID        `json:"backup_config_id"`
+	StartedAt           pgtype.Timestamptz `json:"started_at"`
+	FinishedAt          pgtype.Timestamptz `json:"finished_at"`
+	Status              string             `json:"status"`
+	LocalPath           pgtype.Text        `json:"local_path"`
+	RemoteKey           pgtype.Text        `json:"remote_key"`
+	SizeBytes           int64              `json:"size_bytes"`
+	Error               pgtype.Text        `json:"error"`
+	Log                 pgtype.Text        `json:"log"`
+}
+
+type ApplicationVolumeBackupConfig struct {
+	ID                  pgtype.UUID        `json:"id"`
+	ApplicationVolumeID pgtype.UUID        `json:"application_volume_id"`
+	DestinationID       pgtype.UUID        `json:"destination_id"`
+	Prefix              string             `json:"prefix"`
+	Schedule            string             `json:"schedule"`
+	KeepLatest          pgtype.Int4        `json:"keep_latest"`
+	Enabled             bool               `json:"enabled"`
+	Quiesce             bool               `json:"quiesce"`
+	LastRunAt           pgtype.Timestamptz `json:"last_run_at"`
+	CreatedAt           pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
+}
+
 type AuditLog struct {
 	ID           pgtype.UUID        `json:"id"`
 	UserID       pgtype.UUID        `json:"user_id"`

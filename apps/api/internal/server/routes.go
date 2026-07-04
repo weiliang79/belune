@@ -247,6 +247,15 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService,
 			r.Post("/api/projects/{projectId}/applications/{applicationId}/volumes", h.CreateApplicationVolume)
 			r.Delete("/api/projects/{projectId}/applications/{applicationId}/volumes/{volumeId}", h.DeleteApplicationVolume)
 
+			// Application volume backups
+			r.Get("/api/projects/{projectId}/applications/{applicationId}/volumes/{volumeId}/backup-configs", h.ListVolumeBackupConfigs)
+			r.Post("/api/projects/{projectId}/applications/{applicationId}/volumes/{volumeId}/backup-configs", h.CreateVolumeBackupConfig)
+			r.Put("/api/projects/{projectId}/applications/{applicationId}/volumes/{volumeId}/backup-configs/{configId}", h.UpdateVolumeBackupConfig)
+			r.Delete("/api/projects/{projectId}/applications/{applicationId}/volumes/{volumeId}/backup-configs/{configId}", h.DeleteVolumeBackupConfig)
+			r.Post("/api/projects/{projectId}/applications/{applicationId}/volumes/{volumeId}/backup-configs/{configId}/run", h.RunVolumeBackupConfig)
+			r.Get("/api/projects/{projectId}/applications/{applicationId}/volumes/{volumeId}/backups", h.ListVolumeBackups)
+			r.Post("/api/projects/{projectId}/applications/{applicationId}/volumes/{volumeId}/backups/{backupId}/restore", h.RestoreVolumeBackup)
+
 			// Application file/config mounts
 			r.Get("/api/projects/{projectId}/applications/{applicationId}/file-mounts", h.ListFileMounts)
 			r.Get("/api/projects/{projectId}/applications/{applicationId}/file-mounts/{fileMountId}/reveal", h.RevealFileMount)

@@ -1,12 +1,18 @@
 import { useState } from "react";
 import { toast } from "sonner";
-import { HardDriveIcon, InfoIcon, Trash2Icon } from "lucide-react";
+import {
+  DatabaseBackupIcon,
+  HardDriveIcon,
+  InfoIcon,
+  Trash2Icon,
+} from "lucide-react";
 import {
   useVolumes,
   useCreateVolume,
   useDeleteVolume,
 } from "@/lib/hooks/use-volumes";
 import type { ApplicationVolume } from "@/lib/types";
+import { VolumeBackupsDialog } from "./volume-backups-dialog";
 import { formatBytes } from "@/lib/utils/format";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -50,6 +56,9 @@ export function VolumesSection({ projectId, applicationId }: Props) {
     null,
   );
   const [deleteData, setDeleteData] = useState(false);
+  const [backupsTarget, setBackupsTarget] = useState<ApplicationVolume | null>(
+    null,
+  );
 
   const resetAdd = () => {
     setName("");
@@ -152,10 +161,19 @@ export function VolumesSection({ projectId, applicationId }: Props) {
                     </div>
                   </div>
                 </div>
-                <div className="flex shrink-0 items-center gap-4">
-                  <span className="text-text-faint text-sm tabular-nums">
+                <div className="flex shrink-0 items-center gap-2">
+                  <span className="text-text-faint mr-2 text-sm tabular-nums">
                     {formatBytes(vol.size_bytes)}
                   </span>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    aria-label={`Backups for volume ${vol.name}`}
+                    onClick={() => setBackupsTarget(vol)}
+                  >
+                    <DatabaseBackupIcon aria-hidden="true" className="size-4" />
+                    Backups
+                  </Button>
                   <Button
                     size="sm"
                     variant="outline"
@@ -276,6 +294,16 @@ export function VolumesSection({ projectId, applicationId }: Props) {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {backupsTarget && (
+        <VolumeBackupsDialog
+          projectId={projectId}
+          applicationId={applicationId}
+          volume={backupsTarget}
+          open={backupsTarget !== null}
+          onOpenChange={(o) => !o && setBackupsTarget(null)}
+        />
+      )}
     </Card>
   );
 }
