@@ -1,10 +1,17 @@
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
-import { CloudIcon, Loader2Icon, RotateCcwIcon, ScrollTextIcon } from "lucide-react";
+import {
+  CloudIcon,
+  DatabaseBackupIcon,
+  Loader2Icon,
+  RotateCcwIcon,
+  ScrollTextIcon,
+} from "lucide-react";
 import type { AppVolumeBackupConfig } from "@/lib/types";
 import {
   useVolumeBackups,
   useVolumeRestores,
+  useRunVolumeBackup,
   useRestoreVolumeBackup,
 } from "@/lib/hooks/use-volume-backups";
 import { formatBytes, formatDateTimeShort, formatRelativeTime } from "@/lib/utils/format";
@@ -79,6 +86,7 @@ export function VolumeBackupConfigDrawer({
     volumeId,
     open,
   );
+  const runBackup = useRunVolumeBackup(projectId, applicationId, volumeId);
   const restore = useRestoreVolumeBackup(projectId, applicationId, volumeId);
 
   const [logView, setLogView] = useState<{
@@ -107,6 +115,14 @@ export function VolumeBackupConfigDrawer({
       : restores.find((r) => r.id === logView.id)
     : undefined;
 
+  const backUpNow = () => {
+    toast.promise(runBackup.mutateAsync(config.id), {
+      loading: "Starting backup...",
+      success: "Backup started",
+      error: (err) => err.message,
+    });
+  };
+
   const doRestore = () => {
     if (!restoreTarget) return;
     toast.promise(
@@ -132,31 +148,42 @@ export function VolumeBackupConfigDrawer({
 
         <div className="space-y-4">
           {/* Config summary */}
-          <div className="rounded-lg border p-3 text-sm">
-            <div className="flex items-center gap-2">
-              <CloudIcon aria-hidden="true" className="size-4" />
-              <span className="truncate font-medium">
-                {destinationName ?? "Destination"}
-              </span>
-              {config.quiesce && <Badge variant="secondary">Quiesce</Badge>}
-              {config.enabled ? (
-                <Badge variant="outline">Active</Badge>
-              ) : (
-                <Badge variant="secondary">Disabled</Badge>
-              )}
+          <div className="flex items-start justify-between gap-3 rounded-lg border p-3 text-sm">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <CloudIcon aria-hidden="true" className="size-4" />
+                <span className="truncate font-medium">
+                  {destinationName ?? "Destination"}
+                </span>
+                {config.quiesce && <Badge variant="secondary">Quiesce</Badge>}
+                {config.enabled ? (
+                  <Badge variant="outline">Active</Badge>
+                ) : (
+                  <Badge variant="secondary">Disabled</Badge>
+                )}
+              </div>
+              <div className="text-text-faint mt-0.5 text-xs">
+                {humanizeSchedule(config.schedule)}
+                {config.schedule && (
+                  <>
+                    {" · "}
+                    <code className="font-mono">{config.schedule}</code>
+                  </>
+                )}
+                {config.keep_latest != null && ` · keep ${config.keep_latest}`}
+                {config.last_run_at &&
+                  ` · last run ${formatRelativeTime(config.last_run_at)}`}
+              </div>
             </div>
-            <div className="text-text-faint mt-0.5 text-xs">
-              {humanizeSchedule(config.schedule)}
-              {config.schedule && (
-                <>
-                  {" · "}
-                  <code className="font-mono">{config.schedule}</code>
-                </>
-              )}
-              {config.keep_latest != null && ` · keep ${config.keep_latest}`}
-              {config.last_run_at &&
-                ` · last run ${formatRelativeTime(config.last_run_at)}`}
-            </div>
+            <Button
+              size="sm"
+              className="shrink-0"
+              onClick={backUpNow}
+              disabled={runBackup.isPending}
+            >
+              <DatabaseBackupIcon aria-hidden="true" className="size-4" />
+              Back up now
+            </Button>
           </div>
 
           <Separator />
@@ -230,14 +257,23 @@ export function VolumeBackupConfigDrawer({
                         </Tooltip>
                       )}
                       {b.status === "succeeded" && b.has_remote && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => setRestoreTarget(b.id)}
-                        >
-                          <RotateCcwIcon aria-hidden="true" className="mr-1 h-4 w-4" />
-                          Restore
-                        </Button>
+                        <Tooltip>
+                          <TooltipTrigger
+                            render={
+                              <Button
+                                variant="ghost"
+                                size="icon-sm"
+                                aria-label="Restore"
+                                onClick={() => setRestoreTarget(b.id)}
+                              />
+                            }
+                          >
+                            <RotateCcwIcon className="h-4 w-4" />
+                          </TooltipTrigger>
+                          <TooltipPositioner>
+                            <TooltipContent>Restore</TooltipContent>
+                          </TooltipPositioner>
+                        </Tooltip>
                       )}
                     </div>
                   </li>

@@ -1,6 +1,13 @@
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
-import { Cloud, Loader2, RotateCcw, ScrollText, Trash2 } from "lucide-react";
+import {
+  Cloud,
+  DatabaseBackup as DatabaseBackupIcon,
+  Loader2,
+  RotateCcw,
+  ScrollText,
+  Trash2,
+} from "lucide-react";
 import {
   Sheet,
   SheetContent,
@@ -35,6 +42,7 @@ import {
   useRestoreDatabase,
   useDeleteDatabaseBackup,
 } from "@/lib/hooks/use-databases";
+import { useRunBackupConfig } from "@/lib/hooks/use-database-backup-configs";
 import {
   formatBytes,
   formatDateTimeShort,
@@ -75,6 +83,7 @@ export function BackupConfigRunsSheet({
     db.id,
   );
   const { data: allRestores } = useDatabaseRestores(db.project_id, db.id);
+  const runConfig = useRunBackupConfig(db.project_id, db.id);
   const restore = useRestoreDatabase(db.project_id, db.id);
   const deleteBackup = useDeleteDatabaseBackup(db.project_id, db.id);
 
@@ -103,6 +112,15 @@ export function BackupConfigRunsSheet({
     : undefined;
 
   if (!config) return null;
+
+  const cfgId = config.id;
+  const runNow = () => {
+    toast.promise(runConfig.mutateAsync(cfgId), {
+      loading: "Starting backup…",
+      success: "Backup started",
+      error: (err) => err.message,
+    });
+  };
 
   const handleRestore = (backupId: string) => {
     toast.promise(restore.mutateAsync(backupId), {
@@ -133,30 +151,41 @@ export function BackupConfigRunsSheet({
 
         <div className="space-y-4">
           {/* Config summary */}
-          <div className="rounded-lg border p-3 text-sm">
-            <div className="flex items-center gap-2">
-              <Cloud aria-hidden="true" className="size-4" />
-              <span className="truncate font-medium">
-                {destinationName ?? "Destination"}
-              </span>
-              {config.enabled ? (
-                <Badge variant="outline">Active</Badge>
-              ) : (
-                <Badge variant="secondary">Disabled</Badge>
-              )}
+          <div className="flex items-start justify-between gap-3 rounded-lg border p-3 text-sm">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <Cloud aria-hidden="true" className="size-4" />
+                <span className="truncate font-medium">
+                  {destinationName ?? "Destination"}
+                </span>
+                {config.enabled ? (
+                  <Badge variant="outline">Active</Badge>
+                ) : (
+                  <Badge variant="secondary">Disabled</Badge>
+                )}
+              </div>
+              <div className="text-text-faint mt-0.5 text-xs">
+                {humanizeSchedule(config.schedule)}
+                {config.schedule && (
+                  <>
+                    {" · "}
+                    <code className="font-mono">{config.schedule}</code>
+                  </>
+                )}
+                {config.keep_latest != null && ` · keep ${config.keep_latest}`}
+                {config.last_run_at &&
+                  ` · last run ${formatRelativeTime(config.last_run_at)}`}
+              </div>
             </div>
-            <div className="text-text-faint mt-0.5 text-xs">
-              {humanizeSchedule(config.schedule)}
-              {config.schedule && (
-                <>
-                  {" · "}
-                  <code className="font-mono">{config.schedule}</code>
-                </>
-              )}
-              {config.keep_latest != null && ` · keep ${config.keep_latest}`}
-              {config.last_run_at &&
-                ` · last run ${formatRelativeTime(config.last_run_at)}`}
-            </div>
+            <Button
+              size="sm"
+              className="shrink-0"
+              onClick={runNow}
+              disabled={runConfig.isPending}
+            >
+              <DatabaseBackupIcon aria-hidden="true" className="size-4" />
+              Back up now
+            </Button>
           </div>
 
           <Separator />
@@ -233,12 +262,26 @@ export function BackupConfigRunsSheet({
                       )}
                       {b.status === "succeeded" && (
                         <AlertDialog>
-                          <AlertDialogTrigger
-                            render={<Button variant="outline" size="sm" />}
-                          >
-                            <RotateCcw className="mr-1 h-4 w-4" />
-                            Restore
-                          </AlertDialogTrigger>
+                          <Tooltip>
+                            <TooltipTrigger
+                              render={
+                                <AlertDialogTrigger
+                                  render={
+                                    <Button
+                                      variant="ghost"
+                                      size="icon-sm"
+                                      aria-label="Restore"
+                                    />
+                                  }
+                                />
+                              }
+                            >
+                              <RotateCcw className="h-4 w-4" />
+                            </TooltipTrigger>
+                            <TooltipPositioner>
+                              <TooltipContent>Restore</TooltipContent>
+                            </TooltipPositioner>
+                          </Tooltip>
                           <AlertDialogContent>
                             <AlertDialogHeader>
                               <AlertDialogTitle>
@@ -274,6 +317,7 @@ export function BackupConfigRunsSheet({
                                       variant="ghost"
                                       size="icon-sm"
                                       aria-label="Delete backup"
+                                      className="text-destructive hover:bg-destructive/10 hover:text-destructive"
                                     />
                                   }
                                 />
