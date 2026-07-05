@@ -1,19 +1,10 @@
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
-import {
-  CloudIcon,
-  DatabaseBackupIcon,
-  PencilIcon,
-  RotateCcwIcon,
-  ScrollTextIcon,
-  Trash2Icon,
-} from "lucide-react";
+import { CloudIcon, RotateCcwIcon, ScrollTextIcon } from "lucide-react";
 import type { AppVolumeBackupConfig } from "@/lib/types";
 import {
   useVolumeBackups,
   useVolumeRestores,
-  useDeleteVolumeBackupConfig,
-  useRunVolumeBackup,
   useRestoreVolumeBackup,
 } from "@/lib/hooks/use-volume-backups";
 import { formatBytes, formatRelativeTime } from "@/lib/utils/format";
@@ -51,7 +42,6 @@ interface Props {
   destinationName?: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onEdit: (config: AppVolumeBackupConfig) => void;
 }
 
 function statusVariant(status: string): "default" | "secondary" | "destructive" {
@@ -67,7 +57,6 @@ export function VolumeBackupConfigDrawer({
   destinationName,
   open,
   onOpenChange,
-  onEdit,
 }: Props) {
   const volumeId = config.application_volume_id;
   const { data: allBackups } = useVolumeBackups(
@@ -81,12 +70,6 @@ export function VolumeBackupConfigDrawer({
     applicationId,
     volumeId,
     open,
-  );
-  const runBackup = useRunVolumeBackup(projectId, applicationId, volumeId);
-  const deleteConfig = useDeleteVolumeBackupConfig(
-    projectId,
-    applicationId,
-    volumeId,
   );
   const restore = useRestoreVolumeBackup(projectId, applicationId, volumeId);
 
@@ -106,25 +89,6 @@ export function VolumeBackupConfigDrawer({
       (r) => r.backup_id && ids.has(r.backup_id),
     );
   }, [allRestores, backups]);
-
-  const backUpNow = () => {
-    toast.promise(runBackup.mutateAsync(config.id), {
-      loading: "Starting backup...",
-      success: "Backup started",
-      error: (err) => err.message,
-    });
-  };
-
-  const removeConfig = () => {
-    toast.promise(
-      deleteConfig.mutateAsync(config.id).then(() => onOpenChange(false)),
-      {
-        loading: "Removing config...",
-        success: "Backup config removed",
-        error: (err) => err.message,
-      },
-    );
-  };
 
   const doRestore = () => {
     if (!restoreTarget) return;
@@ -150,54 +114,25 @@ export function VolumeBackupConfigDrawer({
         </SheetHeader>
 
         <div className="space-y-4">
-          {/* Config summary + actions */}
-          <div className="flex items-center justify-between gap-3 rounded-lg border p-3">
-            <div className="min-w-0 text-sm">
-              <div className="flex items-center gap-2">
-                <CloudIcon aria-hidden="true" className="size-4" />
-                <span className="truncate font-medium">
-                  {destinationName ?? "Destination"}
-                </span>
-                {config.quiesce && <Badge variant="secondary">Quiesce</Badge>}
-                {!config.enabled && <Badge variant="secondary">Disabled</Badge>}
-              </div>
-              <div className="text-text-faint mt-0.5 text-xs">
-                {config.schedule ? (
-                  <code className="font-mono">{config.schedule}</code>
-                ) : (
-                  "Manual only"
-                )}
-                {config.keep_latest != null && ` · keep ${config.keep_latest}`}
-                {config.last_run_at &&
-                  ` · last run ${formatRelativeTime(config.last_run_at)}`}
-              </div>
+          {/* Config summary */}
+          <div className="rounded-lg border p-3 text-sm">
+            <div className="flex items-center gap-2">
+              <CloudIcon aria-hidden="true" className="size-4" />
+              <span className="truncate font-medium">
+                {destinationName ?? "Destination"}
+              </span>
+              {config.quiesce && <Badge variant="secondary">Quiesce</Badge>}
+              {!config.enabled && <Badge variant="secondary">Disabled</Badge>}
             </div>
-            <div className="flex shrink-0 items-center gap-2">
-              <Button
-                size="sm"
-                onClick={backUpNow}
-                disabled={runBackup.isPending}
-              >
-                <DatabaseBackupIcon aria-hidden="true" className="size-4" />
-                Back up now
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                aria-label="Edit config"
-                onClick={() => onEdit(config)}
-              >
-                <PencilIcon aria-hidden="true" className="size-4" />
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                aria-label="Delete config"
-                className="text-destructive hover:bg-destructive/10 hover:text-destructive"
-                onClick={removeConfig}
-              >
-                <Trash2Icon aria-hidden="true" className="size-4" />
-              </Button>
+            <div className="text-text-faint mt-0.5 text-xs">
+              {config.schedule ? (
+                <code className="font-mono">{config.schedule}</code>
+              ) : (
+                "Manual only"
+              )}
+              {config.keep_latest != null && ` · keep ${config.keep_latest}`}
+              {config.last_run_at &&
+                ` · last run ${formatRelativeTime(config.last_run_at)}`}
             </div>
           </div>
 

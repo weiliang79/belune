@@ -9,7 +9,11 @@ import {
 import { useState } from "react";
 import { BackupConfigFormDialog } from "@/components/databases/backup-config-form-dialog";
 import { BackupConfigRunsSheet } from "@/components/databases/backup-config-runs-sheet";
-import { useDatabaseBackupConfigs } from "@/lib/hooks/use-database-backup-configs";
+import {
+  useDatabaseBackupConfigs,
+  useRunBackupConfig,
+  useDeleteBackupConfig,
+} from "@/lib/hooks/use-database-backup-configs";
 import { useBackupDestinations } from "@/lib/hooks/use-backup-destinations";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -45,10 +49,12 @@ import {
   Database as DatabaseIcon,
   Loader2,
   Trash2,
+  Pencil,
   TriangleAlert as AlertTriangleIcon,
   DatabaseBackup as DatabaseBackupIcon,
   Plus,
 } from "lucide-react";
+import { IconAction } from "@/components/ui/icon-action";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useBreadcrumbLabel } from "@/lib/hooks/use-breadcrumb";
 import { StatusBadge } from "@/lib/components/status-badge";
@@ -789,11 +795,16 @@ function BackupsTab({ db }: { db: Database }) {
   const { data: destinations } = useBackupDestinations(db.project_id);
   const { data: backups } = useDatabaseBackups(db.project_id, db.id);
   const backup = useBackupDatabase(db.project_id, db.id);
+  const runConfig = useRunBackupConfig(db.project_id, db.id);
+  const deleteConfig = useDeleteBackupConfig(db.project_id, db.id);
 
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<DatabaseBackupConfig | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [selected, setSelected] = useState<DatabaseBackupConfig | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<DatabaseBackupConfig | null>(
+    null,
+  );
 
   const destName = (id: string) =>
     destinations?.find((d) => d.id === id)?.name ?? "Unknown destination";
@@ -812,6 +823,26 @@ function BackupsTab({ db }: { db: Database }) {
     setSheetOpen(false);
     setEditing(cfg);
     setFormOpen(true);
+  };
+
+  const runNow = (cfg: DatabaseBackupConfig) => {
+    toast.promise(runConfig.mutateAsync(cfg.id), {
+      loading: "Starting backup…",
+      success: "Backup started",
+      error: (err) => err.message,
+    });
+  };
+
+  const handleDeleteConfig = () => {
+    if (!deleteTarget) return;
+    toast.promise(deleteConfig.mutateAsync(deleteTarget.id), {
+      loading: "Deleting backup configuration…",
+      success: () => {
+        setDeleteTarget(null);
+        return "Backup configuration deleted";
+      },
+      error: (err) => err.message,
+    });
   };
 
   const handleAdHocBackup = () => {
@@ -889,13 +920,38 @@ function BackupsTab({ db }: { db: Database }) {
                     {c.keep_latest != null ? ` · keep ${c.keep_latest}` : ""}
                   </p>
                 </div>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => openManage(c)}
-                >
-                  Manage
-                </Button>
+                <div className="flex shrink-0 items-center gap-1">
+                  <IconAction
+                    label="Back up now"
+                    size="icon-sm"
+                    disabled={runConfig.isPending || anyRunning}
+                    onClick={() => runNow(c)}
+                  >
+                    <DatabaseBackupIcon className="h-4 w-4" />
+                  </IconAction>
+                  <IconAction
+                    label="Edit"
+                    size="icon-sm"
+                    onClick={() => openEdit(c)}
+                  >
+                    <Pencil className="h-4 w-4" />
+                  </IconAction>
+                  <IconAction
+                    label="Delete"
+                    size="icon-sm"
+                    destructive
+                    onClick={() => setDeleteTarget(c)}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </IconAction>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => openManage(c)}
+                  >
+                    Manage
+                  </Button>
+                </div>
               </li>
             ))}
           </ul>
@@ -915,8 +971,31 @@ function BackupsTab({ db }: { db: Database }) {
         destinationName={selected ? destName(selected.destination_id) : undefined}
         open={sheetOpen}
         onOpenChange={setSheetOpen}
-        onEdit={openEdit}
       />
+
+      <AlertDialog
+        open={deleteTarget !== null}
+        onOpenChange={(o) => !o && setDeleteTarget(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete backup configuration?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This removes the schedule and deletes the backups it produced
+              (local files and remote objects). This can't be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteConfig}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Card>
   );
 }

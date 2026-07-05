@@ -18,6 +18,7 @@ export function IconAction({
   className,
   disabled,
   destructive,
+  size = "icon",
 }: {
   label: string;
   onClick: () => void;
@@ -25,6 +26,7 @@ export function IconAction({
   className?: string;
   disabled?: boolean;
   destructive?: boolean;
+  size?: "icon" | "icon-sm";
 }) {
   return (
     <Tooltip>
@@ -32,7 +34,7 @@ export function IconAction({
         render={
           <Button
             variant="ghost"
-            size="icon"
+            size={size}
             aria-label={label}
             onClick={onClick}
             disabled={disabled}

@@ -1,14 +1,6 @@
 import { useState } from "react";
 import { toast } from "sonner";
-import {
-  DatabaseBackup as DatabaseBackupIcon,
-  Loader2,
-  RotateCcw,
-  Trash2,
-  Pencil,
-  Cloud,
-  ScrollText,
-} from "lucide-react";
+import { Loader2, RotateCcw, Trash2, Cloud, ScrollText } from "lucide-react";
 import {
   Sheet,
   SheetContent,
@@ -46,10 +38,6 @@ import {
   useRestoreDatabase,
   useDeleteDatabaseBackup,
 } from "@/lib/hooks/use-databases";
-import {
-  useRunBackupConfig,
-  useDeleteBackupConfig,
-} from "@/lib/hooks/use-database-backup-configs";
 import { formatBytes, formatDateTimeShort } from "@/lib/utils/format";
 import { cn } from "@/lib/utils";
 import type { Database, DatabaseBackup, DatabaseBackupConfig } from "@/lib/types";
@@ -71,7 +59,6 @@ interface Props {
   destinationName?: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onEdit: (config: DatabaseBackupConfig) => void;
 }
 
 export function BackupConfigRunsSheet({
@@ -80,31 +67,19 @@ export function BackupConfigRunsSheet({
   destinationName,
   open,
   onOpenChange,
-  onEdit,
 }: Props) {
   const { data: allBackups, isLoading } = useDatabaseBackups(
     db.project_id,
     db.id,
   );
-  const run = useRunBackupConfig(db.project_id, db.id);
   const restore = useRestoreDatabase(db.project_id, db.id);
   const deleteBackup = useDeleteDatabaseBackup(db.project_id, db.id);
-  const deleteConfig = useDeleteBackupConfig(db.project_id, db.id);
 
   const [logRun, setLogRun] = useState<DatabaseBackup | null>(null);
 
   const runs = (allBackups ?? []).filter((b) => b.config_id === config?.id);
-  const anyRunning = runs.some((b) => b.status === "running");
 
   if (!config) return null;
-
-  const handleRunNow = () => {
-    toast.promise(run.mutateAsync(config.id), {
-      loading: "Starting backup…",
-      success: "Backup started",
-      error: (err) => err.message,
-    });
-  };
 
   const handleRestore = (backupId: string) => {
     toast.promise(restore.mutateAsync(backupId), {
@@ -122,17 +97,6 @@ export function BackupConfigRunsSheet({
     });
   };
 
-  const handleDeleteConfig = () => {
-    toast.promise(deleteConfig.mutateAsync(config.id), {
-      loading: "Deleting backup configuration…",
-      success: () => {
-        onOpenChange(false);
-        return "Backup configuration deleted";
-      },
-      error: (err) => err.message,
-    });
-  };
-
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent>
@@ -142,53 +106,6 @@ export function BackupConfigRunsSheet({
             {destinationName ?? "Destination"} · {config.schedule}
           </SheetDescription>
         </SheetHeader>
-
-        <div className="flex flex-wrap gap-2">
-          <Button
-            size="sm"
-            onClick={handleRunNow}
-            disabled={run.isPending || anyRunning}
-          >
-            <DatabaseBackupIcon className="mr-1 h-4 w-4" />
-            Manual backup now
-          </Button>
-          <Button size="sm" variant="outline" onClick={() => onEdit(config)}>
-            <Pencil className="mr-1 h-4 w-4" />
-            Edit config
-          </Button>
-          <AlertDialog>
-            <AlertDialogTrigger
-              render={
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="text-destructive hover:bg-destructive/10 hover:text-destructive"
-                />
-              }
-            >
-              <Trash2 className="mr-1 h-4 w-4" />
-              Delete config
-            </AlertDialogTrigger>
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle>Delete backup configuration?</AlertDialogTitle>
-                <AlertDialogDescription>
-                  This removes the schedule and deletes the backups it produced
-                  (local files and remote objects). This can't be undone.
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                <AlertDialogAction
-                  onClick={handleDeleteConfig}
-                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                >
-                  Delete
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
-        </div>
 
         {isLoading ? (
           <p className="text-text-faint text-sm">Loading runs…</p>

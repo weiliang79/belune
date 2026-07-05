@@ -1,13 +1,34 @@
 import { useState } from "react";
-import { PlusIcon } from "lucide-react";
+import { toast } from "sonner";
+import {
+  DatabaseBackupIcon,
+  PencilIcon,
+  PlusIcon,
+  Trash2Icon,
+} from "lucide-react";
 import type { AppVolumeBackupConfig } from "@/lib/types";
 import { useVolumes } from "@/lib/hooks/use-volumes";
 import { useBackupDestinations } from "@/lib/hooks/use-backup-destinations";
-import { useAppVolumeBackupConfigs } from "@/lib/hooks/use-volume-backups";
+import {
+  useAppVolumeBackupConfigs,
+  useRunVolumeBackup,
+  useDeleteVolumeBackupConfig,
+} from "@/lib/hooks/use-volume-backups";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { IconAction } from "@/components/ui/icon-action";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { VolumeBackupConfigForm } from "./volume-backup-config-form";
 import { VolumeBackupConfigDrawer } from "./volume-backup-config-drawer";
 
@@ -87,42 +108,15 @@ export function VolumeBackupConfigsSection({ projectId, applicationId }: Props) 
         ) : (
           <ul className="divide-border divide-y">
             {configs.map((c) => (
-              <li
+              <ConfigRow
                 key={c.id}
-                className="flex items-center justify-between gap-3 py-3"
-              >
-                <div className="min-w-0 space-y-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="font-medium">{c.volume_name}</span>
-                    <span className="text-text-faint font-mono text-xs">
-                      {c.mount_path}
-                    </span>
-                    {c.enabled ? (
-                      <Badge variant="outline">Active</Badge>
-                    ) : (
-                      <Badge variant="secondary">Disabled</Badge>
-                    )}
-                  </div>
-                  <p className="text-text-faint text-xs">
-                    {destName(c.destination_id)}
-                    {" · "}
-                    {c.schedule ? (
-                      <code className="font-mono">{c.schedule}</code>
-                    ) : (
-                      "manual only"
-                    )}
-                    {c.prefix ? ` · ${c.prefix}` : ""}
-                    {c.keep_latest != null ? ` · keep ${c.keep_latest}` : ""}
-                  </p>
-                </div>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => setManageTarget(c)}
-                >
-                  Manage
-                </Button>
-              </li>
+                projectId={projectId}
+                applicationId={applicationId}
+                config={c}
+                destinationName={destName(c.destination_id)}
+                onEdit={openEdit}
+                onManage={setManageTarget}
+              />
             ))}
           </ul>
         )}
@@ -143,9 +137,133 @@ export function VolumeBackupConfigsSection({ projectId, applicationId }: Props) 
           destinationName={destName(manageTarget.destination_id)}
           open={manageTarget !== null}
           onOpenChange={(o) => !o && setManageTarget(null)}
-          onEdit={openEdit}
         />
       )}
     </Card>
+  );
+}
+
+function ConfigRow({
+  projectId,
+  applicationId,
+  config,
+  destinationName,
+  onEdit,
+  onManage,
+}: {
+  projectId: string;
+  applicationId: string;
+  config: AppVolumeBackupConfig;
+  destinationName: string;
+  onEdit: (config: AppVolumeBackupConfig) => void;
+  onManage: (config: AppVolumeBackupConfig) => void;
+}) {
+  const runBackup = useRunVolumeBackup(
+    projectId,
+    applicationId,
+    config.application_volume_id,
+  );
+  const deleteConfig = useDeleteVolumeBackupConfig(
+    projectId,
+    applicationId,
+    config.application_volume_id,
+  );
+  const [confirmOpen, setConfirmOpen] = useState(false);
+
+  const backUpNow = () => {
+    toast.promise(runBackup.mutateAsync(config.id), {
+      loading: "Starting backup...",
+      success: "Backup started",
+      error: (err) => err.message,
+    });
+  };
+
+  const remove = () => {
+    toast.promise(deleteConfig.mutateAsync(config.id), {
+      loading: "Removing config...",
+      success: "Backup config removed",
+      error: (err) => err.message,
+    });
+  };
+
+  return (
+    <li className="flex items-center justify-between gap-3 py-3">
+      <div className="min-w-0 space-y-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="font-medium">{config.volume_name}</span>
+          <span className="text-text-faint font-mono text-xs">
+            {config.mount_path}
+          </span>
+          {config.enabled ? (
+            <Badge variant="outline">Active</Badge>
+          ) : (
+            <Badge variant="secondary">Disabled</Badge>
+          )}
+        </div>
+        <p className="text-text-faint text-xs">
+          {destinationName}
+          {" · "}
+          {config.schedule ? (
+            <code className="font-mono">{config.schedule}</code>
+          ) : (
+            "manual only"
+          )}
+          {config.prefix ? ` · ${config.prefix}` : ""}
+          {config.keep_latest != null ? ` · keep ${config.keep_latest}` : ""}
+        </p>
+      </div>
+      <div className="flex shrink-0 items-center gap-1">
+        <IconAction
+          label="Back up now"
+          size="icon-sm"
+          disabled={runBackup.isPending}
+          onClick={backUpNow}
+        >
+          <DatabaseBackupIcon aria-hidden="true" className="size-4" />
+        </IconAction>
+        <IconAction
+          label="Edit"
+          size="icon-sm"
+          onClick={() => onEdit(config)}
+        >
+          <PencilIcon aria-hidden="true" className="size-4" />
+        </IconAction>
+        <IconAction
+          label="Delete"
+          size="icon-sm"
+          destructive
+          onClick={() => setConfirmOpen(true)}
+        >
+          <Trash2Icon aria-hidden="true" className="size-4" />
+        </IconAction>
+        <Button size="sm" variant="outline" onClick={() => onManage(config)}>
+          Manage
+        </Button>
+      </div>
+
+      <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete backup config?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This removes the schedule for{" "}
+              <span className="font-medium">{config.volume_name}</span> and
+              deletes the backups it produced from{" "}
+              <span className="font-medium">{destinationName}</span>. This can't
+              be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={remove}
+              disabled={deleteConfig.isPending}
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </li>
   );
 }
