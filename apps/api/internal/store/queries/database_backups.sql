@@ -46,3 +46,22 @@ SELECT * FROM database_backups
 WHERE database_id = $1 AND status = 'succeeded'
 ORDER BY finished_at DESC
 LIMIT 1;
+
+-- name: InsertDatabaseRestore :one
+INSERT INTO database_restores (database_id, backup_id)
+VALUES ($1, $2)
+RETURNING *;
+
+-- name: UpdateDatabaseRestore :exec
+UPDATE database_restores
+SET finished_at = $2,
+    status      = $3,
+    error       = $4,
+    log         = $5
+WHERE id = $1;
+
+-- name: ListDatabaseRestores :many
+SELECT * FROM database_restores
+WHERE database_id = $1
+ORDER BY started_at DESC
+LIMIT $2;

@@ -104,6 +104,33 @@ func (q *Queries) InsertDatabaseBackup(ctx context.Context, arg InsertDatabaseBa
 	return i, err
 }
 
+const insertDatabaseRestore = `-- name: InsertDatabaseRestore :one
+INSERT INTO database_restores (database_id, backup_id)
+VALUES ($1, $2)
+RETURNING id, database_id, backup_id, started_at, finished_at, status, error, log
+`
+
+type InsertDatabaseRestoreParams struct {
+	DatabaseID pgtype.UUID `json:"database_id"`
+	BackupID   pgtype.UUID `json:"backup_id"`
+}
+
+func (q *Queries) InsertDatabaseRestore(ctx context.Context, arg InsertDatabaseRestoreParams) (DatabaseRestore, error) {
+	row := q.db.QueryRow(ctx, insertDatabaseRestore, arg.DatabaseID, arg.BackupID)
+	var i DatabaseRestore
+	err := row.Scan(
+		&i.ID,
+		&i.DatabaseID,
+		&i.BackupID,
+		&i.StartedAt,
+		&i.FinishedAt,
+		&i.Status,
+		&i.Error,
+		&i.Log,
+	)
+	return i, err
+}
+
 const listDatabaseBackups = `-- name: ListDatabaseBackups :many
 SELECT id, database_id, started_at, finished_at, status, local_path, remote_key, size_bytes, error, backup_config_id, log, target_database FROM database_backups
 WHERE database_id = $1
@@ -183,6 +210,47 @@ func (q *Queries) ListDatabaseBackupsByConfig(ctx context.Context, arg ListDatab
 			&i.BackupConfigID,
 			&i.Log,
 			&i.TargetDatabase,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listDatabaseRestores = `-- name: ListDatabaseRestores :many
+SELECT id, database_id, backup_id, started_at, finished_at, status, error, log FROM database_restores
+WHERE database_id = $1
+ORDER BY started_at DESC
+LIMIT $2
+`
+
+type ListDatabaseRestoresParams struct {
+	DatabaseID pgtype.UUID `json:"database_id"`
+	Limit      int32       `json:"limit"`
+}
+
+func (q *Queries) ListDatabaseRestores(ctx context.Context, arg ListDatabaseRestoresParams) ([]DatabaseRestore, error) {
+	rows, err := q.db.Query(ctx, listDatabaseRestores, arg.DatabaseID, arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []DatabaseRestore{}
+	for rows.Next() {
+		var i DatabaseRestore
+		if err := rows.Scan(
+			&i.ID,
+			&i.DatabaseID,
+			&i.BackupID,
+			&i.StartedAt,
+			&i.FinishedAt,
+			&i.Status,
+			&i.Error,
+			&i.Log,
 		); err != nil {
 			return nil, err
 		}
@@ -291,6 +359,34 @@ func (q *Queries) UpdateDatabaseBackup(ctx context.Context, arg UpdateDatabaseBa
 		arg.LocalPath,
 		arg.RemoteKey,
 		arg.SizeBytes,
+		arg.Error,
+		arg.Log,
+	)
+	return err
+}
+
+const updateDatabaseRestore = `-- name: UpdateDatabaseRestore :exec
+UPDATE database_restores
+SET finished_at = $2,
+    status      = $3,
+    error       = $4,
+    log         = $5
+WHERE id = $1
+`
+
+type UpdateDatabaseRestoreParams struct {
+	ID         pgtype.UUID        `json:"id"`
+	FinishedAt pgtype.Timestamptz `json:"finished_at"`
+	Status     string             `json:"status"`
+	Error      pgtype.Text        `json:"error"`
+	Log        pgtype.Text        `json:"log"`
+}
+
+func (q *Queries) UpdateDatabaseRestore(ctx context.Context, arg UpdateDatabaseRestoreParams) error {
+	_, err := q.db.Exec(ctx, updateDatabaseRestore,
+		arg.ID,
+		arg.FinishedAt,
+		arg.Status,
 		arg.Error,
 		arg.Log,
 	)

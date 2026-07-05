@@ -304,6 +304,16 @@ export interface BackupDestination {
   updated_at: string;
 }
 
+export interface DatabaseRestore {
+  id: string;
+  backup_id?: string;
+  status: "running" | "succeeded" | "failed";
+  started_at: string;
+  finished_at?: string;
+  error?: string;
+  log?: string;
+}
+
 export interface DatabaseBackupConfig {
   id: string;
   database_id: string;

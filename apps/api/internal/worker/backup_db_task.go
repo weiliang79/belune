@@ -658,30 +658,78 @@ func (h *TaskHandler) HandleRestoreDBTask(ctx context.Context, t *asynq.Task) er
 		return errors.Join(errors.New("backup does not belong to database (permanent)"), asynq.SkipRetry)
 	}
 
+	// Record the restore run so the UI can show restore history.
+	run, err := h.Queries.InsertDatabaseRestore(ctx, generated.InsertDatabaseRestoreParams{
+		DatabaseID: dbID,
+		BackupID:   backupID,
+	})
+	if err != nil {
+		return fmt.Errorf("insert restore run: %w", err)
+	}
+	lg := &runLog{}
+	lg.step("Restore started (backup=%s, scope=%s)", formatUUID(backupID), backupScopeLabel(backup.TargetDatabase))
+
 	method := dbBackupMethod(db)
 	if method == "none" {
+		h.failDatabaseRestoreLog(ctx, run.ID, fmt.Sprintf("restore not supported for database type %s", db.Type), lg)
 		return errors.Join(fmt.Errorf("restore not supported for database type %s (permanent)", db.Type), asynq.SkipRetry)
 	}
 
 	creds, err := h.decryptDBCredentials(db)
 	if err != nil {
+		h.failDatabaseRestoreLog(ctx, run.ID, fmt.Sprintf("credentials: %v", err), lg)
 		return errors.Join(fmt.Errorf("credentials (permanent): %w", err), asynq.SkipRetry)
 	}
 
 	dumpPath, cleanup, err := h.resolveBackupFile(ctx, backup)
 	if err != nil {
+		h.failDatabaseRestoreLog(ctx, run.ID, fmt.Sprintf("resolve backup file: %v", err), lg)
 		return fmt.Errorf("resolve backup file: %w", err)
 	}
 	defer cleanup()
+	lg.step("Backup archive ready; applying restore (method=%s)", method)
 
 	if err := h.applyRestoreArchive(ctx, db, creds, method, dumpPath, backup.TargetDatabase); err != nil {
 		h.notifyRestore(ctx, db, false, err.Error())
+		h.failDatabaseRestoreLog(ctx, run.ID, err.Error(), lg)
 		return err
 	}
 
+	lg.step("Restore succeeded")
+	h.finaliseDatabaseRestore(ctx, run.ID, generated.UpdateDatabaseRestoreParams{
+		ID:         run.ID,
+		FinishedAt: pgtype.Timestamptz{Time: time.Now(), Valid: true},
+		Status:     "succeeded",
+		Log:        pgtype.Text{String: lg.String(), Valid: true},
+	})
 	h.notifyRestore(ctx, db, true, "")
 	slog.Info("database restored", "database_id", payload.DatabaseID, "backup_id", payload.BackupID, "method", method, "scope", backupScopeLabel(backup.TargetDatabase))
 	return nil
+}
+
+func (h *TaskHandler) failDatabaseRestoreLog(ctx context.Context, id pgtype.UUID, errMsg string, lg *runLog) {
+	slog.Error("database restore failed", "restore_id", formatUUID(id), "error", errMsg)
+	logText := ""
+	if lg != nil {
+		lg.step("Restore failed: %s", errMsg)
+		logText = lg.String()
+	}
+	h.finaliseDatabaseRestore(ctx, id, generated.UpdateDatabaseRestoreParams{
+		ID:         id,
+		FinishedAt: pgtype.Timestamptz{Time: time.Now(), Valid: true},
+		Status:     "failed",
+		Error:      pgtype.Text{String: errMsg, Valid: true},
+		Log:        pgtype.Text{String: logText, Valid: true},
+	})
+}
+
+func (h *TaskHandler) finaliseDatabaseRestore(ctx context.Context, id pgtype.UUID, params generated.UpdateDatabaseRestoreParams) {
+	if !id.Valid {
+		return
+	}
+	if err := h.Queries.UpdateDatabaseRestore(ctx, params); err != nil {
+		slog.Warn("restore_db: failed to update run record", "restore_id", formatUUID(id), "error", err)
+	}
 }
 
 // notifyDatabaseOwner sends the database's owner a notification (bell +

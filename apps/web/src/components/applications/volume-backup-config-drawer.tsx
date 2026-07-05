@@ -1,16 +1,24 @@
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
-import { CloudIcon, RotateCcwIcon, ScrollTextIcon } from "lucide-react";
+import { CloudIcon, Loader2Icon, RotateCcwIcon, ScrollTextIcon } from "lucide-react";
 import type { AppVolumeBackupConfig } from "@/lib/types";
 import {
   useVolumeBackups,
   useVolumeRestores,
   useRestoreVolumeBackup,
 } from "@/lib/hooks/use-volume-backups";
-import { formatBytes, formatRelativeTime } from "@/lib/utils/format";
+import { formatBytes, formatDateTimeShort, formatRelativeTime } from "@/lib/utils/format";
+import { humanizeSchedule } from "@/lib/utils/schedule";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipPositioner,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import {
   Sheet,
   SheetContent,
@@ -44,10 +52,15 @@ interface Props {
   onOpenChange: (open: boolean) => void;
 }
 
-function statusVariant(status: string): "default" | "secondary" | "destructive" {
-  if (status === "succeeded") return "default";
-  if (status === "failed") return "destructive";
-  return "secondary";
+function statusTone(status: string): string {
+  switch (status) {
+    case "succeeded":
+      return "text-status-ready";
+    case "failed":
+      return "text-status-error";
+    default:
+      return "text-status-building";
+  }
 }
 
 export function VolumeBackupConfigDrawer({
@@ -122,13 +135,19 @@ export function VolumeBackupConfigDrawer({
                 {destinationName ?? "Destination"}
               </span>
               {config.quiesce && <Badge variant="secondary">Quiesce</Badge>}
-              {!config.enabled && <Badge variant="secondary">Disabled</Badge>}
+              {config.enabled ? (
+                <Badge variant="outline">Active</Badge>
+              ) : (
+                <Badge variant="secondary">Disabled</Badge>
+              )}
             </div>
             <div className="text-text-faint mt-0.5 text-xs">
-              {config.schedule ? (
-                <code className="font-mono">{config.schedule}</code>
-              ) : (
-                "Manual only"
+              {humanizeSchedule(config.schedule)}
+              {config.schedule && (
+                <>
+                  {" · "}
+                  <code className="font-mono">{config.schedule}</code>
+                </>
               )}
               {config.keep_latest != null && ` · keep ${config.keep_latest}`}
               {config.last_run_at &&
@@ -138,39 +157,76 @@ export function VolumeBackupConfigDrawer({
 
           <Separator />
 
-          {/* Backup runs */}
+          {/* Recent backups */}
           <div className="space-y-2">
             <div className="text-sm font-medium">Recent backups</div>
             {backups.length === 0 ? (
               <p className="text-muted-foreground text-sm">No backups yet.</p>
             ) : (
-              <div className="space-y-2">
+              <ul className="divide-border divide-y">
                 {backups.map((b) => (
-                  <div
+                  <li
                     key={b.id}
-                    className="flex items-center justify-between gap-3 rounded-md border p-2.5 text-sm"
+                    className="flex items-center justify-between gap-3 py-3"
                   >
-                    <div className="flex min-w-0 items-center gap-2">
-                      <Badge variant={statusVariant(b.status)}>{b.status}</Badge>
-                      <span className="text-text-faint tabular-nums">
-                        {formatBytes(b.size_bytes)}
-                      </span>
-                      <span className="text-text-faint truncate">
-                        {formatRelativeTime(b.started_at)}
-                      </span>
-                    </div>
-                    <div className="flex shrink-0 items-center gap-1">
-                      {b.log && (
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          aria-label="View log"
-                          onClick={() =>
-                            setLogView({ title: "Backup log", log: b.log ?? "" })
-                          }
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span
+                          className={cn(
+                            "text-sm font-medium capitalize",
+                            statusTone(b.status),
+                          )}
                         >
-                          <ScrollTextIcon aria-hidden="true" className="size-4" />
-                        </Button>
+                          {b.status === "running" && (
+                            <Loader2Icon className="mr-1 inline h-3 w-3 animate-spin" />
+                          )}
+                          {b.status}
+                        </span>
+                        {b.has_remote && (
+                          <CloudIcon
+                            className="text-text-faint h-3.5 w-3.5"
+                            aria-label="Uploaded to destination"
+                          />
+                        )}
+                        {b.status === "succeeded" && (
+                          <span className="text-text-faint text-xs">
+                            {formatBytes(b.size_bytes)}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-text-faint text-xs">
+                        {formatDateTimeShort(b.started_at)}
+                      </p>
+                      {b.error && (
+                        <p className="text-status-error mt-0.5 truncate text-xs">
+                          {b.error}
+                        </p>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-1">
+                      {b.log && (
+                        <Tooltip>
+                          <TooltipTrigger
+                            render={
+                              <Button
+                                variant="ghost"
+                                size="icon-sm"
+                                aria-label="View log"
+                                onClick={() =>
+                                  setLogView({
+                                    title: "Backup log",
+                                    log: b.log ?? "",
+                                  })
+                                }
+                              />
+                            }
+                          >
+                            <ScrollTextIcon className="h-4 w-4" />
+                          </TooltipTrigger>
+                          <TooltipPositioner>
+                            <TooltipContent>View log</TooltipContent>
+                          </TooltipPositioner>
+                        </Tooltip>
                       )}
                       {b.status === "succeeded" && b.has_remote && (
                         <Button
@@ -178,55 +234,77 @@ export function VolumeBackupConfigDrawer({
                           variant="outline"
                           onClick={() => setRestoreTarget(b.id)}
                         >
-                          <RotateCcwIcon aria-hidden="true" className="size-4" />
+                          <RotateCcwIcon aria-hidden="true" className="mr-1 h-4 w-4" />
                           Restore
                         </Button>
                       )}
                     </div>
-                  </div>
+                  </li>
                 ))}
-              </div>
+              </ul>
             )}
           </div>
 
-          {/* Restore runs */}
+          {/* Recent restores */}
           {restores.length > 0 && (
             <>
               <Separator />
               <div className="space-y-2">
                 <div className="text-sm font-medium">Recent restores</div>
-                <div className="space-y-2">
+                <ul className="divide-border divide-y">
                   {restores.map((rr) => (
-                    <div
+                    <li
                       key={rr.id}
-                      className="flex items-center justify-between gap-3 rounded-md border p-2.5 text-sm"
+                      className="flex items-center justify-between gap-3 py-3"
                     >
-                      <div className="flex min-w-0 items-center gap-2">
-                        <Badge variant={statusVariant(rr.status)}>
-                          {rr.status}
-                        </Badge>
-                        <span className="text-text-faint truncate">
-                          {formatRelativeTime(rr.started_at)}
-                        </span>
-                      </div>
-                      {rr.log && (
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          aria-label="View restore log"
-                          onClick={() =>
-                            setLogView({
-                              title: "Restore log",
-                              log: rr.log ?? "",
-                            })
-                          }
+                      <div className="min-w-0">
+                        <span
+                          className={cn(
+                            "text-sm font-medium capitalize",
+                            statusTone(rr.status),
+                          )}
                         >
-                          <ScrollTextIcon aria-hidden="true" className="size-4" />
-                        </Button>
+                          {rr.status === "running" && (
+                            <Loader2Icon className="mr-1 inline h-3 w-3 animate-spin" />
+                          )}
+                          {rr.status}
+                        </span>
+                        <p className="text-text-faint text-xs">
+                          {formatDateTimeShort(rr.started_at)}
+                        </p>
+                        {rr.error && (
+                          <p className="text-status-error mt-0.5 truncate text-xs">
+                            {rr.error}
+                          </p>
+                        )}
+                      </div>
+                      {(rr.log || rr.error) && (
+                        <Tooltip>
+                          <TooltipTrigger
+                            render={
+                              <Button
+                                variant="ghost"
+                                size="icon-sm"
+                                aria-label="View restore log"
+                                onClick={() =>
+                                  setLogView({
+                                    title: "Restore log",
+                                    log: rr.log ?? "",
+                                  })
+                                }
+                              />
+                            }
+                          >
+                            <ScrollTextIcon className="h-4 w-4" />
+                          </TooltipTrigger>
+                          <TooltipPositioner>
+                            <TooltipContent>View log</TooltipContent>
+                          </TooltipPositioner>
+                        </Tooltip>
                       )}
-                    </div>
+                    </li>
                   ))}
-                </div>
+                </ul>
               </div>
             </>
           )}

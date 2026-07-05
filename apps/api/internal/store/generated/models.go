@@ -203,6 +203,17 @@ type DatabaseBackupConfig struct {
 	TargetDatabase string             `json:"target_database"`
 }
 
+type DatabaseRestore struct {
+	ID         pgtype.UUID        `json:"id"`
+	DatabaseID pgtype.UUID        `json:"database_id"`
+	BackupID   pgtype.UUID        `json:"backup_id"`
+	StartedAt  pgtype.Timestamptz `json:"started_at"`
+	FinishedAt pgtype.Timestamptz `json:"finished_at"`
+	Status     string             `json:"status"`
+	Error      pgtype.Text        `json:"error"`
+	Log        pgtype.Text        `json:"log"`
+}
+
 type Deployment struct {
 	ID              pgtype.UUID        `json:"id"`
 	ApplicationID   pgtype.UUID        `json:"application_id"`

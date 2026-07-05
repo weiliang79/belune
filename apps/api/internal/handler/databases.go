@@ -595,6 +595,58 @@ func (h *Handler) ListDatabaseBackups(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, resp)
 }
 
+type databaseRestoreResponse struct {
+	ID         string     `json:"id"`
+	BackupID   string     `json:"backup_id,omitempty"`
+	Status     string     `json:"status"`
+	StartedAt  time.Time  `json:"started_at"`
+	FinishedAt *time.Time `json:"finished_at,omitempty"`
+	Error      string     `json:"error,omitempty"`
+	Log        string     `json:"log,omitempty"`
+}
+
+// ListDatabaseRestores returns the recent restore runs for a database.
+func (h *Handler) ListDatabaseRestores(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "databaseId")
+	var dbUUID pgtype.UUID
+	if err := dbUUID.Scan(id); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid database id")
+		return
+	}
+	if !h.canAccessDatabase(r, dbUUID) {
+		writeError(w, http.StatusForbidden, "access denied")
+		return
+	}
+
+	runs, err := h.queries.ListDatabaseRestores(r.Context(), generated.ListDatabaseRestoresParams{
+		DatabaseID: dbUUID,
+		Limit:      50,
+	})
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to list restores")
+		return
+	}
+	out := make([]databaseRestoreResponse, 0, len(runs))
+	for _, b := range runs {
+		resp := databaseRestoreResponse{
+			ID:        uuidToString(b.ID),
+			Status:    b.Status,
+			StartedAt: b.StartedAt.Time,
+			Error:     b.Error.String,
+			Log:       b.Log.String,
+		}
+		if b.BackupID.Valid {
+			resp.BackupID = uuidToString(b.BackupID)
+		}
+		if b.FinishedAt.Valid {
+			t := b.FinishedAt.Time
+			resp.FinishedAt = &t
+		}
+		out = append(out, resp)
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
 // DeleteDatabaseBackup removes one backup (row + local file + S3 object).
 func (h *Handler) DeleteDatabaseBackup(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "databaseId")

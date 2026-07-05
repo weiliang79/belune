@@ -1,4 +1,4 @@
-import type { Database, DatabaseBackup } from "@/lib/types";
+import type { Database, DatabaseBackup, DatabaseRestore } from "@/lib/types";
 import { api } from "./client";
 
 export function listDatabases(projectId: string) {
@@ -67,6 +67,12 @@ export function backupDatabase(projectId: string, databaseId: string) {
   return api.post<{ status: string }>(
     `/projects/${projectId}/databases/${databaseId}/backups`,
     {},
+  );
+}
+
+export function listDatabaseRestores(projectId: string, databaseId: string) {
+  return api.get<DatabaseRestore[]>(
+    `/projects/${projectId}/databases/${databaseId}/restores`,
   );
 }
 

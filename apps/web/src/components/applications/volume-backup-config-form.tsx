@@ -268,17 +268,18 @@ function ConfigForm({
               </SelectItem>
             </SelectContent>
           </Select>
-          {presetValue === "custom" && (
-            <Input
-              value={schedule}
-              onChange={(e) => setSchedule(e.target.value)}
-              placeholder="0 0 * * *"
-              className="font-mono"
-              aria-label="Cron expression"
-            />
-          )}
+          <Input
+            value={schedule}
+            onChange={(e) => {
+              setCustomMode(false);
+              setSchedule(e.target.value);
+            }}
+            placeholder="0 0 * * * (leave empty for manual only)"
+            className="font-mono"
+            aria-label="Cron expression"
+          />
           <p className="text-muted-foreground text-xs">
-            Standard 5-field cron expression. Manual only = back up on demand.
+            Standard 5-field cron expression. Empty = back up on demand only.
           </p>
         </div>
 

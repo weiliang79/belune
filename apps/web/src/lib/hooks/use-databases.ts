@@ -166,10 +166,29 @@ export function useDeleteDatabaseBackup(projectId: string, databaseId: string) {
   });
 }
 
+export function useDatabaseRestores(projectId: string, databaseId: string) {
+  return useQuery({
+    queryKey: queryKeys.databases.restores(projectId, databaseId),
+    queryFn: () => databasesApi.listDatabaseRestores(projectId, databaseId),
+    refetchInterval: (query) =>
+      query.state.data?.some((r) => r.status === "running") ? 3000 : false,
+  });
+}
+
 export function useRestoreDatabase(projectId: string, databaseId: string) {
+  const qc = useQueryClient();
   return useMutation({
     mutationFn: (backupId: string) =>
       databasesApi.restoreDatabase(projectId, databaseId, backupId),
+    onSuccess: () => {
+      // The worker inserts the "running" restore row shortly after enqueue;
+      // re-poll briefly so it shows up without a manual refresh.
+      const key = queryKeys.databases.restores(projectId, databaseId);
+      qc.invalidateQueries({ queryKey: key });
+      [1000, 2500, 5000].forEach((ms) =>
+        setTimeout(() => qc.invalidateQueries({ queryKey: key }), ms),
+      );
+    },
   });
 }
 
