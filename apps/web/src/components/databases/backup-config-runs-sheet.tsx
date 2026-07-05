@@ -8,12 +8,7 @@ import {
   SheetTitle,
   SheetDescription,
 } from "@/components/ui/sheet";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { LiveLogDialog } from "@/components/ui/live-log-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -47,12 +42,7 @@ import {
 } from "@/lib/utils/format";
 import { humanizeSchedule } from "@/lib/utils/schedule";
 import { cn } from "@/lib/utils";
-import type {
-  Database,
-  DatabaseBackup,
-  DatabaseBackupConfig,
-  DatabaseRestore,
-} from "@/lib/types";
+import type { Database, DatabaseBackupConfig } from "@/lib/types";
 
 function statusTone(status: string): string {
   switch (status) {
@@ -88,9 +78,10 @@ export function BackupConfigRunsSheet({
   const restore = useRestoreDatabase(db.project_id, db.id);
   const deleteBackup = useDeleteDatabaseBackup(db.project_id, db.id);
 
-  const [logView, setLogView] = useState<{ title: string; log: string } | null>(
-    null,
-  );
+  const [logView, setLogView] = useState<{
+    kind: "backup" | "restore";
+    id: string;
+  } | null>(null);
 
   const runs = useMemo(
     () => (allBackups ?? []).filter((b) => b.config_id === config?.id),
@@ -102,6 +93,14 @@ export function BackupConfigRunsSheet({
       (r) => r.backup_id && ids.has(r.backup_id),
     );
   }, [allRestores, runs]);
+
+  // Looked up live from the polling query so the log grows in the dialog while
+  // the run is still in progress.
+  const viewedRun = logView
+    ? logView.kind === "backup"
+      ? runs.find((b) => b.id === logView.id)
+      : restores.find((r) => r.id === logView.id)
+    : undefined;
 
   if (!config) return null;
 
@@ -120,11 +119,6 @@ export function BackupConfigRunsSheet({
       error: (err) => err.message,
     });
   };
-
-  const backupLog = (b: DatabaseBackup) =>
-    setLogView({ title: "Backup log", log: b.log?.trim() || b.error || "" });
-  const restoreLog = (r: DatabaseRestore) =>
-    setLogView({ title: "Restore log", log: r.log?.trim() || r.error || "" });
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -224,7 +218,9 @@ export function BackupConfigRunsSheet({
                                 variant="ghost"
                                 size="icon-sm"
                                 aria-label="View log"
-                                onClick={() => backupLog(b)}
+                                onClick={() =>
+                                  setLogView({ kind: "backup", id: b.id })
+                                }
                               />
                             }
                           >
@@ -358,7 +354,9 @@ export function BackupConfigRunsSheet({
                                 variant="ghost"
                                 size="icon-sm"
                                 aria-label="View restore log"
-                                onClick={() => restoreLog(r)}
+                                onClick={() =>
+                                  setLogView({ kind: "restore", id: r.id })
+                                }
                               />
                             }
                           >
@@ -377,16 +375,13 @@ export function BackupConfigRunsSheet({
           )}
         </div>
 
-        <Dialog open={logView !== null} onOpenChange={(o) => !o && setLogView(null)}>
-          <DialogContent className="sm:max-w-2xl">
-            <DialogHeader>
-              <DialogTitle>{logView?.title ?? "Log"}</DialogTitle>
-            </DialogHeader>
-            <pre className="bg-muted max-h-[60vh] overflow-auto rounded-md p-3 font-mono text-xs whitespace-pre-wrap">
-              {logView?.log || "No log recorded for this run."}
-            </pre>
-          </DialogContent>
-        </Dialog>
+        <LiveLogDialog
+          open={logView !== null}
+          onOpenChange={(o) => !o && setLogView(null)}
+          title={logView?.kind === "restore" ? "Restore log" : "Backup log"}
+          log={viewedRun?.log?.trim() || viewedRun?.error || ""}
+          running={viewedRun?.status === "running"}
+        />
       </SheetContent>
     </Sheet>
   );

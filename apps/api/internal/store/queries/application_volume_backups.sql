@@ -97,3 +97,9 @@ SELECT * FROM application_volume_restores
 WHERE application_volume_id = $1
 ORDER BY started_at DESC
 LIMIT $2;
+
+-- name: SetApplicationVolumeBackupLog :exec
+UPDATE application_volume_backups SET log = $2 WHERE id = $1;
+
+-- name: SetApplicationVolumeRestoreLog :exec
+UPDATE application_volume_restores SET log = $2 WHERE id = $1;

@@ -456,6 +456,34 @@ func (q *Queries) SetApplicationVolumeBackupConfigLastRun(ctx context.Context, a
 	return err
 }
 
+const setApplicationVolumeBackupLog = `-- name: SetApplicationVolumeBackupLog :exec
+UPDATE application_volume_backups SET log = $2 WHERE id = $1
+`
+
+type SetApplicationVolumeBackupLogParams struct {
+	ID  pgtype.UUID `json:"id"`
+	Log pgtype.Text `json:"log"`
+}
+
+func (q *Queries) SetApplicationVolumeBackupLog(ctx context.Context, arg SetApplicationVolumeBackupLogParams) error {
+	_, err := q.db.Exec(ctx, setApplicationVolumeBackupLog, arg.ID, arg.Log)
+	return err
+}
+
+const setApplicationVolumeRestoreLog = `-- name: SetApplicationVolumeRestoreLog :exec
+UPDATE application_volume_restores SET log = $2 WHERE id = $1
+`
+
+type SetApplicationVolumeRestoreLogParams struct {
+	ID  pgtype.UUID `json:"id"`
+	Log pgtype.Text `json:"log"`
+}
+
+func (q *Queries) SetApplicationVolumeRestoreLog(ctx context.Context, arg SetApplicationVolumeRestoreLogParams) error {
+	_, err := q.db.Exec(ctx, setApplicationVolumeRestoreLog, arg.ID, arg.Log)
+	return err
+}
+
 const updateApplicationVolumeBackup = `-- name: UpdateApplicationVolumeBackup :exec
 UPDATE application_volume_backups
 SET finished_at = $2,

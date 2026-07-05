@@ -47,6 +47,9 @@ export function useVolumeBackups(
     queryKey: queryKeys.volumeBackups(projectId, applicationId, volumeId),
     queryFn: () => api.listVolumeBackups(projectId, applicationId, volumeId),
     enabled,
+    // Poll while a run is in progress so its log streams in near-realtime.
+    refetchInterval: (query) =>
+      query.state.data?.some((b) => b.status === "running") ? 2000 : false,
   });
 }
 
@@ -60,6 +63,8 @@ export function useVolumeRestores(
     queryKey: queryKeys.volumeRestores(projectId, applicationId, volumeId),
     queryFn: () => api.listVolumeRestores(projectId, applicationId, volumeId),
     enabled,
+    refetchInterval: (query) =>
+      query.state.data?.some((r) => r.status === "running") ? 2000 : false,
   });
 }
 

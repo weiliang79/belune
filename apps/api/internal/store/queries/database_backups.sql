@@ -65,3 +65,9 @@ SELECT * FROM database_restores
 WHERE database_id = $1
 ORDER BY started_at DESC
 LIMIT $2;
+
+-- name: SetDatabaseBackupLog :exec
+UPDATE database_backups SET log = $2 WHERE id = $1;
+
+-- name: SetDatabaseRestoreLog :exec
+UPDATE database_restores SET log = $2 WHERE id = $1;

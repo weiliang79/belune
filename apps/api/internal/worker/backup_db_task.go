@@ -208,13 +208,22 @@ func dbBackupMethod(db generated.Database) string {
 }
 
 // runLog accumulates a short, human-readable per-run backup log (timestamped
-// step lines plus raw engine stderr) persisted to database_backups.log.
+// step lines plus raw engine stderr) persisted to the run's log column.
+//
+// When flush is set, the log is persisted to the database as it grows so the UI
+// can show it in near-realtime rather than only at completion. step lines flush
+// immediately (they are the coarse progress signal); raw output is throttled to
+// avoid hammering the database on chatty engine stderr. The finalise* update
+// always writes the complete log, so a skipped intermediate flush is harmless.
 type runLog struct {
-	sb strings.Builder
+	sb        strings.Builder
+	flush     func(log string)
+	lastFlush time.Time
 }
 
 func (l *runLog) step(format string, args ...any) {
 	fmt.Fprintf(&l.sb, "%s  %s\n", time.Now().UTC().Format("15:04:05Z"), fmt.Sprintf(format, args...))
+	l.persist(true)
 }
 
 // raw appends captured command output verbatim (trimmed of trailing newlines).
@@ -224,6 +233,18 @@ func (l *runLog) raw(s string) {
 		l.sb.WriteString(s)
 		l.sb.WriteByte('\n')
 	}
+	l.persist(false)
+}
+
+func (l *runLog) persist(force bool) {
+	if l.flush == nil {
+		return
+	}
+	if !force && time.Since(l.lastFlush) < 500*time.Millisecond {
+		return
+	}
+	l.lastFlush = time.Now()
+	l.flush(l.String())
 }
 
 func (l *runLog) String() string { return l.sb.String() }
@@ -316,6 +337,11 @@ func (h *TaskHandler) HandleBackupDBTask(ctx context.Context, t *asynq.Task) err
 	}
 
 	lg := &runLog{}
+	lg.flush = func(s string) {
+		if err := h.Queries.SetDatabaseBackupLog(ctx, generated.SetDatabaseBackupLogParams{ID: run.ID, Log: s}); err != nil {
+			slog.Warn("backup_db: flush log", "backup_id", formatUUID(run.ID), "error", err)
+		}
+	}
 	lg.step("Backup started (method=%s, engine=%s, scope=%s)", method, db.Type, backupScopeLabel(target))
 
 	creds, err := h.decryptDBCredentials(db)
@@ -667,6 +693,11 @@ func (h *TaskHandler) HandleRestoreDBTask(ctx context.Context, t *asynq.Task) er
 		return fmt.Errorf("insert restore run: %w", err)
 	}
 	lg := &runLog{}
+	lg.flush = func(s string) {
+		if err := h.Queries.SetDatabaseRestoreLog(ctx, generated.SetDatabaseRestoreLogParams{ID: run.ID, Log: pgtype.Text{String: s, Valid: true}}); err != nil {
+			slog.Warn("restore_db: flush log", "restore_id", formatUUID(run.ID), "error", err)
+		}
+	}
 	lg.step("Restore started (backup=%s, scope=%s)", formatUUID(backupID), backupScopeLabel(backup.TargetDatabase))
 
 	method := dbBackupMethod(db)

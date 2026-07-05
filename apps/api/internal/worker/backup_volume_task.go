@@ -92,6 +92,11 @@ func (h *TaskHandler) HandleBackupVolumeTask(ctx context.Context, t *asynq.Task)
 	}
 
 	lg := &runLog{}
+	lg.flush = func(s string) {
+		if err := h.Queries.SetApplicationVolumeBackupLog(ctx, generated.SetApplicationVolumeBackupLogParams{ID: run.ID, Log: pgtype.Text{String: s, Valid: true}}); err != nil {
+			slog.Warn("backup_volume: flush log", "backup_id", formatUUID(run.ID), "error", err)
+		}
+	}
 	lg.step("Volume backup started (volume=%s, path=%s, quiesce=%t)", vol.Name, vol.MountPath, cfg.Quiesce)
 
 	if err := os.MkdirAll(h.Config.DatabaseBackupDir, 0o755); err != nil {

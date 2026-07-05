@@ -26,12 +26,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { LiveLogDialog } from "@/components/ui/live-log-dialog";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -86,9 +81,10 @@ export function VolumeBackupConfigDrawer({
   );
   const restore = useRestoreVolumeBackup(projectId, applicationId, volumeId);
 
-  const [logView, setLogView] = useState<{ title: string; log: string } | null>(
-    null,
-  );
+  const [logView, setLogView] = useState<{
+    kind: "backup" | "restore";
+    id: string;
+  } | null>(null);
   const [restoreTarget, setRestoreTarget] = useState<string | null>(null);
 
   // Scope runs + restores to this config (a volume may have several configs).
@@ -102,6 +98,14 @@ export function VolumeBackupConfigDrawer({
       (r) => r.backup_id && ids.has(r.backup_id),
     );
   }, [allRestores, backups]);
+
+  // The viewed run is looked up live from the polling query, so its log grows in
+  // the dialog while the run is still in progress.
+  const viewedRun = logView
+    ? logView.kind === "backup"
+      ? backups.find((b) => b.id === logView.id)
+      : restores.find((r) => r.id === logView.id)
+    : undefined;
 
   const doRestore = () => {
     if (!restoreTarget) return;
@@ -213,10 +217,7 @@ export function VolumeBackupConfigDrawer({
                                 size="icon-sm"
                                 aria-label="View log"
                                 onClick={() =>
-                                  setLogView({
-                                    title: "Backup log",
-                                    log: b.log ?? "",
-                                  })
+                                  setLogView({ kind: "backup", id: b.id })
                                 }
                               />
                             }
@@ -287,10 +288,7 @@ export function VolumeBackupConfigDrawer({
                                 size="icon-sm"
                                 aria-label="View restore log"
                                 onClick={() =>
-                                  setLogView({
-                                    title: "Restore log",
-                                    log: rr.log ?? "",
-                                  })
+                                  setLogView({ kind: "restore", id: rr.id })
                                 }
                               />
                             }
@@ -310,17 +308,14 @@ export function VolumeBackupConfigDrawer({
           )}
         </div>
 
-        {/* Log viewer */}
-        <Dialog open={logView !== null} onOpenChange={(o) => !o && setLogView(null)}>
-          <DialogContent className="max-w-2xl">
-            <DialogHeader>
-              <DialogTitle>{logView?.title ?? "Log"}</DialogTitle>
-            </DialogHeader>
-            <pre className="bg-muted/40 max-h-96 overflow-auto rounded-md border p-3 font-mono text-xs whitespace-pre-wrap">
-              {logView?.log || "No log."}
-            </pre>
-          </DialogContent>
-        </Dialog>
+        {/* Log viewer (streams while the run is in progress) */}
+        <LiveLogDialog
+          open={logView !== null}
+          onOpenChange={(o) => !o && setLogView(null)}
+          title={logView?.kind === "restore" ? "Restore log" : "Backup log"}
+          log={viewedRun?.log?.trim() || viewedRun?.error || ""}
+          running={viewedRun?.status === "running"}
+        />
 
         {/* Restore confirm */}
         <AlertDialog

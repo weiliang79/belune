@@ -328,6 +328,34 @@ func (q *Queries) ListProjectDatabaseBackups(ctx context.Context, arg ListProjec
 	return items, nil
 }
 
+const setDatabaseBackupLog = `-- name: SetDatabaseBackupLog :exec
+UPDATE database_backups SET log = $2 WHERE id = $1
+`
+
+type SetDatabaseBackupLogParams struct {
+	ID  pgtype.UUID `json:"id"`
+	Log string      `json:"log"`
+}
+
+func (q *Queries) SetDatabaseBackupLog(ctx context.Context, arg SetDatabaseBackupLogParams) error {
+	_, err := q.db.Exec(ctx, setDatabaseBackupLog, arg.ID, arg.Log)
+	return err
+}
+
+const setDatabaseRestoreLog = `-- name: SetDatabaseRestoreLog :exec
+UPDATE database_restores SET log = $2 WHERE id = $1
+`
+
+type SetDatabaseRestoreLogParams struct {
+	ID  pgtype.UUID `json:"id"`
+	Log pgtype.Text `json:"log"`
+}
+
+func (q *Queries) SetDatabaseRestoreLog(ctx context.Context, arg SetDatabaseRestoreLogParams) error {
+	_, err := q.db.Exec(ctx, setDatabaseRestoreLog, arg.ID, arg.Log)
+	return err
+}
+
 const updateDatabaseBackup = `-- name: UpdateDatabaseBackup :exec
 UPDATE database_backups
 SET finished_at = $2,

@@ -75,6 +75,11 @@ func (h *TaskHandler) HandleRestoreVolumeTask(ctx context.Context, t *asynq.Task
 	}
 
 	lg := &runLog{}
+	lg.flush = func(s string) {
+		if err := h.Queries.SetApplicationVolumeRestoreLog(ctx, generated.SetApplicationVolumeRestoreLogParams{ID: run.ID, Log: pgtype.Text{String: s, Valid: true}}); err != nil {
+			slog.Warn("restore_volume: flush log", "restore_id", formatUUID(run.ID), "error", err)
+		}
+	}
 	lg.step("Volume restore started (volume=%s, path=%s, backup=%s)", vol.Name, vol.MountPath, formatUUID(backupID))
 
 	archivePath, cleanup, err := h.resolveVolumeBackupFile(ctx, bk)
