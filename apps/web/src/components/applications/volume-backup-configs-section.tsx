@@ -2,6 +2,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 import {
   DatabaseBackupIcon,
+  HistoryIcon,
   PencilIcon,
   PlusIcon,
   Trash2Icon,
@@ -222,6 +223,13 @@ function ConfigRow({
           <DatabaseBackupIcon aria-hidden="true" className="size-4" />
         </IconAction>
         <IconAction
+          label="Manage Histories"
+          size="icon-sm"
+          onClick={() => onManage(config)}
+        >
+          <HistoryIcon aria-hidden="true" className="size-4" />
+        </IconAction>
+        <IconAction
           label="Edit"
           size="icon-sm"
           onClick={() => onEdit(config)}
@@ -236,9 +244,6 @@ function ConfigRow({
         >
           <Trash2Icon aria-hidden="true" className="size-4" />
         </IconAction>
-        <Button size="sm" variant="outline" onClick={() => onManage(config)}>
-          Manage
-        </Button>
       </div>
 
       <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>

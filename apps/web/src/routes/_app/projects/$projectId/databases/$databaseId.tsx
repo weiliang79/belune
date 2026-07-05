@@ -50,6 +50,7 @@ import {
   Loader2,
   Trash2,
   Pencil,
+  History,
   TriangleAlert as AlertTriangleIcon,
   DatabaseBackup as DatabaseBackupIcon,
   Plus,
@@ -930,6 +931,13 @@ function BackupsTab({ db }: { db: Database }) {
                     <DatabaseBackupIcon className="h-4 w-4" />
                   </IconAction>
                   <IconAction
+                    label="Manage Histories"
+                    size="icon-sm"
+                    onClick={() => openManage(c)}
+                  >
+                    <History className="h-4 w-4" />
+                  </IconAction>
+                  <IconAction
                     label="Edit"
                     size="icon-sm"
                     onClick={() => openEdit(c)}
@@ -944,13 +952,6 @@ function BackupsTab({ db }: { db: Database }) {
                   >
                     <Trash2 className="h-4 w-4" />
                   </IconAction>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => openManage(c)}
-                  >
-                    Manage
-                  </Button>
                 </div>
               </li>
             ))}
