@@ -1,6 +1,21 @@
 -- name: ListDeploymentsByApplication :many
 SELECT * FROM deployments WHERE application_id = $1 ORDER BY started_at DESC;
 
+-- name: ListImageTagOwners :many
+-- Maps each built image tag to its owning application, so the admin Docker
+-- page can attribute images regardless of which builder produced them (labels
+-- are only reliable on the Dockerfile path). One row per distinct image tag,
+-- resolving to the most recent deployment that produced it.
+SELECT DISTINCT ON (d.image_tag)
+    d.image_tag,
+    d.application_id,
+    a.name AS application_name,
+    a.project_id
+FROM deployments d
+JOIN applications a ON a.id = d.application_id
+WHERE d.image_tag IS NOT NULL AND d.image_tag <> ''
+ORDER BY d.image_tag, d.started_at DESC;
+
 -- name: GetDeployment :one
 SELECT * FROM deployments WHERE id = $1;
 
@@ -36,6 +51,22 @@ UPDATE deployments SET build_logs = $2 WHERE id = $1;
 
 -- name: UpdateDeploymentImageTag :exec
 UPDATE deployments SET image_tag = $2 WHERE id = $1;
+
+-- name: UpdateDeploymentCommitSha :exec
+-- Records the commit actually built. Previously only the webhook push path set
+-- commit_sha; manual/git builds left it null. Needed so Rebuild can re-checkout
+-- the currently-deployed commit.
+UPDATE deployments SET commit_sha = $2 WHERE id = $1;
+
+-- name: GetLatestSuccessfulDeployment :one
+-- The most recent successfully-deployed deployment for an app, carrying the
+-- image_tag (for Reload) and commit_sha (for Rebuild).
+SELECT * FROM deployments
+WHERE application_id = $1
+  AND status = 'success'
+  AND image_tag IS NOT NULL AND image_tag <> ''
+ORDER BY started_at DESC
+LIMIT 1;
 
 -- name: UpdateDeploymentHealth :exec
 UPDATE deployments

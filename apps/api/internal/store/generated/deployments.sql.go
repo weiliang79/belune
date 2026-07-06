@@ -178,6 +178,42 @@ func (q *Queries) GetLatestApplicationHealth(ctx context.Context, applicationID 
 	return i, err
 }
 
+const getLatestSuccessfulDeployment = `-- name: GetLatestSuccessfulDeployment :one
+SELECT id, application_id, status, triggered_by, commit_sha, image_tag, build_logs, error_message, started_at, build_started_at, build_ended_at, deploy_started_at, finished_at, idempotency_key, health_status, health_message, health_checked_at FROM deployments
+WHERE application_id = $1
+  AND status = 'success'
+  AND image_tag IS NOT NULL AND image_tag <> ''
+ORDER BY started_at DESC
+LIMIT 1
+`
+
+// The most recent successfully-deployed deployment for an app, carrying the
+// image_tag (for Reload) and commit_sha (for Rebuild).
+func (q *Queries) GetLatestSuccessfulDeployment(ctx context.Context, applicationID pgtype.UUID) (Deployment, error) {
+	row := q.db.QueryRow(ctx, getLatestSuccessfulDeployment, applicationID)
+	var i Deployment
+	err := row.Scan(
+		&i.ID,
+		&i.ApplicationID,
+		&i.Status,
+		&i.TriggeredBy,
+		&i.CommitSha,
+		&i.ImageTag,
+		&i.BuildLogs,
+		&i.ErrorMessage,
+		&i.StartedAt,
+		&i.BuildStartedAt,
+		&i.BuildEndedAt,
+		&i.DeployStartedAt,
+		&i.FinishedAt,
+		&i.IdempotencyKey,
+		&i.HealthStatus,
+		&i.HealthMessage,
+		&i.HealthCheckedAt,
+	)
+	return i, err
+}
+
 const listDeploymentsByApplication = `-- name: ListDeploymentsByApplication :many
 SELECT id, application_id, status, triggered_by, commit_sha, image_tag, build_logs, error_message, started_at, build_started_at, build_ended_at, deploy_started_at, finished_at, idempotency_key, health_status, health_message, health_checked_at FROM deployments WHERE application_id = $1 ORDER BY started_at DESC
 `
@@ -382,6 +418,54 @@ func (q *Queries) ListGlobalDeploymentsFiltered(ctx context.Context, arg ListGlo
 	return items, nil
 }
 
+const listImageTagOwners = `-- name: ListImageTagOwners :many
+SELECT DISTINCT ON (d.image_tag)
+    d.image_tag,
+    d.application_id,
+    a.name AS application_name,
+    a.project_id
+FROM deployments d
+JOIN applications a ON a.id = d.application_id
+WHERE d.image_tag IS NOT NULL AND d.image_tag <> ''
+ORDER BY d.image_tag, d.started_at DESC
+`
+
+type ListImageTagOwnersRow struct {
+	ImageTag        pgtype.Text `json:"image_tag"`
+	ApplicationID   pgtype.UUID `json:"application_id"`
+	ApplicationName string      `json:"application_name"`
+	ProjectID       pgtype.UUID `json:"project_id"`
+}
+
+// Maps each built image tag to its owning application, so the admin Docker
+// page can attribute images regardless of which builder produced them (labels
+// are only reliable on the Dockerfile path). One row per distinct image tag,
+// resolving to the most recent deployment that produced it.
+func (q *Queries) ListImageTagOwners(ctx context.Context) ([]ListImageTagOwnersRow, error) {
+	rows, err := q.db.Query(ctx, listImageTagOwners)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListImageTagOwnersRow{}
+	for rows.Next() {
+		var i ListImageTagOwnersRow
+		if err := rows.Scan(
+			&i.ImageTag,
+			&i.ApplicationID,
+			&i.ApplicationName,
+			&i.ProjectID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listOldDeployments = `-- name: ListOldDeployments :many
 SELECT id, application_id, status, triggered_by, commit_sha, image_tag, build_logs, error_message, started_at, build_started_at, build_ended_at, deploy_started_at, finished_at, idempotency_key, health_status, health_message, health_checked_at FROM deployments WHERE application_id = $1 ORDER BY started_at DESC OFFSET $2
 `
@@ -537,6 +621,23 @@ type UpdateDeploymentBuildLogsParams struct {
 
 func (q *Queries) UpdateDeploymentBuildLogs(ctx context.Context, arg UpdateDeploymentBuildLogsParams) error {
 	_, err := q.db.Exec(ctx, updateDeploymentBuildLogs, arg.ID, arg.BuildLogs)
+	return err
+}
+
+const updateDeploymentCommitSha = `-- name: UpdateDeploymentCommitSha :exec
+UPDATE deployments SET commit_sha = $2 WHERE id = $1
+`
+
+type UpdateDeploymentCommitShaParams struct {
+	ID        pgtype.UUID `json:"id"`
+	CommitSha pgtype.Text `json:"commit_sha"`
+}
+
+// Records the commit actually built. Previously only the webhook push path set
+// commit_sha; manual/git builds left it null. Needed so Rebuild can re-checkout
+// the currently-deployed commit.
+func (q *Queries) UpdateDeploymentCommitSha(ctx context.Context, arg UpdateDeploymentCommitShaParams) error {
+	_, err := q.db.Exec(ctx, updateDeploymentCommitSha, arg.ID, arg.CommitSha)
 	return err
 }
 

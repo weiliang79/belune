@@ -239,6 +239,96 @@ func Clone(ctx context.Context, repoURL, destDir, branch, token string) (*CloneR
 	}, nil
 }
 
+// CloneCommit fetches a repository and checks out an exact commit SHA (rather
+// than a branch tip). Used by Rebuild to re-build the currently-deployed commit
+// instead of branch HEAD. It first tries a shallow fetch of the single commit
+// (fast; supported by GitHub/GitLab and most modern servers), then falls back to
+// a full clone + checkout for servers that reject fetching an arbitrary SHA.
+// Token handling and SSRF validation match Clone.
+func CloneCommit(ctx context.Context, repoURL, destDir, commitSHA, token string) (*CloneResult, error) {
+	if err := validateRepoURL(repoURL, nil); err != nil {
+		return nil, err
+	}
+	if !isHexSHA(commitSHA) {
+		return nil, fmt.Errorf("invalid commit sha")
+	}
+
+	cloneURL := repoURL
+	if token != "" && strings.HasPrefix(repoURL, "https://") {
+		cloneURL = strings.Replace(repoURL, "https://", "https://"+token+"@", 1)
+	}
+
+	if err := shallowFetchCommit(ctx, cloneURL, destDir, commitSHA); err != nil {
+		// Fallback: full clone + checkout works on any server, even those that
+		// disallow fetching an arbitrary SHA. Reset destDir (the fetch attempt
+		// git-init'd it) so `git clone` can recreate it.
+		if rmErr := os.RemoveAll(destDir); rmErr != nil {
+			return nil, fmt.Errorf("reset clone dir: %w", rmErr)
+		}
+		if cloneErr := fullCloneCheckout(ctx, cloneURL, destDir, commitSHA, token); cloneErr != nil {
+			return nil, fmt.Errorf("clone commit %s (shallow fetch failed: %s): %w",
+				commitSHA, redactToken(err.Error(), token), cloneErr)
+		}
+	}
+	return resolveHead(ctx, destDir)
+}
+
+// shallowFetchCommit initialises destDir and shallow-fetches a single commit.
+func shallowFetchCommit(ctx context.Context, cloneURL, destDir, commitSHA string) error {
+	run := func(args ...string) error {
+		out, err := exec.CommandContext(ctx, "git", args...).CombinedOutput()
+		if err != nil {
+			return fmt.Errorf("%s: %w", strings.TrimSpace(string(out)), err)
+		}
+		return nil
+	}
+	if err := run("init", "-q", destDir); err != nil {
+		return err
+	}
+	if err := run("-C", destDir, "remote", "add", "origin", cloneURL); err != nil {
+		return err
+	}
+	if err := run("-C", destDir, "fetch", "--depth", "1", "origin", commitSHA); err != nil {
+		return err
+	}
+	return run("-C", destDir, "checkout", "-q", "FETCH_HEAD")
+}
+
+// fullCloneCheckout clones the full history then checks out the commit.
+func fullCloneCheckout(ctx context.Context, cloneURL, destDir, commitSHA, token string) error {
+	out, err := exec.CommandContext(ctx, "git", "clone", "--no-checkout", cloneURL, destDir).CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("git clone: %s: %w", redactToken(string(out), token), redactError(err, token))
+	}
+	out, err = exec.CommandContext(ctx, "git", "-C", destDir, "checkout", "-q", commitSHA).CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("git checkout %s: %s: %w", commitSHA, strings.TrimSpace(string(out)), err)
+	}
+	return nil
+}
+
+// resolveHead returns the checked-out commit SHA of a working tree.
+func resolveHead(ctx context.Context, destDir string) (*CloneResult, error) {
+	shaOutput, err := exec.CommandContext(ctx, "git", "-C", destDir, "rev-parse", "HEAD").Output()
+	if err != nil {
+		return nil, fmt.Errorf("git rev-parse: %w", err)
+	}
+	return &CloneResult{CommitSHA: strings.TrimSpace(string(shaOutput))}, nil
+}
+
+// isHexSHA reports whether s is a plausible git commit hash (7–64 hex chars).
+func isHexSHA(s string) bool {
+	if len(s) < 7 || len(s) > 64 {
+		return false
+	}
+	for _, r := range s {
+		if !((r >= '0' && r <= '9') || (r >= 'a' && r <= 'f') || (r >= 'A' && r <= 'F')) {
+			return false
+		}
+	}
+	return true
+}
+
 // redactToken removes occurrences of the auth token from a string before it
 // flows back to the caller. Git error output occasionally echoes the
 // authenticated URL (`https://<token>@host/...`); without redaction the

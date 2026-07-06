@@ -9,12 +9,14 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/filters"
 	imagetypes "github.com/docker/docker/api/types/image"
 
 	"github.com/ungweiliang/selfhost-paas/internal/pkg/metrics"
+	"github.com/ungweiliang/selfhost-paas/internal/runtime"
 )
 
 func (c *Client) PullImage(ctx context.Context, image string) (err error) {
@@ -75,6 +77,72 @@ func (c *Client) PruneImages(ctx context.Context) error {
 		return fmt.Errorf("prune images: %w", err)
 	}
 	return nil
+}
+
+// ListImages lists all images on the host for the read-only admin inspect page.
+// SharedSize is requested so the overview page can report reclaimable bytes.
+func (c *Client) ListImages(ctx context.Context) (result []runtime.ImageInfo, err error) {
+	defer func() { metrics.RecordDockerOp("list_images", err) }()
+	images, err := c.cli.ImageList(ctx, imagetypes.ListOptions{All: false, SharedSize: true})
+	if err != nil {
+		return nil, fmt.Errorf("list images: %w", err)
+	}
+	result = make([]runtime.ImageInfo, 0, len(images))
+	for _, img := range images {
+		result = append(result, runtime.ImageInfo{
+			ID:         img.ID,
+			RepoTags:   img.RepoTags,
+			Size:       img.Size,
+			SharedSize: img.SharedSize,
+			Containers: img.Containers,
+			Dangling:   isDanglingImage(img.RepoTags),
+			Labels:     img.Labels,
+			CreatedAt:  time.Unix(img.Created, 0),
+		})
+	}
+	return result, nil
+}
+
+// ResolveImageDigest inspects a locally-present image and returns a
+// digest-pinned reference ("repo@sha256:…") drawn from its RepoDigests. It
+// prefers a digest whose repository matches ref (an image can carry digests for
+// several repos); otherwise it returns the first available. Returns "" (nil
+// error) when the image has no repo digest.
+func (c *Client) ResolveImageDigest(ctx context.Context, ref string) (digest string, err error) {
+	defer func() { metrics.RecordDockerOp("resolve_image_digest", err) }()
+
+	inspect, err := c.cli.ImageInspect(ctx, ref)
+	if err != nil {
+		return "", fmt.Errorf("inspect image %s: %w", ref, err)
+	}
+	if len(inspect.RepoDigests) == 0 {
+		return "", nil
+	}
+	// Match the digest to ref's repository when possible (strip any tag first).
+	repo := ref
+	if at := strings.IndexByte(repo, '@'); at >= 0 {
+		repo = repo[:at]
+	}
+	if colon := strings.LastIndexByte(repo, ':'); colon >= 0 && !strings.ContainsRune(repo[colon:], '/') {
+		repo = repo[:colon]
+	}
+	for _, rd := range inspect.RepoDigests {
+		if strings.HasPrefix(rd, repo+"@") {
+			return rd, nil
+		}
+	}
+	return inspect.RepoDigests[0], nil
+}
+
+// isDanglingImage reports whether an image has no usable tag (untagged), which
+// is how the Docker CLI marks images eligible for dangling prune.
+func isDanglingImage(repoTags []string) bool {
+	for _, t := range repoTags {
+		if t != "" && t != "<none>:<none>" {
+			return false
+		}
+	}
+	return true
 }
 
 // tarDirectory creates a tar archive from a directory.

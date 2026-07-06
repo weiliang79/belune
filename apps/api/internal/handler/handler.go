@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"log/slog"
 	"net/http"
@@ -26,11 +27,21 @@ type TaskEnqueuer interface {
 	Enqueue(task *asynq.Task, opts ...asynq.Option) (*asynq.TaskInfo, error)
 }
 
+// QueueInspector is the narrow slice of *asynq.Inspector the handler uses for
+// queue maintenance: reporting depth and clearing dead-letter/retry tasks.
+// Concrete impl is *asynq.Inspector; mocked in tests.
+type QueueInspector interface {
+	GetQueueInfo(queue string) (*asynq.QueueInfo, error)
+	DeleteAllArchivedTasks(queue string) (int, error)
+	DeleteAllRetryTasks(queue string) (int, error)
+}
+
 // ReconcilerStatusProvider is the narrow interface the handler consumes to
-// surface proxy reconciler state on the admin API. Concrete type lives in
-// internal/proxy.
+// surface proxy reconciler state and trigger an on-demand reconcile from the
+// admin API. Concrete type lives in internal/proxy.
 type ReconcilerStatusProvider interface {
 	Status() proxy.ReconcilerStatus
+	ReconcileNow(ctx context.Context) error
 }
 
 type Handler struct {
@@ -38,6 +49,7 @@ type Handler struct {
 	db                *pgxpool.Pool
 	queries           *generated.Queries
 	asynq             TaskEnqueuer
+	inspector         QueueInspector
 	runtime           runtime.ContainerRuntime
 	proxy             proxy.ProxyManager
 	reconciler        ReconcilerStatusProvider
@@ -62,6 +74,7 @@ func New(
 	db *pgxpool.Pool,
 	queries *generated.Queries,
 	asynqClient TaskEnqueuer,
+	inspector QueueInspector,
 	rt runtime.ContainerRuntime,
 	pm proxy.ProxyManager,
 	reconciler ReconcilerStatusProvider,
@@ -85,6 +98,7 @@ func New(
 		db:                db,
 		queries:           queries,
 		asynq:             asynqClient,
+		inspector:         inspector,
 		runtime:           rt,
 		proxy:             pm,
 		reconciler:        reconciler,

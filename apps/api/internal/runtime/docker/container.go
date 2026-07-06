@@ -176,8 +176,25 @@ func (c *Client) ListContainers(ctx context.Context) ([]runtime.ContainerInfo, e
 	if err != nil {
 		return nil, fmt.Errorf("list containers: %w", err)
 	}
+	return mapContainerSummaries(containers), nil
+}
 
-	var result []runtime.ContainerInfo
+// ListAllContainers lists every container on the host (running and stopped),
+// including ones not managed by the platform. Read-only; used by the admin
+// Docker inspect page. It intentionally omits the managed-by label filter that
+// ListContainers applies for health probes and metrics.
+func (c *Client) ListAllContainers(ctx context.Context) (result []runtime.ContainerInfo, err error) {
+	defer func() { metrics.RecordDockerOp("list_all_containers", err) }()
+	containers, err := c.cli.ContainerList(ctx, container.ListOptions{All: true})
+	if err != nil {
+		return nil, fmt.Errorf("list all containers: %w", err)
+	}
+	return mapContainerSummaries(containers), nil
+}
+
+// mapContainerSummaries converts Docker container summaries into the runtime DTO.
+func mapContainerSummaries(containers []container.Summary) []runtime.ContainerInfo {
+	result := make([]runtime.ContainerInfo, 0, len(containers))
 	for _, ctr := range containers {
 		name := ""
 		if len(ctr.Names) > 0 {
@@ -198,14 +215,13 @@ func (c *Client) ListContainers(ctx context.Context) ([]runtime.ContainerInfo, e
 			ID:        ctr.ID,
 			Name:      name,
 			Image:     ctr.Image,
-			Status:    ctr.State,
+			Status:    string(ctr.State),
 			Ports:     ports,
 			Labels:    ctr.Labels,
 			CreatedAt: time.Unix(ctr.Created, 0),
 		})
 	}
-
-	return result, nil
+	return result
 }
 
 func (c *Client) ContainerStats(ctx context.Context, containerID string) (*runtime.ContainerResourceStats, error) {

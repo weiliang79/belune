@@ -122,6 +122,40 @@ export function useRestartApplication(projectId: string, applicationId: string) 
   });
 }
 
+// Reload and Rebuild both create a new deployment, so they invalidate the
+// deployments list as well as the application detail (mirrors useDeployApplication).
+export function useReloadApplication(projectId: string, applicationId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => applicationsApi.reloadApplication(projectId, applicationId),
+    onSuccess: () => {
+      qc.invalidateQueries({
+        queryKey: queryKeys.applications.detail(projectId, applicationId),
+      });
+      qc.invalidateQueries({
+        queryKey: queryKeys.deployments.all(projectId, applicationId),
+      });
+    },
+    onError: (error) => toast.error(error.message),
+  });
+}
+
+export function useRebuildApplication(projectId: string, applicationId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => applicationsApi.rebuildApplication(projectId, applicationId),
+    onSuccess: () => {
+      qc.invalidateQueries({
+        queryKey: queryKeys.applications.detail(projectId, applicationId),
+      });
+      qc.invalidateQueries({
+        queryKey: queryKeys.deployments.all(projectId, applicationId),
+      });
+    },
+    onError: (error) => toast.error(error.message),
+  });
+}
+
 export function useBuildCache(projectId: string, applicationId: string) {
   return useQuery({
     queryKey: queryKeys.applications.buildCache(projectId, applicationId),

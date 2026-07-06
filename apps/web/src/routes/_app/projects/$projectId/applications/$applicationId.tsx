@@ -10,6 +10,8 @@ import {
   useStopApplication,
   useStartApplication,
   useRestartApplication,
+  useReloadApplication,
+  useRebuildApplication,
 } from "@/lib/hooks/use-applications";
 import { useProject } from "@/lib/hooks/use-projects";
 import { useDeployments } from "@/lib/hooks/use-deployments";
@@ -74,6 +76,8 @@ function ApplicationLayout() {
   const stop = useStopApplication(projectId, applicationId);
   const start = useStartApplication(projectId, applicationId);
   const restart = useRestartApplication(projectId, applicationId);
+  const reload = useReloadApplication(projectId, applicationId);
+  const rebuild = useRebuildApplication(projectId, applicationId);
   const routerState = useRouterState();
   const currentPath = routerState.location.pathname;
 
@@ -208,6 +212,46 @@ function ApplicationLayout() {
           >
             Restart
           </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => {
+              toast.promise(reload.mutateAsync(), {
+                loading: "Reloading...",
+                success: "Reload started — applying current config",
+                error: (err) => err.message,
+              });
+            }}
+            disabled={
+              reload.isPending ||
+              application.status === "deploying" ||
+              application.status === "building"
+            }
+            title="Recreate the container from the current image to apply config changes (volumes, file mounts, env) — no rebuild"
+          >
+            Reload
+          </Button>
+          {application.type === "git" && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                toast.promise(rebuild.mutateAsync(), {
+                  loading: "Rebuilding...",
+                  success: "Rebuild started — building the current commit",
+                  error: (err) => err.message,
+                });
+              }}
+              disabled={
+                rebuild.isPending ||
+                application.status === "deploying" ||
+                application.status === "building"
+              }
+              title="Rebuild the currently-deployed commit (not the latest) — picks up base-image and dependency updates"
+            >
+              Rebuild
+            </Button>
+          )}
           {application.status === "running" ? (
             <AlertDialog>
               <AlertDialogTrigger

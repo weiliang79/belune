@@ -92,7 +92,8 @@ func (h *Handler) GetMetrics(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) TriggerCleanup(w http.ResponseWriter, r *http.Request) {
 	type cleanupRequest struct {
-		RetainCount int `json:"retain_count,omitempty"`
+		RetainCount int      `json:"retain_count,omitempty"`
+		Actions     []string `json:"actions,omitempty"` // empty = full cleanup
 	}
 
 	var req cleanupRequest
@@ -101,6 +102,17 @@ func (h *Handler) TriggerCleanup(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.RetainCount <= 0 {
 		req.RetainCount = 3
+	}
+
+	validActions := map[string]bool{
+		"deployments": true, "images": true, "volumes": true,
+		"containers": true, "build_cache": true,
+	}
+	for _, a := range req.Actions {
+		if !validActions[a] {
+			writeError(w, http.StatusBadRequest, "invalid cleanup action: "+a)
+			return
+		}
 	}
 
 	payload, _ := json.Marshal(req)

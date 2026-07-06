@@ -15,9 +15,22 @@ import (
 	"github.com/ungweiliang/selfhost-paas/internal/store/generated"
 )
 
+// settingDailyCleanup gates the periodic (scheduled) cleanup run. Absent or any
+// value other than "false" means enabled — preserving the historical always-on
+// behaviour.
+const settingDailyCleanup = "daily_cleanup_enabled"
+
 type cleanupPayload struct {
 	ApplicationID string `json:"application_id,omitempty"`
 	RetainCount   int    `json:"retain_count,omitempty"`
+	// Scheduled marks the periodic run enqueued by the scheduler. Only scheduled
+	// runs are gated by the daily_cleanup_enabled setting; manual and per-app
+	// cleanups always run.
+	Scheduled bool `json:"scheduled,omitempty"`
+	// Actions selects which cleanup steps to run. Empty = full cleanup (all
+	// steps), which the periodic run and the "Run full cleanup" button use.
+	// Values: "deployments" | "images" | "volumes" | "containers" | "build_cache".
+	Actions []string `json:"actions,omitempty"`
 }
 
 func (h *TaskHandler) HandleCleanupTask(ctx context.Context, t *asynq.Task) error {
@@ -32,49 +45,80 @@ func (h *TaskHandler) HandleCleanupTask(ctx context.Context, t *asynq.Task) erro
 		payload.RetainCount = 3
 	}
 
-	slog.Info("handling cleanup task", "retain_count", payload.RetainCount, "application_id", payload.ApplicationID)
+	// Scheduled runs honour the daily-cleanup toggle; manual/per-app runs ignore it.
+	if payload.Scheduled && !h.dailyCleanupEnabled(ctx) {
+		slog.Info("daily cleanup disabled by setting; skipping scheduled run")
+		return nil
+	}
+
+	full := len(payload.Actions) == 0
+	wants := func(action string) bool {
+		if full {
+			return true
+		}
+		for _, a := range payload.Actions {
+			if a == action {
+				return true
+			}
+		}
+		return false
+	}
+
+	slog.Info("handling cleanup task", "retain_count", payload.RetainCount,
+		"application_id", payload.ApplicationID, "actions", payload.Actions)
 
 	totalRemoved := 0
 	appsProcessed := 0
 
-	if payload.ApplicationID != "" {
-		// Single-app cleanup: one JOIN query instead of GetApplication + GetProject.
-		appID, err := parseUUID(payload.ApplicationID)
-		if err != nil {
-			return errors.Join(fmt.Errorf("invalid application_id (permanent): %w", err), asynq.SkipRetry)
-		}
-		row, err := h.Queries.GetApplicationWithProjectSlug(ctx, appID)
-		if err != nil {
-			return fmt.Errorf("get application: %w", err)
-		}
-		h.cleanupAppDeployments(ctx, row.ID, row.Type, row.Slug, row.ProjectSlug, payload.RetainCount, &totalRemoved)
-		appsProcessed = 1
-	} else {
-		// Bulk cleanup: single JOIN query — no per-row GetProject call.
-		rows, err := h.Queries.ListAllApplicationsWithProjectSlug(ctx)
-		if err != nil {
-			return fmt.Errorf("list applications: %w", err)
-		}
-		for _, row := range rows {
+	if wants("deployments") {
+		if payload.ApplicationID != "" {
+			// Single-app cleanup: one JOIN query instead of GetApplication + GetProject.
+			appID, err := parseUUID(payload.ApplicationID)
+			if err != nil {
+				return errors.Join(fmt.Errorf("invalid application_id (permanent): %w", err), asynq.SkipRetry)
+			}
+			row, err := h.Queries.GetApplicationWithProjectSlug(ctx, appID)
+			if err != nil {
+				return fmt.Errorf("get application: %w", err)
+			}
 			h.cleanupAppDeployments(ctx, row.ID, row.Type, row.Slug, row.ProjectSlug, payload.RetainCount, &totalRemoved)
+			appsProcessed = 1
+		} else {
+			// Bulk cleanup: single JOIN query — no per-row GetProject call.
+			rows, err := h.Queries.ListAllApplicationsWithProjectSlug(ctx)
+			if err != nil {
+				return fmt.Errorf("list applications: %w", err)
+			}
+			for _, row := range rows {
+				h.cleanupAppDeployments(ctx, row.ID, row.Type, row.Slug, row.ProjectSlug, payload.RetainCount, &totalRemoved)
+			}
+			appsProcessed = len(rows)
 		}
-		appsProcessed = len(rows)
 	}
 
-	// Prune dangling images and volumes
-	if err := h.Runtime.PruneImages(ctx); err != nil {
-		slog.Warn("failed to prune images", "error", err)
+	if wants("images") {
+		if err := h.Runtime.PruneImages(ctx); err != nil {
+			slog.Warn("failed to prune images", "error", err)
+		}
 	}
-	if err := h.Runtime.PruneVolumes(ctx); err != nil {
-		slog.Warn("failed to prune volumes", "error", err)
+	if wants("volumes") {
+		if err := h.Runtime.PruneVolumes(ctx); err != nil {
+			slog.Warn("failed to prune volumes", "error", err)
+		}
+	}
+	if wants("build_cache") {
+		if err := h.Runtime.PruneBuildCache(ctx); err != nil {
+			slog.Warn("failed to prune build cache", "error", err)
+		}
+	}
+	if wants("containers") {
+		// Remove orphan containers: managed containers with no matching application in DB.
+		h.cleanupOrphanContainers(ctx)
 	}
 
-	// Remove orphan containers: managed containers with no matching application in DB.
-	h.cleanupOrphanContainers(ctx)
-
-	// Reap idle preview apps. Skipped entirely when targeting a single app
-	// (the caller wanted a narrow cleanup) or when the feature is disabled.
-	if payload.ApplicationID == "" {
+	// Reap idle preview apps only in a full bulk cleanup — never for a targeted
+	// single-app or single-action run.
+	if full && payload.ApplicationID == "" {
 		h.cleanupStalePreviews(ctx)
 	}
 
@@ -83,6 +127,16 @@ func (h *TaskHandler) HandleCleanupTask(ctx context.Context, t *asynq.Task) erro
 		"deployments_removed", totalRemoved,
 	)
 	return nil
+}
+
+// dailyCleanupEnabled reports whether the periodic cleanup should run. Absent or
+// unreadable setting defaults to enabled (preserving prior always-on behaviour).
+func (h *TaskHandler) dailyCleanupEnabled(ctx context.Context) bool {
+	s, err := h.Queries.GetSetting(ctx, settingDailyCleanup)
+	if err != nil {
+		return true
+	}
+	return s.Value != "false"
 }
 
 // cleanupAppDeployments removes images and DB records for deployments of a

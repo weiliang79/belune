@@ -457,3 +457,137 @@ export interface Stats {
   };
   host: HostResources | null;
 }
+
+// ---- Docker inspect (read-only admin pages) --------------------------------
+
+/** Links a Docker resource back to the platform app/database that owns it. */
+export interface DockerOwner {
+  type: "application" | "database";
+  id: string;
+  name: string;
+  project_id: string;
+}
+
+export interface DockerSystemInfo {
+  server_version: string;
+  operating_system: string;
+  os_type: string;
+  architecture: string;
+  kernel_version: string;
+  storage_driver: string;
+  logging_driver: string;
+  cgroup_driver: string;
+  ncpu: number;
+  mem_total: number;
+  docker_root_dir: string;
+  name: string;
+  containers: number;
+  containers_running: number;
+  containers_paused: number;
+  containers_stopped: number;
+  images: number;
+}
+
+export interface DockerDiskUsageEntry {
+  count: number;
+  size: number;
+  reclaimable: number;
+}
+
+export interface DockerDiskUsage {
+  layers_size: number;
+  images: DockerDiskUsageEntry;
+  containers: DockerDiskUsageEntry;
+  volumes: DockerDiskUsageEntry;
+  build_cache: DockerDiskUsageEntry;
+}
+
+export interface DockerOverview {
+  info: DockerSystemInfo;
+  disk_usage: DockerDiskUsage;
+  counts: {
+    containers_running: number;
+    containers_total: number;
+    images: number;
+    volumes: number;
+  };
+}
+
+export interface DockerContainer {
+  id: string;
+  name: string;
+  image: string;
+  status: string;
+  ports: Record<string, string>;
+  managed: boolean;
+  owner?: DockerOwner;
+  created_at: string;
+}
+
+export interface DockerImage {
+  id: string;
+  repo_tags: string[] | null;
+  size: number;
+  shared_size: number;
+  containers: number;
+  dangling: boolean;
+  managed: boolean;
+  owner?: DockerOwner;
+  created_at: string;
+}
+
+export interface DockerVolume {
+  name: string;
+  driver: string;
+  mountpoint: string;
+  scope: string;
+  size: number;
+  ref_count: number;
+  managed: boolean;
+  kind: "" | "data" | "cache";
+  owner?: DockerOwner;
+  created_at: string;
+}
+
+export interface DockerNetworkContainer {
+  id: string;
+  name: string;
+  ipv4_address: string;
+}
+
+// ---- Maintenance (Server page) ---------------------------------------------
+
+export interface ReconcilerStatus {
+  interval_seconds: number;
+  last_run_at: string;
+  last_duration_ms: number;
+  last_added: number;
+  last_removed: number;
+  last_error?: string;
+  run_count: number;
+  total_drift: number;
+}
+
+export interface QueueDepth {
+  queue: string;
+  pending: number;
+  active: number;
+  retry: number;
+  archived: number;
+}
+
+export interface QueueStatus {
+  queues: QueueDepth[];
+  total_stuck: number;
+}
+
+export interface DockerNetwork {
+  id: string;
+  name: string;
+  driver: string;
+  scope: string;
+  internal: boolean;
+  managed: boolean;
+  containers: DockerNetworkContainer[] | null;
+  created_at: string;
+}

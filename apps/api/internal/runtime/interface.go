@@ -82,6 +82,27 @@ type ContainerRuntime interface {
 	// Pass time.Now() to receive only new log lines (no backlog).
 	ContainerLogsSince(ctx context.Context, id string, since time.Time) (io.ReadCloser, error)
 	ListContainers(ctx context.Context) ([]ContainerInfo, error)
+	// ListAllContainers lists every container on the host (running and stopped),
+	// including ones not managed by the platform. Read-only; powers the admin
+	// Docker inspect page. Unlike ListContainers it does not filter by the
+	// managed-by label.
+	ListAllContainers(ctx context.Context) ([]ContainerInfo, error)
+	// ListImages lists all images on the host (read-only, admin inspect page).
+	ListImages(ctx context.Context) ([]ImageInfo, error)
+	// ResolveImageDigest inspects a locally-present image reference and returns a
+	// digest-pinned reference ("repo@sha256:…") from its RepoDigests. Returns an
+	// empty string (nil error) when the image has no repo digest (e.g. built
+	// locally, never pushed). Used to pin database / prebuilt-image versions so
+	// recreates don't silently follow a moved mutable tag.
+	ResolveImageDigest(ctx context.Context, ref string) (string, error)
+	// ListVolumes lists all volumes on the host with on-disk sizes (read-only).
+	ListVolumes(ctx context.Context) ([]VolumeInfo, error)
+	// ListNetworks lists all networks on the host with attached containers (read-only).
+	ListNetworks(ctx context.Context) ([]NetworkInfo, error)
+	// SystemInfo returns a trimmed `docker info` for the overview page (read-only).
+	SystemInfo(ctx context.Context) (*DockerSystemInfo, error)
+	// SystemDiskUsage returns a `docker system df` summary (read-only).
+	SystemDiskUsage(ctx context.Context) (*DockerDiskUsage, error)
 	PullImage(ctx context.Context, image string) error
 	BuildImage(ctx context.Context, contextDir, dockerfile, tag string) error
 	CreateNetwork(ctx context.Context, name string) error
@@ -110,6 +131,11 @@ type ContainerRuntime interface {
 	RemoveImage(ctx context.Context, image string) error
 	PruneImages(ctx context.Context) error
 	PruneVolumes(ctx context.Context) error
+	// PruneBuildCache reclaims build caches: it removes the platform's per-app
+	// CNB cache volumes (labelled paas-cache, which PruneVolumes deliberately
+	// preserves) and prunes the BuildKit builder cache. Disposable — the next
+	// build repopulates them.
+	PruneBuildCache(ctx context.Context) error
 	ContainerStats(ctx context.Context, containerID string) (*ContainerResourceStats, error)
 	ContainerEvents(ctx context.Context, filters map[string][]string) (<-chan ContainerEvent, <-chan error)
 	// ContainerExecTTY creates a new exec session in the named container with TTY enabled.
@@ -138,4 +164,85 @@ type ContainerEvent struct {
 	Status        string // start, stop, die, restart, oom
 	Labels        map[string]string
 	Time          time.Time
+}
+
+// ImageInfo describes a Docker image for the read-only admin inspect view.
+type ImageInfo struct {
+	ID         string
+	RepoTags   []string
+	Size       int64
+	SharedSize int64            // shared layer bytes; -1 if not computed
+	Containers int64            // containers using this image; -1 if unknown
+	Dangling   bool             // untagged (no usable RepoTags)
+	Labels     map[string]string
+	CreatedAt  time.Time
+}
+
+// VolumeInfo describes a Docker volume for the read-only admin inspect view.
+type VolumeInfo struct {
+	Name       string
+	Driver     string
+	Mountpoint string
+	Scope      string
+	Size       int64            // on-disk bytes; -1 if unknown
+	RefCount   int64            // containers referencing; -1 if unknown
+	Labels     map[string]string
+	CreatedAt  time.Time
+}
+
+// NetworkContainer is a container attached to a Docker network.
+type NetworkContainer struct {
+	ID          string
+	Name        string
+	IPv4Address string
+}
+
+// NetworkInfo describes a Docker network for the read-only admin inspect view.
+type NetworkInfo struct {
+	ID         string
+	Name       string
+	Driver     string
+	Scope      string
+	Internal   bool
+	Labels     map[string]string
+	CreatedAt  time.Time
+	Containers []NetworkContainer
+}
+
+// DockerSystemInfo is a trimmed view of `docker info` for the overview page.
+// JSON tags are snake_case because it is returned directly on the admin API.
+type DockerSystemInfo struct {
+	ServerVersion     string `json:"server_version"`
+	OperatingSystem   string `json:"operating_system"`
+	OSType            string `json:"os_type"`
+	Architecture      string `json:"architecture"`
+	KernelVersion     string `json:"kernel_version"`
+	StorageDriver     string `json:"storage_driver"`
+	LoggingDriver     string `json:"logging_driver"`
+	CgroupDriver      string `json:"cgroup_driver"`
+	NCPU              int    `json:"ncpu"`
+	MemTotal          int64  `json:"mem_total"`
+	DockerRootDir     string `json:"docker_root_dir"`
+	Name              string `json:"name"`
+	Containers        int    `json:"containers"`
+	ContainersRunning int    `json:"containers_running"`
+	ContainersPaused  int    `json:"containers_paused"`
+	ContainersStopped int    `json:"containers_stopped"`
+	Images            int    `json:"images"`
+}
+
+// DiskUsageEntry summarizes disk usage for one Docker object type.
+type DiskUsageEntry struct {
+	Count       int   `json:"count"`
+	Size        int64 `json:"size"`
+	Reclaimable int64 `json:"reclaimable"`
+}
+
+// DockerDiskUsage summarizes `docker system df` for the overview page.
+type DockerDiskUsage struct {
+	LayersSize int64          `json:"layers_size"`
+	Images     DiskUsageEntry `json:"images"`
+	Containers DiskUsageEntry `json:"containers"`
+	Volumes    DiskUsageEntry `json:"volumes"`
+	BuildCache DiskUsageEntry `json:"build_cache"`
 }

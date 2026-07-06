@@ -25,6 +25,11 @@ UPDATE databases SET cpu_limit = $2, memory_limit = $3 WHERE id = $1 RETURNING *
 -- name: UpdateDatabaseVersion :one
 UPDATE databases SET version = $2 WHERE id = $1 RETURNING *;
 
+-- name: UpdateDatabaseImageDigest :exec
+-- Pins (or clears, with NULL) the resolved @sha256 image digest so recreates
+-- reuse the exact image. Upgrade clears it so the target tag is re-pinned.
+UPDATE databases SET image_digest = $2 WHERE id = $1;
+
 -- name: ListDatabasesByStatus :many
 SELECT * FROM databases WHERE status = $1;
 

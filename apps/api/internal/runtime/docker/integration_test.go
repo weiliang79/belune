@@ -20,6 +20,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/docker/docker/api/types/volume"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -106,10 +107,10 @@ func volumeExists(t *testing.T, c *Client, name string) bool {
 // silently deletes user data whenever the cleanup worker runs while an app's
 // container is absent between deploys.
 //
-// The label filter is the guarantee under test. (On Docker Engine 23.0+,
-// VolumesPrune without all=true additionally skips *named* volumes entirely, so
-// these named volumes are doubly protected; the label keeps the guard correct
-// on older daemons and if all=true is ever introduced.)
+// Two guarantees are under test: labelled platform volumes survive, AND
+// unlabelled-but-platform-named volumes survive (the name guard), because a
+// volume can lose or never receive its labels yet still hold user data. Foreign
+// dangling volumes are still reclaimed.
 //
 // NOTE: this calls PruneVolumes, which reaps dangling volumes on the host —
 // running it may delete unrelated leftover volumes. It is gated behind the
@@ -129,10 +130,30 @@ func TestIntegration_PruneVolumes_PreservesDataAndCache(t *testing.T) {
 	require.NoError(t, c.CreateCacheVolume(ctx, cache))
 	t.Cleanup(func() { _ = c.RemoveVolume(context.Background(), cache) })
 
+	// Unlabeled but platform-named volume (legacy, or Docker-auto-created before
+	// the labelling code) — the name guard MUST keep it, since it may hold user
+	// data even though VolumeCreate never (re)applied the paas-data label.
+	var lb [6]byte
+	_, _ = rand.Read(lb[:])
+	legacy := "paas-vol-itlegacy-" + hex.EncodeToString(lb[:])
+	_, err := c.cli.VolumeCreate(ctx, volume.CreateOptions{Name: legacy}) // deliberately no labels
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = c.RemoveVolume(context.Background(), legacy) })
+
+	// Foreign unlabeled dangling volume — prune SHOULD reclaim it.
+	var fb [6]byte
+	_, _ = rand.Read(fb[:])
+	foreign := "foreign-it-" + hex.EncodeToString(fb[:])
+	_, err = c.cli.VolumeCreate(ctx, volume.CreateOptions{Name: foreign})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = c.RemoveVolume(context.Background(), foreign) })
+
 	require.NoError(t, c.PruneVolumes(ctx))
 
 	assert.True(t, volumeExists(t, c, data), "paas-data volume must survive prune")
 	assert.True(t, volumeExists(t, c, cache), "paas-cache volume must survive prune")
+	assert.True(t, volumeExists(t, c, legacy), "unlabeled platform-named volume must survive prune")
+	assert.False(t, volumeExists(t, c, foreign), "foreign dangling volume should be reclaimed")
 }
 
 func TestIntegration_ContainerLifecycle(t *testing.T) {

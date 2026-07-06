@@ -243,10 +243,34 @@ func (h *TaskHandler) provisionDBContainer(ctx context.Context, db generated.Dat
 		slog.Debug("could not create project network (may already exist)", "network", projectNetwork, "error", netErr)
 	}
 
+	// Pin the image to a resolved @sha256 digest so recreates (reconfigure,
+	// restart, reload) reuse the exact image instead of silently following a
+	// moved mutable tag (e.g. postgres:18 -> 18.1). If already pinned, deploy the
+	// digest directly; otherwise pull the tag, resolve its digest, and persist
+	// the pin. Upgrade clears the pin so the new target tag is re-resolved.
+	pinned := db.ImageDigest.Valid && db.ImageDigest.String != ""
+	if pinned {
+		image = db.ImageDigest.String
+	}
 	if err := h.Runtime.PullImage(ctx, image); err != nil {
 		return fmt.Errorf("pull image: %w", err)
 	}
-	if err := h.Runtime.CreateVolume(ctx, volumeName); err != nil {
+	if !pinned {
+		if digest, derr := h.Runtime.ResolveImageDigest(ctx, image); derr != nil {
+			slog.Warn("could not resolve database image digest; using tag", "image", image, "error", derr)
+		} else if digest != "" {
+			if uderr := h.Queries.UpdateDatabaseImageDigest(ctx, generated.UpdateDatabaseImageDigestParams{
+				ID:          db.ID,
+				ImageDigest: pgtype.Text{String: digest, Valid: true},
+			}); uderr != nil {
+				slog.Warn("could not persist database image digest", "database_id", db.ID.String(), "error", uderr)
+			}
+			image = digest
+		}
+	}
+	// Label as persistent data so PruneVolumes never reaps the database's data
+	// while its container is momentarily absent (stop/reconfigure/recreate).
+	if err := h.Runtime.CreateDataVolume(ctx, volumeName); err != nil {
 		return fmt.Errorf("create volume: %w", err)
 	}
 

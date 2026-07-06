@@ -29,7 +29,7 @@ INSERT INTO databases (
     backup_command, restore_command
 )
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
-RETURNING id, project_id, type, name, slug, version, status, internal_host, internal_port, credentials_encrypted, created_at, cpu_limit, memory_limit, host_port, image, container_port, data_dir, backup_mode, backup_command, restore_command
+RETURNING id, project_id, type, name, slug, version, status, internal_host, internal_port, credentials_encrypted, created_at, cpu_limit, memory_limit, host_port, image, container_port, data_dir, backup_mode, backup_command, restore_command, image_digest
 `
 
 type CreateDatabaseParams struct {
@@ -90,6 +90,7 @@ func (q *Queries) CreateDatabase(ctx context.Context, arg CreateDatabaseParams) 
 		&i.BackupMode,
 		&i.BackupCommand,
 		&i.RestoreCommand,
+		&i.ImageDigest,
 	)
 	return i, err
 }
@@ -104,7 +105,7 @@ func (q *Queries) DeleteDatabase(ctx context.Context, id pgtype.UUID) error {
 }
 
 const getDatabase = `-- name: GetDatabase :one
-SELECT id, project_id, type, name, slug, version, status, internal_host, internal_port, credentials_encrypted, created_at, cpu_limit, memory_limit, host_port, image, container_port, data_dir, backup_mode, backup_command, restore_command FROM databases WHERE id = $1
+SELECT id, project_id, type, name, slug, version, status, internal_host, internal_port, credentials_encrypted, created_at, cpu_limit, memory_limit, host_port, image, container_port, data_dir, backup_mode, backup_command, restore_command, image_digest FROM databases WHERE id = $1
 `
 
 func (q *Queries) GetDatabase(ctx context.Context, id pgtype.UUID) (Database, error) {
@@ -131,6 +132,7 @@ func (q *Queries) GetDatabase(ctx context.Context, id pgtype.UUID) (Database, er
 		&i.BackupMode,
 		&i.BackupCommand,
 		&i.RestoreCommand,
+		&i.ImageDigest,
 	)
 	return i, err
 }
@@ -149,7 +151,7 @@ func (q *Queries) GetDatabaseOwnerUserID(ctx context.Context, id pgtype.UUID) (p
 }
 
 const listAllDatabases = `-- name: ListAllDatabases :many
-SELECT id, project_id, type, name, slug, version, status, internal_host, internal_port, credentials_encrypted, created_at, cpu_limit, memory_limit, host_port, image, container_port, data_dir, backup_mode, backup_command, restore_command FROM databases
+SELECT id, project_id, type, name, slug, version, status, internal_host, internal_port, credentials_encrypted, created_at, cpu_limit, memory_limit, host_port, image, container_port, data_dir, backup_mode, backup_command, restore_command, image_digest FROM databases
 `
 
 func (q *Queries) ListAllDatabases(ctx context.Context) ([]Database, error) {
@@ -182,6 +184,7 @@ func (q *Queries) ListAllDatabases(ctx context.Context) ([]Database, error) {
 			&i.BackupMode,
 			&i.BackupCommand,
 			&i.RestoreCommand,
+			&i.ImageDigest,
 		); err != nil {
 			return nil, err
 		}
@@ -194,7 +197,7 @@ func (q *Queries) ListAllDatabases(ctx context.Context) ([]Database, error) {
 }
 
 const listDatabasesByProject = `-- name: ListDatabasesByProject :many
-SELECT id, project_id, type, name, slug, version, status, internal_host, internal_port, credentials_encrypted, created_at, cpu_limit, memory_limit, host_port, image, container_port, data_dir, backup_mode, backup_command, restore_command FROM databases WHERE project_id = $1 ORDER BY created_at DESC
+SELECT id, project_id, type, name, slug, version, status, internal_host, internal_port, credentials_encrypted, created_at, cpu_limit, memory_limit, host_port, image, container_port, data_dir, backup_mode, backup_command, restore_command, image_digest FROM databases WHERE project_id = $1 ORDER BY created_at DESC
 `
 
 func (q *Queries) ListDatabasesByProject(ctx context.Context, projectID pgtype.UUID) ([]Database, error) {
@@ -227,6 +230,7 @@ func (q *Queries) ListDatabasesByProject(ctx context.Context, projectID pgtype.U
 			&i.BackupMode,
 			&i.BackupCommand,
 			&i.RestoreCommand,
+			&i.ImageDigest,
 		); err != nil {
 			return nil, err
 		}
@@ -239,7 +243,7 @@ func (q *Queries) ListDatabasesByProject(ctx context.Context, projectID pgtype.U
 }
 
 const listDatabasesByStatus = `-- name: ListDatabasesByStatus :many
-SELECT id, project_id, type, name, slug, version, status, internal_host, internal_port, credentials_encrypted, created_at, cpu_limit, memory_limit, host_port, image, container_port, data_dir, backup_mode, backup_command, restore_command FROM databases WHERE status = $1
+SELECT id, project_id, type, name, slug, version, status, internal_host, internal_port, credentials_encrypted, created_at, cpu_limit, memory_limit, host_port, image, container_port, data_dir, backup_mode, backup_command, restore_command, image_digest FROM databases WHERE status = $1
 `
 
 func (q *Queries) ListDatabasesByStatus(ctx context.Context, status string) ([]Database, error) {
@@ -272,6 +276,7 @@ func (q *Queries) ListDatabasesByStatus(ctx context.Context, status string) ([]D
 			&i.BackupMode,
 			&i.BackupCommand,
 			&i.RestoreCommand,
+			&i.ImageDigest,
 		); err != nil {
 			return nil, err
 		}
@@ -284,7 +289,7 @@ func (q *Queries) ListDatabasesByStatus(ctx context.Context, status string) ([]D
 }
 
 const updateDatabaseAfterProvision = `-- name: UpdateDatabaseAfterProvision :one
-UPDATE databases SET status = $2, internal_host = $3, internal_port = $4, host_port = $5 WHERE id = $1 RETURNING id, project_id, type, name, slug, version, status, internal_host, internal_port, credentials_encrypted, created_at, cpu_limit, memory_limit, host_port, image, container_port, data_dir, backup_mode, backup_command, restore_command
+UPDATE databases SET status = $2, internal_host = $3, internal_port = $4, host_port = $5 WHERE id = $1 RETURNING id, project_id, type, name, slug, version, status, internal_host, internal_port, credentials_encrypted, created_at, cpu_limit, memory_limit, host_port, image, container_port, data_dir, backup_mode, backup_command, restore_command, image_digest
 `
 
 type UpdateDatabaseAfterProvisionParams struct {
@@ -325,12 +330,29 @@ func (q *Queries) UpdateDatabaseAfterProvision(ctx context.Context, arg UpdateDa
 		&i.BackupMode,
 		&i.BackupCommand,
 		&i.RestoreCommand,
+		&i.ImageDigest,
 	)
 	return i, err
 }
 
+const updateDatabaseImageDigest = `-- name: UpdateDatabaseImageDigest :exec
+UPDATE databases SET image_digest = $2 WHERE id = $1
+`
+
+type UpdateDatabaseImageDigestParams struct {
+	ID          pgtype.UUID `json:"id"`
+	ImageDigest pgtype.Text `json:"image_digest"`
+}
+
+// Pins (or clears, with NULL) the resolved @sha256 image digest so recreates
+// reuse the exact image. Upgrade clears it so the target tag is re-pinned.
+func (q *Queries) UpdateDatabaseImageDigest(ctx context.Context, arg UpdateDatabaseImageDigestParams) error {
+	_, err := q.db.Exec(ctx, updateDatabaseImageDigest, arg.ID, arg.ImageDigest)
+	return err
+}
+
 const updateDatabaseResources = `-- name: UpdateDatabaseResources :one
-UPDATE databases SET cpu_limit = $2, memory_limit = $3 WHERE id = $1 RETURNING id, project_id, type, name, slug, version, status, internal_host, internal_port, credentials_encrypted, created_at, cpu_limit, memory_limit, host_port, image, container_port, data_dir, backup_mode, backup_command, restore_command
+UPDATE databases SET cpu_limit = $2, memory_limit = $3 WHERE id = $1 RETURNING id, project_id, type, name, slug, version, status, internal_host, internal_port, credentials_encrypted, created_at, cpu_limit, memory_limit, host_port, image, container_port, data_dir, backup_mode, backup_command, restore_command, image_digest
 `
 
 type UpdateDatabaseResourcesParams struct {
@@ -363,6 +385,7 @@ func (q *Queries) UpdateDatabaseResources(ctx context.Context, arg UpdateDatabas
 		&i.BackupMode,
 		&i.BackupCommand,
 		&i.RestoreCommand,
+		&i.ImageDigest,
 	)
 	return i, err
 }
@@ -382,7 +405,7 @@ func (q *Queries) UpdateDatabaseSlug(ctx context.Context, arg UpdateDatabaseSlug
 }
 
 const updateDatabaseStatus = `-- name: UpdateDatabaseStatus :one
-UPDATE databases SET status = $2 WHERE id = $1 RETURNING id, project_id, type, name, slug, version, status, internal_host, internal_port, credentials_encrypted, created_at, cpu_limit, memory_limit, host_port, image, container_port, data_dir, backup_mode, backup_command, restore_command
+UPDATE databases SET status = $2 WHERE id = $1 RETURNING id, project_id, type, name, slug, version, status, internal_host, internal_port, credentials_encrypted, created_at, cpu_limit, memory_limit, host_port, image, container_port, data_dir, backup_mode, backup_command, restore_command, image_digest
 `
 
 type UpdateDatabaseStatusParams struct {
@@ -414,12 +437,13 @@ func (q *Queries) UpdateDatabaseStatus(ctx context.Context, arg UpdateDatabaseSt
 		&i.BackupMode,
 		&i.BackupCommand,
 		&i.RestoreCommand,
+		&i.ImageDigest,
 	)
 	return i, err
 }
 
 const updateDatabaseVersion = `-- name: UpdateDatabaseVersion :one
-UPDATE databases SET version = $2 WHERE id = $1 RETURNING id, project_id, type, name, slug, version, status, internal_host, internal_port, credentials_encrypted, created_at, cpu_limit, memory_limit, host_port, image, container_port, data_dir, backup_mode, backup_command, restore_command
+UPDATE databases SET version = $2 WHERE id = $1 RETURNING id, project_id, type, name, slug, version, status, internal_host, internal_port, credentials_encrypted, created_at, cpu_limit, memory_limit, host_port, image, container_port, data_dir, backup_mode, backup_command, restore_command, image_digest
 `
 
 type UpdateDatabaseVersionParams struct {
@@ -451,6 +475,7 @@ func (q *Queries) UpdateDatabaseVersion(ctx context.Context, arg UpdateDatabaseV
 		&i.BackupMode,
 		&i.BackupCommand,
 		&i.RestoreCommand,
+		&i.ImageDigest,
 	)
 	return i, err
 }

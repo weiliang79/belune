@@ -2,6 +2,7 @@ package proxy
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"sync"
 	"time"
@@ -18,6 +19,11 @@ type Reconciler struct {
 	queries  *generated.Queries
 	proxy    ProxyManager
 	interval time.Duration
+
+	// runMu serialises whole reconcile passes so a manual ReconcileNow can't
+	// overlap the periodic tick (reconcile is diff-based/idempotent but issues
+	// concurrent Caddy add/remove calls otherwise).
+	runMu sync.Mutex
 
 	mu     sync.RWMutex
 	status ReconcilerStatus
@@ -56,6 +62,19 @@ func (r *Reconciler) Status() ReconcilerStatus {
 	return r.status
 }
 
+// ReconcileNow runs a reconciliation pass on demand (the admin "reconcile
+// routes" action) and returns the pass's first error, if any. It shares the run
+// mutex with the periodic loop, so a manual trigger cannot overlap a tick.
+func (r *Reconciler) ReconcileNow(ctx context.Context) error {
+	r.reconcile(ctx)
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	if r.status.LastError != "" {
+		return errors.New(r.status.LastError)
+	}
+	return nil
+}
+
 // Run starts the reconcile loop. It reconciles immediately on entry, then on
 // every tick. Returns when ctx is cancelled.
 func (r *Reconciler) Run(ctx context.Context) {
@@ -79,6 +98,9 @@ func (r *Reconciler) Run(ctx context.Context) {
 // The outcome (added/removed counts, first error) is recorded on the
 // Reconciler so it can be surfaced via Status().
 func (r *Reconciler) reconcile(ctx context.Context) {
+	r.runMu.Lock()
+	defer r.runMu.Unlock()
+
 	start := time.Now()
 	var added, removed int
 	var firstErr error

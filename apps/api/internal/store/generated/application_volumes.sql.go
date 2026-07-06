@@ -64,6 +64,48 @@ func (q *Queries) GetApplicationVolume(ctx context.Context, id pgtype.UUID) (App
 	return i, err
 }
 
+const listApplicationVolumeOwners = `-- name: ListApplicationVolumeOwners :many
+SELECT av.application_id, av.name, a.name AS application_name, a.project_id
+FROM application_volumes av
+JOIN applications a ON a.id = av.application_id
+`
+
+type ListApplicationVolumeOwnersRow struct {
+	ApplicationID   pgtype.UUID `json:"application_id"`
+	Name            string      `json:"name"`
+	ApplicationName string      `json:"application_name"`
+	ProjectID       pgtype.UUID `json:"project_id"`
+}
+
+// Maps each application volume to its owning app so the admin Docker page can
+// link Docker volumes back to the application. Volumes carry no application-id
+// label, but the Docker volume name is reconstructable from (application_id,
+// name) via naming.AppVolumeName, so ownership is resolved from this table.
+func (q *Queries) ListApplicationVolumeOwners(ctx context.Context) ([]ListApplicationVolumeOwnersRow, error) {
+	rows, err := q.db.Query(ctx, listApplicationVolumeOwners)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListApplicationVolumeOwnersRow{}
+	for rows.Next() {
+		var i ListApplicationVolumeOwnersRow
+		if err := rows.Scan(
+			&i.ApplicationID,
+			&i.Name,
+			&i.ApplicationName,
+			&i.ProjectID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listApplicationVolumes = `-- name: ListApplicationVolumes :many
 SELECT id, application_id, name, mount_path, created_at, updated_at FROM application_volumes
 WHERE application_id = $1

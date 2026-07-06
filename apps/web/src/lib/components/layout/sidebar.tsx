@@ -14,6 +14,7 @@ import {
   Loader2,
   X,
 } from "lucide-react";
+import { SiDocker } from "@icons-pack/react-simple-icons";
 import { useAuthStore } from "@/lib/stores/auth";
 import { useSidebarStore } from "@/lib/stores/sidebar";
 import { useIsMobile } from "@/lib/hooks/use-is-mobile";
@@ -39,6 +40,7 @@ const HOME_NAV: NavItem[] = [
 
 const SETTINGS_NAV: NavItem[] = [
   { to: "/server", label: "Server", Icon: Server, admin: true },
+  { to: "/docker", label: "Docker", Icon: SiDocker, admin: true },
   { to: "/git", label: "Git", Icon: GitBranch },
   { to: "/account", label: "Account", Icon: User, exact: true },
   { to: "/team", label: "Team", Icon: Users, admin: true },

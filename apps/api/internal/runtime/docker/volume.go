@@ -3,10 +3,17 @@ package docker
 import (
 	"context"
 	"fmt"
+	"log/slog"
+	"strings"
+	"time"
 
 	"github.com/docker/docker/api/types"
+	"github.com/docker/docker/api/types/build"
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/api/types/volume"
+
+	"github.com/ungweiliang/selfhost-paas/internal/pkg/metrics"
+	"github.com/ungweiliang/selfhost-paas/internal/runtime"
 )
 
 // labelCache is a per-volume flag that opts the volume out of PruneVolumes.
@@ -111,20 +118,133 @@ func (c *Client) RemoveVolume(ctx context.Context, name string) error {
 	return c.cli.VolumeRemove(ctx, name, true)
 }
 
-// PruneVolumes removes dangling volumes except those explicitly tagged as
-// caches or persistent application data. Multiple label! filters are ANDed by
-// the daemon, so a volume is pruned only when it carries neither tag. Without
-// these exclusions the periodic cleanup worker would wipe per-app CNB +
-// BuildKit cache volumes between builds (Phase 5) and, worse, delete persistent
-// application data volumes whenever an app's container is absent between
-// deploys.
-func (c *Client) PruneVolumes(ctx context.Context) error {
-	_, err := c.cli.VolumesPrune(ctx, filters.NewArgs(
-		filters.Arg("label!", labelCache+"=true"),
-		filters.Arg("label!", labelData+"=true"),
-	))
+// ListVolumes lists all volumes on the host for the read-only admin inspect
+// page, attaching on-disk sizes and reference counts from a single DiskUsage
+// call (DiskUsage is O(all volumes), so it must not be called per-volume).
+func (c *Client) ListVolumes(ctx context.Context) (result []runtime.VolumeInfo, err error) {
+	defer func() { metrics.RecordDockerOp("list_volumes", err) }()
+
+	list, err := c.cli.VolumeList(ctx, volume.ListOptions{})
 	if err != nil {
-		return fmt.Errorf("prune volumes: %w", err)
+		return nil, fmt.Errorf("list volumes: %w", err)
+	}
+
+	// Sizes/ref-counts only come from the disk-usage endpoint. Best-effort: if
+	// it fails we still return the volume list with -1 (unknown) sizes.
+	usage := make(map[string]*volume.UsageData)
+	if du, duErr := c.cli.DiskUsage(ctx, types.DiskUsageOptions{
+		Types: []types.DiskUsageObject{types.VolumeObject},
+	}); duErr == nil {
+		for _, v := range du.Volumes {
+			if v != nil && v.UsageData != nil {
+				usage[v.Name] = v.UsageData
+			}
+		}
+	}
+
+	result = make([]runtime.VolumeInfo, 0, len(list.Volumes))
+	for _, v := range list.Volumes {
+		if v == nil {
+			continue
+		}
+		size, refCount := int64(-1), int64(-1)
+		if ud, ok := usage[v.Name]; ok {
+			size, refCount = ud.Size, ud.RefCount
+		}
+		created, _ := time.Parse(time.RFC3339, v.CreatedAt)
+		result = append(result, runtime.VolumeInfo{
+			Name:       v.Name,
+			Driver:     v.Driver,
+			Mountpoint: v.Mountpoint,
+			Scope:      v.Scope,
+			Size:       size,
+			RefCount:   refCount,
+			Labels:     v.Labels,
+			CreatedAt:  created,
+		})
+	}
+	return result, nil
+}
+
+// PruneBuildCache reclaims build caches: it removes the platform's CNB cache
+// volumes (labelled paas-cache — deliberately preserved by PruneVolumes) and
+// prunes the BuildKit builder cache. Both are disposable; the next build
+// repopulates them. Best-effort: individual failures are logged, not fatal.
+func (c *Client) PruneBuildCache(ctx context.Context) (err error) {
+	defer func() { metrics.RecordDockerOp("prune_build_cache", err) }()
+
+	// Remove CNB cache volumes (label paas-cache=true).
+	list, listErr := c.cli.VolumeList(ctx, volume.ListOptions{
+		Filters: filters.NewArgs(filters.Arg("label", labelCache+"=true")),
+	})
+	if listErr != nil {
+		return fmt.Errorf("list cache volumes: %w", listErr)
+	}
+	for _, v := range list.Volumes {
+		if v == nil {
+			continue
+		}
+		if rmErr := c.cli.VolumeRemove(ctx, v.Name, false); rmErr != nil {
+			slog.Warn("prune build cache: could not remove cache volume", "volume", v.Name, "error", rmErr)
+		}
+	}
+
+	// Prune the BuildKit builder cache.
+	if _, bcErr := c.cli.BuildCachePrune(ctx, build.CachePruneOptions{All: true}); bcErr != nil {
+		return fmt.Errorf("prune builder cache: %w", bcErr)
+	}
+	return nil
+}
+
+// platformVolumePrefix marks Docker volumes created by the platform's naming
+// helpers (app data volumes `paas-vol-*`, CNB/BuildKit caches `paas-cnb-*`,
+// and other `paas-*` resources). Kept in sync with internal/naming.
+const platformVolumePrefix = "paas-"
+
+// isPlatformVolume reports whether a volume was created by the platform and must
+// therefore never be reaped by PruneVolumes. A volume qualifies if it carries
+// any platform label OR matches the platform naming prefix. The name check is a
+// deliberate safety net: Docker's VolumeCreate does not (re)apply labels to a
+// volume that already exists, so a legacy or Docker-auto-created data volume can
+// end up unlabeled yet still hold user data. Deleting such a volume would be
+// silent, unrecoverable data loss, so we err on the side of keeping it — the
+// platform removes its own volumes explicitly at app/database deletion.
+func isPlatformVolume(name string, labels map[string]string) bool {
+	if labels[labelManagedBy] == labelValue ||
+		labels[labelCache] == "true" ||
+		labels[labelData] == "true" {
+		return true
+	}
+	return strings.HasPrefix(name, platformVolumePrefix)
+}
+
+// PruneVolumes reclaims dangling (unreferenced) volumes that are NOT owned by
+// the platform. It deliberately does not use the daemon's blanket VolumesPrune:
+// that reaps every dangling volume lacking a specific label, which would destroy
+// a persistent app or database data volume that is momentarily unreferenced (app
+// stopped, database reconfiguring, or a container removed between deploys) and
+// happens to be unlabeled. Instead it lists dangling volumes and skips every
+// platform-owned one (see isPlatformVolume), removing only foreign orphans.
+// Removal is non-forced, so a volume that becomes referenced between the list
+// and the remove is left untouched.
+func (c *Client) PruneVolumes(ctx context.Context) (err error) {
+	defer func() { metrics.RecordDockerOp("prune_volumes", err) }()
+
+	resp, err := c.cli.VolumeList(ctx, volume.ListOptions{
+		Filters: filters.NewArgs(filters.Arg("dangling", "true")),
+	})
+	if err != nil {
+		return fmt.Errorf("list dangling volumes: %w", err)
+	}
+	for _, v := range resp.Volumes {
+		if v == nil || isPlatformVolume(v.Name, v.Labels) {
+			continue
+		}
+		if rmErr := c.cli.VolumeRemove(ctx, v.Name, false); rmErr != nil {
+			// Best-effort: the volume may have become referenced since listing,
+			// or removal may be denied — never fail the whole cleanup run.
+			slog.Warn("prune volumes: could not remove foreign volume", "volume", v.Name, "error", rmErr)
+		}
 	}
 	return nil
 }

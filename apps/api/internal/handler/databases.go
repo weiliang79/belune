@@ -843,10 +843,9 @@ func (h *Handler) UpgradeDatabase(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusConflict, "database must be running to upgrade")
 		return
 	}
-	if req.TargetVersion == db.Version {
-		writeError(w, http.StatusBadRequest, "target_version matches the current version")
-		return
-	}
+	// A target equal to the current version is allowed: with digest pinning it
+	// means "refresh to the latest patch of this tag" (re-pull + re-pin) rather
+	// than a no-op. It still runs the guarded dump/restore flow for safety.
 
 	if _, err := h.queries.UpdateDatabaseStatus(r.Context(), generated.UpdateDatabaseStatusParams{
 		ID:     dbUUID,

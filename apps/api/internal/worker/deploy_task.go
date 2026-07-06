@@ -36,6 +36,7 @@ type deployPayload struct {
 	ApplicationID    string            `json:"application_id"`
 	DeploymentID     string            `json:"deployment_id"`
 	RollbackImageTag string            `json:"rollback_image_tag,omitempty"` // non-empty = skip build, redeploy this image
+	CommitSHA        string            `json:"commit_sha,omitempty"`         // non-empty = rebuild this exact commit instead of branch HEAD
 	TraceCarrier     map[string]string `json:"trace_carrier,omitempty"`      // W3C trace context for span linking across the queue
 }
 
@@ -344,6 +345,15 @@ func (h *TaskHandler) prepareImage(ctx context.Context, dc *deployContext) error
 		if err := h.Runtime.PullImage(pullCtx, dc.imageName); err != nil {
 			return fmt.Errorf("pull image: %w", err)
 		}
+		// Pin to the resolved digest so a later Reload/rollback recreates the
+		// exact image that was deployed, not whatever the mutable tag (e.g.
+		// :latest) points at by then. Falls back to the tag if no repo digest.
+		if digest, derr := h.Runtime.ResolveImageDigest(pullCtx, dc.imageName); derr != nil {
+			slog.Warn("could not resolve image digest; using tag", "image", dc.imageName, "error", derr)
+		} else if digest != "" {
+			slog.Info("pinned image to digest", "image", dc.imageName, "digest", digest)
+			dc.imageName = digest
+		}
 
 	case "git":
 		if err := h.buildFromGit(ctx, dc); err != nil {
@@ -402,13 +412,30 @@ func (h *TaskHandler) buildFromGit(ctx context.Context, dc *deployContext) error
 	// default ref. Token is empty here because cloneURL already embeds it when
 	// credentials are present.
 	branch := dc.appRow.Branch.String
-	slog.Info("cloning repository", "repo", dc.app.SourceRepo.String, "dest", tmpDir, "branch", branch)
-	cloneResult, err := git.Clone(buildCtx, cloneURL, tmpDir, branch, "")
+	var cloneResult *git.CloneResult
+	if dc.payload.CommitSHA != "" {
+		// Rebuild: re-checkout the exact currently-deployed commit, not branch HEAD.
+		slog.Info("cloning repository at pinned commit", "repo", dc.app.SourceRepo.String, "dest", tmpDir, "commit", dc.payload.CommitSHA)
+		cloneResult, err = git.CloneCommit(buildCtx, cloneURL, tmpDir, dc.payload.CommitSHA, "")
+	} else {
+		slog.Info("cloning repository", "repo", dc.app.SourceRepo.String, "dest", tmpDir, "branch", branch)
+		cloneResult, err = git.Clone(buildCtx, cloneURL, tmpDir, branch, "")
+	}
 	if err != nil {
 		return fmt.Errorf("git clone: %w", err)
 	}
 	dc.commitSHA = cloneResult.CommitSHA
 	slog.Info("cloned repository", "commit", dc.commitSHA)
+
+	// Record the built commit so Rebuild can re-checkout the deployed commit and
+	// so deployment history shows it (webhook pushes set it at create time, but
+	// manual/reload/rebuild deploys otherwise wouldn't).
+	if dc.commitSHA != "" {
+		h.Queries.UpdateDeploymentCommitSha(ctx, generated.UpdateDeploymentCommitShaParams{
+			ID:        dc.deploymentID,
+			CommitSha: pgtype.Text{String: dc.commitSHA, Valid: true},
+		})
+	}
 
 	var customBuildpacks []string
 	if len(dc.app.CustomBuildpacks) > 0 {

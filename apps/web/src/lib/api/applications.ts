@@ -73,6 +73,21 @@ export function restartApplication(projectId: string, applicationId: string) {
   );
 }
 
+// Recreate the container from the current image (skip build) to apply config
+// changes — volumes, file mounts, env, resource limits — without pulling new code.
+export function reloadApplication(projectId: string, applicationId: string) {
+  return api.post<{ message: string }>(
+    `/projects/${projectId}/applications/${applicationId}/reload`,
+  );
+}
+
+// Rebuild the currently-deployed commit (git apps only), not branch HEAD.
+export function rebuildApplication(projectId: string, applicationId: string) {
+  return api.post<{ message: string }>(
+    `/projects/${projectId}/applications/${applicationId}/rebuild`,
+  );
+}
+
 export interface BuildCacheInfo {
   build_cache_bytes: number;
   launch_cache_bytes: number;

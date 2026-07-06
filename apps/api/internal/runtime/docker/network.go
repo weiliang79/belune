@@ -8,6 +8,7 @@ import (
 	networktypes "github.com/docker/docker/api/types/network"
 
 	"github.com/ungweiliang/selfhost-paas/internal/pkg/metrics"
+	"github.com/ungweiliang/selfhost-paas/internal/runtime"
 )
 
 func (c *Client) CreateNetwork(ctx context.Context, name string) (err error) {
@@ -38,6 +39,44 @@ func (c *Client) CreateNetwork(ctx context.Context, name string) (err error) {
 
 func (c *Client) RemoveNetwork(ctx context.Context, name string) error {
 	return c.cli.NetworkRemove(ctx, name)
+}
+
+// ListNetworks lists all networks on the host for the read-only admin inspect
+// page. NetworkList does not populate attached containers, so each network is
+// inspected (best-effort) to surface which containers are wired to it.
+func (c *Client) ListNetworks(ctx context.Context) (result []runtime.NetworkInfo, err error) {
+	defer func() { metrics.RecordDockerOp("list_networks", err) }()
+
+	networks, err := c.cli.NetworkList(ctx, networktypes.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("list networks: %w", err)
+	}
+
+	result = make([]runtime.NetworkInfo, 0, len(networks))
+	for _, n := range networks {
+		info := runtime.NetworkInfo{
+			ID:        n.ID,
+			Name:      n.Name,
+			Driver:    n.Driver,
+			Scope:     n.Scope,
+			Internal:  n.Internal,
+			Labels:    n.Labels,
+			CreatedAt: n.Created,
+		}
+		// Inspect to resolve attached containers; ignore per-network errors so
+		// one removed network mid-list doesn't fail the whole page.
+		if inspect, insErr := c.cli.NetworkInspect(ctx, n.ID, networktypes.InspectOptions{}); insErr == nil {
+			for id, ep := range inspect.Containers {
+				info.Containers = append(info.Containers, runtime.NetworkContainer{
+					ID:          id,
+					Name:        ep.Name,
+					IPv4Address: ep.IPv4Address,
+				})
+			}
+		}
+		result = append(result, info)
+	}
+	return result, nil
 }
 
 // ConnectContainerToNetwork attaches a container to a Docker network. The

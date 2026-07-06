@@ -20,6 +20,7 @@ import { Route as AppTeamRouteImport } from './routes/_app/team'
 import { Route as AppServerRouteImport } from './routes/_app/server'
 import { Route as AppQuotasRouteImport } from './routes/_app/quotas'
 import { Route as AppGitRouteImport } from './routes/_app/git'
+import { Route as AppDockerRouteImport } from './routes/_app/docker'
 import { Route as AppDashboardRouteImport } from './routes/_app/dashboard'
 import { Route as AppAuditRouteImport } from './routes/_app/audit'
 import { Route as AppAccountRouteImport } from './routes/_app/account'
@@ -97,6 +98,11 @@ const AppQuotasRoute = AppQuotasRouteImport.update({
 const AppGitRoute = AppGitRouteImport.update({
   id: '/git',
   path: '/git',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppDockerRoute = AppDockerRouteImport.update({
+  id: '/docker',
+  path: '/docker',
   getParentRoute: () => AppRoute,
 } as any)
 const AppDashboardRoute = AppDashboardRouteImport.update({
@@ -245,6 +251,7 @@ export interface FileRoutesByFullPath {
   '/account': typeof AppAccountRoute
   '/audit': typeof AppAuditRoute
   '/dashboard': typeof AppDashboardRoute
+  '/docker': typeof AppDockerRoute
   '/git': typeof AppGitRoute
   '/quotas': typeof AppQuotasRoute
   '/server': typeof AppServerRoute
@@ -281,6 +288,7 @@ export interface FileRoutesByTo {
   '/account': typeof AppAccountRoute
   '/audit': typeof AppAuditRoute
   '/dashboard': typeof AppDashboardRoute
+  '/docker': typeof AppDockerRoute
   '/git': typeof AppGitRoute
   '/quotas': typeof AppQuotasRoute
   '/server': typeof AppServerRoute
@@ -317,6 +325,7 @@ export interface FileRoutesById {
   '/_app/account': typeof AppAccountRoute
   '/_app/audit': typeof AppAuditRoute
   '/_app/dashboard': typeof AppDashboardRoute
+  '/_app/docker': typeof AppDockerRoute
   '/_app/git': typeof AppGitRoute
   '/_app/quotas': typeof AppQuotasRoute
   '/_app/server': typeof AppServerRoute
@@ -355,6 +364,7 @@ export interface FileRouteTypes {
     | '/account'
     | '/audit'
     | '/dashboard'
+    | '/docker'
     | '/git'
     | '/quotas'
     | '/server'
@@ -391,6 +401,7 @@ export interface FileRouteTypes {
     | '/account'
     | '/audit'
     | '/dashboard'
+    | '/docker'
     | '/git'
     | '/quotas'
     | '/server'
@@ -426,6 +437,7 @@ export interface FileRouteTypes {
     | '/_app/account'
     | '/_app/audit'
     | '/_app/dashboard'
+    | '/_app/docker'
     | '/_app/git'
     | '/_app/quotas'
     | '/_app/server'
@@ -540,6 +552,13 @@ declare module '@tanstack/react-router' {
       path: '/git'
       fullPath: '/git'
       preLoaderRoute: typeof AppGitRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/docker': {
+      id: '/_app/docker'
+      path: '/docker'
+      fullPath: '/docker'
+      preLoaderRoute: typeof AppDockerRouteImport
       parentRoute: typeof AppRoute
     }
     '/_app/dashboard': {
@@ -782,6 +801,7 @@ interface AppRouteChildren {
   AppAccountRoute: typeof AppAccountRoute
   AppAuditRoute: typeof AppAuditRoute
   AppDashboardRoute: typeof AppDashboardRoute
+  AppDockerRoute: typeof AppDockerRoute
   AppGitRoute: typeof AppGitRoute
   AppQuotasRoute: typeof AppQuotasRoute
   AppServerRoute: typeof AppServerRoute
@@ -797,6 +817,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppAccountRoute: AppAccountRoute,
   AppAuditRoute: AppAuditRoute,
   AppDashboardRoute: AppDashboardRoute,
+  AppDockerRoute: AppDockerRoute,
   AppGitRoute: AppGitRoute,
   AppQuotasRoute: AppQuotasRoute,
   AppServerRoute: AppServerRoute,

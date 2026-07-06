@@ -34,7 +34,7 @@ type Server struct {
 	auth    *service.AuthService
 }
 
-func New(cfg *config.Config, db *pgxpool.Pool, queries *generated.Queries, asynqClient handler.TaskEnqueuer, rt runtime.ContainerRuntime, pm proxy.ProxyManager, reconciler handler.ReconcilerStatusProvider, rdb *redis.Client, hub *ws.Hub, auditSvc *service.AuditService, notifySvc *service.NotificationService, termMgr *terminal.Manager, emailSvc *email.Service) *Server {
+func New(cfg *config.Config, db *pgxpool.Pool, queries *generated.Queries, asynqClient handler.TaskEnqueuer, inspector handler.QueueInspector, rt runtime.ContainerRuntime, pm proxy.ProxyManager, reconciler handler.ReconcilerStatusProvider, rdb *redis.Client, hub *ws.Hub, auditSvc *service.AuditService, notifySvc *service.NotificationService, termMgr *terminal.Manager, emailSvc *email.Service) *Server {
 	auth := service.NewAuthService(queries, cfg.JWTSecret, cfg.JWTExpiryHours, cfg.JWTRefreshHours, rdb)
 	appSvc := service.NewApplicationService(db, queries, rt, cfg.Keyring, cfg.FileMountsDir)
 	projSvc := service.NewProjectService(queries, rt)
@@ -48,7 +48,7 @@ func New(cfg *config.Config, db *pgxpool.Pool, queries *generated.Queries, asynq
 		cfg:     cfg,
 		db:      db,
 		auth:    auth,
-		handler: handler.New(cfg, db, queries, asynqClient, rt, pm, reconciler, auth, rdb, appSvc, projSvc, dbSvc, gitProviderSvc, gitIntegrationSvc, backupDestSvc, hub, auditSvc, notifySvc, termMgr, quotaSvc, emailSvc),
+		handler: handler.New(cfg, db, queries, asynqClient, inspector, rt, pm, reconciler, auth, rdb, appSvc, projSvc, dbSvc, gitProviderSvc, gitIntegrationSvc, backupDestSvc, hub, auditSvc, notifySvc, termMgr, quotaSvc, emailSvc),
 	}
 
 	s.router = s.setupRouter()

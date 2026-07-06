@@ -730,15 +730,15 @@ function AdvancedCard({ db }: { db: Database }) {
                       onChange={(e) => setTargetVersion(e.target.value)}
                       placeholder="e.g. 17"
                     />
+                    <p className="text-text-faint text-xs">
+                      Enter the same version to refresh it to the latest patch.
+                    </p>
                   </div>
                   <AlertDialogFooter>
                     <AlertDialogCancel>Cancel</AlertDialogCancel>
                     <AlertDialogAction
                       onClick={handleUpgrade}
-                      disabled={
-                        !targetVersion.trim() ||
-                        targetVersion.trim() === db.version
-                      }
+                      disabled={!targetVersion.trim()}
                     >
                       Upgrade
                     </AlertDialogAction>

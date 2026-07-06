@@ -23,6 +23,19 @@ type MockContainerRuntime struct {
 	PullCalls       []string // image tags passed to PullImage
 	ListContainers_ []runtime.ContainerInfo
 
+	// Read-only admin Docker inspect fixtures (nil → empty result).
+	ListAllContainers_ []runtime.ContainerInfo
+	ListImages_        []runtime.ImageInfo
+	ListVolumes_       []runtime.VolumeInfo
+	ListNetworks_      []runtime.NetworkInfo
+	SystemInfo_        *runtime.DockerSystemInfo
+	SystemDiskUsage_   *runtime.DockerDiskUsage
+
+	// ResolveImageDigest_ is returned by ResolveImageDigest; ResolveDigestCalls
+	// records the refs it was asked to resolve.
+	ResolveImageDigest_ string
+	ResolveDigestCalls  []string
+
 	// ExecFunc, when set, backs ContainerExec — lets tests simulate dump output
 	// and exit codes. When nil, ContainerExec is a no-op returning exit 0.
 	ExecFunc func(ctx context.Context, container string, cmd []string, stdin io.Reader, stdout, stderr io.Writer) (int, error)
@@ -80,6 +93,67 @@ func (m *MockContainerRuntime) ListContainers(_ context.Context) ([]runtime.Cont
 	return m.ListContainers_, nil
 }
 
+func (m *MockContainerRuntime) ListAllContainers(_ context.Context) ([]runtime.ContainerInfo, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.ListAllContainers_ == nil {
+		return []runtime.ContainerInfo{}, nil
+	}
+	return m.ListAllContainers_, nil
+}
+
+func (m *MockContainerRuntime) ListImages(_ context.Context) ([]runtime.ImageInfo, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.ListImages_ == nil {
+		return []runtime.ImageInfo{}, nil
+	}
+	return m.ListImages_, nil
+}
+
+func (m *MockContainerRuntime) ListVolumes(_ context.Context) ([]runtime.VolumeInfo, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.ListVolumes_ == nil {
+		return []runtime.VolumeInfo{}, nil
+	}
+	return m.ListVolumes_, nil
+}
+
+func (m *MockContainerRuntime) ListNetworks(_ context.Context) ([]runtime.NetworkInfo, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.ListNetworks_ == nil {
+		return []runtime.NetworkInfo{}, nil
+	}
+	return m.ListNetworks_, nil
+}
+
+func (m *MockContainerRuntime) SystemInfo(_ context.Context) (*runtime.DockerSystemInfo, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.SystemInfo_ == nil {
+		return &runtime.DockerSystemInfo{}, nil
+	}
+	return m.SystemInfo_, nil
+}
+
+func (m *MockContainerRuntime) SystemDiskUsage(_ context.Context) (*runtime.DockerDiskUsage, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.SystemDiskUsage_ == nil {
+		return &runtime.DockerDiskUsage{}, nil
+	}
+	return m.SystemDiskUsage_, nil
+}
+
+func (m *MockContainerRuntime) ResolveImageDigest(_ context.Context, ref string) (string, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.ResolveDigestCalls = append(m.ResolveDigestCalls, ref)
+	return m.ResolveImageDigest_, nil
+}
+
 func (m *MockContainerRuntime) PullImage(_ context.Context, image string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -107,6 +181,7 @@ func (m *MockContainerRuntime) RemoveVolume(_ context.Context, _ string) error {
 func (m *MockContainerRuntime) RemoveImage(_ context.Context, _ string) error  { return nil }
 func (m *MockContainerRuntime) PruneImages(_ context.Context) error            { return nil }
 func (m *MockContainerRuntime) PruneVolumes(_ context.Context) error           { return nil }
+func (m *MockContainerRuntime) PruneBuildCache(_ context.Context) error        { return nil }
 func (m *MockContainerRuntime) ContainerStats(_ context.Context, _ string) (*runtime.ContainerResourceStats, error) {
 	return &runtime.ContainerResourceStats{}, nil
 }
@@ -165,6 +240,60 @@ func (m *MockProxyManager) RemoveRoute(_ context.Context, hostname string) error
 func (m *MockProxyManager) SetupTLS(_ context.Context, _, _, _, _ string) error { return nil }
 func (m *MockProxyManager) ListRoutes(_ context.Context) ([]proxy.RouteConfig, error) {
 	return nil, nil
+}
+
+// MockReconciler implements handler.ReconcilerStatusProvider for testing.
+type MockReconciler struct {
+	mu                sync.Mutex
+	ReconcileNowCalls int
+	Status_           proxy.ReconcilerStatus
+	ReconcileErr      error
+}
+
+func (m *MockReconciler) Status() proxy.ReconcilerStatus {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.Status_
+}
+
+func (m *MockReconciler) ReconcileNow(_ context.Context) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.ReconcileNowCalls++
+	return m.ReconcileErr
+}
+
+// MockQueueInspector implements handler.QueueInspector for testing.
+type MockQueueInspector struct {
+	mu                  sync.Mutex
+	Info                map[string]*asynq.QueueInfo // per-queue info; missing → zero-value
+	ArchivedByQ         map[string]int              // counts returned by DeleteAllArchivedTasks
+	RetryByQ            map[string]int              // counts returned by DeleteAllRetryTasks
+	DeleteArchivedCalls []string
+	DeleteRetryCalls    []string
+}
+
+func (m *MockQueueInspector) GetQueueInfo(queue string) (*asynq.QueueInfo, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if qi, ok := m.Info[queue]; ok {
+		return qi, nil
+	}
+	return &asynq.QueueInfo{Queue: queue}, nil
+}
+
+func (m *MockQueueInspector) DeleteAllArchivedTasks(queue string) (int, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.DeleteArchivedCalls = append(m.DeleteArchivedCalls, queue)
+	return m.ArchivedByQ[queue], nil
+}
+
+func (m *MockQueueInspector) DeleteAllRetryTasks(queue string) (int, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.DeleteRetryCalls = append(m.DeleteRetryCalls, queue)
+	return m.RetryByQ[queue], nil
 }
 
 // EnqueuedTask records a task that was enqueued.

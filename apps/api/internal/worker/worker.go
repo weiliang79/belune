@@ -142,7 +142,9 @@ func (w *Worker) StartScheduler() (*asynq.Scheduler, error) {
 		nil,
 	)
 
-	payload, _ := json.Marshal(cleanupPayload{RetainCount: 3})
+	// Scheduled=true so HandleCleanupTask honours the daily_cleanup_enabled toggle
+	// (manual/per-app cleanups leave it false and always run).
+	payload, _ := json.Marshal(cleanupPayload{RetainCount: 3, Scheduled: true})
 	task := asynq.NewTask(TypeCleanup, payload)
 
 	if _, err := scheduler.Register("@every 24h", task, asynq.Queue("low")); err != nil {

@@ -172,6 +172,7 @@ type Database struct {
 	BackupMode           string             `json:"backup_mode"`
 	BackupCommand        pgtype.Text        `json:"backup_command"`
 	RestoreCommand       pgtype.Text        `json:"restore_command"`
+	ImageDigest          pgtype.Text        `json:"image_digest"`
 }
 
 type DatabaseBackup struct {

@@ -88,6 +88,9 @@ func (h *TaskHandler) HandleUpgradeDBTask(ctx context.Context, t *asynq.Task) er
 		h.setDatabaseStatus(ctx, dbID, "running")
 		return errors.Join(fmt.Errorf("update version: %w", err), asynq.SkipRetry)
 	}
+	// The old pin belongs to the old version — clear it so provision re-pulls the
+	// target tag and pins its digest (also covers same-tag "refresh to latest").
+	dbNew.ImageDigest = pgtype.Text{}
 
 	h.removeDBContainer(ctx, db.Slug)
 	if err := h.Runtime.RemoveVolume(ctx, db.Slug+"-vol"); err != nil {
@@ -204,6 +207,8 @@ func (h *TaskHandler) rollbackUpgrade(ctx context.Context, db generated.Database
 		h.failDatabase(ctx, db.ID, fmt.Sprintf("upgrade failed (%s); rollback could not reset version: %v", reason, err))
 		return errors.Join(fmt.Errorf("rollback reset version: %w", err), asynq.SkipRetry)
 	}
+	// Re-pin for the restored old version (provision re-resolves the tag digest).
+	dbOld.ImageDigest = pgtype.Text{}
 
 	h.removeDBContainer(ctx, dbOld.Slug)
 	if err := h.Runtime.RemoveVolume(ctx, dbOld.Slug+"-vol"); err != nil {

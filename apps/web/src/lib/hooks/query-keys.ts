@@ -204,4 +204,13 @@ export const queryKeys = {
   },
   alertPreferences: ["alert-preferences"] as const,
   invitations: ["invitations"] as const,
+  proxyReconciler: ["proxy", "reconciler"] as const,
+  maintenanceQueue: ["maintenance", "queue"] as const,
+  docker: {
+    overview: ["docker", "overview"] as const,
+    containers: ["docker", "containers"] as const,
+    images: ["docker", "images"] as const,
+    volumes: ["docker", "volumes"] as const,
+    networks: ["docker", "networks"] as const,
+  },
 };

@@ -230,7 +230,8 @@ func (h *Handler) ListApplications(w http.ResponseWriter, r *http.Request) {
 type deployPayload struct {
 	ApplicationID    string            `json:"application_id"`
 	DeploymentID     string            `json:"deployment_id"`
-	RollbackImageTag string            `json:"rollback_image_tag,omitempty"`
+	RollbackImageTag string            `json:"rollback_image_tag,omitempty"` // non-empty = skip build, redeploy this image (rollback/reload)
+	CommitSHA        string            `json:"commit_sha,omitempty"`         // non-empty = rebuild this exact commit instead of branch HEAD
 	TraceCarrier     map[string]string `json:"trace_carrier,omitempty"`
 }
 
@@ -421,6 +422,159 @@ func (h *Handler) RestartApplication(w http.ResponseWriter, r *http.Request) {
 	h.audit(r, "restart_application", "application", applicationID, nil)
 
 	writeJSON(w, http.StatusOK, app)
+}
+
+// ReloadApplication recreates the application container from its current image
+// (the latest successful deployment's image) WITHOUT rebuilding, so config
+// changes — volumes, file mounts, env, resource limits — take effect quickly
+// and without pulling new code. It reuses the deploy worker's skip-build path
+// (RollbackImageTag), which re-reads all config on container recreate.
+func (h *Handler) ReloadApplication(w http.ResponseWriter, r *http.Request) {
+	applicationID := chi.URLParam(r, "applicationId")
+	var applicationUUID pgtype.UUID
+	if err := applicationUUID.Scan(applicationID); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid application id")
+		return
+	}
+	if !h.canAccessApplication(r, applicationUUID) {
+		writeError(w, http.StatusForbidden, "access denied")
+		return
+	}
+
+	latest, err := h.queries.GetLatestSuccessfulDeployment(r.Context(), applicationUUID)
+	if err != nil {
+		writeError(w, http.StatusConflict, "no successful deployment to reload — deploy the application first")
+		return
+	}
+
+	deployment, err := h.queries.CreateDeployment(r.Context(), generated.CreateDeploymentParams{
+		ApplicationID: applicationUUID,
+		Status:        status.DeploymentPending,
+		TriggeredBy:   "reload",
+	})
+	if err != nil {
+		slog.Error("failed to create reload deployment", "error", err)
+		writeError(w, http.StatusInternalServerError, "failed to create deployment")
+		return
+	}
+
+	payload, err := json.Marshal(deployPayload{
+		ApplicationID:    applicationID,
+		DeploymentID:     formatDeploymentID(deployment.ID),
+		RollbackImageTag: latest.ImageTag.String,
+		TraceCarrier:     tracing.InjectContext(r.Context()),
+	})
+	if err != nil {
+		slog.Error("failed to marshal reload payload", "error", err)
+		writeError(w, http.StatusInternalServerError, "failed to create reload task")
+		return
+	}
+
+	if err := h.enqueueDeployTask(applicationID, payload); err != nil {
+		if errors.Is(err, asynq.ErrTaskIDConflict) {
+			writeError(w, http.StatusConflict, "a deployment is already in progress for this application")
+			return
+		}
+		slog.Error("failed to enqueue reload task", "error", err)
+		writeError(w, http.StatusInternalServerError, "failed to enqueue reload task")
+		return
+	}
+
+	h.audit(r, "reload_application", "application", applicationID, nil)
+	writeJSON(w, http.StatusAccepted, deployment)
+}
+
+// RebuildApplication rebuilds the application from the commit that is currently
+// deployed (not branch HEAD) and recreates the container. Git-source apps only:
+// it re-runs the build for the running version, picking up patched base images
+// and refreshed dependencies without shipping new code.
+func (h *Handler) RebuildApplication(w http.ResponseWriter, r *http.Request) {
+	applicationID := chi.URLParam(r, "applicationId")
+	var applicationUUID pgtype.UUID
+	if err := applicationUUID.Scan(applicationID); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid application id")
+		return
+	}
+	if !h.canAccessApplication(r, applicationUUID) {
+		writeError(w, http.StatusForbidden, "access denied")
+		return
+	}
+
+	app, err := h.queries.GetApplication(r.Context(), applicationUUID)
+	if err != nil {
+		writeError(w, http.StatusNotFound, "application not found")
+		return
+	}
+	if app.Type != "git" {
+		writeError(w, http.StatusBadRequest, "rebuild is only available for git-source applications")
+		return
+	}
+
+	latest, err := h.queries.GetLatestSuccessfulDeployment(r.Context(), applicationUUID)
+	if err != nil {
+		writeError(w, http.StatusConflict, "no successful deployment to rebuild — deploy the application first")
+		return
+	}
+	if !latest.CommitSha.Valid || latest.CommitSha.String == "" {
+		writeError(w, http.StatusConflict, "the current deployment has no recorded commit — deploy the application first")
+		return
+	}
+
+	deployment, err := h.queries.CreateDeployment(r.Context(), generated.CreateDeploymentParams{
+		ApplicationID: applicationUUID,
+		Status:        status.DeploymentPending,
+		TriggeredBy:   "rebuild",
+		CommitSha:     latest.CommitSha,
+	})
+	if err != nil {
+		slog.Error("failed to create rebuild deployment", "error", err)
+		writeError(w, http.StatusInternalServerError, "failed to create deployment")
+		return
+	}
+
+	payload, err := json.Marshal(deployPayload{
+		ApplicationID: applicationID,
+		DeploymentID:  formatDeploymentID(deployment.ID),
+		CommitSHA:     latest.CommitSha.String,
+		TraceCarrier:  tracing.InjectContext(r.Context()),
+	})
+	if err != nil {
+		slog.Error("failed to marshal rebuild payload", "error", err)
+		writeError(w, http.StatusInternalServerError, "failed to create rebuild task")
+		return
+	}
+
+	if err := h.enqueueDeployTask(applicationID, payload); err != nil {
+		if errors.Is(err, asynq.ErrTaskIDConflict) {
+			writeError(w, http.StatusConflict, "a deployment is already in progress for this application")
+			return
+		}
+		slog.Error("failed to enqueue rebuild task", "error", err)
+		writeError(w, http.StatusInternalServerError, "failed to enqueue rebuild task")
+		return
+	}
+
+	h.audit(r, "rebuild_application", "application", applicationID, nil)
+	writeJSON(w, http.StatusAccepted, deployment)
+}
+
+// formatDeploymentID renders a pgtype.UUID as the canonical 8-4-4-4-12 string
+// the deploy worker expects in its payload.
+func formatDeploymentID(id pgtype.UUID) string {
+	return fmt.Sprintf("%x-%x-%x-%x-%x",
+		id.Bytes[0:4], id.Bytes[4:6], id.Bytes[6:8], id.Bytes[8:10], id.Bytes[10:16])
+}
+
+// enqueueDeployTask enqueues a deploy task on the critical queue with the
+// per-application TaskID guard that serialises deploys for one app.
+func (h *Handler) enqueueDeployTask(applicationID string, payload []byte) error {
+	_, err := h.asynq.Enqueue(asynq.NewTask("deploy", payload),
+		asynq.Queue("critical"),
+		asynq.Timeout(time.Duration(h.cfg.TaskTimeoutMinutes)*time.Minute),
+		asynq.MaxRetry(3),
+		asynq.TaskID("deploy:"+applicationID),
+	)
+	return err
 }
 
 type updateApplicationRequest struct {

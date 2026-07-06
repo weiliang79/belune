@@ -32,7 +32,6 @@ import {
 } from "@/components/ui/select";
 import {
   useMetrics,
-  useTriggerCleanup,
   useHostHistoricalMetrics,
   useHostMetricsStream,
   useHostMetricsRange,
@@ -44,6 +43,7 @@ import { useMemo, useState, type ReactNode } from "react";
 import type { HostMetricPoint, SettingEntry } from "@/lib/types";
 import { UPlotAreaChart } from "@/components/ui/uplot-area-chart";
 import { SystemBackupsPanel } from "@/components/backups/system-backups-panel";
+import { MaintenanceSection } from "@/components/server/maintenance-section";
 import { cn } from "@/lib/utils";
 import { formatDateTimeShort } from "@/lib/utils/format";
 
@@ -145,7 +145,6 @@ function ServerSettingsPage() {
 
   const { data: metrics, isLoading } = useMetrics();
   const { data: services } = useServerServices();
-  const cleanup = useTriggerCleanup();
 
   // Host Metrics viewer state: Overview (sparklines) vs Detail (charts), and the
   // time window — null = Live (last 10 min, streamed), otherwise a static snapshot.
@@ -213,14 +212,6 @@ function ServerSettingsPage() {
 
   const { data: settings } = useSettings();
   const updateSettings = useUpdateSettings();
-
-  const handleCleanup = () => {
-    toast.promise(cleanup.mutateAsync(undefined), {
-      loading: "Running cleanup...",
-      success: "Cleanup task queued",
-      error: "Failed to trigger cleanup",
-    });
-  };
 
   const handleSaveRetention = (key: string, value: string) => {
     toast.promise(updateSettings.mutateAsync([{ key, value }]), {
@@ -365,22 +356,7 @@ function ServerSettingsPage() {
               <CardTitle>Maintenance</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium">Cleanup old deployments</p>
-                  <p className="text-muted-foreground text-sm">
-                    Remove old deployment records, images, and dangling volumes.
-                    Keeps the 3 most recent deployments per service.
-                  </p>
-                </div>
-                <Button
-                  variant="outline"
-                  onClick={handleCleanup}
-                  disabled={cleanup.isPending}
-                >
-                  {cleanup.isPending ? "Running..." : "Run Cleanup"}
-                </Button>
-              </div>
+              <MaintenanceSection />
             </CardContent>
           </Card>
         </div>
