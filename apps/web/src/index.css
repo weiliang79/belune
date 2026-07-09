@@ -32,13 +32,13 @@
   --text-faint: #71717a;
   --text-faintest: #a1a1aa;
 
-  /* Brand accent — violet (default; shared across themes) */
-  --brand: #7c3aed;
-  --brand-hover: #8b5cf6;
-  --brand-press: #6d28d9;
+  /* Brand accent — indigo in light mode (violet takes over in .dark) */
+  --brand: #4249bd;
+  --brand-hover: #5a61d4;
+  --brand-press: #343aa0;
   --brand-fg: #ffffff;
-  --brand-soft: rgba(124, 58, 237, 0.16);
-  --brand-line: rgba(124, 58, 237, 0.42);
+  --brand-soft: rgba(66, 73, 189, 0.16);
+  --brand-line: rgba(66, 73, 189, 0.42);
 
   /* Status: ready / running (= brand) */
   --status-ready: var(--brand);
@@ -106,6 +106,14 @@
 }
 
 .dark {
+  /* Brand accent — violet in dark mode (indigo is the light-mode default) */
+  --brand: #7c3aed;
+  --brand-hover: #8b5cf6;
+  --brand-press: #6d28d9;
+  --brand-fg: #ffffff;
+  --brand-soft: rgba(124, 58, 237, 0.16);
+  --brand-line: rgba(124, 58, 237, 0.42);
+
   /* Surfaces (dark) */
   --bg: #09090b;
   --bg-subtle: #0c0c0e;

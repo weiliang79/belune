@@ -20,6 +20,7 @@ import { useSidebarStore } from "@/lib/stores/sidebar";
 import { useIsMobile } from "@/lib/hooks/use-is-mobile";
 import { logout } from "@/lib/api/auth";
 import { BRAND } from "@/lib/brand";
+import { BeluneLogo } from "@/lib/components/belune-logo";
 import { useInstanceName } from "@/lib/hooks/use-features";
 import { initialsOf } from "@/lib/utils/initials";
 import { cn } from "@/lib/utils";
@@ -156,7 +157,7 @@ export function Sidebar({ mobileOpen, onMobileClose }: SidebarProps) {
             background: "linear-gradient(140deg, var(--brand), var(--brand-press))",
           }}
         >
-          <Rocket className="h-[18px] w-[18px]" />
+          <BeluneLogo className="h-[18px] w-[18px]" />
         </div>
         {expanded && (
           <div className="flex min-w-0 flex-col leading-tight">

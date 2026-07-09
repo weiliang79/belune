@@ -75,7 +75,7 @@ function SetupPage() {
               <Input
                 id="instanceName"
                 type="text"
-                placeholder="Self-Hosted PaaS"
+                placeholder="Belune"
                 value={field.state.value}
                 onBlur={field.handleBlur}
                 onChange={(e) => field.handleChange(e.target.value)}

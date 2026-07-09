@@ -6,6 +6,6 @@
  * or a backend `/version` field when available.
  */
 export const BRAND = {
-  name: "homelab-paas",
+  name: "Belune",
   version: "v0.0.28-alpha",
 } as const;

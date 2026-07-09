@@ -1,11 +1,11 @@
 import type { ReactNode } from "react";
 import {
-  RocketIcon,
   GitBranchIcon,
   ShieldCheckIcon,
   ActivityIcon,
 } from "lucide-react";
 import { BRAND } from "@/lib/brand";
+import { BeluneLogo } from "@/lib/components/belune-logo";
 import { useInstanceName } from "@/lib/hooks/use-features";
 
 const HIGHLIGHTS = [
@@ -41,14 +41,17 @@ export function AuthLayout({
       >
         <div className="flex items-center gap-2.5">
           <div className="grid size-9 place-items-center rounded-lg bg-white/15 backdrop-blur">
-            <RocketIcon className="size-5" />
+            <BeluneLogo className="size-5" />
           </div>
-          <span className="text-lg font-semibold">{instanceName}</span>
+          <div className="flex flex-col leading-tight">
+            <span className="text-lg font-semibold">{instanceName}</span>
+            <span className="text-xs text-white/60">Effortless deploys.</span>
+          </div>
         </div>
 
         <div className="max-w-sm">
           <h2 className="text-3xl leading-tight font-semibold tracking-tight">
-            Your homelab, shipped like a platform.
+            Deploy like the cloud.
           </h2>
           <ul className="mt-8 space-y-3">
             {HIGHLIGHTS.map(({ Icon, text }) => (
@@ -78,7 +81,7 @@ export function AuthLayout({
                   "linear-gradient(140deg, var(--brand), var(--brand-press))",
               }}
             >
-              <RocketIcon className="size-5" />
+              <BeluneLogo className="size-5" />
             </div>
             <span className="text-lg font-semibold">{instanceName}</span>
           </div>

@@ -298,7 +298,7 @@ function ServerSettingsPage() {
                   id="instance-name"
                   value={instanceNameValue}
                   onChange={(e) => setInstanceNameDraft(e.target.value)}
-                  placeholder="Self-Hosted PaaS"
+                  placeholder="Belune"
                 />
                 <Button
                   onClick={handleSaveInstanceName}

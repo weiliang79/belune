@@ -29,7 +29,7 @@ export const useAccentStore = create<AccentState>()(
       toggle: () =>
         set({ accent: get().accent === "violet" ? "emerald" : "violet" }),
     }),
-    { name: "paas-accent" },
+    { name: "belune-accent" },
   ),
 );
 

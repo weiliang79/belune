@@ -4,11 +4,12 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>PaaS</title>
+    <meta name="description" content="Belune — effortless deploys." />
+    <title>Belune</title>
     <script>
       // Apply the persisted accent before React mounts to avoid a color flash.
       try {
-        var a = JSON.parse(localStorage.getItem("paas-accent"));
+        var a = JSON.parse(localStorage.getItem("belune-accent"));
         if (a && a.state && a.state.accent === "emerald") {
           document.documentElement.dataset.accent = "emerald";
         }

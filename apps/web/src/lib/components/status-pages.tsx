@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { Link, useRouter } from "@tanstack/react-router";
-import { RocketIcon } from "lucide-react";
 import { Button, buttonVariants } from "@/components/ui/button";
+import { BeluneLogo } from "@/lib/components/belune-logo";
 import { useInstanceName } from "@/lib/hooks/use-features";
 import { useAuthStore } from "@/lib/stores/auth";
 import { cn } from "@/lib/utils";
@@ -30,7 +30,7 @@ function StatusPageFrame({
               "linear-gradient(140deg, var(--brand), var(--brand-press))",
           }}
         >
-          <RocketIcon className="size-4.5" />
+          <BeluneLogo className="size-4.5" />
         </div>
         <span className="text-sm font-semibold">{instanceName}</span>
       </div>
