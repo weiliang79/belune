@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/ungweiliang/selfhost-paas/internal/pkg/crypto"
+	"github.com/weiling79/belune/internal/pkg/crypto"
 )
 
 type Config struct {
@@ -39,7 +39,7 @@ type Config struct {
 	PreviewIdleDays int // days after which idle preview apps are garbage-collected (default 7; 0 disables)
 
 	// SkipMigrations is the runtime kill-switch for auto-migration. Set
-	// PAAS_SKIP_MIGRATIONS=true to bring the API up without running pending
+	// BELUNE_SKIP_MIGRATIONS=true to bring the API up without running pending
 	// migrations — useful when an in-progress migration left the schema in a
 	// state the operator wants to repair manually before letting the next
 	// version of the binary touch it.
@@ -89,21 +89,21 @@ type Config struct {
 	BackupS3Bucket      string
 	BackupS3AccessKey   string
 	BackupS3SecretKey   string
-	BackupS3Prefix      string // key prefix inside the bucket (default "paas/")
+	BackupS3Prefix      string // key prefix inside the bucket (default "belune/")
 	BackupS3UseSSL      bool   // default true
 	BackupRetainDays    int    // delete objects older than N days (default 30)
 	BackupRetainCount   int    // always keep the N most-recent objects (default 14)
 	// Path to backup.sh reachable from the API process. Defaults to
-	// $PAAS_DIR/scripts/backup.sh (falls back to /opt/paas/scripts/backup.sh).
+	// $BELUNE_DIR/scripts/backup.sh (falls back to /opt/belune/scripts/backup.sh).
 	BackupScriptPath string
 	// Local directory where managed-database logical dumps are written before
-	// (optional) upload to S3. Defaults to $PAAS_DIR/backups/databases.
+	// (optional) upload to S3. Defaults to $BELUNE_DIR/backups/databases.
 	DatabaseBackupDir string
 	// Host directory under which per-application file/config mounts are
 	// materialised (<dir>/<app-id>/<file-id>) before being bind-mounted read-only
 	// into the app container. Must be a HOST path the Docker daemon can bind —
 	// on the containerised-API deploy it must be shared into the API container at
-	// the same path. Defaults to $PAAS_DIR/filemounts.
+	// the same path. Defaults to $BELUNE_DIR/filemounts.
 	FileMountsDir string
 	// Image for the short-lived helper that tars/untars a database volume during
 	// "other"-type volume-snapshot backup/restore. Must contain `tar` and `sh`.
@@ -116,7 +116,7 @@ type Config struct {
 func Load() (*Config, error) {
 	cfg := &Config{
 		Port:               getEnvInt("PORT", 8080),
-		DatabaseURL:        getEnv("DATABASE_URL", "postgres://paas:paas@localhost:5432/paas?sslmode=disable"),
+		DatabaseURL:        getEnv("DATABASE_URL", "postgres://belune:belune@localhost:5432/belune?sslmode=disable"),
 		RedisURL:           getEnv("REDIS_URL", "redis://localhost:6379"),
 		JWTSecret:          getEnv("JWT_SECRET", ""),
 		JWTExpiryHours:     getEnvInt("JWT_EXPIRY_HOURS", 1),
@@ -138,7 +138,7 @@ func Load() (*Config, error) {
 
 		PreviewIdleDays: getEnvInt("PREVIEW_IDLE_DAYS", 7),
 
-		SkipMigrations: getEnvBool("PAAS_SKIP_MIGRATIONS", false),
+		SkipMigrations: getEnvBool("BELUNE_SKIP_MIGRATIONS", false),
 
 		OTLPEndpoint: getEnv("OTEL_EXPORTER_OTLP_ENDPOINT", ""),
 		OTLPInsecure: getEnvBool("OTEL_EXPORTER_OTLP_INSECURE", true),
@@ -165,13 +165,13 @@ func Load() (*Config, error) {
 		BackupS3Bucket:            getEnv("BACKUP_S3_BUCKET", ""),
 		BackupS3AccessKey:         getEnv("BACKUP_S3_ACCESS_KEY", ""),
 		BackupS3SecretKey:         getEnv("BACKUP_S3_SECRET_KEY", ""),
-		BackupS3Prefix:            getEnv("BACKUP_S3_PREFIX", "paas/"),
+		BackupS3Prefix:            getEnv("BACKUP_S3_PREFIX", "belune/"),
 		BackupS3UseSSL:            getEnvBool("BACKUP_S3_USE_SSL", true),
 		BackupRetainDays:          getEnvInt("BACKUP_RETAIN_DAYS", 30),
 		BackupRetainCount:         getEnvInt("BACKUP_RETAIN_COUNT", 14),
-		BackupScriptPath:          getEnv("BACKUP_SCRIPT_PATH", paasDir()+"/scripts/backup.sh"),
-		DatabaseBackupDir:         getEnv("DATABASE_BACKUP_DIR", paasDir()+"/backups/databases"),
-		FileMountsDir:             getEnv("FILE_MOUNTS_DIR", paasDir()+"/filemounts"),
+		BackupScriptPath:          getEnv("BACKUP_SCRIPT_PATH", beluneDir()+"/scripts/backup.sh"),
+		DatabaseBackupDir:         getEnv("DATABASE_BACKUP_DIR", beluneDir()+"/backups/databases"),
+		FileMountsDir:             getEnv("FILE_MOUNTS_DIR", beluneDir()+"/filemounts"),
 		DatabaseBackupHelperImage: getEnv("DATABASE_BACKUP_HELPER_IMAGE", "alpine:3.20"),
 		DatabaseBackupRetainCount: getEnvInt("DATABASE_BACKUP_RETAIN_COUNT", 7),
 	}
@@ -197,12 +197,12 @@ func Load() (*Config, error) {
 	return cfg, nil
 }
 
-// paasDir returns the PaaS install directory, used to derive default paths.
-func paasDir() string {
-	if dir := os.Getenv("PAAS_DIR"); dir != "" {
+// beluneDir returns the PaaS install directory, used to derive default paths.
+func beluneDir() string {
+	if dir := os.Getenv("BELUNE_DIR"); dir != "" {
 		return dir
 	}
-	return "/opt/paas"
+	return "/opt/belune"
 }
 
 func getEnv(key, fallback string) string {

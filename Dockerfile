@@ -18,21 +18,21 @@ COPY apps/api/ ./
 COPY --from=frontend /web/build ./web/dist/
 RUN CGO_ENABLED=0 GOOS=linux go build \
     -ldflags="-s -w -X main.Version=${VERSION:-dev}" \
-    -o /paas ./cmd/server
+    -o /belune ./cmd/server
 
 # Stage 3: Minimal runtime image
 FROM alpine:3.20
 RUN apk add --no-cache ca-certificates tzdata git && \
-    addgroup -S paas && adduser -S -G paas paas
-COPY --from=backend /paas /usr/local/bin/paas
+    addgroup -S belune && adduser -S -G belune belune
+COPY --from=backend /belune /usr/local/bin/belune
 # Writable, persistable location for managed-database logical dumps. The default
-# DatabaseBackupDir (/opt/paas/backups/databases) is not creatable by the non-root
-# paas user, so point it at a dir we own here. Mount a volume on /data in
+# DatabaseBackupDir (/opt/belune/backups/databases) is not creatable by the non-root
+# belune user, so point it at a dir we own here. Mount a volume on /data in
 # docker-compose.prod.yml so dumps survive container recreation (needed for restore).
-RUN mkdir -p /data/backups/databases && chown -R paas:paas /data
+RUN mkdir -p /data/backups/databases && chown -R belune:belune /data
 ENV DATABASE_BACKUP_DIR=/data/backups/databases
-USER paas
+USER belune
 EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD wget -qO- http://localhost:8080/health || exit 1
-ENTRYPOINT ["paas"]
+ENTRYPOINT ["belune"]

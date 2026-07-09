@@ -13,7 +13,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 
-	"github.com/ungweiliang/selfhost-paas/internal/store/generated"
+	"github.com/weiling79/belune/internal/store/generated"
 )
 
 // fileMountReservedPrefixes reject a mount under a kernel/pseudo filesystem.

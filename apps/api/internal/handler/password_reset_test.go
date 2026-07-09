@@ -9,8 +9,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/ungweiliang/selfhost-paas/internal/testutil"
-	"github.com/ungweiliang/selfhost-paas/internal/worker"
+	"github.com/weiling79/belune/internal/testutil"
+	"github.com/weiling79/belune/internal/worker"
 )
 
 func TestForgotPassword_AlwaysReturns200(t *testing.T) {

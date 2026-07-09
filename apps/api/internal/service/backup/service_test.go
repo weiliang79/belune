@@ -14,8 +14,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/ungweiliang/selfhost-paas/internal/config"
-	"github.com/ungweiliang/selfhost-paas/internal/service/backup"
+	"github.com/weiling79/belune/internal/config"
+	"github.com/weiling79/belune/internal/service/backup"
 )
 
 // startMinio spins up a MinIO testcontainer and returns a configured Service.
@@ -46,7 +46,7 @@ func startMinio(t *testing.T) (*backup.Service, func()) {
 		BackupS3Bucket:      bucket,
 		BackupS3AccessKey:   accessKey,
 		BackupS3SecretKey:   secretKey,
-		BackupS3Prefix:      "paas/",
+		BackupS3Prefix:      "belune/",
 		BackupS3UseSSL:      false,
 		BackupRetainDays:    30,
 		BackupRetainCount:   14,
@@ -78,12 +78,12 @@ func TestBackupService_UploadListDelete(t *testing.T) {
 	defer teardown()
 	ctx := context.Background()
 
-	path := tempBackupFile(t, "paas-backup-20260501T120000Z.tar.gz", "fake archive content")
+	path := tempBackupFile(t, "belune-backup-20260501T120000Z.tar.gz", "fake archive content")
 
 	// Upload
 	key, err := svc.Upload(ctx, path)
 	require.NoError(t, err)
-	assert.Equal(t, "paas/paas-backup-20260501T120000Z.tar.gz", key)
+	assert.Equal(t, "belune/belune-backup-20260501T120000Z.tar.gz", key)
 
 	// List — should contain the one object
 	objects, err := svc.List(ctx)
@@ -114,8 +114,8 @@ func TestBackupService_LatestKey(t *testing.T) {
 
 	// Upload two files
 	for i, name := range []string{
-		"paas-backup-20260501T100000Z.tar.gz",
-		"paas-backup-20260501T120000Z.tar.gz",
+		"belune-backup-20260501T100000Z.tar.gz",
+		"belune-backup-20260501T120000Z.tar.gz",
 	} {
 		path := tempBackupFile(t, name, fmt.Sprintf("content %d", i))
 		_, err := svc.Upload(ctx, path)
@@ -134,7 +134,7 @@ func TestBackupService_AgeFileContentType(t *testing.T) {
 	defer teardown()
 	ctx := context.Background()
 
-	path := tempBackupFile(t, "paas-backup-20260501T120000Z.tar.gz.age", "encrypted")
+	path := tempBackupFile(t, "belune-backup-20260501T120000Z.tar.gz.age", "encrypted")
 	key, err := svc.Upload(ctx, path)
 	require.NoError(t, err)
 	assert.True(t, strings.HasSuffix(key, ".age"))
@@ -156,7 +156,7 @@ func TestBackupService_DeleteMissingKeyIsNoError(t *testing.T) {
 	ctx := context.Background()
 
 	// Deleting a key that doesn't exist should not error (S3 semantics)
-	err := svc.Delete(ctx, []string{"paas/nonexistent.tar.gz"})
+	err := svc.Delete(ctx, []string{"belune/nonexistent.tar.gz"})
 	assert.NoError(t, err)
 }
 

@@ -39,13 +39,13 @@ jobs:
       postgres:
         image: postgres:16-alpine
         env:
-          POSTGRES_USER: paas
-          POSTGRES_PASSWORD: paas
-          POSTGRES_DB: paas
+          POSTGRES_USER: belune
+          POSTGRES_PASSWORD: belune
+          POSTGRES_DB: belune
         ports:
           - 5432:5432
         options: >-
-          --health-cmd "pg_isready -U paas"
+          --health-cmd "pg_isready -U belune"
           --health-interval 5s
           --health-timeout 3s
           --health-retries 10
@@ -62,7 +62,7 @@ jobs:
 
       - name: Apply all migrations on a fresh database
         env:
-          DATABASE_URL: postgres://paas:paas@localhost:5432/paas?sslmode=disable
+          DATABASE_URL: postgres://belune:belune@localhost:5432/belune?sslmode=disable
         run: go run ./cmd/migrate-check
 
   frontend:
@@ -98,13 +98,13 @@ jobs:
       postgres:
         image: postgres:16-alpine
         env:
-          POSTGRES_USER: paas
-          POSTGRES_PASSWORD: paas
-          POSTGRES_DB: paas
+          POSTGRES_USER: belune
+          POSTGRES_PASSWORD: belune
+          POSTGRES_DB: belune
         ports:
           - 5432:5432
         options: >-
-          --health-cmd "pg_isready -U paas"
+          --health-cmd "pg_isready -U belune"
           --health-interval 5s
           --health-timeout 3s
           --health-retries 10
@@ -127,50 +127,50 @@ jobs:
 
       - name: Apply migrations (baseline)
         env:
-          DATABASE_URL: postgres://paas:paas@localhost:5432/paas?sslmode=disable
+          DATABASE_URL: postgres://belune:belune@localhost:5432/belune?sslmode=disable
         run: go run ./cmd/migrate-check
 
       - name: Seed representative rows
         # PGPASSWORD is the fixed CI-only service container password — intentional plaintext.
         env:
-          PGPASSWORD: paas
+          PGPASSWORD: belune
         run: |
-          psql -h localhost -U paas -d paas \
+          psql -h localhost -U belune -d belune \
             -c "INSERT INTO settings (key, value) VALUES ('restore_drill_marker', 'phase7') ON CONFLICT (key) DO NOTHING;"
-          psql -h localhost -U paas -d paas \
+          psql -h localhost -U belune -d belune \
             -c "INSERT INTO users (email, password_hash, role, username, first_name, last_name) VALUES ('drill@example.com', '\$2a\$10\$aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'admin', 'drill', 'Drill', 'User');"
 
       - name: Dump database
         env:
-          PGPASSWORD: paas
-        run: pg_dump -h localhost -U paas paas > /tmp/paas-drill.sql
+          PGPASSWORD: belune
+        run: pg_dump -h localhost -U belune belune > /tmp/belune-drill.sql
 
       - name: Drop and recreate database
         env:
-          PGPASSWORD: paas
+          PGPASSWORD: belune
         run: |
-          psql -h localhost -U paas -d postgres -c "DROP DATABASE paas;"
-          psql -h localhost -U paas -d postgres -c "CREATE DATABASE paas;"
+          psql -h localhost -U belune -d postgres -c "DROP DATABASE belune;"
+          psql -h localhost -U belune -d postgres -c "CREATE DATABASE belune;"
 
       - name: Restore from dump
         env:
-          PGPASSWORD: paas
-        run: psql -h localhost -U paas -d paas < /tmp/paas-drill.sql
+          PGPASSWORD: belune
+        run: psql -h localhost -U belune -d belune < /tmp/belune-drill.sql
 
       - name: Re-apply migrations (must be idempotent no-op)
         env:
-          DATABASE_URL: postgres://paas:paas@localhost:5432/paas?sslmode=disable
+          DATABASE_URL: postgres://belune:belune@localhost:5432/belune?sslmode=disable
         run: go run ./cmd/migrate-check
 
       - name: Verify seeded rows survived round-trip
         env:
-          PGPASSWORD: paas
+          PGPASSWORD: belune
         run: |
-          SETTING=$(psql -h localhost -U paas -d paas -t -A \
+          SETTING=$(psql -h localhost -U belune -d belune -t -A \
             -c "SELECT value FROM settings WHERE key = 'restore_drill_marker';")
           [ "${SETTING}" = "phase7" ] || { echo "FAIL: settings row missing after restore"; exit 1; }
 
-          COUNT=$(psql -h localhost -U paas -d paas -t -A \
+          COUNT=$(psql -h localhost -U belune -d belune -t -A \
             -c "SELECT COUNT(*) FROM users WHERE email = 'drill@example.com';")
           [ "${COUNT}" = "1" ] || { echo "FAIL: user row missing after restore"; exit 1; }
 
@@ -193,6 +193,6 @@ jobs:
         with:
           context: .
           push: false
-          tags: selfhost-paas:ci
+          tags: belune:ci
           cache-from: type=gha
           cache-to: type=gha,mode=max

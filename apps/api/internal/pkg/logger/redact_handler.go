@@ -6,7 +6,7 @@ import (
 	"log/slog"
 	"strings"
 
-	"github.com/ungweiliang/selfhost-paas/internal/pkg/redact"
+	"github.com/weiling79/belune/internal/pkg/redact"
 )
 
 // sensitiveKeyFragments are substrings that, when found (case-insensitively)

@@ -3,7 +3,7 @@
 # Run from the install directory: bash update.sh
 set -euo pipefail
 
-INSTALL_DIR="${PAAS_DIR:-/opt/paas}"
+INSTALL_DIR="${BELUNE_DIR:-/opt/belune}"
 
 info()    { echo "  [info]  $*"; }
 success() { echo "  [ok]    $*"; }
@@ -21,26 +21,26 @@ echo ""
 
 # ── Pull latest image ──────────────────────────────────────────────────────────
 
-PAAS_IMAGE=$(grep 'PAAS_IMAGE' .env 2>/dev/null | cut -d= -f2 || echo "ghcr.io/ungweiliang/selfhost-paas:latest")
-info "Pulling ${PAAS_IMAGE}..."
-docker pull "${PAAS_IMAGE}"
+BELUNE_IMAGE=$(grep 'BELUNE_IMAGE' .env 2>/dev/null | cut -d= -f2 || echo "ghcr.io/weiling79/belune:latest")
+info "Pulling ${BELUNE_IMAGE}..."
+docker pull "${BELUNE_IMAGE}"
 
-# ── Restart paas service (migrations run automatically on startup) ────────────
+# ── Restart belune service (migrations run automatically on startup) ────────────
 
-info "Restarting paas container..."
-docker compose up -d --no-deps paas
+info "Restarting belune container..."
+docker compose up -d --no-deps belune
 
 # ── Re-extract helper binaries ─────────────────────────────────────────────────
 
-PAAS_IMAGE=$(grep 'PAAS_IMAGE' .env 2>/dev/null | cut -d= -f2 || echo "ghcr.io/ungweiliang/selfhost-paas:latest")
+BELUNE_IMAGE=$(grep 'BELUNE_IMAGE' .env 2>/dev/null | cut -d= -f2 || echo "ghcr.io/weiling79/belune:latest")
 mkdir -p "${INSTALL_DIR}/bin"
-info "Re-extracting paas-backup-upload helper..."
-docker run --rm --entrypoint="" "${PAAS_IMAGE}" \
-  cat /usr/local/bin/paas-backup-upload \
-  > "${INSTALL_DIR}/bin/paas-backup-upload" 2>/dev/null \
-  && chmod +x "${INSTALL_DIR}/bin/paas-backup-upload" \
-  && success "paas-backup-upload updated." \
-  || info "paas-backup-upload not found in image — skipping."
+info "Re-extracting belune-backup-upload helper..."
+docker run --rm --entrypoint="" "${BELUNE_IMAGE}" \
+  cat /usr/local/bin/belune-backup-upload \
+  > "${INSTALL_DIR}/bin/belune-backup-upload" 2>/dev/null \
+  && chmod +x "${INSTALL_DIR}/bin/belune-backup-upload" \
+  && success "belune-backup-upload updated." \
+  || info "belune-backup-upload not found in image — skipping."
 
 # ── Wait for health ────────────────────────────────────────────────────────────
 
@@ -51,7 +51,7 @@ until curl -sf http://localhost:8080/healthz >/dev/null 2>&1; do
   sleep 2
   ELAPSED=$((ELAPSED + 2))
   if [[ ${ELAPSED} -ge ${MAX_WAIT} ]]; then
-    die "API did not become ready after update. Check: docker compose logs paas"
+    die "API did not become ready after update. Check: docker compose logs belune"
   fi
 done
 

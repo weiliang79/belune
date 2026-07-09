@@ -33,7 +33,7 @@ tasks:
     cmd: docker compose down
 
   # ─── Observability (opt-in) ──────────────────────────────────
-  # Requires the `paas-infra` network, which `dev:infra` creates.
+  # Requires the `belune-infra` network, which `dev:infra` creates.
   # Prometheus scrapes the API at host.docker.internal:9090 (METRICS_BIND=127.0.0.1:9090).
 
   observability:up:
@@ -59,7 +59,7 @@ tasks:
   build:api:
     desc: Build Go binary with embedded frontend
     dir: '{{.API_DIR}}'
-    cmd: go build -o ../../paas ./cmd/server
+    cmd: go build -o ../../belune ./cmd/server
 
   build:
     desc: Build everything (frontend then backend)

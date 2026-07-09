@@ -7,8 +7,8 @@ import (
 
 	"github.com/jackc/pgx/v5/pgtype"
 
-	"github.com/ungweiliang/selfhost-paas/internal/pkg/crypto"
-	"github.com/ungweiliang/selfhost-paas/internal/store/generated"
+	"github.com/weiling79/belune/internal/pkg/crypto"
+	"github.com/weiling79/belune/internal/store/generated"
 )
 
 // GitProviderConfigService manages the per-instance registered provider apps

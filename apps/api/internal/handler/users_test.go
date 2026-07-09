@@ -7,7 +7,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/ungweiliang/selfhost-paas/internal/testutil"
+	"github.com/weiling79/belune/internal/testutil"
 )
 
 func TestCreateUser_AdminOnly(t *testing.T) {

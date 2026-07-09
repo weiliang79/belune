@@ -14,10 +14,10 @@ import (
 	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5/pgtype"
 
-	"github.com/ungweiliang/selfhost-paas/internal/naming"
-	"github.com/ungweiliang/selfhost-paas/internal/status"
-	"github.com/ungweiliang/selfhost-paas/internal/store"
-	"github.com/ungweiliang/selfhost-paas/internal/store/generated"
+	"github.com/weiling79/belune/internal/naming"
+	"github.com/weiling79/belune/internal/status"
+	"github.com/weiling79/belune/internal/store"
+	"github.com/weiling79/belune/internal/store/generated"
 )
 
 var defaultVersions = map[string]string{
@@ -47,8 +47,8 @@ type createDatabaseRequest struct {
 	DataDir        string            `json:"data_dir"`
 	Env            map[string]string `json:"env"`             // passed verbatim as container env
 	BackupMode     string            `json:"backup_mode"`     // volume_snapshot | command
-	BackupCommand  string            `json:"backup_command"`  // command mode: dump into $PAAS_BACKUP_DIR
-	RestoreCommand string            `json:"restore_command"` // command mode: restore from $PAAS_BACKUP_DIR
+	BackupCommand  string            `json:"backup_command"`  // command mode: dump into $BELUNE_BACKUP_DIR
+	RestoreCommand string            `json:"restore_command"` // command mode: restore from $BELUNE_BACKUP_DIR
 }
 
 var defaultUsers = map[string]string{

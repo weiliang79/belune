@@ -13,9 +13,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/ungweiliang/selfhost-paas/internal/naming"
-	"github.com/ungweiliang/selfhost-paas/internal/runtime/docker"
-	"github.com/ungweiliang/selfhost-paas/internal/store/generated"
+	"github.com/weiling79/belune/internal/naming"
+	"github.com/weiling79/belune/internal/runtime/docker"
+	"github.com/weiling79/belune/internal/store/generated"
 )
 
 // otherRedisDB seeds an "other"-type database backed by redis:7-alpine (a small,
@@ -58,8 +58,8 @@ func provisionAndCleanup(t *testing.T, h interface {
 // snapshot path (RunHelper tar → wipe → untar) against a real container: write
 // data, back up, change it, restore, and confirm the original value is back.
 func TestBackupRestore_OtherVolumeSnapshot_RealDocker(t *testing.T) {
-	if os.Getenv("PAAS_DOCKER_INTEGRATION") == "" {
-		t.Skip("set PAAS_DOCKER_INTEGRATION=1 to run the real-Docker volume-snapshot round-trip")
+	if os.Getenv("BELUNE_DOCKER_INTEGRATION") == "" {
+		t.Skip("set BELUNE_DOCKER_INTEGRATION=1 to run the real-Docker volume-snapshot round-trip")
 	}
 	ctx := context.Background()
 	rt, err := docker.New()
@@ -112,11 +112,11 @@ func TestBackupRestore_OtherVolumeSnapshot_RealDocker(t *testing.T) {
 }
 
 // TestBackupRestore_OtherCommand_RealDocker exercises the BYO command path: the
-// backup command writes into $PAAS_BACKUP_DIR (the system tars it out), and the
+// backup command writes into $BELUNE_BACKUP_DIR (the system tars it out), and the
 // restore command reads it back after the system untars it.
 func TestBackupRestore_OtherCommand_RealDocker(t *testing.T) {
-	if os.Getenv("PAAS_DOCKER_INTEGRATION") == "" {
-		t.Skip("set PAAS_DOCKER_INTEGRATION=1 to run the real-Docker command-mode round-trip")
+	if os.Getenv("BELUNE_DOCKER_INTEGRATION") == "" {
+		t.Skip("set BELUNE_DOCKER_INTEGRATION=1 to run the real-Docker command-mode round-trip")
 	}
 	ctx := context.Background()
 	rt, err := docker.New()
@@ -125,8 +125,8 @@ func TestBackupRestore_OtherCommand_RealDocker(t *testing.T) {
 	h.Config.DatabaseBackupDir = t.TempDir()
 
 	db := otherRedisDB(t, "command", func(p *generated.CreateDatabaseParams) {
-		p.BackupCommand = pgtype.Text{String: `echo marker-42 > "$PAAS_BACKUP_DIR/d.txt"`, Valid: true}
-		p.RestoreCommand = pgtype.Text{String: `cp "$PAAS_BACKUP_DIR/d.txt" /data/restored.txt`, Valid: true}
+		p.BackupCommand = pgtype.Text{String: `echo marker-42 > "$BELUNE_BACKUP_DIR/d.txt"`, Valid: true}
+		p.RestoreCommand = pgtype.Text{String: `cp "$BELUNE_BACKUP_DIR/d.txt" /data/restored.txt`, Valid: true}
 	})
 	provisionAndCleanup(t, h, rt, db)
 

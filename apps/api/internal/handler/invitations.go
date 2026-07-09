@@ -12,11 +12,11 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
-	"github.com/ungweiliang/selfhost-paas/internal/pkg/metrics"
-	"github.com/ungweiliang/selfhost-paas/internal/server/middleware"
-	"github.com/ungweiliang/selfhost-paas/internal/service"
-	"github.com/ungweiliang/selfhost-paas/internal/store/generated"
-	"github.com/ungweiliang/selfhost-paas/internal/worker"
+	"github.com/weiling79/belune/internal/pkg/metrics"
+	"github.com/weiling79/belune/internal/server/middleware"
+	"github.com/weiling79/belune/internal/service"
+	"github.com/weiling79/belune/internal/store/generated"
+	"github.com/weiling79/belune/internal/worker"
 )
 
 const invitationTTL = 7 * 24 * time.Hour

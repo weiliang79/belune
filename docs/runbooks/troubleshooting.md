@@ -9,7 +9,7 @@ Common problems and their resolutions for the self-hosted PaaS.
 **Symptoms:** Status badge never leaves `deploying`/`building`; no logs appear.
 
 **Steps:**
-1. Check the API worker logs: `docker compose logs -f paas`
+1. Check the API worker logs: `docker compose logs -f belune`
 2. Look for task queue errors (asynq). If the Redis container is unhealthy the task will never be picked up:
    ```
    docker compose ps redis
@@ -17,7 +17,7 @@ Common problems and their resolutions for the self-hosted PaaS.
    ```
 3. If Redis is healthy but no worker is processing, restart the API service:
    ```
-   docker compose restart paas
+   docker compose restart belune
    ```
 4. If the build itself failed, check for a recent deployment record in the Deployments tab — the build log should be attached.
 
@@ -64,7 +64,7 @@ Common problems and their resolutions for the self-hosted PaaS.
 5. If the `caddydata` volume is corrupt, stop Caddy, remove the volume, and restart — **this will revoke existing certificates**:
    ```
    docker compose stop caddy
-   docker volume rm paas_caddydata
+   docker volume rm belune_caddydata
    docker compose up -d caddy
    ```
 
@@ -72,7 +72,7 @@ Common problems and their resolutions for the self-hosted PaaS.
 
 ## Database connection errors (API fails to start)
 
-**Symptoms:** `paas` container exits with `dial error` or `connection refused`.
+**Symptoms:** `belune` container exits with `dial error` or `connection refused`.
 
 **Steps:**
 1. Check Postgres is running: `docker compose ps postgres`
@@ -88,11 +88,11 @@ Common problems and their resolutions for the self-hosted PaaS.
 
 **Cause:** The `Origin` header sent by the browser does not match `CORS_ORIGINS` in `.env`.
 
-**Fix:** Add the frontend origin (e.g. `https://paas.example.com`) to `CORS_ORIGINS`:
+**Fix:** Add the frontend origin (e.g. `https://belune.example.com`) to `CORS_ORIGINS`:
 ```
-CORS_ORIGINS=https://paas.example.com
+CORS_ORIGINS=https://belune.example.com
 ```
-Then restart: `docker compose restart paas`
+Then restart: `docker compose restart belune`
 
 ---
 
@@ -101,6 +101,6 @@ Then restart: `docker compose restart paas`
 **Symptoms:** The Audit Log page is empty despite activity.
 
 **Steps:**
-1. Confirm the `paas` container is healthy — audit writes happen synchronously in request handlers.
-2. Check for database write errors in `docker compose logs paas | grep -i audit`.
+1. Confirm the `belune` container is healthy — audit writes happen synchronously in request handlers.
+2. Check for database write errors in `docker compose logs belune | grep -i audit`.
 3. Verify the acting user has a valid session (audit records are skipped if no user context is available).

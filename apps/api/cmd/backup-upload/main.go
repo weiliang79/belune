@@ -16,8 +16,8 @@ import (
 	"log/slog"
 	"os"
 
-	"github.com/ungweiliang/selfhost-paas/internal/config"
-	"github.com/ungweiliang/selfhost-paas/internal/service/backup"
+	"github.com/weiling79/belune/internal/config"
+	"github.com/weiling79/belune/internal/service/backup"
 )
 
 func main() {

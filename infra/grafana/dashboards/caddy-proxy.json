@@ -1,7 +1,7 @@
 {
-  "uid": "paas-caddy",
+  "uid": "belune-caddy",
   "title": "Caddy Proxy",
-  "tags": ["selfhost-paas", "caddy"],
+  "tags": ["belune", "caddy"],
   "timezone": "browser",
   "schemaVersion": 39,
   "version": 1,
@@ -51,7 +51,7 @@
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "targets": [
         {
-          "expr": "sum by (op, result) (rate(paas_caddy_admin_calls_total[5m]))",
+          "expr": "sum by (op, result) (rate(belune_caddy_admin_calls_total[5m]))",
           "legendFormat": "{{op}} ({{result}})"
         }
       ]

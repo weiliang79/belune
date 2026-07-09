@@ -13,17 +13,17 @@ import (
 	"github.com/stretchr/testify/require"
 	tcminio "github.com/testcontainers/testcontainers-go/modules/minio"
 
-	"github.com/ungweiliang/selfhost-paas/internal/config"
-	"github.com/ungweiliang/selfhost-paas/internal/service/backup"
-	"github.com/ungweiliang/selfhost-paas/internal/testutil"
+	"github.com/weiling79/belune/internal/config"
+	"github.com/weiling79/belune/internal/service/backup"
+	"github.com/weiling79/belune/internal/testutil"
 )
 
 // TestRestoreFromS3_RealDocker verifies the resolveBackupFile remote branch: a
 // backup is uploaded to (MinIO) S3, its local copy is deleted, and the restore
 // then downloads it from S3 and feeds it to the restore client.
 func TestRestoreFromS3_RealDocker(t *testing.T) {
-	if os.Getenv("PAAS_DOCKER_INTEGRATION") == "" {
-		t.Skip("set PAAS_DOCKER_INTEGRATION=1 to run the restore-from-S3 test (needs MinIO)")
+	if os.Getenv("BELUNE_DOCKER_INTEGRATION") == "" {
+		t.Skip("set BELUNE_DOCKER_INTEGRATION=1 to run the restore-from-S3 test (needs MinIO)")
 	}
 	ctx := context.Background()
 
@@ -43,7 +43,7 @@ func TestRestoreFromS3_RealDocker(t *testing.T) {
 		BackupS3Bucket:      "test-backups",
 		BackupS3AccessKey:   "minioadmin",
 		BackupS3SecretKey:   "minioadmin",
-		BackupS3Prefix:      "paas/",
+		BackupS3Prefix:      "belune/",
 		BackupS3UseSSL:      false,
 	})
 	require.NoError(t, svc.EnsureBucket(ctx))

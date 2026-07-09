@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/ungweiliang/selfhost-paas/internal/testutil"
+	"github.com/weiling79/belune/internal/testutil"
 )
 
 func TestListBackupRuns_EmptyOnFreshDB(t *testing.T) {

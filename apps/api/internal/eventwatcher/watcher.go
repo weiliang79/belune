@@ -8,10 +8,10 @@ import (
 
 	"github.com/jackc/pgx/v5/pgtype"
 
-	"github.com/ungweiliang/selfhost-paas/internal/runtime"
-	"github.com/ungweiliang/selfhost-paas/internal/status"
-	"github.com/ungweiliang/selfhost-paas/internal/store/generated"
-	"github.com/ungweiliang/selfhost-paas/internal/ws"
+	"github.com/weiling79/belune/internal/runtime"
+	"github.com/weiling79/belune/internal/status"
+	"github.com/weiling79/belune/internal/store/generated"
+	"github.com/weiling79/belune/internal/ws"
 )
 
 const (
@@ -143,7 +143,7 @@ func (w *Watcher) reconcile(ctx context.Context) {
 // watchEvents subscribes to Docker events and processes them.
 func (w *Watcher) watchEvents(ctx context.Context) error {
 	eventCh, errCh := w.runtime.ContainerEvents(ctx, map[string][]string{
-		"label":  {"managed-by=selfhost-paas"},
+		"label":  {"managed-by=belune"},
 		"event":  {"start", "stop", "die", "restart", "oom"},
 	})
 

@@ -9,7 +9,7 @@ import (
 func TestOAuthAuthURL_GitLabSaaS(t *testing.T) {
 	p := newOAuthProvider("gitlab")
 	cfg := AppConfig{Provider: "gitlab", ClientID: "cid"}
-	got := p.AuthURL(cfg, "https://paas.example/cb", "st8")
+	got := p.AuthURL(cfg, "https://belune.example/cb", "st8")
 
 	if !strings.HasPrefix(got, "https://gitlab.com/oauth/authorize?") {
 		t.Fatalf("unexpected base: %s", got)
@@ -19,7 +19,7 @@ func TestOAuthAuthURL_GitLabSaaS(t *testing.T) {
 	if q.Get("client_id") != "cid" || q.Get("state") != "st8" || q.Get("response_type") != "code" {
 		t.Fatalf("unexpected query: %s", u.RawQuery)
 	}
-	if q.Get("redirect_uri") != "https://paas.example/cb" {
+	if q.Get("redirect_uri") != "https://belune.example/cb" {
 		t.Fatalf("unexpected redirect_uri: %s", q.Get("redirect_uri"))
 	}
 }
@@ -27,7 +27,7 @@ func TestOAuthAuthURL_GitLabSaaS(t *testing.T) {
 func TestOAuthAuthURL_GitLabSelfHosted(t *testing.T) {
 	p := newOAuthProvider("gitlab")
 	cfg := AppConfig{Provider: "gitlab", BaseURL: "https://gitlab.example.com", ClientID: "cid"}
-	got := p.AuthURL(cfg, "https://paas.example/cb", "s")
+	got := p.AuthURL(cfg, "https://belune.example/cb", "s")
 	if !strings.HasPrefix(got, "https://gitlab.example.com/oauth/authorize?") {
 		t.Fatalf("expected self-hosted base, got: %s", got)
 	}
@@ -35,7 +35,7 @@ func TestOAuthAuthURL_GitLabSelfHosted(t *testing.T) {
 
 func TestOAuthAuthURL_Bitbucket(t *testing.T) {
 	p := newOAuthProvider("bitbucket")
-	got := p.AuthURL(AppConfig{Provider: "bitbucket", ClientID: "c"}, "https://paas.example/cb", "s")
+	got := p.AuthURL(AppConfig{Provider: "bitbucket", ClientID: "c"}, "https://belune.example/cb", "s")
 	if !strings.HasPrefix(got, "https://bitbucket.org/site/oauth2/authorize?") {
 		t.Fatalf("unexpected bitbucket auth url: %s", got)
 	}
@@ -43,7 +43,7 @@ func TestOAuthAuthURL_Bitbucket(t *testing.T) {
 
 func TestOAuthAuthURL_Gitea(t *testing.T) {
 	p := newOAuthProvider("gitea")
-	got := p.AuthURL(AppConfig{Provider: "gitea", BaseURL: "https://gitea.example.com", ClientID: "c"}, "https://paas.example/cb", "s")
+	got := p.AuthURL(AppConfig{Provider: "gitea", BaseURL: "https://gitea.example.com", ClientID: "c"}, "https://belune.example/cb", "s")
 	if !strings.HasPrefix(got, "https://gitea.example.com/login/oauth/authorize?") {
 		t.Fatalf("unexpected gitea auth url: %s", got)
 	}

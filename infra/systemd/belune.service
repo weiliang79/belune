@@ -1,6 +1,6 @@
 [Unit]
 Description=Self-Hosted PaaS (docker compose stack)
-Documentation=https://github.com/ungweiliang/selfhost-paas/blob/main/docs/runbooks/install.md
+Documentation=https://github.com/weiling79/belune/blob/main/docs/runbooks/install.md
 Requires=docker.service
 After=docker.service network-online.target
 Wants=network-online.target
@@ -8,7 +8,7 @@ Wants=network-online.target
 [Service]
 Type=oneshot
 RemainAfterExit=yes
-WorkingDirectory=/opt/paas
+WorkingDirectory=/opt/belune
 
 # Up brings the stack up; compose `restart: unless-stopped` then handles
 # per-container respawn. Stop is graceful so volumes stay intact.

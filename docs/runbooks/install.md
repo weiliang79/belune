@@ -20,16 +20,16 @@ which handles the boring parts (compose, secrets, image pull) automatically.
 ## 2. Run the installer
 
 ```sh
-curl -sSL https://raw.githubusercontent.com/ungweiliang/selfhost-paas/main/scripts/install.sh | bash
+curl -sSL https://raw.githubusercontent.com/weiling79/belune/main/scripts/install.sh | bash
 ```
 
 This:
 
-- Creates `/opt/paas` (override with `PAAS_DIR=/path bash install.sh`).
+- Creates `/opt/belune` (override with `BELUNE_DIR=/path bash install.sh`).
 - Downloads `docker-compose.yml` and the Caddyfile template.
 - Generates a `.env` containing fresh `JWT_SECRET`, `ENCRYPTION_KEY`, and
   Postgres password — keep this file out of version control.
-- Pulls `ghcr.io/ungweiliang/selfhost-paas:latest` and runs `docker compose up -d`.
+- Pulls `ghcr.io/weiling79/belune:latest` and runs `docker compose up -d`.
 - Waits for `GET /healthz` to return 200.
 
 When it finishes, the panel is reachable at `http://<host>:80` and the API
@@ -46,16 +46,16 @@ respawn after Docker restarts. The systemd unit's job is to bring the stack
 up on host reboot before anyone needs to log in.
 
 ```sh
-sudo cp /opt/paas/infra/systemd/paas.service /etc/systemd/system/paas.service
+sudo cp /opt/belune/infra/systemd/belune.service /etc/systemd/system/belune.service
 sudo systemctl daemon-reload
-sudo systemctl enable --now paas.service
+sudo systemctl enable --now belune.service
 ```
 
 Verify:
 
 ```sh
-systemctl status paas.service        # should be 'active (exited)'
-docker compose -f /opt/paas/docker-compose.yml ps  # all healthy
+systemctl status belune.service        # should be 'active (exited)'
+docker compose -f /opt/belune/docker-compose.yml ps  # all healthy
 ```
 
 If you keep the install in a non-default directory, edit
@@ -65,12 +65,12 @@ If you keep the install in a non-default directory, edit
 
 ## 4. DNS
 
-You need at least two records. Replace `paas.example.com` with your
+You need at least two records. Replace `belune.example.com` with your
 chosen panel hostname.
 
 | Record           | Type  | Target              | Purpose                        |
 | ---------------- | ----- | ------------------- | ------------------------------ |
-| `paas.example.com` | A   | `<host IP>`         | Dashboard + API                |
+| `belune.example.com` | A   | `<host IP>`         | Dashboard + API                |
 | `*.example.com`  | A     | `<host IP>`         | Apps deployed via the platform |
 
 If you plan to use **preview environments**, you also need a wildcard for
@@ -87,12 +87,12 @@ Caddy handles TLS automatically. Two paths:
 
 ### 5a. HTTP-01 (default, simplest)
 
-Once the A records resolve, point a browser at `https://paas.example.com`
+Once the A records resolve, point a browser at `https://belune.example.com`
 and Caddy issues a cert on first visit. Set `TLS_ENABLED=true` and
-`SECURE_COOKIES=true` in `/opt/paas/.env`, then:
+`SECURE_COOKIES=true` in `/opt/belune/.env`, then:
 
 ```sh
-sudo systemctl restart paas.service
+sudo systemctl restart belune.service
 ```
 
 ### 5b. DNS-01 (wildcard certs)
@@ -106,23 +106,23 @@ edit the Caddyfile to declare the issuer. See the
 Verify TLS is live:
 
 ```sh
-curl -sSI https://paas.example.com/healthz | head -1   # 200 OK
-curl -sS https://paas.example.com/healthz              # {"status":"ok"}
+curl -sSI https://belune.example.com/healthz | head -1   # 200 OK
+curl -sS https://belune.example.com/healthz              # {"status":"ok"}
 ```
 
 ---
 
 ## 6. Bootstrap the admin account
 
-Visit `https://paas.example.com` in a browser. The first-run page asks you
+Visit `https://belune.example.com` in a browser. The first-run page asks you
 to create an admin account. After that, login is required for everything.
 
 Useful CLI sanity checks:
 
 ```sh
-docker compose -f /opt/paas/docker-compose.yml logs --tail 50 paas
-docker compose -f /opt/paas/docker-compose.yml exec postgres \
-    psql -U paas -d paas -c 'SELECT count(*) FROM users;'
+docker compose -f /opt/belune/docker-compose.yml logs --tail 50 belune
+docker compose -f /opt/belune/docker-compose.yml exec postgres \
+    psql -U belune -d belune -c 'SELECT count(*) FROM users;'
 ```
 
 ---
@@ -136,7 +136,7 @@ admin to set passwords manually.
 See [`smtp.md`](./smtp.md) for the full setup guide. Minimum required vars:
 
 ```env
-PUBLIC_BASE_URL=https://paas.example.com
+PUBLIC_BASE_URL=https://belune.example.com
 SMTP_HOST=smtp.example.com
 SMTP_PORT=587
 SMTP_USER=...
@@ -177,7 +177,7 @@ on a daily schedule (default 02:00 UTC) and enforces a rotation policy. No
 external cron job is required.
 
 **Defaults** (active with no configuration):
-- Daily local backup to `PAAS_DIR/backups/` (i.e. `/opt/paas/backups/`).
+- Daily local backup to `BELUNE_DIR/backups/` (i.e. `/opt/belune/backups/`).
 - Keeps the last 14 backups **and** any backup newer than 30 days — whichever
   retains more.
 
@@ -187,7 +187,7 @@ external cron job is required.
 BACKUP_REMOTE_ENABLED=true
 BACKUP_S3_ENDPOINT=            # empty = AWS S3; or e.g. s3.us-west-004.backblazeb2.com
 BACKUP_S3_REGION=us-east-1
-BACKUP_S3_BUCKET=my-paas-backups
+BACKUP_S3_BUCKET=my-belune-backups
 BACKUP_S3_ACCESS_KEY=...
 BACKUP_S3_SECRET_KEY=...
 ```
@@ -203,13 +203,13 @@ Restore drill (do this at least once before you need it for real):
 ## 9. Updating
 
 ```sh
-cd /opt/paas
+cd /opt/belune
 sudo bash scripts/update.sh
 ```
 
-This pulls the latest pinned image (read from `PAAS_IMAGE` in `.env`),
+This pulls the latest pinned image (read from `BELUNE_IMAGE` in `.env`),
 re-runs migrations, and waits for `/healthz`. The systemd unit doesn't need
-to be restarted — `update.sh` only bounces the `paas` container.
+to be restarted — `update.sh` only bounces the `belune` container.
 
 ---
 

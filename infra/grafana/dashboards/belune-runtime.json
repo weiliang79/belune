@@ -1,7 +1,7 @@
 {
-  "uid": "paas-runtime",
+  "uid": "belune-runtime",
   "title": "PaaS Runtime",
-  "tags": ["selfhost-paas"],
+  "tags": ["belune"],
   "timezone": "browser",
   "schemaVersion": 39,
   "version": 1,
@@ -15,7 +15,7 @@
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "targets": [
         {
-          "expr": "sum by (pattern) (rate(paas_http_requests_total[5m]))",
+          "expr": "sum by (pattern) (rate(belune_http_requests_total[5m]))",
           "legendFormat": "{{pattern}}"
         }
       ]
@@ -27,7 +27,7 @@
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "targets": [
         {
-          "expr": "histogram_quantile(0.95, sum by (pattern, le) (rate(paas_http_request_duration_seconds_bucket[5m])))",
+          "expr": "histogram_quantile(0.95, sum by (pattern, le) (rate(belune_http_request_duration_seconds_bucket[5m])))",
           "legendFormat": "{{pattern}}"
         }
       ]
@@ -39,7 +39,7 @@
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "targets": [
         {
-          "expr": "sum by (pattern) (rate(paas_http_requests_total{status=~\"5..\"}[5m]))",
+          "expr": "sum by (pattern) (rate(belune_http_requests_total{status=~\"5..\"}[5m]))",
           "legendFormat": "{{pattern}}"
         }
       ]
@@ -51,7 +51,7 @@
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "targets": [
         {
-          "expr": "paas_asynq_queue_size",
+          "expr": "belune_asynq_queue_size",
           "legendFormat": "{{queue}}/{{state}}"
         }
       ]
@@ -63,7 +63,7 @@
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "targets": [
         {
-          "expr": "histogram_quantile(0.95, sum by (stage, le) (rate(paas_deploy_stage_duration_seconds_bucket[15m])))",
+          "expr": "histogram_quantile(0.95, sum by (stage, le) (rate(belune_deploy_stage_duration_seconds_bucket[15m])))",
           "legendFormat": "{{stage}}"
         }
       ]
@@ -75,7 +75,7 @@
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "targets": [
         {
-          "expr": "sum by (stage) (increase(paas_deploy_stage_duration_seconds_count{status=\"error\"}[1h]))",
+          "expr": "sum by (stage) (increase(belune_deploy_stage_duration_seconds_count{status=\"error\"}[1h]))",
           "legendFormat": "{{stage}}"
         }
       ]
@@ -87,7 +87,7 @@
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "targets": [
         {
-          "expr": "sum by (op, result) (rate(paas_docker_runtime_operations_total[5m]))",
+          "expr": "sum by (op, result) (rate(belune_docker_runtime_operations_total[5m]))",
           "legendFormat": "{{op}} ({{result}})"
         }
       ]

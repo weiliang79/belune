@@ -7,10 +7,10 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/httprate"
 
-	"github.com/ungweiliang/selfhost-paas/internal/handler"
-	"github.com/ungweiliang/selfhost-paas/internal/pkg/metrics"
-	"github.com/ungweiliang/selfhost-paas/internal/server/middleware"
-	"github.com/ungweiliang/selfhost-paas/internal/service"
+	"github.com/weiling79/belune/internal/handler"
+	"github.com/weiling79/belune/internal/pkg/metrics"
+	"github.com/weiling79/belune/internal/server/middleware"
+	"github.com/weiling79/belune/internal/service"
 )
 
 const (

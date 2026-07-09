@@ -13,9 +13,9 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
-	"github.com/ungweiliang/selfhost-paas/internal/pkg/crypto"
-	"github.com/ungweiliang/selfhost-paas/internal/server/middleware"
-	"github.com/ungweiliang/selfhost-paas/internal/service"
+	"github.com/weiling79/belune/internal/pkg/crypto"
+	"github.com/weiling79/belune/internal/server/middleware"
+	"github.com/weiling79/belune/internal/service"
 )
 
 var validGitProviders = map[string]bool{"github": true, "gitlab": true, "bitbucket": true, "gitea": true}

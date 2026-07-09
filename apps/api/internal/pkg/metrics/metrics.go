@@ -35,34 +35,34 @@ var (
 	factory = promauto.With(Registry)
 
 	httpRequestsTotal = factory.NewCounterVec(prometheus.CounterOpts{
-		Name: "paas_http_requests_total",
+		Name: "belune_http_requests_total",
 		Help: "HTTP requests served by the PaaS API, labelled by chi route pattern and status class.",
 	}, []string{"method", "pattern", "status"})
 
 	httpRequestDuration = factory.NewHistogramVec(prometheus.HistogramOpts{
-		Name:    "paas_http_request_duration_seconds",
+		Name:    "belune_http_request_duration_seconds",
 		Help:    "Latency of HTTP requests served by the PaaS API.",
 		Buckets: []float64{0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10},
 	}, []string{"method", "pattern"})
 
 	asynqQueueSize = factory.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "paas_asynq_queue_size",
+		Name: "belune_asynq_queue_size",
 		Help: "Asynq queue depth by queue name and task state.",
 	}, []string{"queue", "state"})
 
 	deployDuration = factory.NewHistogramVec(prometheus.HistogramOpts{
-		Name:    "paas_deploy_stage_duration_seconds",
+		Name:    "belune_deploy_stage_duration_seconds",
 		Help:    "Deploy pipeline stage durations (build, push, run, route, verify).",
 		Buckets: []float64{0.25, 0.5, 1, 2.5, 5, 10, 30, 60, 120, 300, 600},
 	}, []string{"stage", "status"})
 
 	dockerOps = factory.NewCounterVec(prometheus.CounterOpts{
-		Name: "paas_docker_runtime_operations_total",
+		Name: "belune_docker_runtime_operations_total",
 		Help: "Docker runtime operations by op name and result.",
 	}, []string{"op", "result"})
 
 	caddyAdminCalls = factory.NewCounterVec(prometheus.CounterOpts{
-		Name: "paas_caddy_admin_calls_total",
+		Name: "belune_caddy_admin_calls_total",
 		Help: "Caddy admin API calls by op name and result.",
 	}, []string{"op", "result"})
 )

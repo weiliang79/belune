@@ -8,9 +8,9 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/ungweiliang/selfhost-paas/internal/build"
-	"github.com/ungweiliang/selfhost-paas/internal/naming"
-	"github.com/ungweiliang/selfhost-paas/internal/runtime"
+	"github.com/weiling79/belune/internal/build"
+	"github.com/weiling79/belune/internal/naming"
+	"github.com/weiling79/belune/internal/runtime"
 )
 
 // Builder runs Cloud Native Buildpacks (CNB) via `pack build`.
@@ -62,7 +62,7 @@ func (b *Builder) Build(ctx context.Context, opts build.BuildOptions) (*build.Bu
 	// derives an auto-generated volume name from the image digest, which
 	// churns every time the image tag changes (we tag each deploy uniquely).
 	//
-	// Pre-create the volumes so they carry the paas-cache label — auto-created
+	// Pre-create the volumes so they carry the belune-cache label — auto-created
 	// volumes would not be labelled and the periodic cleanup worker would
 	// wipe them via PruneVolumes.
 	if opts.ApplicationID != "" {

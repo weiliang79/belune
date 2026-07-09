@@ -10,16 +10,16 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 
-	"github.com/ungweiliang/selfhost-paas/internal/build"
-	"github.com/ungweiliang/selfhost-paas/internal/config"
-	"github.com/ungweiliang/selfhost-paas/internal/pkg/crypto"
-	"github.com/ungweiliang/selfhost-paas/internal/proxy"
-	"github.com/ungweiliang/selfhost-paas/internal/quota"
-	"github.com/ungweiliang/selfhost-paas/internal/runtime"
-	"github.com/ungweiliang/selfhost-paas/internal/service"
-	"github.com/ungweiliang/selfhost-paas/internal/service/backup"
-	"github.com/ungweiliang/selfhost-paas/internal/service/email"
-	"github.com/ungweiliang/selfhost-paas/internal/store/generated"
+	"github.com/weiling79/belune/internal/build"
+	"github.com/weiling79/belune/internal/config"
+	"github.com/weiling79/belune/internal/pkg/crypto"
+	"github.com/weiling79/belune/internal/proxy"
+	"github.com/weiling79/belune/internal/quota"
+	"github.com/weiling79/belune/internal/runtime"
+	"github.com/weiling79/belune/internal/service"
+	"github.com/weiling79/belune/internal/service/backup"
+	"github.com/weiling79/belune/internal/service/email"
+	"github.com/weiling79/belune/internal/store/generated"
 )
 
 // auditLogger is the narrow interface the worker needs to emit audit entries.

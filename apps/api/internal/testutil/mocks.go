@@ -9,8 +9,8 @@ import (
 
 	"github.com/hibiken/asynq"
 
-	"github.com/ungweiliang/selfhost-paas/internal/proxy"
-	"github.com/ungweiliang/selfhost-paas/internal/runtime"
+	"github.com/weiling79/belune/internal/proxy"
+	"github.com/weiling79/belune/internal/runtime"
 )
 
 // MockContainerRuntime implements runtime.ContainerRuntime for testing.

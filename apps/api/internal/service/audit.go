@@ -9,8 +9,8 @@ import (
 
 	"github.com/jackc/pgx/v5/pgtype"
 
-	"github.com/ungweiliang/selfhost-paas/internal/pkg/redact"
-	"github.com/ungweiliang/selfhost-paas/internal/store/generated"
+	"github.com/weiling79/belune/internal/pkg/redact"
+	"github.com/weiling79/belune/internal/store/generated"
 )
 
 const (

@@ -13,7 +13,7 @@ import (
 	"github.com/shirou/gopsutil/v4/disk"
 	"github.com/shirou/gopsutil/v4/mem"
 
-	"github.com/ungweiliang/selfhost-paas/internal/store/generated"
+	"github.com/weiling79/belune/internal/store/generated"
 )
 
 // HostMetricPoint is published to Redis and sent via SSE.

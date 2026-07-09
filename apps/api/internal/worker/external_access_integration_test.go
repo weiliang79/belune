@@ -15,7 +15,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/ungweiliang/selfhost-paas/internal/runtime/docker"
+	"github.com/weiling79/belune/internal/runtime/docker"
 )
 
 // redisPing dials addr and speaks the redis inline protocol; true means the
@@ -40,8 +40,8 @@ func redisPing(addr string) bool {
 // (reachable from the host loopback), data survives the recreate, and disabling
 // it removes the binding.
 func TestExternalAccessToggle_RealDocker(t *testing.T) {
-	if os.Getenv("PAAS_DOCKER_INTEGRATION") == "" {
-		t.Skip("set PAAS_DOCKER_INTEGRATION=1 to run the real-Docker external-access toggle")
+	if os.Getenv("BELUNE_DOCKER_INTEGRATION") == "" {
+		t.Skip("set BELUNE_DOCKER_INTEGRATION=1 to run the real-Docker external-access toggle")
 	}
 	ctx := context.Background()
 	rt, err := docker.New()

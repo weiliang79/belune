@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/ungweiliang/selfhost-paas/internal/runtime"
+	"github.com/weiling79/belune/internal/runtime"
 )
 
 const containerTestImage = "busybox:latest"
@@ -44,7 +44,7 @@ func uniqueTestContainerName(t *testing.T) string {
 	if _, err := rand.Read(b[:]); err != nil {
 		t.Fatalf("rand: %v", err)
 	}
-	return "paas-test-" + hex.EncodeToString(b[:])
+	return "belune-test-" + hex.EncodeToString(b[:])
 }
 
 // TestContainerLifecycle exercises the create→start→list→stop→remove path
@@ -64,7 +64,7 @@ func TestContainerLifecycle(t *testing.T) {
 		Name:   name,
 		Image:  containerTestImage,
 		Cmd:    []string{"sleep", "3600"},
-		Labels: map[string]string{"paas-unit-test": "true"},
+		Labels: map[string]string{"belune-unit-test": "true"},
 	})
 	require.NoError(t, err, "create container")
 	// Ensure cleanup even if later steps fail.
@@ -110,7 +110,7 @@ func TestCreateContainerUnknownImage(t *testing.T) {
 
 	_, err := c.CreateContainer(ctx, runtime.ContainerConfig{
 		Name:  uniqueTestContainerName(t),
-		Image: "paas-nonexistent-image-for-testing-99999:latest",
+		Image: "belune-nonexistent-image-for-testing-99999:latest",
 	})
 	assert.Error(t, err, "creating a container with an unknown image should return an error")
 }

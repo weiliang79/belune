@@ -14,11 +14,11 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"go.opentelemetry.io/otel/attribute"
 
-	"github.com/ungweiliang/selfhost-paas/internal/pkg/joblog"
-	"github.com/ungweiliang/selfhost-paas/internal/pkg/loglevel"
-	"github.com/ungweiliang/selfhost-paas/internal/pkg/metrics"
-	"github.com/ungweiliang/selfhost-paas/internal/pkg/tracing"
-	"github.com/ungweiliang/selfhost-paas/internal/store/generated"
+	"github.com/weiling79/belune/internal/pkg/joblog"
+	"github.com/weiling79/belune/internal/pkg/loglevel"
+	"github.com/weiling79/belune/internal/pkg/metrics"
+	"github.com/weiling79/belune/internal/pkg/tracing"
+	"github.com/weiling79/belune/internal/store/generated"
 )
 
 // HandleBackupNowTask shells out to backup.sh and records the result in
@@ -28,7 +28,7 @@ func (h *TaskHandler) HandleBackupNowTask(ctx context.Context, t *asynq.Task) er
 	ctx, span := tracing.Tracer().Start(ctx, "backup.run")
 	defer span.End()
 
-	scriptPath := "/opt/paas/scripts/backup.sh"
+	scriptPath := "/opt/belune/scripts/backup.sh"
 	if h.Config != nil && h.Config.BackupScriptPath != "" {
 		scriptPath = h.Config.BackupScriptPath
 	}
@@ -48,7 +48,7 @@ func (h *TaskHandler) HandleBackupNowTask(ctx context.Context, t *asynq.Task) er
 	start := time.Now()
 
 	if _, err := os.Stat(scriptPath); os.IsNotExist(err) {
-		msg := fmt.Sprintf("backup script not found at %s; use 'systemctl start paas-backup.service' instead", scriptPath)
+		msg := fmt.Sprintf("backup script not found at %s; use 'systemctl start belune-backup.service' instead", scriptPath)
 		h.finaliseRun(ctx, run.ID, 0, pgtype.Text{}, msg, "")
 		notFoundErr := errors.New(msg)
 		metrics.RecordBackupRun("local", notFoundErr, time.Since(start))

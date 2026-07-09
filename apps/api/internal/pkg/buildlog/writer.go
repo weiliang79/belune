@@ -5,8 +5,8 @@ import (
 	"context"
 	"time"
 
-	"github.com/ungweiliang/selfhost-paas/internal/pkg/joblog"
-	"github.com/ungweiliang/selfhost-paas/internal/pkg/loglevel"
+	"github.com/weiling79/belune/internal/pkg/joblog"
+	"github.com/weiling79/belune/internal/pkg/loglevel"
 )
 
 // LineWriter implements io.Writer over the build output stream. It buffers

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/ungweiliang/selfhost-paas/internal/git/providers"
+	"github.com/weiling79/belune/internal/git/providers"
 )
 
 // WebhookPayload represents a parsed webhook event.

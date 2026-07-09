@@ -10,11 +10,11 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/ungweiliang/selfhost-paas/internal/naming"
-	"github.com/ungweiliang/selfhost-paas/internal/pkg/crypto"
-	"github.com/ungweiliang/selfhost-paas/internal/runtime"
-	"github.com/ungweiliang/selfhost-paas/internal/store"
-	"github.com/ungweiliang/selfhost-paas/internal/store/generated"
+	"github.com/weiling79/belune/internal/naming"
+	"github.com/weiling79/belune/internal/pkg/crypto"
+	"github.com/weiling79/belune/internal/runtime"
+	"github.com/weiling79/belune/internal/store"
+	"github.com/weiling79/belune/internal/store/generated"
 )
 
 type ApplicationService struct {
@@ -171,7 +171,7 @@ func (s *ApplicationService) Delete(ctx context.Context, appID pgtype.UUID, proj
 		}
 	}
 
-	// Drop the per-app CNB cache volumes too. They are tagged paas-cache=true
+	// Drop the per-app CNB cache volumes too. They are tagged belune-cache=true
 	// so PruneVolumes would not have reclaimed them; leaving them behind after
 	// delete would leak disk space permanently.
 	for _, vol := range []string{
@@ -183,7 +183,7 @@ func (s *ApplicationService) Delete(ctx context.Context, appID pgtype.UUID, proj
 		}
 	}
 
-	// Drop persistent data volumes. They are tagged paas-data=true so
+	// Drop persistent data volumes. They are tagged belune-data=true so
 	// PruneVolumes never reclaims them; app deletion is the only point they can
 	// be cleaned up. List them BEFORE DeleteApplication, whose ON DELETE CASCADE
 	// removes the application_volumes rows.

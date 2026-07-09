@@ -397,7 +397,7 @@ export function DatabaseFormDialog({ projectId, open, onOpenChange }: Props) {
                       value={otherBackupCmd}
                       onChange={(e) => setOtherBackupCmd(e.target.value)}
                       rows={2}
-                      placeholder="dump into $PAAS_BACKUP_DIR"
+                      placeholder="dump into $BELUNE_BACKUP_DIR"
                       className="font-mono text-xs"
                     />
                   </div>
@@ -408,13 +408,13 @@ export function DatabaseFormDialog({ projectId, open, onOpenChange }: Props) {
                       value={otherRestoreCmd}
                       onChange={(e) => setOtherRestoreCmd(e.target.value)}
                       rows={2}
-                      placeholder="restore from $PAAS_BACKUP_DIR"
+                      placeholder="restore from $BELUNE_BACKUP_DIR"
                       className="font-mono text-xs"
                     />
                   </div>
                   <p className="text-muted-foreground text-xs">
                     Run inside the container. Backup writes into
-                    <code className="mx-1">$PAAS_BACKUP_DIR</code>; restore
+                    <code className="mx-1">$BELUNE_BACKUP_DIR</code>; restore
                     reads from it. The image must include
                     <code className="mx-1">sh</code> and
                     <code className="mx-1">tar</code> (used to archive that

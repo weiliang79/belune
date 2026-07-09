@@ -8,8 +8,8 @@ import (
 
 	"github.com/jackc/pgx/v5/pgtype"
 
-	"github.com/ungweiliang/selfhost-paas/internal/server/middleware"
-	"github.com/ungweiliang/selfhost-paas/internal/service"
+	"github.com/weiling79/belune/internal/server/middleware"
+	"github.com/weiling79/belune/internal/service"
 )
 
 // latestHostStats returns the cached host snapshot written by the metrics

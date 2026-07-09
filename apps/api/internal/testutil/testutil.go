@@ -13,8 +13,8 @@ import (
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
 	"github.com/testcontainers/testcontainers-go/wait"
 
-	"github.com/ungweiliang/selfhost-paas/internal/migrations"
-	"github.com/ungweiliang/selfhost-paas/internal/store/generated"
+	"github.com/weiling79/belune/internal/migrations"
+	"github.com/weiling79/belune/internal/store/generated"
 )
 
 // SetupTestDB spins up a PostgreSQL 16 testcontainer, runs migrations,
@@ -25,7 +25,7 @@ func SetupTestDB() (*pgxpool.Pool, *generated.Queries, func()) {
 
 	pgContainer, err := postgres.Run(ctx,
 		"postgres:16-alpine",
-		postgres.WithDatabase("paas_test"),
+		postgres.WithDatabase("belune_test"),
 		postgres.WithUsername("test"),
 		postgres.WithPassword("test"),
 		testcontainers.WithWaitStrategy(

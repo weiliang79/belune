@@ -9,9 +9,9 @@ import (
 
 	"github.com/jackc/pgx/v5/pgtype"
 
-	"github.com/ungweiliang/selfhost-paas/internal/git/providers"
-	"github.com/ungweiliang/selfhost-paas/internal/pkg/crypto"
-	"github.com/ungweiliang/selfhost-paas/internal/store/generated"
+	"github.com/weiling79/belune/internal/git/providers"
+	"github.com/weiling79/belune/internal/pkg/crypto"
+	"github.com/weiling79/belune/internal/store/generated"
 )
 
 // GitIntegrationService manages per-user connected provider accounts: completing

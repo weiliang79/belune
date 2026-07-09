@@ -1,6 +1,6 @@
 # Architecture
 
-See [paas-project-structure.md](../paas-project-structure.md) for the full architecture document.
+See [belune-project-structure.md](../belune-project-structure.md) for the full architecture document.
 
 ## Key Principles
 

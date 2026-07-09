@@ -8,71 +8,71 @@ import (
 
 var (
 	smtpSendDuration = factory.NewHistogramVec(prometheus.HistogramOpts{
-		Name:    "paas_smtp_send_duration_seconds",
+		Name:    "belune_smtp_send_duration_seconds",
 		Help:    "Duration of outbound SMTP sends by template and result.",
 		Buckets: []float64{0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 15, 30},
 	}, []string{"template", "result"})
 
 	smtpSendTotal = factory.NewCounterVec(prometheus.CounterOpts{
-		Name: "paas_smtp_send_total",
+		Name: "belune_smtp_send_total",
 		Help: "Total outbound SMTP sends by template and result.",
 	}, []string{"template", "result"})
 
 	backupRunDuration = factory.NewHistogramVec(prometheus.HistogramOpts{
-		Name:    "paas_backup_run_duration_seconds",
+		Name:    "belune_backup_run_duration_seconds",
 		Help:    "Backup run durations by destination and result.",
 		Buckets: []float64{1, 5, 10, 30, 60, 120, 300, 600},
 	}, []string{"destination", "result"})
 
 	backupRunTotal = factory.NewCounterVec(prometheus.CounterOpts{
-		Name: "paas_backup_run_total",
+		Name: "belune_backup_run_total",
 		Help: "Total backup runs by destination and result.",
 	}, []string{"destination", "result"})
 
 	webhookDeliveryDuration = factory.NewHistogramVec(prometheus.HistogramOpts{
-		Name:    "paas_webhook_delivery_duration_seconds",
+		Name:    "belune_webhook_delivery_duration_seconds",
 		Help:    "End-to-end webhook processing duration by source (github/gitlab/unknown).",
 		Buckets: []float64{0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5},
 	}, []string{"source"})
 
 	passwordResetIssued = factory.NewCounter(prometheus.CounterOpts{
-		Name: "paas_password_reset_issued_total",
+		Name: "belune_password_reset_issued_total",
 		Help: "Total password reset tokens issued.",
 	})
 
 	passwordResetRedeemed = factory.NewCounter(prometheus.CounterOpts{
-		Name: "paas_password_reset_redeemed_total",
+		Name: "belune_password_reset_redeemed_total",
 		Help: "Total password reset tokens redeemed.",
 	})
 
 	invitationIssued = factory.NewCounter(prometheus.CounterOpts{
-		Name: "paas_invitation_issued_total",
+		Name: "belune_invitation_issued_total",
 		Help: "Total user invitations issued.",
 	})
 
 	invitationAccepted = factory.NewCounter(prometheus.CounterOpts{
-		Name: "paas_invitation_accepted_total",
+		Name: "belune_invitation_accepted_total",
 		Help: "Total user invitations accepted.",
 	})
 
 	terminalSessionStarted = factory.NewCounter(prometheus.CounterOpts{
-		Name: "paas_terminal_session_started_total",
+		Name: "belune_terminal_session_started_total",
 		Help: "Total terminal sessions created.",
 	})
 
 	terminalSessionClosed = factory.NewCounter(prometheus.CounterOpts{
-		Name: "paas_terminal_session_closed_total",
+		Name: "belune_terminal_session_closed_total",
 		Help: "Total terminal sessions closed.",
 	})
 
 	terminalSessionDuration = factory.NewHistogram(prometheus.HistogramOpts{
-		Name:    "paas_terminal_session_duration_seconds",
+		Name:    "belune_terminal_session_duration_seconds",
 		Help:    "Duration of terminal sessions.",
 		Buckets: []float64{1, 5, 15, 30, 60, 120, 300, 600, 1800, 3600},
 	})
 
 	backupRotateTotal = factory.NewCounterVec(prometheus.CounterOpts{
-		Name: "paas_backup_rotate_total",
+		Name: "belune_backup_rotate_total",
 		Help: "Total backup rotation runs by result.",
 	}, []string{"result"})
 )

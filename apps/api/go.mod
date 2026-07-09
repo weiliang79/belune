@@ -1,4 +1,4 @@
-module github.com/ungweiliang/selfhost-paas
+module github.com/weiling79/belune
 
 go 1.25.0
 

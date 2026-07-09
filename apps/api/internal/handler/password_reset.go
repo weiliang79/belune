@@ -16,10 +16,10 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"golang.org/x/crypto/bcrypt"
 
-	"github.com/ungweiliang/selfhost-paas/internal/pkg/metrics"
-	"github.com/ungweiliang/selfhost-paas/internal/server/middleware"
-	"github.com/ungweiliang/selfhost-paas/internal/store/generated"
-	"github.com/ungweiliang/selfhost-paas/internal/worker"
+	"github.com/weiling79/belune/internal/pkg/metrics"
+	"github.com/weiling79/belune/internal/server/middleware"
+	"github.com/weiling79/belune/internal/store/generated"
+	"github.com/weiling79/belune/internal/worker"
 )
 
 const passwordResetTTL = 30 * time.Minute

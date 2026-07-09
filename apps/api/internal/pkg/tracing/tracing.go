@@ -25,7 +25,7 @@ import (
 
 // TracerName is the instrumentation scope used for every span produced by
 // first-party server code.
-const TracerName = "selfhost-paas/api"
+const TracerName = "belune/api"
 
 // Config controls exporter wiring. Zero value is safe — tracing remains no-op.
 type Config struct {

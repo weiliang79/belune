@@ -13,8 +13,8 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/ungweiliang/selfhost-paas/internal/pkg/metrics"
-	"github.com/ungweiliang/selfhost-paas/internal/proxy"
+	"github.com/weiling79/belune/internal/pkg/metrics"
+	"github.com/weiling79/belune/internal/proxy"
 )
 
 // ErrCaddyUnreachable is returned when the Caddy admin API cannot be contacted

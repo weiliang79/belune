@@ -16,18 +16,18 @@ import (
 	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5/pgtype"
 
-	"github.com/ungweiliang/selfhost-paas/internal/pkg/joblog"
-	"github.com/ungweiliang/selfhost-paas/internal/pkg/loglevel"
-	"github.com/ungweiliang/selfhost-paas/internal/runtime"
-	"github.com/ungweiliang/selfhost-paas/internal/service/backup"
-	statuspkg "github.com/ungweiliang/selfhost-paas/internal/status"
-	"github.com/ungweiliang/selfhost-paas/internal/store/generated"
+	"github.com/weiling79/belune/internal/pkg/joblog"
+	"github.com/weiling79/belune/internal/pkg/loglevel"
+	"github.com/weiling79/belune/internal/runtime"
+	"github.com/weiling79/belune/internal/service/backup"
+	statuspkg "github.com/weiling79/belune/internal/status"
+	"github.com/weiling79/belune/internal/store/generated"
 )
 
-// paasBackupDir is the in-container scratch dir for "command" backup mode. The
-// user's backup command writes here (exposed as $PAAS_BACKUP_DIR); the system
+// beluneBackupDir is the in-container scratch dir for "command" backup mode. The
+// user's backup command writes here (exposed as $BELUNE_BACKUP_DIR); the system
 // then tars it out. Under /tmp so it is writable by non-root container users.
-const paasBackupDir = "/tmp/paas-backup"
+const beluneBackupDir = "/tmp/belune-backup"
 
 // backupDBPayload triggers a backup of a managed database. BackupConfigID is
 // optional: when set, the dump is uploaded to that config's project destination
@@ -624,15 +624,15 @@ func (h *TaskHandler) snapshotVolume(ctx context.Context, db generated.Database,
 }
 
 // commandBackup runs the user's backup command in the running container (writing
-// into $PAAS_BACKUP_DIR), then tars that directory into f.
+// into $BELUNE_BACKUP_DIR), then tars that directory into f.
 func (h *TaskHandler) commandBackup(ctx context.Context, db generated.Database, f *os.File, lg *runLog) error {
 	if !db.BackupCommand.Valid || db.BackupCommand.String == "" {
 		return errors.Join(errors.New("backup_command is not set (permanent)"), asynq.SkipRetry)
 	}
 
 	lg.step("Running backup command")
-	prep := fmt.Sprintf("rm -rf %s && mkdir -p %s && export PAAS_BACKUP_DIR=%s && ( %s )",
-		paasBackupDir, paasBackupDir, paasBackupDir, db.BackupCommand.String)
+	prep := fmt.Sprintf("rm -rf %s && mkdir -p %s && export BELUNE_BACKUP_DIR=%s && ( %s )",
+		beluneBackupDir, beluneBackupDir, beluneBackupDir, db.BackupCommand.String)
 	var stderr bytes.Buffer
 	exit, err := h.Runtime.ContainerExec(ctx, db.Slug, []string{"sh", "-c", prep}, nil, nil, &stderr)
 	lg.raw(stderr.String())
@@ -646,10 +646,10 @@ func (h *TaskHandler) commandBackup(ctx context.Context, db generated.Database, 
 	// Requires `sh` + `tar` in the "other" image; a missing tar surfaces here as
 	// a non-zero exit ("tar: not found") in the returned error (documented in the
 	// create dialog).
-	lg.step("Archiving $PAAS_BACKUP_DIR")
+	lg.step("Archiving $BELUNE_BACKUP_DIR")
 	var terr bytes.Buffer
 	exit, err = h.Runtime.ContainerExec(ctx, db.Slug,
-		[]string{"sh", "-c", fmt.Sprintf("tar czf - -C %s .", paasBackupDir)}, nil, f, &terr)
+		[]string{"sh", "-c", fmt.Sprintf("tar czf - -C %s .", beluneBackupDir)}, nil, f, &terr)
 	lg.raw(terr.String())
 	if err != nil {
 		return fmt.Errorf("exec tar: %w", err)
@@ -660,7 +660,7 @@ func (h *TaskHandler) commandBackup(ctx context.Context, db generated.Database, 
 	lg.step("Command backup completed")
 
 	// Best-effort cleanup.
-	_, _ = h.Runtime.ContainerExec(ctx, db.Slug, []string{"sh", "-c", "rm -rf " + paasBackupDir}, nil, nil, nil)
+	_, _ = h.Runtime.ContainerExec(ctx, db.Slug, []string{"sh", "-c", "rm -rf " + beluneBackupDir}, nil, nil, nil)
 	return nil
 }
 
@@ -930,7 +930,7 @@ func (h *TaskHandler) restoreVolume(ctx context.Context, db generated.Database, 
 	return nil
 }
 
-// commandRestore untars the archive into $PAAS_BACKUP_DIR in the running
+// commandRestore untars the archive into $BELUNE_BACKUP_DIR in the running
 // container, then runs the user's restore command.
 func (h *TaskHandler) commandRestore(ctx context.Context, db generated.Database, dumpPath string) error {
 	if !db.RestoreCommand.Valid || db.RestoreCommand.String == "" {
@@ -943,7 +943,7 @@ func (h *TaskHandler) commandRestore(ctx context.Context, db generated.Database,
 	}
 	defer f.Close()
 
-	unpack := fmt.Sprintf("rm -rf %s && mkdir -p %s && tar xzf - -C %s", paasBackupDir, paasBackupDir, paasBackupDir)
+	unpack := fmt.Sprintf("rm -rf %s && mkdir -p %s && tar xzf - -C %s", beluneBackupDir, beluneBackupDir, beluneBackupDir)
 	var uerr bytes.Buffer
 	exit, err := h.Runtime.ContainerExec(ctx, db.Slug, []string{"sh", "-c", unpack}, f, nil, &uerr)
 	if err != nil {
@@ -953,7 +953,7 @@ func (h *TaskHandler) commandRestore(ctx context.Context, db generated.Database,
 		return errors.Join(fmt.Errorf("unpack exited %d: %s", exit, strings.TrimSpace(uerr.String())), asynq.SkipRetry)
 	}
 
-	run := fmt.Sprintf("export PAAS_BACKUP_DIR=%s && ( %s )", paasBackupDir, db.RestoreCommand.String)
+	run := fmt.Sprintf("export BELUNE_BACKUP_DIR=%s && ( %s )", beluneBackupDir, db.RestoreCommand.String)
 	var rerr bytes.Buffer
 	exit, err = h.Runtime.ContainerExec(ctx, db.Slug, []string{"sh", "-c", run}, nil, nil, &rerr)
 	if err != nil {
@@ -963,7 +963,7 @@ func (h *TaskHandler) commandRestore(ctx context.Context, db generated.Database,
 		return errors.Join(fmt.Errorf("restore command exited %d: %s", exit, strings.TrimSpace(rerr.String())), asynq.SkipRetry)
 	}
 
-	_, _ = h.Runtime.ContainerExec(ctx, db.Slug, []string{"sh", "-c", "rm -rf " + paasBackupDir}, nil, nil, nil)
+	_, _ = h.Runtime.ContainerExec(ctx, db.Slug, []string{"sh", "-c", "rm -rf " + beluneBackupDir}, nil, nil, nil)
 	return nil
 }
 
@@ -981,7 +981,7 @@ func (h *TaskHandler) resolveBackupFile(ctx context.Context, backup generated.Da
 		return "", noop, errors.New("backup has no local file and no remote copy")
 	}
 
-	tmp := filepath.Join(os.TempDir(), "paas-restore-"+filepath.Base(backup.RemoteKey.String))
+	tmp := filepath.Join(os.TempDir(), "belune-restore-"+filepath.Base(backup.RemoteKey.String))
 	cleanup := func() { _ = os.Remove(tmp) }
 
 	// Config-driven backups live in their project destination, not the global

@@ -3,7 +3,7 @@
 -- Unlike volumes (persistent named Docker volumes), a file mount injects a
 -- single config file whose CONTENT the user provides in the UI (config.yaml,
 -- nginx.conf, an init script, a cert). On deploy the worker writes the
--- decrypted content to a managed host file under <paasDir>/filemounts/<app-id>/
+-- decrypted content to a managed host file under <beluneDir>/filemounts/<app-id>/
 -- and bind-mounts it read-only into the container at mount_path. The DB row is
 -- the source of truth; the host file is regenerated on every deploy.
 --

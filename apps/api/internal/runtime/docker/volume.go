@@ -12,20 +12,20 @@ import (
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/api/types/volume"
 
-	"github.com/ungweiliang/selfhost-paas/internal/pkg/metrics"
-	"github.com/ungweiliang/selfhost-paas/internal/runtime"
+	"github.com/weiling79/belune/internal/pkg/metrics"
+	"github.com/weiling79/belune/internal/runtime"
 )
 
 // labelCache is a per-volume flag that opts the volume out of PruneVolumes.
 // Used by CNB/BuildKit cache volumes so layer history survives cleanup runs.
-const labelCache = "paas-cache"
+const labelCache = "belune-cache"
 
 // labelData is a per-volume flag that opts a persistent application data
 // volume out of PruneVolumes. Unlike caches (disposable), these hold user data
 // and must NEVER be reaped by the cleanup worker, even while their app's
 // container is absent between deploys (which would otherwise leave the volume
 // dangling and eligible for prune).
-const labelData = "paas-data"
+const labelData = "belune-data"
 
 func (c *Client) CreateVolume(ctx context.Context, name string) error {
 	_, err := c.cli.VolumeCreate(ctx, volume.CreateOptions{
@@ -167,13 +167,13 @@ func (c *Client) ListVolumes(ctx context.Context) (result []runtime.VolumeInfo, 
 }
 
 // PruneBuildCache reclaims build caches: it removes the platform's CNB cache
-// volumes (labelled paas-cache — deliberately preserved by PruneVolumes) and
+// volumes (labelled belune-cache — deliberately preserved by PruneVolumes) and
 // prunes the BuildKit builder cache. Both are disposable; the next build
 // repopulates them. Best-effort: individual failures are logged, not fatal.
 func (c *Client) PruneBuildCache(ctx context.Context) (err error) {
 	defer func() { metrics.RecordDockerOp("prune_build_cache", err) }()
 
-	// Remove CNB cache volumes (label paas-cache=true).
+	// Remove CNB cache volumes (label belune-cache=true).
 	list, listErr := c.cli.VolumeList(ctx, volume.ListOptions{
 		Filters: filters.NewArgs(filters.Arg("label", labelCache+"=true")),
 	})
@@ -197,9 +197,9 @@ func (c *Client) PruneBuildCache(ctx context.Context) (err error) {
 }
 
 // platformVolumePrefix marks Docker volumes created by the platform's naming
-// helpers (app data volumes `paas-vol-*`, CNB/BuildKit caches `paas-cnb-*`,
-// and other `paas-*` resources). Kept in sync with internal/naming.
-const platformVolumePrefix = "paas-"
+// helpers (app data volumes `belune-vol-*`, CNB/BuildKit caches `belune-cnb-*`,
+// and other `belune-*` resources). Kept in sync with internal/naming.
+const platformVolumePrefix = "belune-"
 
 // isPlatformVolume reports whether a volume was created by the platform and must
 // therefore never be reaped by PruneVolumes. A volume qualifies if it carries

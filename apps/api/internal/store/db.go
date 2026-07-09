@@ -12,7 +12,7 @@ import (
 	"github.com/golang-migrate/migrate/v4/source/iofs"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/ungweiliang/selfhost-paas/internal/store/generated"
+	"github.com/weiling79/belune/internal/store/generated"
 )
 
 // migrationAdvisoryLockID is the Postgres advisory lock key acquired around
@@ -21,7 +21,7 @@ import (
 // coordinate. golang-migrate's pgx driver also takes its own internal lock —
 // this outer lock guards everything *around* m.Up() (e.g. future schema
 // bootstrap steps) so they remain serialized too.
-const migrationAdvisoryLockID int64 = 0x70616173_6d696772 // "paasmigr"
+const migrationAdvisoryLockID int64 = 0x70616173_6d696772 // "belunemigr"
 
 // migrationLockTimeout caps how long we'll wait for another instance's
 // migration to finish on a multi-replica startup before giving up.

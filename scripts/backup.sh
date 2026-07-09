@@ -13,10 +13,10 @@
 #   BACKUP_ENCRYPTION_KEY=age1ql3z7hjy54pw...
 set -euo pipefail
 
-INSTALL_DIR="${PAAS_DIR:-/opt/paas}"
+INSTALL_DIR="${BELUNE_DIR:-/opt/belune}"
 BACKUP_DIR="${1:-${INSTALL_DIR}/backups}"
 TIMESTAMP=$(date -u +"%Y%m%dT%H%M%SZ")
-BACKUP_NAME="paas-backup-${TIMESTAMP}"
+BACKUP_NAME="belune-backup-${TIMESTAMP}"
 WORK_DIR="${BACKUP_DIR}/${BACKUP_NAME}"
 
 # Resolve encryption key from env or .env file
@@ -46,8 +46,8 @@ mkdir -p "${WORK_DIR}"
 
 info "Dumping Postgres database..."
 DB_CONTAINER=$(docker compose ps -q postgres 2>/dev/null) || die "Postgres container not running."
-PG_USER=$(grep 'POSTGRES_USER' .env 2>/dev/null | cut -d= -f2 || echo "paas")
-PG_DB=$(grep 'POSTGRES_DB'   .env 2>/dev/null | cut -d= -f2 || echo "paas")
+PG_USER=$(grep 'POSTGRES_USER' .env 2>/dev/null | cut -d= -f2 || echo "belune")
+PG_DB=$(grep 'POSTGRES_DB'   .env 2>/dev/null | cut -d= -f2 || echo "belune")
 
 docker exec "${DB_CONTAINER}" \
   pg_dump -U "${PG_USER}" -d "${PG_DB}" --no-password \
@@ -111,9 +111,9 @@ if [[ -z "${BACKUP_REMOTE_ENABLED}" && -f "${INSTALL_DIR}/.env" ]]; then
 fi
 
 if [[ "${BACKUP_REMOTE_ENABLED}" == "true" ]]; then
-  UPLOAD_BIN="${INSTALL_DIR}/bin/paas-backup-upload"
+  UPLOAD_BIN="${INSTALL_DIR}/bin/belune-backup-upload"
   if [[ ! -x "${UPLOAD_BIN}" ]]; then
-    die "paas-backup-upload not found at ${UPLOAD_BIN}. Re-run update.sh to extract it."
+    die "belune-backup-upload not found at ${UPLOAD_BIN}. Re-run update.sh to extract it."
   fi
   info "Uploading ${ARCHIVE} to remote storage..."
   # Source .env so all BACKUP_S3_* variables are available to the helper.

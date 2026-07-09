@@ -7,8 +7,8 @@ import (
 
 	"github.com/jackc/pgx/v5/pgtype"
 
-	"github.com/ungweiliang/selfhost-paas/internal/naming"
-	"github.com/ungweiliang/selfhost-paas/internal/runtime"
+	"github.com/weiling79/belune/internal/naming"
+	"github.com/weiling79/belune/internal/runtime"
 )
 
 // Read-only Docker inspect endpoints powering the admin Docker page. These
@@ -21,11 +21,11 @@ import (
 // (the docker package keeps them unexported) so the API can flag ownership.
 const (
 	dockerLabelManagedBy    = "managed-by"
-	dockerLabelManagedValue = "selfhost-paas"
+	dockerLabelManagedValue = "belune"
 	dockerLabelAppID        = "application-id"
 	dockerLabelDatabaseID   = "database-id"
-	dockerLabelCache        = "paas-cache"
-	dockerLabelData         = "paas-data"
+	dockerLabelCache        = "belune-cache"
+	dockerLabelData         = "belune-data"
 )
 
 // dockerTimeout bounds each Docker probe so one hung daemon call can't stall

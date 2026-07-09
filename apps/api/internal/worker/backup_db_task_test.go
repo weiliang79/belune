@@ -13,12 +13,12 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/ungweiliang/selfhost-paas/internal/pkg/crypto"
-	"github.com/ungweiliang/selfhost-paas/internal/runtime"
-	"github.com/ungweiliang/selfhost-paas/internal/status"
-	"github.com/ungweiliang/selfhost-paas/internal/store/generated"
-	"github.com/ungweiliang/selfhost-paas/internal/testutil"
-	"github.com/ungweiliang/selfhost-paas/internal/worker"
+	"github.com/weiling79/belune/internal/pkg/crypto"
+	"github.com/weiling79/belune/internal/runtime"
+	"github.com/weiling79/belune/internal/status"
+	"github.com/weiling79/belune/internal/store/generated"
+	"github.com/weiling79/belune/internal/testutil"
+	"github.com/weiling79/belune/internal/worker"
 )
 
 // otherVolumeSnapshot / otherCommand configure a seeded "other" database for the
@@ -198,7 +198,7 @@ func TestHandleBackupDBTask_Command(t *testing.T) {
 	// Expect: prep (runs user command), tar the dir, cleanup.
 	require.Len(t, cmds, 3)
 	assert.Contains(t, cmds[0], "mydump")
-	assert.Contains(t, cmds[0], "PAAS_BACKUP_DIR")
+	assert.Contains(t, cmds[0], "BELUNE_BACKUP_DIR")
 	assert.Contains(t, cmds[1], "tar czf -")
 	assert.Contains(t, cmds[2], "rm -rf")
 }

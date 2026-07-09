@@ -9,12 +9,12 @@ development but not for production).
 
 ## 1. Required env vars
 
-Set these in `/opt/paas/.env` before (re)starting the stack.
+Set these in `/opt/belune/.env` before (re)starting the stack.
 
 ```env
 # Public URL of the dashboard — used to build reset / invite links.
 # Must be the URL users actually open in a browser (with scheme, no trailing slash).
-PUBLIC_BASE_URL=https://paas.example.com
+PUBLIC_BASE_URL=https://belune.example.com
 
 # SMTP server
 SMTP_HOST=smtp.example.com
@@ -29,7 +29,7 @@ SMTP_TLS_MODE=starttls                # starttls | tls | none
 After editing `.env`, restart the API:
 
 ```sh
-docker compose -f /opt/paas/docker-compose.yml restart paas
+docker compose -f /opt/belune/docker-compose.yml restart belune
 ```
 
 ---
@@ -103,7 +103,7 @@ lets the rest of the platform start without a real mail server.
 Confirm it is active:
 
 ```sh
-docker compose -f /opt/paas/docker-compose.yml logs paas | grep "smtp"
+docker compose -f /opt/belune/docker-compose.yml logs belune | grep "smtp"
 # Expected: level=INFO msg="SMTP host not configured, falling back to log-only mode"
 ```
 
@@ -116,10 +116,10 @@ the login page (`/forgot-password`). Then check:
 
 ```sh
 # Confirm the email was dispatched (SMTP path)
-docker compose -f /opt/paas/docker-compose.yml logs paas | grep "email sent"
+docker compose -f /opt/belune/docker-compose.yml logs belune | grep "email sent"
 
 # Or, in log-only mode, inspect the rendered message
-docker compose -f /opt/paas/docker-compose.yml logs paas | grep "subject="
+docker compose -f /opt/belune/docker-compose.yml logs belune | grep "subject="
 ```
 
 ---

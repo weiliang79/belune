@@ -10,10 +10,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/ungweiliang/selfhost-paas/internal/service"
-	"github.com/ungweiliang/selfhost-paas/internal/status"
-	"github.com/ungweiliang/selfhost-paas/internal/store/generated"
-	"github.com/ungweiliang/selfhost-paas/internal/testutil"
+	"github.com/weiling79/belune/internal/service"
+	"github.com/weiling79/belune/internal/status"
+	"github.com/weiling79/belune/internal/store/generated"
+	"github.com/weiling79/belune/internal/testutil"
 )
 
 // startAsynqAgainstMiniredis returns an asynq.Client + Inspector wired to a

@@ -8,9 +8,9 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
-	"github.com/ungweiliang/selfhost-paas/internal/pkg/buildlog"
-	"github.com/ungweiliang/selfhost-paas/internal/pkg/sse"
-	"github.com/ungweiliang/selfhost-paas/internal/status"
+	"github.com/weiling79/belune/internal/pkg/buildlog"
+	"github.com/weiling79/belune/internal/pkg/sse"
+	"github.com/weiling79/belune/internal/status"
 )
 
 func (h *Handler) StreamBuildLogs(w http.ResponseWriter, r *http.Request) {

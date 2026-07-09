@@ -14,14 +14,14 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/ungweiliang/selfhost-paas/internal/config"
-	"github.com/ungweiliang/selfhost-paas/internal/pkg/crypto"
-	"github.com/ungweiliang/selfhost-paas/internal/proxy"
-	"github.com/ungweiliang/selfhost-paas/internal/runtime"
-	"github.com/ungweiliang/selfhost-paas/internal/status"
-	"github.com/ungweiliang/selfhost-paas/internal/store/generated"
-	"github.com/ungweiliang/selfhost-paas/internal/testutil"
-	"github.com/ungweiliang/selfhost-paas/internal/worker"
+	"github.com/weiling79/belune/internal/config"
+	"github.com/weiling79/belune/internal/pkg/crypto"
+	"github.com/weiling79/belune/internal/proxy"
+	"github.com/weiling79/belune/internal/runtime"
+	"github.com/weiling79/belune/internal/status"
+	"github.com/weiling79/belune/internal/store/generated"
+	"github.com/weiling79/belune/internal/testutil"
+	"github.com/weiling79/belune/internal/worker"
 )
 
 var (

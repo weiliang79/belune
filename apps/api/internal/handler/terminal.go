@@ -17,10 +17,10 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 
-	"github.com/ungweiliang/selfhost-paas/internal/naming"
-	"github.com/ungweiliang/selfhost-paas/internal/pkg/metrics"
-	"github.com/ungweiliang/selfhost-paas/internal/pkg/tracing"
-	"github.com/ungweiliang/selfhost-paas/internal/server/middleware"
+	"github.com/weiling79/belune/internal/naming"
+	"github.com/weiling79/belune/internal/pkg/metrics"
+	"github.com/weiling79/belune/internal/pkg/tracing"
+	"github.com/weiling79/belune/internal/server/middleware"
 )
 
 // termMsg is the JSON envelope for terminal WebSocket messages.

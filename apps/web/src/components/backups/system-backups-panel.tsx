@@ -32,9 +32,9 @@ function fmtSummaryDate(iso: string | null) {
 }
 
 // The install path the restore script and archives live under. Kept in sync
-// with PAAS_DIR (default /opt/paas); shown in the restore instructions so an
+// with BELUNE_DIR (default /opt/belune); shown in the restore instructions so an
 // operator has the exact command without guessing paths.
-const PAAS_DIR = "/opt/paas";
+const BELUNE_DIR = "/opt/belune";
 
 // buildRestoreCommand constructs the exact restore.sh invocation for a run.
 // Archives are named after their remote key's basename (backup.sh writes the
@@ -43,9 +43,9 @@ const PAAS_DIR = "/opt/paas";
 function buildRestoreCommand(run: BackupRun): string | null {
   if (!run.remote_key) return null;
   const filename = run.remote_key.split("/").pop() ?? run.remote_key;
-  const archive = `${PAAS_DIR}/backups/${filename}`;
+  const archive = `${BELUNE_DIR}/backups/${filename}`;
   const identity = filename.endsWith(".age") ? " <age-identity-file>" : "";
-  return `bash ${PAAS_DIR}/scripts/restore.sh ${archive}${identity}`;
+  return `bash ${BELUNE_DIR}/scripts/restore.sh ${archive}${identity}`;
 }
 
 const backupColumns: ColumnDef<BackupRun>[] = [
@@ -239,7 +239,7 @@ export function SystemBackupsPanel() {
 // needs to work when the API itself is down). This card makes the CLI path
 // discoverable instead of hidden in a runbook.
 function RestoreHelpCard({ remoteEnabled }: { remoteEnabled: boolean }) {
-  const example = `bash ${PAAS_DIR}/scripts/restore.sh ${PAAS_DIR}/backups/paas-backup-<timestamp>.tar.gz`;
+  const example = `bash ${BELUNE_DIR}/scripts/restore.sh ${BELUNE_DIR}/backups/belune-backup-<timestamp>.tar.gz`;
   return (
     <Card>
       <CardHeader>
@@ -254,21 +254,21 @@ function RestoreHelpCard({ remoteEnabled }: { remoteEnabled: boolean }) {
         <ol className="text-muted-foreground list-decimal space-y-2 pl-5">
           <li>
             SSH into the server host (where the platform runs, at{" "}
-            <code className="font-mono text-xs">{PAAS_DIR}</code>).
+            <code className="font-mono text-xs">{BELUNE_DIR}</code>).
           </li>
           <li>
             Locate the archive:{" "}
             {remoteEnabled ? (
               <>
                 either the local copy under{" "}
-                <code className="font-mono text-xs">{PAAS_DIR}/backups/</code> or
+                <code className="font-mono text-xs">{BELUNE_DIR}/backups/</code> or
                 download the object from your remote bucket (the run's{" "}
                 <span className="font-medium">Remote key</span> above).
               </>
             ) : (
               <>
                 under{" "}
-                <code className="font-mono text-xs">{PAAS_DIR}/backups/</code>.
+                <code className="font-mono text-xs">{BELUNE_DIR}/backups/</code>.
               </>
             )}
           </li>

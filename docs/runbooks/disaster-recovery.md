@@ -24,8 +24,8 @@ The platform runs `scripts/backup.sh` on a built-in daily schedule (default
 - Caddy TLS data (certificates + config)
 - `.env` file
 
-**Local backups** are written to `PAAS_DIR/backups/` (default
-`/opt/paas/backups/`) and rotated according to `BACKUP_RETAIN_DAYS` (30) and
+**Local backups** are written to `BELUNE_DIR/backups/` (default
+`/opt/belune/backups/`) and rotated according to `BACKUP_RETAIN_DAYS` (30) and
 `BACKUP_RETAIN_COUNT` (14).
 
 **Remote backups** (recommended for production) upload each archive to
@@ -45,14 +45,14 @@ Set `BACKUP_ENCRYPTION_KEY` in `.env` to an `age` public key to encrypt archives
 
 ```bash
 # Generate a keypair
-age-keygen -o ~/.age/paas.key         # keep the private key safe, off-server
-# ~/.age/paas.key contains the public key on the first line as a comment
+age-keygen -o ~/.age/belune.key         # keep the private key safe, off-server
+# ~/.age/belune.key contains the public key on the first line as a comment
 
 # Add the public key to .env
 BACKUP_ENCRYPTION_KEY=age1ql3z7hjy54pw...
 ```
 
-Encrypted archives have the `.tar.gz.age` extension. Store the private key (`~/.age/paas.key`) separately from the encrypted backups.
+Encrypted archives have the `.tar.gz.age` extension. Store the private key (`~/.age/belune.key`) separately from the encrypted backups.
 
 ---
 
@@ -61,21 +61,21 @@ Encrypted archives have the `.tar.gz.age` extension. Store the private key (`~/.
 Single table or row was deleted accidentally; the host is still running.
 
 > This is a *selective* (single-table) restore done by hand, so you manage the
-> `paas` service yourself. A *full-database* restore via `restore.sh` stops and
-> starts `paas` for you — see Scenario 2.
+> `belune` service yourself. A *full-database* restore via `restore.sh` stops and
+> starts `belune` for you — see Scenario 2.
 
 1. **Stop the API** to prevent further writes:
    ```bash
-   docker compose stop paas
+   docker compose stop belune
    ```
 2. Identify the most recent backup containing the data.
 3. Extract the Postgres dump from the backup to a temporary location:
    ```bash
-   tar -xzf paas-backup-<timestamp>.tar.gz
+   tar -xzf belune-backup-<timestamp>.tar.gz
    # (for an encrypted archive, decrypt it first with age)
    ```
 4. Restore only the affected table from the dump (using `pg_restore` selective restore, or by copying INSERT statements manually).
-5. Restart the API: `docker compose start paas`
+5. Restart the API: `docker compose start belune`
 
 ---
 
@@ -92,18 +92,18 @@ The original host is lost. A new server has been provisioned.
 
 1. **Transfer the backup** to the new host:
    ```bash
-   scp paas-backup-<timestamp>.tar.gz[.age] user@new-host:/tmp/
+   scp belune-backup-<timestamp>.tar.gz[.age] user@new-host:/tmp/
    ```
 
 2. **Run the installer** to set up the directory structure:
    ```bash
    bash scripts/install.sh
    ```
-   This creates `/opt/paas` with `docker-compose.yml` and a template `.env`.
+   This creates `/opt/belune` with `docker-compose.yml` and a template `.env`.
 
 3. **Preview the backup first** (optional but recommended — makes no changes):
    ```bash
-   bash /opt/paas/scripts/restore.sh --dry-run /tmp/paas-backup-<timestamp>.tar.gz
+   bash /opt/belune/scripts/restore.sh --dry-run /tmp/belune-backup-<timestamp>.tar.gz
    ```
    This verifies the archive is readable and prints exactly what it contains
    (`.env`, `postgres.sql` size, Caddy TLS data).
@@ -111,10 +111,10 @@ The original host is lost. A new server has been provisioned.
 4. **Restore the backup**:
    ```bash
    # Unencrypted:
-   bash /opt/paas/scripts/restore.sh /tmp/paas-backup-<timestamp>.tar.gz
+   bash /opt/belune/scripts/restore.sh /tmp/belune-backup-<timestamp>.tar.gz
 
    # Encrypted:
-   bash /opt/paas/scripts/restore.sh /tmp/paas-backup-<timestamp>.tar.gz.age ~/.age/paas.key
+   bash /opt/belune/scripts/restore.sh /tmp/belune-backup-<timestamp>.tar.gz.age ~/.age/belune.key
    ```
 
    `restore.sh` will:
@@ -123,20 +123,20 @@ The original host is lost. A new server has been provisioned.
      to skip the prompt for non-interactive use
    - Restore `.env`
    - **Wait for Postgres to be ready** (up to 30s) before touching it
-   - **Stop the `paas` service** so it releases its database connections
+   - **Stop the `belune` service** so it releases its database connections
      (Postgres refuses to drop a database with active sessions) — you do *not*
      need to stop it manually first
    - **Snapshot the current database** to
-     `/opt/paas/backups/pre-restore-<timestamp>.sql` before overwriting, so a
+     `/opt/belune/backups/pre-restore-<timestamp>.sql` before overwriting, so a
      bad restore can be rolled back
    - Drop and recreate the Postgres database from the dump
    - Restore Caddy TLS data
-   - **Bring the `paas` service back up** (`docker compose up -d paas`) — but
-     only on success; if the restore fails, `paas` stays stopped so it can't
+   - **Bring the `belune` service back up** (`docker compose up -d belune`) — but
+     only on success; if the restore fails, `belune` stays stopped so it can't
      connect to a half-restored database
 
    If the restore fails partway, the script prints the exact commands to roll
-   back to the pre-restore snapshot and restart `paas`.
+   back to the pre-restore snapshot and restart `belune`.
 
 5. **Verify DNS** points to the new host's IP for all configured domains.
 
@@ -154,14 +154,14 @@ The original host is lost. A new server has been provisioned.
 Symptoms: Postgres container crash-loops, logs show `invalid page` or `could not read block`.
 
 1. **Stop all services**: `docker compose down`
-2. **Remove the corrupt volume**: `docker volume rm paas_pgdata`
+2. **Remove the corrupt volume**: `docker volume rm belune_pgdata`
 3. **Start Postgres only**: `docker compose up -d postgres`
 4. **Restore from the latest backup**:
    ```bash
-   bash /opt/paas/scripts/restore.sh paas-backup-<timestamp>.tar.gz[.age] [identity-file]
+   bash /opt/belune/scripts/restore.sh belune-backup-<timestamp>.tar.gz[.age] [identity-file]
    ```
    The script waits for the freshly-started Postgres to become ready, performs
-   the restore, and brings `paas` back up (which also starts `redis` via its
+   the restore, and brings `belune` back up (which also starts `redis` via its
    dependency) on success.
 5. **Bring up anything still down** (e.g. `caddy`): `docker compose up -d`
 
@@ -174,20 +174,20 @@ restore, which decrypts, verifies integrity, and prints the manifest without
 changing anything:
 
 ```bash
-bash /opt/paas/scripts/restore.sh --dry-run paas-backup-<timestamp>.tar.gz[.age] [identity-file]
+bash /opt/belune/scripts/restore.sh --dry-run belune-backup-<timestamp>.tar.gz[.age] [identity-file]
 ```
 
 Or inspect manually:
 
 ```bash
 # Check archive integrity
-tar -tzf paas-backup-<timestamp>.tar.gz | head
+tar -tzf belune-backup-<timestamp>.tar.gz | head
 
 # Decrypt and check (encrypted)
-age --decrypt -i ~/.age/paas.key paas-backup-<timestamp>.tar.gz.age | tar -tz | head
+age --decrypt -i ~/.age/belune.key belune-backup-<timestamp>.tar.gz.age | tar -tz | head
 
 # Check SQL dump is non-empty
-tar -xzf paas-backup-<timestamp>.tar.gz --strip-components=1 '*/postgres.sql' -O | head -20
+tar -xzf belune-backup-<timestamp>.tar.gz --strip-components=1 '*/postgres.sql' -O | head -20
 ```
 
 ---
@@ -211,7 +211,7 @@ If you need to trigger a one-off backup outside the schedule, either use the
 script directly:
 
 ```bash
-bash /opt/paas/scripts/backup.sh
+bash /opt/belune/scripts/backup.sh
 ```
 
 ---

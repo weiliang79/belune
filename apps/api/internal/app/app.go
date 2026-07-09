@@ -14,30 +14,30 @@ import (
 	"github.com/redis/go-redis/v9"
 	"golang.org/x/sync/errgroup"
 
-	"github.com/ungweiliang/selfhost-paas/internal/build"
-	"github.com/ungweiliang/selfhost-paas/internal/build/buildpacks"
-	"github.com/ungweiliang/selfhost-paas/internal/build/dockerfile"
-	"github.com/ungweiliang/selfhost-paas/internal/build/image"
-	"github.com/ungweiliang/selfhost-paas/internal/build/railpack"
-	"github.com/ungweiliang/selfhost-paas/internal/config"
-	"github.com/ungweiliang/selfhost-paas/internal/eventwatcher"
-	"github.com/ungweiliang/selfhost-paas/internal/logcollector"
-	"github.com/ungweiliang/selfhost-paas/internal/logtailer"
-	"github.com/ungweiliang/selfhost-paas/internal/migrations"
-	"github.com/ungweiliang/selfhost-paas/internal/pkg/metrics"
-	"github.com/ungweiliang/selfhost-paas/internal/proxy"
-	"github.com/ungweiliang/selfhost-paas/internal/proxy/caddy"
-	"github.com/ungweiliang/selfhost-paas/internal/quota"
-	"github.com/ungweiliang/selfhost-paas/internal/runtime/docker"
-	"github.com/ungweiliang/selfhost-paas/internal/server"
-	"github.com/ungweiliang/selfhost-paas/internal/service"
-	"github.com/ungweiliang/selfhost-paas/internal/service/backup"
-	"github.com/ungweiliang/selfhost-paas/internal/service/email"
-	"github.com/ungweiliang/selfhost-paas/internal/store"
-	"github.com/ungweiliang/selfhost-paas/internal/store/generated"
-	"github.com/ungweiliang/selfhost-paas/internal/terminal"
-	"github.com/ungweiliang/selfhost-paas/internal/worker"
-	"github.com/ungweiliang/selfhost-paas/internal/ws"
+	"github.com/weiling79/belune/internal/build"
+	"github.com/weiling79/belune/internal/build/buildpacks"
+	"github.com/weiling79/belune/internal/build/dockerfile"
+	"github.com/weiling79/belune/internal/build/image"
+	"github.com/weiling79/belune/internal/build/railpack"
+	"github.com/weiling79/belune/internal/config"
+	"github.com/weiling79/belune/internal/eventwatcher"
+	"github.com/weiling79/belune/internal/logcollector"
+	"github.com/weiling79/belune/internal/logtailer"
+	"github.com/weiling79/belune/internal/migrations"
+	"github.com/weiling79/belune/internal/pkg/metrics"
+	"github.com/weiling79/belune/internal/proxy"
+	"github.com/weiling79/belune/internal/proxy/caddy"
+	"github.com/weiling79/belune/internal/quota"
+	"github.com/weiling79/belune/internal/runtime/docker"
+	"github.com/weiling79/belune/internal/server"
+	"github.com/weiling79/belune/internal/service"
+	"github.com/weiling79/belune/internal/service/backup"
+	"github.com/weiling79/belune/internal/service/email"
+	"github.com/weiling79/belune/internal/store"
+	"github.com/weiling79/belune/internal/store/generated"
+	"github.com/weiling79/belune/internal/terminal"
+	"github.com/weiling79/belune/internal/worker"
+	"github.com/weiling79/belune/internal/ws"
 )
 
 // App holds all application dependencies and owns their lifecycle.
@@ -74,7 +74,7 @@ func New(cfg *config.Config) (*App, error) {
 	}
 
 	if cfg.SkipMigrations {
-		slog.Warn("PAAS_SKIP_MIGRATIONS=true — auto-migration disabled, schema may be ahead or behind binary expectations")
+		slog.Warn("BELUNE_SKIP_MIGRATIONS=true — auto-migration disabled, schema may be ahead or behind binary expectations")
 	} else if err := store.RunMigrations(cfg.DatabaseURL, migrations.Files); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("run migrations: %w", err)

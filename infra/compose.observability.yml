@@ -5,13 +5,13 @@
 # Bring up alongside the main infra stack:
 #   task observability:up
 #
-# The stack joins the `paas-infra` external network so it can reach the API
+# The stack joins the `belune-infra` external network so it can reach the API
 # and Caddy containers by name.
 
 services:
   prometheus:
     image: prom/prometheus:v3.1.0
-    container_name: paas-prometheus
+    container_name: belune-prometheus
     ports:
       - "127.0.0.1:9090:9090"
     volumes:
@@ -23,7 +23,7 @@ services:
       - "--storage.tsdb.retention.time=14d"
       - "--web.enable-lifecycle"
     networks:
-      - paas-infra
+      - belune-infra
     extra_hosts:
       # Lets Prometheus scrape the PaaS API running on the host when the API
       # is not containerised (dev via `task dev:api`).
@@ -32,7 +32,7 @@ services:
 
   grafana:
     image: grafana/grafana:11.4.0
-    container_name: paas-grafana
+    container_name: belune-grafana
     ports:
       - "127.0.0.1:3000:3000"
     environment:
@@ -44,14 +44,14 @@ services:
       - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
       - grafanadata:/var/lib/grafana
     networks:
-      - paas-infra
+      - belune-infra
     depends_on:
       - prometheus
     restart: unless-stopped
 
   jaeger:
     image: jaegertracing/all-in-one:1.63.0
-    container_name: paas-jaeger
+    container_name: belune-jaeger
     environment:
       COLLECTOR_OTLP_ENABLED: "true"
     ports:
@@ -59,7 +59,7 @@ services:
       - "127.0.0.1:4317:4317"   # OTLP gRPC
       - "127.0.0.1:4318:4318"   # OTLP HTTP
     networks:
-      - paas-infra
+      - belune-infra
     restart: unless-stopped
 
 volumes:
@@ -67,6 +67,6 @@ volumes:
   grafanadata:
 
 networks:
-  paas-infra:
-    name: paas-infra
+  belune-infra:
+    name: belune-infra
     external: true

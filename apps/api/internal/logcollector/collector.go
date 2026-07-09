@@ -20,10 +20,10 @@ import (
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 
-	"github.com/ungweiliang/selfhost-paas/internal/pkg/loglevel"
-	"github.com/ungweiliang/selfhost-paas/internal/pkg/tracing"
-	"github.com/ungweiliang/selfhost-paas/internal/runtime"
-	"github.com/ungweiliang/selfhost-paas/internal/store/generated"
+	"github.com/weiling79/belune/internal/pkg/loglevel"
+	"github.com/weiling79/belune/internal/pkg/tracing"
+	"github.com/weiling79/belune/internal/runtime"
+	"github.com/weiling79/belune/internal/store/generated"
 )
 
 const (

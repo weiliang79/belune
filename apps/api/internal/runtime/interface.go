@@ -132,7 +132,7 @@ type ContainerRuntime interface {
 	PruneImages(ctx context.Context) error
 	PruneVolumes(ctx context.Context) error
 	// PruneBuildCache reclaims build caches: it removes the platform's per-app
-	// CNB cache volumes (labelled paas-cache, which PruneVolumes deliberately
+	// CNB cache volumes (labelled belune-cache, which PruneVolumes deliberately
 	// preserves) and prunes the BuildKit builder cache. Disposable — the next
 	// build repopulates them.
 	PruneBuildCache(ctx context.Context) error

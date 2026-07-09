@@ -7,9 +7,9 @@ import (
 
 	"github.com/jackc/pgx/v5/pgtype"
 
-	"github.com/ungweiliang/selfhost-paas/internal/pkg/crypto"
-	"github.com/ungweiliang/selfhost-paas/internal/service/backup"
-	"github.com/ungweiliang/selfhost-paas/internal/store/generated"
+	"github.com/weiling79/belune/internal/pkg/crypto"
+	"github.com/weiling79/belune/internal/service/backup"
+	"github.com/weiling79/belune/internal/store/generated"
 )
 
 // BackupDestinationService manages project-scoped S3-compatible backup targets.

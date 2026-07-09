@@ -10,16 +10,16 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 
-	"github.com/ungweiliang/selfhost-paas/internal/config"
-	"github.com/ungweiliang/selfhost-paas/internal/proxy"
-	"github.com/ungweiliang/selfhost-paas/internal/quota"
-	"github.com/ungweiliang/selfhost-paas/internal/runtime"
-	"github.com/ungweiliang/selfhost-paas/internal/server/middleware"
-	"github.com/ungweiliang/selfhost-paas/internal/service"
-	"github.com/ungweiliang/selfhost-paas/internal/service/email"
-	"github.com/ungweiliang/selfhost-paas/internal/store/generated"
-	"github.com/ungweiliang/selfhost-paas/internal/terminal"
-	"github.com/ungweiliang/selfhost-paas/internal/ws"
+	"github.com/weiling79/belune/internal/config"
+	"github.com/weiling79/belune/internal/proxy"
+	"github.com/weiling79/belune/internal/quota"
+	"github.com/weiling79/belune/internal/runtime"
+	"github.com/weiling79/belune/internal/server/middleware"
+	"github.com/weiling79/belune/internal/service"
+	"github.com/weiling79/belune/internal/service/email"
+	"github.com/weiling79/belune/internal/store/generated"
+	"github.com/weiling79/belune/internal/terminal"
+	"github.com/weiling79/belune/internal/ws"
 )
 
 // TaskEnqueuer abstracts task queue operations for testability.

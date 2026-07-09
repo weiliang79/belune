@@ -25,7 +25,7 @@ and architectural boundaries for the self-hosted PaaS project.
 ## Monorepo Root Layout
 
 ```
-paas/
+belune/
 ├── apps/
 │   ├── api/                  # Go backend
 │   └── web/                  # SvelteKit frontend
@@ -456,7 +456,7 @@ tasks:
 Production build:
 1. task build:web          → outputs to apps/api/web/dist/
 2. task build:api          → embeds frontend via //go:embed, outputs single binary
-3. ./paas                  → serves both API and UI on :8080
+3. ./belune                  → serves both API and UI on :8080
 ```
 
 ---
@@ -465,12 +465,12 @@ Production build:
 
 ```bash
 # What end users run — single command to get started
-curl -sSL https://get.yourpaas.com | bash
+curl -sSL https://get.yourbelune.com | bash
 
 # Script does:
 # 1. Detect OS + arch
 # 2. Download latest binary from GitHub releases
-# 3. Install to /usr/local/bin/paas
+# 3. Install to /usr/local/bin/belune
 # 4. Create systemd service
 # 5. Generate .env with secure random secrets
 # 6. Start service

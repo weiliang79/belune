@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ungweiliang/selfhost-paas/internal/server/middleware"
+	"github.com/weiling79/belune/internal/server/middleware"
 )
 
 func okHandler() http.Handler {

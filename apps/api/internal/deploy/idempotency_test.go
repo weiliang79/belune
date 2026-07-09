@@ -6,7 +6,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/ungweiliang/selfhost-paas/internal/deploy"
+	"github.com/weiling79/belune/internal/deploy"
 )
 
 func TestKey_Deterministic(t *testing.T) {

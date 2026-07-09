@@ -15,8 +15,8 @@ import (
 	"github.com/docker/docker/api/types/filters"
 	imagetypes "github.com/docker/docker/api/types/image"
 
-	"github.com/ungweiliang/selfhost-paas/internal/pkg/metrics"
-	"github.com/ungweiliang/selfhost-paas/internal/runtime"
+	"github.com/weiling79/belune/internal/pkg/metrics"
+	"github.com/weiling79/belune/internal/runtime"
 )
 
 func (c *Client) PullImage(ctx context.Context, image string) (err error) {

@@ -20,9 +20,9 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/ungweiliang/selfhost-paas/internal/config"
-	"github.com/ungweiliang/selfhost-paas/internal/pkg/crypto"
-	"github.com/ungweiliang/selfhost-paas/internal/store"
+	"github.com/weiling79/belune/internal/config"
+	"github.com/weiling79/belune/internal/pkg/crypto"
+	"github.com/weiling79/belune/internal/store"
 )
 
 // target describes one (table, id column, encrypted column) tuple to rewrap.

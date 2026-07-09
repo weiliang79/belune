@@ -20,11 +20,11 @@
 # SAFETY: A restore is DESTRUCTIVE — it drops and recreates the Postgres
 # database and overwrites .env and Caddy TLS data. Before dropping the database
 # this script writes a pre-restore snapshot of the CURRENT database to
-# ${PAAS_DIR}/backups/pre-restore-<timestamp>.sql so a botched restore can be
+# ${BELUNE_DIR}/backups/pre-restore-<timestamp>.sql so a botched restore can be
 # rolled back.
 set -euo pipefail
 
-INSTALL_DIR="${PAAS_DIR:-/opt/paas}"
+INSTALL_DIR="${BELUNE_DIR:-/opt/belune}"
 
 info()    { echo "  [info]  $*"; }
 success() { echo "  [ok]    $*"; }
@@ -147,7 +147,7 @@ echo "  This will OVERWRITE the current install at ${INSTALL_DIR}:"
 ${have_pg}    && echo "    • DROP and recreate the Postgres database"
 ${have_env}   && echo "    • Overwrite .env"
 ${have_caddy} && echo "    • Overwrite Caddy TLS data (certificates + config)"
-echo "    • Restart the paas service"
+echo "    • Restart the belune service"
 echo ""
 
 if ! ${ASSUME_YES}; then
@@ -172,8 +172,8 @@ fi
 if ${have_pg}; then
   DB_CONTAINER=$(docker compose ps -q postgres 2>/dev/null) || die "Postgres container not running."
   [[ -n "${DB_CONTAINER}" ]] || die "Postgres container not running. Start it first: docker compose up -d postgres"
-  PG_USER=$(grep 'POSTGRES_USER' .env 2>/dev/null | cut -d= -f2 || echo "paas")
-  PG_DB=$(grep 'POSTGRES_DB'   .env 2>/dev/null | cut -d= -f2 || echo "paas")
+  PG_USER=$(grep 'POSTGRES_USER' .env 2>/dev/null | cut -d= -f2 || echo "belune")
+  PG_DB=$(grep 'POSTGRES_DB'   .env 2>/dev/null | cut -d= -f2 || echo "belune")
 
   # Wait for Postgres to accept connections before touching it — a just-started
   # container (e.g. after a corrupt-volume rebuild) may not be ready yet.
@@ -189,13 +189,13 @@ if ${have_pg}; then
   success "Postgres is ready."
 
   # Stop the API before dropping the database: Postgres refuses to DROP a
-  # database that still has active sessions, and the paas container holds live
+  # database that still has active sessions, and the belune container holds live
   # connections (its worker runs there too). We bring it back up only on
-  # success — if the restore fails, paas stays down so it can't connect to a
+  # success — if the restore fails, belune stays down so it can't connect to a
   # half-restored database.
-  info "Stopping the paas service to release database connections..."
-  docker compose stop paas >/dev/null 2>&1 || true
-  success "paas service stopped."
+  info "Stopping the belune service to release database connections..."
+  docker compose stop belune >/dev/null 2>&1 || true
+  success "belune service stopped."
 
   # Pre-restore safety snapshot: dump the CURRENT database before we drop it, so
   # a bad restore is recoverable. Best-effort — skipped if the DB doesn't exist
@@ -211,9 +211,9 @@ if ${have_pg}; then
       trap 'rc=$?; rm -rf "${WORK_DIR}"; if [[ ${rc} -ne 0 ]]; then
         echo "" >&2
         echo "  [err]   Restore FAILED (exit ${rc}). The database may be in a partial state." >&2
-        echo "  [err]   The paas service is stopped. Roll back to the pre-restore snapshot, then start it:" >&2
+        echo "  [err]   The belune service is stopped. Roll back to the pre-restore snapshot, then start it:" >&2
         echo "          docker exec -i ${DB_CONTAINER} psql -U ${PG_USER} -d ${PG_DB} < ${SNAPSHOT}" >&2
-        echo "          docker compose up -d paas" >&2
+        echo "          docker compose up -d belune" >&2
       fi' EXIT
     else
       rm -f "${SNAPSHOT}"
@@ -252,13 +252,13 @@ if ${have_caddy}; then
   fi
 fi
 
-# ── Bring the paas service back up ────────────────────────────────────────────
+# ── Bring the belune service back up ────────────────────────────────────────────
 # We stopped it earlier to release DB connections. `up -d` starts it (respecting
 # the postgres/redis health dependencies) and picks up the restored data + .env.
 
-info "Starting paas service..."
-docker compose up -d paas \
-  || warn "Could not start paas automatically. Start it manually: docker compose up -d paas"
+info "Starting belune service..."
+docker compose up -d belune \
+  || warn "Could not start belune automatically. Start it manually: docker compose up -d belune"
 
 echo ""
 success "Restore complete!"

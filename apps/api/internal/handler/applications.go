@@ -13,13 +13,13 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
-	"github.com/ungweiliang/selfhost-paas/internal/naming"
-	"github.com/ungweiliang/selfhost-paas/internal/pkg/tracing"
-	"github.com/ungweiliang/selfhost-paas/internal/quota"
-	"github.com/ungweiliang/selfhost-paas/internal/service"
-	"github.com/ungweiliang/selfhost-paas/internal/status"
-	"github.com/ungweiliang/selfhost-paas/internal/store/generated"
-	"github.com/ungweiliang/selfhost-paas/internal/worker"
+	"github.com/weiling79/belune/internal/naming"
+	"github.com/weiling79/belune/internal/pkg/tracing"
+	"github.com/weiling79/belune/internal/quota"
+	"github.com/weiling79/belune/internal/service"
+	"github.com/weiling79/belune/internal/status"
+	"github.com/weiling79/belune/internal/store/generated"
+	"github.com/weiling79/belune/internal/worker"
 )
 
 // parseOptionalUUID converts a possibly-empty UUID string into a pgtype.UUID.

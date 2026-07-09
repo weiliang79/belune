@@ -13,8 +13,8 @@ import (
 	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5/pgtype"
 
-	statuspkg "github.com/ungweiliang/selfhost-paas/internal/status"
-	"github.com/ungweiliang/selfhost-paas/internal/store/generated"
+	statuspkg "github.com/weiling79/belune/internal/status"
+	"github.com/weiling79/belune/internal/store/generated"
 )
 
 // upgradeDBPayload triggers a guarded major-version upgrade of a managed

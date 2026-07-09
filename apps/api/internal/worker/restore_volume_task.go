@@ -15,9 +15,9 @@ import (
 	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5/pgtype"
 
-	"github.com/ungweiliang/selfhost-paas/internal/naming"
-	"github.com/ungweiliang/selfhost-paas/internal/runtime"
-	"github.com/ungweiliang/selfhost-paas/internal/store/generated"
+	"github.com/weiling79/belune/internal/naming"
+	"github.com/weiling79/belune/internal/runtime"
+	"github.com/weiling79/belune/internal/store/generated"
 )
 
 // restoreVolumePayload restores an application volume from a previously-recorded
@@ -131,7 +131,7 @@ func (h *TaskHandler) resolveVolumeBackupFile(ctx context.Context, bk generated.
 	if err != nil {
 		return "", noop, fmt.Errorf("resolve backup destination: %w", err)
 	}
-	tmp := filepath.Join(os.TempDir(), "paas-volrestore-"+filepath.Base(bk.RemoteKey.String))
+	tmp := filepath.Join(os.TempDir(), "belune-volrestore-"+filepath.Base(bk.RemoteKey.String))
 	cleanup := func() { _ = os.Remove(tmp) }
 	if err := client.Download(ctx, bk.RemoteKey.String, tmp); err != nil {
 		cleanup()

@@ -18,18 +18,18 @@ import (
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 
-	"github.com/ungweiliang/selfhost-paas/internal/build"
-	"github.com/ungweiliang/selfhost-paas/internal/git"
-	"github.com/ungweiliang/selfhost-paas/internal/naming"
-	"github.com/ungweiliang/selfhost-paas/internal/pkg/buildlog"
-	"github.com/ungweiliang/selfhost-paas/internal/pkg/metrics"
-	"github.com/ungweiliang/selfhost-paas/internal/pkg/redact"
-	"github.com/ungweiliang/selfhost-paas/internal/pkg/tracing"
-	"github.com/ungweiliang/selfhost-paas/internal/proxy"
-	"github.com/ungweiliang/selfhost-paas/internal/runtime"
-	"github.com/ungweiliang/selfhost-paas/internal/status"
-	"github.com/ungweiliang/selfhost-paas/internal/store"
-	"github.com/ungweiliang/selfhost-paas/internal/store/generated"
+	"github.com/weiling79/belune/internal/build"
+	"github.com/weiling79/belune/internal/git"
+	"github.com/weiling79/belune/internal/naming"
+	"github.com/weiling79/belune/internal/pkg/buildlog"
+	"github.com/weiling79/belune/internal/pkg/metrics"
+	"github.com/weiling79/belune/internal/pkg/redact"
+	"github.com/weiling79/belune/internal/pkg/tracing"
+	"github.com/weiling79/belune/internal/proxy"
+	"github.com/weiling79/belune/internal/runtime"
+	"github.com/weiling79/belune/internal/status"
+	"github.com/weiling79/belune/internal/store"
+	"github.com/weiling79/belune/internal/store/generated"
 )
 
 type deployPayload struct {
@@ -308,7 +308,7 @@ func (h *TaskHandler) cleanupExisting(ctx context.Context, dc *deployContext) {
 // are idempotent.
 //
 // v0.0.9-alpha Phase 2: stopped attaching app containers to the shared
-// `paas-infra` network. Apps in different projects can no longer see each
+// `belune-infra` network. Apps in different projects can no longer see each
 // other on the Docker network plane. Caddy still bridges them by joining
 // each project network on demand.
 func (h *TaskHandler) ensureNetworks(ctx context.Context, dc *deployContext) {
@@ -376,7 +376,7 @@ func (h *TaskHandler) prepareImage(ctx context.Context, dc *deployContext) error
 func (h *TaskHandler) buildFromGit(ctx context.Context, dc *deployContext) error {
 	dc.imageName = naming.ImageTag(dc.appRow.ProjectSlug, dc.appRow.Slug, dc.payload.ApplicationID, dc.payload.DeploymentID)
 
-	tmpDir, err := os.MkdirTemp("", "paas-build-*")
+	tmpDir, err := os.MkdirTemp("", "belune-build-*")
 	if err != nil {
 		return fmt.Errorf("create temp dir: %w", err)
 	}
@@ -548,7 +548,7 @@ func parseFileMode(mode string) os.FileMode {
 	return os.FileMode(parsed) & 0o777
 }
 
-// createAndStart creates the container, starts it, and connects it to paas-infra.
+// createAndStart creates the container, starts it, and connects it to belune-infra.
 // On success it appends a compensator that stops and removes the container.
 func (h *TaskHandler) createAndStart(ctx context.Context, dc *deployContext) error {
 	// Load persistent volumes and ensure the backing Docker volumes exist
@@ -624,7 +624,7 @@ func (h *TaskHandler) createAndStart(ctx context.Context, dc *deployContext) err
 		return fmt.Errorf("start container: %w", err)
 	}
 
-	// No paas-infra cross-attach: project network isolation (v0.0.9 Phase 2).
+	// No belune-infra cross-attach: project network isolation (v0.0.9 Phase 2).
 	// Caddy was attached to the project network in ensureNetworks above so
 	// it can already reach this container by hostname.
 

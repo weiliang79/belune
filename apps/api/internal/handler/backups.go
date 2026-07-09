@@ -9,8 +9,8 @@ import (
 	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5"
 
-	"github.com/ungweiliang/selfhost-paas/internal/service/backup"
-	"github.com/ungweiliang/selfhost-paas/internal/worker"
+	"github.com/weiling79/belune/internal/service/backup"
+	"github.com/weiling79/belune/internal/worker"
 )
 
 type backupRunView struct {
@@ -137,7 +137,7 @@ func (h *Handler) TriggerBackupRun(w http.ResponseWriter, r *http.Request) {
 	// feedback instead of an enqueued task that always fails in the worker.
 	scriptPath := h.cfg.BackupScriptPath
 	if scriptPath == "" {
-		scriptPath = "/opt/paas/scripts/backup.sh"
+		scriptPath = "/opt/belune/scripts/backup.sh"
 	}
 	if _, statErr := os.Stat(scriptPath); errors.Is(statErr, os.ErrNotExist) {
 		writeError(w, http.StatusBadRequest,

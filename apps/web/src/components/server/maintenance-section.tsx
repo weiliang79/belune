@@ -112,7 +112,7 @@ export function MaintenanceSection() {
                       actions: ["volumes"],
                       label: "unused volumes",
                       description:
-                        "Removes dangling volumes not owned by the platform. App data (paas-data) and in-use volumes are preserved.",
+                        "Removes dangling volumes not owned by the platform. App data (belune-data) and in-use volumes are preserved.",
                     })
                   }
                 >

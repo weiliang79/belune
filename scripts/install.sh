@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # Self-Hosted PaaS — Installer
-# Usage: curl -sSL https://raw.githubusercontent.com/ungweiliang/selfhost-paas/main/scripts/install.sh | bash
+# Usage: curl -sSL https://raw.githubusercontent.com/weiling79/belune/main/scripts/install.sh | bash
 set -euo pipefail
 
-INSTALL_DIR="${PAAS_DIR:-/opt/paas}"
-GITHUB_REPO="ungweiliang/selfhost-paas"
+INSTALL_DIR="${BELUNE_DIR:-/opt/belune}"
+GITHUB_REPO="weiling79/belune"
 IMAGE="ghcr.io/${GITHUB_REPO}:latest"
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
@@ -59,7 +59,7 @@ info "Downloading .env.defaults reference..."
 curl -sSfL "${RAW_URL}/.env.defaults" -o .env.defaults
 
 info "Downloading systemd unit..."
-curl -sSfL "${RAW_URL}/infra/systemd/paas.service" -o infra/systemd/paas.service
+curl -sSfL "${RAW_URL}/infra/systemd/belune.service" -o infra/systemd/belune.service
 
 # ── Generate .env ──────────────────────────────────────────────────────────────
 
@@ -76,10 +76,10 @@ else
   cat > .env <<EOF
 # Self-Hosted PaaS — generated on ${INSTALL_DATE}
 
-POSTGRES_USER=paas
+POSTGRES_USER=belune
 POSTGRES_PASSWORD=${PG_PASS}
-POSTGRES_DB=paas
-DATABASE_URL=postgres://paas:${PG_PASS}@postgres:5432/paas?sslmode=disable
+POSTGRES_DB=belune
+DATABASE_URL=postgres://belune:${PG_PASS}@postgres:5432/belune?sslmode=disable
 
 REDIS_URL=redis://redis:6379
 
@@ -94,7 +94,7 @@ PORT=8080
 TLS_ENABLED=false
 CORS_ORIGINS=http://localhost
 
-PAAS_IMAGE=${IMAGE}
+BELUNE_IMAGE=${IMAGE}
 EOF
 
   success ".env written with generated secrets."
@@ -110,16 +110,16 @@ docker compose up -d
 
 # ── Extract helper binaries ────────────────────────────────────────────────────
 
-# Copy paas-backup-upload out of the API image so backup.sh can run it on the
+# Copy belune-backup-upload out of the API image so backup.sh can run it on the
 # host without requiring a running container. Re-extracted on every update.
 mkdir -p "${INSTALL_DIR}/bin"
-info "Extracting paas-backup-upload helper..."
+info "Extracting belune-backup-upload helper..."
 docker run --rm --entrypoint="" "${IMAGE}" \
-  cat /usr/local/bin/paas-backup-upload \
-  > "${INSTALL_DIR}/bin/paas-backup-upload" 2>/dev/null \
-  && chmod +x "${INSTALL_DIR}/bin/paas-backup-upload" \
-  && success "paas-backup-upload installed at ${INSTALL_DIR}/bin/paas-backup-upload." \
-  || info "paas-backup-upload not found in image — remote backup upload will not be available."
+  cat /usr/local/bin/belune-backup-upload \
+  > "${INSTALL_DIR}/bin/belune-backup-upload" 2>/dev/null \
+  && chmod +x "${INSTALL_DIR}/bin/belune-backup-upload" \
+  && success "belune-backup-upload installed at ${INSTALL_DIR}/bin/belune-backup-upload." \
+  || info "belune-backup-upload not found in image — remote backup upload will not be available."
 
 # ── Wait for health ────────────────────────────────────────────────────────────
 
@@ -130,7 +130,7 @@ until curl -sf http://localhost:8080/healthz >/dev/null 2>&1; do
   sleep 2
   ELAPSED=$((ELAPSED + 2))
   if [[ ${ELAPSED} -ge ${MAX_WAIT} ]]; then
-    die "API did not become ready within ${MAX_WAIT}s. Check: docker compose logs paas"
+    die "API did not become ready within ${MAX_WAIT}s. Check: docker compose logs belune"
   fi
 done
 
@@ -140,48 +140,48 @@ done
 # root. Anywhere else (macOS dev, rootless install) we just print the
 # manual instructions and move on.
 if [[ -d /run/systemd/system ]] && [[ ${EUID:-$(id -u)} -eq 0 ]]; then
-  if [[ ! -f /etc/systemd/system/paas.service ]]; then
-    info "Installing paas.service systemd unit..."
+  if [[ ! -f /etc/systemd/system/belune.service ]]; then
+    info "Installing belune.service systemd unit..."
     # Patch WorkingDirectory if the operator chose a non-default path. The
-    # bundled unit hard-codes /opt/paas; sed-rewrite it in place rather than
+    # bundled unit hard-codes /opt/belune; sed-rewrite it in place rather than
     # shipping a templated file users would have to render themselves.
-    if [[ "${INSTALL_DIR}" != "/opt/paas" ]]; then
+    if [[ "${INSTALL_DIR}" != "/opt/belune" ]]; then
       sed "s|^WorkingDirectory=.*|WorkingDirectory=${INSTALL_DIR}|" \
-        infra/systemd/paas.service > /etc/systemd/system/paas.service
+        infra/systemd/belune.service > /etc/systemd/system/belune.service
     else
-      cp infra/systemd/paas.service /etc/systemd/system/paas.service
+      cp infra/systemd/belune.service /etc/systemd/system/belune.service
     fi
     systemctl daemon-reload
-    systemctl enable paas.service >/dev/null 2>&1 || true
-    success "paas.service installed and enabled (auto-starts on reboot)."
+    systemctl enable belune.service >/dev/null 2>&1 || true
+    success "belune.service installed and enabled (auto-starts on reboot)."
   else
-    info "/etc/systemd/system/paas.service already exists — skipping."
+    info "/etc/systemd/system/belune.service already exists — skipping."
   fi
 
   # ── Backup timer ──────────────────────────────────────────────────────────────
-  if [[ ! -f /etc/systemd/system/paas-backup.timer ]]; then
-    info "Installing paas-backup.service and paas-backup.timer..."
-    if [[ "${INSTALL_DIR}" != "/opt/paas" ]]; then
-      sed "s|/opt/paas|${INSTALL_DIR}|g" \
-        infra/systemd/paas-backup.service > /etc/systemd/system/paas-backup.service
+  if [[ ! -f /etc/systemd/system/belune-backup.timer ]]; then
+    info "Installing belune-backup.service and belune-backup.timer..."
+    if [[ "${INSTALL_DIR}" != "/opt/belune" ]]; then
+      sed "s|/opt/belune|${INSTALL_DIR}|g" \
+        infra/systemd/belune-backup.service > /etc/systemd/system/belune-backup.service
     else
-      cp infra/systemd/paas-backup.service /etc/systemd/system/paas-backup.service
+      cp infra/systemd/belune-backup.service /etc/systemd/system/belune-backup.service
     fi
-    cp infra/systemd/paas-backup.timer /etc/systemd/system/paas-backup.timer
+    cp infra/systemd/belune-backup.timer /etc/systemd/system/belune-backup.timer
     systemctl daemon-reload
-    systemctl enable --now paas-backup.timer >/dev/null 2>&1 || true
-    success "paas-backup.timer installed and enabled (daily backups at 02:00)."
+    systemctl enable --now belune-backup.timer >/dev/null 2>&1 || true
+    success "belune-backup.timer installed and enabled (daily backups at 02:00)."
   else
-    info "/etc/systemd/system/paas-backup.timer already exists — skipping."
+    info "/etc/systemd/system/belune-backup.timer already exists — skipping."
   fi
 else
   info "Skipping systemd install (not root or non-systemd host)."
   info "To enable auto-start on reboot:"
-  info "  sudo cp ${INSTALL_DIR}/infra/systemd/paas.service /etc/systemd/system/"
-  info "  sudo systemctl daemon-reload && sudo systemctl enable --now paas.service"
+  info "  sudo cp ${INSTALL_DIR}/infra/systemd/belune.service /etc/systemd/system/"
+  info "  sudo systemctl daemon-reload && sudo systemctl enable --now belune.service"
   info "To enable daily backups:"
-  info "  sudo cp ${INSTALL_DIR}/infra/systemd/paas-backup.{service,timer} /etc/systemd/system/"
-  info "  sudo systemctl daemon-reload && sudo systemctl enable --now paas-backup.timer"
+  info "  sudo cp ${INSTALL_DIR}/infra/systemd/belune-backup.{service,timer} /etc/systemd/system/"
+  info "  sudo systemctl daemon-reload && sudo systemctl enable --now belune-backup.timer"
 fi
 
 # ── Done ──────────────────────────────────────────────────────────────────────

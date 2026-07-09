@@ -18,7 +18,7 @@ import (
 	"github.com/redis/go-redis/v9"
 	"golang.org/x/crypto/bcrypt"
 
-	"github.com/ungweiliang/selfhost-paas/internal/store/generated"
+	"github.com/weiling79/belune/internal/store/generated"
 )
 
 var (

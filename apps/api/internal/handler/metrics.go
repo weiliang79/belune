@@ -7,7 +7,7 @@ import (
 
 	"github.com/hibiken/asynq"
 
-	"github.com/ungweiliang/selfhost-paas/internal/status"
+	"github.com/weiling79/belune/internal/status"
 )
 
 type metricsResponse struct {

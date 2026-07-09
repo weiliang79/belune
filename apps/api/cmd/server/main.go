@@ -8,10 +8,10 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/ungweiliang/selfhost-paas/internal/app"
-	"github.com/ungweiliang/selfhost-paas/internal/config"
-	"github.com/ungweiliang/selfhost-paas/internal/pkg/logger"
-	"github.com/ungweiliang/selfhost-paas/internal/pkg/tracing"
+	"github.com/weiling79/belune/internal/app"
+	"github.com/weiling79/belune/internal/config"
+	"github.com/weiling79/belune/internal/pkg/logger"
+	"github.com/weiling79/belune/internal/pkg/tracing"
 )
 
 func main() {
@@ -31,7 +31,7 @@ func main() {
 	traceShutdown, err := tracing.Init(context.Background(), tracing.Config{
 		Endpoint:       cfg.OTLPEndpoint,
 		Insecure:       cfg.OTLPInsecure,
-		ServiceName:    "selfhost-paas-api",
+		ServiceName:    "belune-api",
 		ServiceVersion: "v0.0.11-alpha",
 	})
 	if err != nil {

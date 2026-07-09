@@ -7,7 +7,7 @@ A self-hosted Platform-as-a-Service for deploying applications with automatic bu
 One-command install on a fresh Linux host:
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/ungweiliang/selfhost-paas/main/scripts/install.sh | bash
+curl -sSL https://raw.githubusercontent.com/weiling79/belune/main/scripts/install.sh | bash
 ```
 
 Then follow [`docs/runbooks/install.md`](docs/runbooks/install.md) for DNS,
@@ -48,13 +48,13 @@ task dev:web
 
 ## Develop with the devcontainer
 
-The VS Code devcontainer runs the Go API inside a container that joins the `paas-infra` Docker network. This gives the API real Docker DNS (Postgres/Redis/Caddy reachable by service name) and lets Caddy route `localhost:80` to the API correctly. Vite always runs on the host for fast HMR.
+The VS Code devcontainer runs the Go API inside a container that joins the `belune-infra` Docker network. This gives the API real Docker DNS (Postgres/Redis/Caddy reachable by service name) and lets Caddy route `localhost:80` to the API correctly. Vite always runs on the host for fast HMR.
 
 **Prerequisites:** Docker Desktop or OrbStack, VS Code with the Dev Containers extension.
 
 ```bash
 # 1. Ensure the shared network exists (done automatically by initializeCommand)
-docker network create paas-infra 2>/dev/null || true
+docker network create belune-infra 2>/dev/null || true
 
 # 2. Open in devcontainer
 # VS Code: Ctrl+Shift+P → "Dev Containers: Reopen in Container"
@@ -71,4 +71,4 @@ task dev:web        # Vite on :5173, proxies /api/* to localhost:8080
 
 ## Project Structure
 
-See [paas-project-structure.md](paas-project-structure.md) for full architecture details.
+See [belune-project-structure.md](belune-project-structure.md) for full architecture details.

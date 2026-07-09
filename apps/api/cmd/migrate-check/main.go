@@ -9,8 +9,8 @@ import (
 	"log/slog"
 	"os"
 
-	"github.com/ungweiliang/selfhost-paas/internal/migrations"
-	"github.com/ungweiliang/selfhost-paas/internal/store"
+	"github.com/weiling79/belune/internal/migrations"
+	"github.com/weiling79/belune/internal/store"
 )
 
 func main() {

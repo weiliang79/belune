@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/ungweiliang/selfhost-paas/internal/proxy"
+	"github.com/weiling79/belune/internal/proxy"
 )
 
 var updateGolden = flag.Bool("update", false, "update golden files under testdata/")

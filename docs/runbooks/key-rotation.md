@@ -50,7 +50,7 @@ or shared scratchpads.
 Update the API process environment so both old and new keys are present:
 
 ```bash
-# /etc/paas.env or equivalent
+# /etc/belune.env or equivalent
 ENCRYPTION_KEYS=v1:<old_hex>,v2:<new_hex>
 ENCRYPTION_KEY_CURRENT=v2
 ```

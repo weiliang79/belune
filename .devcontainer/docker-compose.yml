@@ -3,20 +3,20 @@ services:
     image: mcr.microsoft.com/devcontainers/go:1.26-bookworm
     command: sleep infinity
     volumes:
-      - ..:/workspaces/selfhost-paas:cached
+      - ..:/workspaces/belune:cached
       - /var/run/docker.sock:/var/run/docker.sock
-      - /var/tmp/paas-builds:/var/tmp/paas-builds
+      - /var/tmp/belune-builds:/var/tmp/belune-builds
       # Cache Go state across container rebuilds — module downloads, build
       # cache, and `go install` binaries (air, dlv, migrate, etc.).
       - go-mod-cache:/home/vscode/go/pkg/mod
       - go-build-cache:/home/vscode/.cache/go-build
       - go-bin-cache:/home/vscode/go/bin
     environment:
-      DATABASE_URL: postgres://paas:paas@postgres:5432/paas?sslmode=disable
+      DATABASE_URL: postgres://belune:belune@postgres:5432/belune?sslmode=disable
       REDIS_URL: redis://redis:6379
       CADDY_ADMIN_URL: http://caddy:2019
       BUILDKIT_HOST: tcp://buildkit:1234
-      TMPDIR: /var/tmp/paas-builds
+      TMPDIR: /var/tmp/belune-builds
       PORT: "8080"
       METRICS_BIND: 0.0.0.0:9090
       OTEL_EXPORTER_OTLP_ENDPOINT: jaeger:4318
@@ -25,7 +25,7 @@ services:
       - ../.env
     networks:
       - default
-      - paas-infra
+      - belune-infra
     depends_on:
       postgres:
         condition: service_healthy
@@ -38,7 +38,7 @@ volumes:
   go-bin-cache:
 
 networks:
-  paas-infra:
-    name: paas-infra
+  belune-infra:
+    name: belune-infra
     external: true
   default: {}

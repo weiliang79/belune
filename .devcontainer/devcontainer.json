@@ -1,9 +1,9 @@
 {
-  "name": "selfhost-paas API",
+  "name": "belune API",
   "dockerComposeFile": ["../infra/docker-compose.yml", "docker-compose.yml"],
   "service": "api",
-  "workspaceFolder": "/workspaces/selfhost-paas",
-  "initializeCommand": "mkdir -p /var/tmp/paas-builds && docker network create paas-infra 2>/dev/null || true",
+  "workspaceFolder": "/workspaces/belune",
+  "initializeCommand": "mkdir -p /var/tmp/belune-builds && docker network create belune-infra 2>/dev/null || true",
   "forwardPorts": [8080],
   "portsAttributes": {
     "9090": {
@@ -11,7 +11,7 @@
       "onAutoForward": "ignore"
     }
   },
-  "postCreateCommand": "bash /workspaces/selfhost-paas/.devcontainer/post-create.sh",
+  "postCreateCommand": "bash /workspaces/belune/.devcontainer/post-create.sh",
   "customizations": {
     "vscode": {
       "extensions": [

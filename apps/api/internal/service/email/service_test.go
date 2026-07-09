@@ -8,8 +8,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/ungweiliang/selfhost-paas/internal/config"
-	"github.com/ungweiliang/selfhost-paas/internal/service/email"
+	"github.com/weiling79/belune/internal/config"
+	"github.com/weiling79/belune/internal/service/email"
 )
 
 // logOnlyCfg returns a config with no SMTP host (log-only mode).
@@ -20,7 +20,7 @@ func logOnlyCfg() *config.Config {
 		SMTPFromEmail: "noreply@example.com",
 		SMTPFromName:  "Self-Hosted PaaS",
 		SMTPTLSMode:   "starttls",
-		PublicBaseURL: "https://paas.example.com",
+		PublicBaseURL: "https://belune.example.com",
 	}
 }
 
@@ -41,7 +41,7 @@ func TestTemplates_PasswordReset(t *testing.T) {
 
 	vars := map[string]any{
 		"FirstName": "Alice",
-		"ResetURL":  "https://paas.example.com/reset-password?token=abc123",
+		"ResetURL":  "https://belune.example.com/reset-password?token=abc123",
 	}
 
 	subject, textBody, htmlBody, err := svc.Render("password_reset", vars)
@@ -49,10 +49,10 @@ func TestTemplates_PasswordReset(t *testing.T) {
 
 	assert.Equal(t, "Reset your password", subject)
 	assert.Contains(t, textBody, "Alice")
-	assert.Contains(t, textBody, "https://paas.example.com/reset-password?token=abc123")
+	assert.Contains(t, textBody, "https://belune.example.com/reset-password?token=abc123")
 	assert.Contains(t, textBody, "30 minutes")
 	assert.Contains(t, htmlBody, "Reset your password")
-	assert.Contains(t, htmlBody, "https://paas.example.com/reset-password?token=abc123")
+	assert.Contains(t, htmlBody, "https://belune.example.com/reset-password?token=abc123")
 	assert.Contains(t, htmlBody, "no-referrer")
 
 	// Verify round-trip through log-only send doesn't error.
@@ -66,7 +66,7 @@ func TestTemplates_UserInvitation(t *testing.T) {
 
 	vars := map[string]any{
 		"Role":      "operator",
-		"InviteURL": "https://paas.example.com/accept-invite?token=xyz789",
+		"InviteURL": "https://belune.example.com/accept-invite?token=xyz789",
 	}
 
 	subject, textBody, htmlBody, err := svc.Render("user_invitation", vars)
@@ -74,10 +74,10 @@ func TestTemplates_UserInvitation(t *testing.T) {
 
 	assert.Equal(t, "You've been invited to Self-Hosted PaaS", subject)
 	assert.Contains(t, textBody, "operator")
-	assert.Contains(t, textBody, "https://paas.example.com/accept-invite?token=xyz789")
+	assert.Contains(t, textBody, "https://belune.example.com/accept-invite?token=xyz789")
 	assert.Contains(t, textBody, "7 days")
 	assert.Contains(t, htmlBody, "operator")
-	assert.Contains(t, htmlBody, "https://paas.example.com/accept-invite?token=xyz789")
+	assert.Contains(t, htmlBody, "https://belune.example.com/accept-invite?token=xyz789")
 	assert.Contains(t, htmlBody, "no-referrer")
 
 	err = svc.SendTemplate(context.Background(), "user_invitation", "new@example.com", vars)

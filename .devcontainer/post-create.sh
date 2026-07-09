@@ -4,7 +4,7 @@ set -euo pipefail
 # Allow go to auto-download a newer toolchain when a module requires it
 export GOTOOLCHAIN=auto
 
-# Unset TMPDIR so Go uses the system /tmp for build cache, not /var/tmp/paas-builds.
+# Unset TMPDIR so Go uses the system /tmp for build cache, not /var/tmp/belune-builds.
 # That bind-mount is only for pack/buildpack deploy operations and has limited space.
 unset TMPDIR
 
@@ -14,7 +14,7 @@ export GOFLAGS="-p=2"
 echo "==> Ensuring build temp dir is writable..."
 # Must happen first — TMPDIR is set to this path in docker-compose, so Go uses it
 # for its own build cache before we get to the bottom of this script.
-sudo chmod 777 /var/tmp/paas-builds
+sudo chmod 777 /var/tmp/belune-builds
 
 echo "==> Fixing ownership of cached Go directories..."
 # Named volumes for the Go caches (see .devcontainer/docker-compose.yml) are
@@ -71,14 +71,14 @@ echo "==> Installing railpack CLI..."
 curl -sSL https://railpack.com/install.sh | sudo bash
 
 echo "==> Downloading Go modules..."
-cd /workspaces/selfhost-paas/apps/api && go mod download
+cd /workspaces/belune/apps/api && go mod download
 
-echo "==> Setting up /opt/paas install mirror (control-plane backup)..."
-# The control-plane backup worker shells out to $PAAS_DIR/scripts/backup.sh
-# (default /opt/paas/scripts/backup.sh) and that script treats its dir as a real
+echo "==> Setting up /opt/belune install mirror (control-plane backup)..."
+# The control-plane backup worker shells out to $BELUNE_DIR/scripts/backup.sh
+# (default /opt/belune/scripts/backup.sh) and that script treats its dir as a real
 # install: it needs a docker-compose.yml and a .env alongside the script, plus
-# bin/paas-backup-upload for remote upload. In a real install everything
-# co-locates under /opt/paas; here we mirror that layout with symlinks into the
+# bin/belune-backup-upload for remote upload. In a real install everything
+# co-locates under /opt/belune; here we mirror that layout with symlinks into the
 # repo so "Run Backup Now" works locally.
 #
 # Notes:
@@ -87,18 +87,18 @@ echo "==> Setting up /opt/paas install mirror (control-plane backup)..."
 #  - We deliberately do NOT set BACKUP_REMOTE_ENABLED here: the script sources
 #    this .env right before the upload helper, so a value would override the real
 #    one the worker inherits from the repo .env (via `task dev:api` dotenv). With
-#    BACKUP_REMOTE_ENABLED=true + minio-paas running, backups upload for real.
+#    BACKUP_REMOTE_ENABLED=true + minio-belune running, backups upload for real.
 #  - Recreated on every rebuild since /opt lives inside the container.
-REPO=/workspaces/selfhost-paas
-sudo mkdir -p /opt/paas/scripts /opt/paas/backups /opt/paas/bin
-sudo ln -sfn "$REPO/scripts/backup.sh" /opt/paas/scripts/backup.sh
-sudo ln -sfn "$REPO/infra/docker-compose.yml" /opt/paas/docker-compose.yml
-printf 'POSTGRES_USER=paas\nPOSTGRES_DB=paas\nCOMPOSE_PROJECT_NAME=infra\n' \
-  | sudo tee /opt/paas/.env >/dev/null
+REPO=/workspaces/belune
+sudo mkdir -p /opt/belune/scripts /opt/belune/backups /opt/belune/bin
+sudo ln -sfn "$REPO/scripts/backup.sh" /opt/belune/scripts/backup.sh
+sudo ln -sfn "$REPO/infra/docker-compose.yml" /opt/belune/docker-compose.yml
+printf 'POSTGRES_USER=belune\nPOSTGRES_DB=belune\nCOMPOSE_PROJECT_NAME=infra\n' \
+  | sudo tee /opt/belune/.env >/dev/null
 # Chown before building so the vscode-owned `go build` can write into bin/.
-sudo chown -R vscode:vscode /opt/paas
+sudo chown -R vscode:vscode /opt/belune
 # Build the upload helper (same binary install.sh/update.sh extract on a server).
-go build -o /opt/paas/bin/paas-backup-upload ./cmd/backup-upload
+go build -o /opt/belune/bin/belune-backup-upload ./cmd/backup-upload
 
 echo "==> Installing Docker CLI (best-effort)..."
 # The Docker socket is bind-mounted; we just need the CLI binary.

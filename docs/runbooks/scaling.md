@@ -30,7 +30,7 @@ The simplest option — move to a larger VM.
    WORKER_CONCURRENCY=20
    DB_MAX_OPEN_CONNS=40
    ```
-5. Restart: `docker compose restart paas`
+5. Restart: `docker compose restart belune`
 
 ---
 
@@ -39,14 +39,14 @@ The simplest option — move to a larger VM.
 For production workloads, moving Postgres to a managed service (RDS, Supabase, etc.) is recommended.
 
 1. Take a backup: `bash scripts/backup.sh`
-2. Provision the managed Postgres instance and create the `paas` database.
+2. Provision the managed Postgres instance and create the `belune` database.
 3. Restore the dump to the managed instance:
    ```
    psql "$MANAGED_DATABASE_URL" < postgres.sql
    ```
 4. Update `.env`:
    ```
-   DATABASE_URL=postgres://user:pass@managed-host:5432/paas?sslmode=require
+   DATABASE_URL=postgres://user:pass@managed-host:5432/belune?sslmode=require
    ```
 5. Remove the local Postgres service from `docker-compose.yml` (or comment it out).
 6. Restart: `docker compose up -d`
@@ -78,7 +78,7 @@ WORKER_CONCURRENCY=20
 
 Each build goroutine spawns a Docker build process, so ensure the host has enough CPU and disk I/O. Monitor with `docker stats` during peak build activity.
 
-To keep the Docker layer cache warm and speed up repeated builds, ensure the `paas` container mounts the Docker socket from the host (already the default in `docker-compose.yml`).
+To keep the Docker layer cache warm and speed up repeated builds, ensure the `belune` container mounts the Docker socket from the host (already the default in `docker-compose.yml`).
 
 ---
 
@@ -88,11 +88,11 @@ Each WebSocket connection consumes a file descriptor. On busy instances, raise t
 
 ```bash
 # /etc/security/limits.conf
-paas  soft  nofile  65536
-paas  hard  nofile  65536
+belune  soft  nofile  65536
+belune  hard  nofile  65536
 ```
 
-Or set it in `docker-compose.yml` under the `paas` service:
+Or set it in `docker-compose.yml` under the `belune` service:
 ```yaml
 ulimits:
   nofile:

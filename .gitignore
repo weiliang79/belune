@@ -4,7 +4,7 @@
 *.dll
 *.so
 *.dylib
-paas
+belune
 apps/api/server
 
 # Go
@@ -44,4 +44,4 @@ coverage/
 *.out
 
 # Local dev backup dump dir (DATABASE_BACKUP_DIR)
-.paas-data/
+.belune-data/

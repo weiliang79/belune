@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/ungweiliang/selfhost-paas/internal/build"
-	"github.com/ungweiliang/selfhost-paas/internal/runtime"
+	"github.com/weiling79/belune/internal/build"
+	"github.com/weiling79/belune/internal/runtime"
 )
 
 // Builder handles pre-built images — just pull and deploy, no build step.

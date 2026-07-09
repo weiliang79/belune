@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/ungweiliang/selfhost-paas/internal/store/generated"
+	"github.com/weiling79/belune/internal/store/generated"
 )
 
 type settingResponse struct {

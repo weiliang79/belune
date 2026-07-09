@@ -1,6 +1,6 @@
 services:
-  paas:
-    image: ${PAAS_IMAGE:-ghcr.io/ungweiliang/selfhost-paas:latest}
+  belune:
+    image: ${BELUNE_IMAGE:-ghcr.io/weiling79/belune:latest}
     build:
       context: ..
       dockerfile: Dockerfile
@@ -11,7 +11,7 @@ services:
     volumes:
       # Persist managed-database logical dumps (DATABASE_BACKUP_DIR=/data/backups/databases)
       # so local restore works across container recreation.
-      - paasdata:/data
+      - belunedata:/data
     depends_on:
       postgres:
         condition: service_healthy
@@ -32,13 +32,13 @@ services:
   postgres:
     image: postgres:16-alpine
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-paas}
+      POSTGRES_USER: ${POSTGRES_USER:-belune}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: ${POSTGRES_DB:-paas}
+      POSTGRES_DB: ${POSTGRES_DB:-belune}
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-paas}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-belune}"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -105,4 +105,4 @@ volumes:
   caddydata:
   caddyconfig:
   caddylogs:
-  paasdata:
+  belunedata:

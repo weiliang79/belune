@@ -18,13 +18,13 @@ import (
 
 	"go.opentelemetry.io/otel/attribute"
 
-	"github.com/ungweiliang/selfhost-paas/internal/deploy"
-	"github.com/ungweiliang/selfhost-paas/internal/git"
-	"github.com/ungweiliang/selfhost-paas/internal/pkg/metrics"
-	"github.com/ungweiliang/selfhost-paas/internal/pkg/tracing"
-	"github.com/ungweiliang/selfhost-paas/internal/preview"
-	"github.com/ungweiliang/selfhost-paas/internal/status"
-	"github.com/ungweiliang/selfhost-paas/internal/store/generated"
+	"github.com/weiling79/belune/internal/deploy"
+	"github.com/weiling79/belune/internal/git"
+	"github.com/weiling79/belune/internal/pkg/metrics"
+	"github.com/weiling79/belune/internal/pkg/tracing"
+	"github.com/weiling79/belune/internal/preview"
+	"github.com/weiling79/belune/internal/status"
+	"github.com/weiling79/belune/internal/store/generated"
 )
 
 func (h *Handler) HandleWebhookPush(w http.ResponseWriter, r *http.Request) {

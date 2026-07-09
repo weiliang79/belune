@@ -14,12 +14,12 @@ import (
 	"github.com/docker/docker/api/types/network"
 	"github.com/docker/go-connections/nat"
 
-	"github.com/ungweiliang/selfhost-paas/internal/pkg/metrics"
-	"github.com/ungweiliang/selfhost-paas/internal/runtime"
+	"github.com/weiling79/belune/internal/pkg/metrics"
+	"github.com/weiling79/belune/internal/runtime"
 )
 
 const labelManagedBy = "managed-by"
-const labelValue = "selfhost-paas"
+const labelValue = "belune"
 
 func (c *Client) CreateContainer(ctx context.Context, cfg runtime.ContainerConfig) (id string, err error) {
 	defer func() { metrics.RecordDockerOp("create_container", err) }()

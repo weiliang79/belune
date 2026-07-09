@@ -12,12 +12,12 @@ import (
 	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5/pgtype"
 
-	"github.com/ungweiliang/selfhost-paas/internal/build"
-	"github.com/ungweiliang/selfhost-paas/internal/git"
-	"github.com/ungweiliang/selfhost-paas/internal/naming"
-	"github.com/ungweiliang/selfhost-paas/internal/pkg/buildlog"
-	"github.com/ungweiliang/selfhost-paas/internal/status"
-	"github.com/ungweiliang/selfhost-paas/internal/store/generated"
+	"github.com/weiling79/belune/internal/build"
+	"github.com/weiling79/belune/internal/git"
+	"github.com/weiling79/belune/internal/naming"
+	"github.com/weiling79/belune/internal/pkg/buildlog"
+	"github.com/weiling79/belune/internal/status"
+	"github.com/weiling79/belune/internal/store/generated"
 )
 
 type buildPayload struct {
@@ -73,7 +73,7 @@ func (h *TaskHandler) HandleBuildTask(ctx context.Context, t *asynq.Task) error 
 	}
 
 	// Clone the repository
-	tmpDir, err := os.MkdirTemp("", "paas-build-*")
+	tmpDir, err := os.MkdirTemp("", "belune-build-*")
 	if err != nil {
 		h.failDeployment(ctx, deploymentID, "build", fmt.Sprintf("create temp dir: %v", err))
 		return fmt.Errorf("create temp dir: %w", err)

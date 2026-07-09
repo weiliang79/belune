@@ -11,10 +11,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/ungweiliang/selfhost-paas/internal/naming"
-	"github.com/ungweiliang/selfhost-paas/internal/runtime"
-	"github.com/ungweiliang/selfhost-paas/internal/store/generated"
-	"github.com/ungweiliang/selfhost-paas/internal/testutil"
+	"github.com/weiling79/belune/internal/naming"
+	"github.com/weiling79/belune/internal/runtime"
+	"github.com/weiling79/belune/internal/store/generated"
+	"github.com/weiling79/belune/internal/testutil"
 )
 
 func TestDockerEndpoints_AdminReadOnly(t *testing.T) {
@@ -36,26 +36,26 @@ func TestDockerEndpoints_AdminReadOnly(t *testing.T) {
 		Volumes:    runtime.DiskUsageEntry{Count: 2, Size: 500, Reclaimable: 100},
 	}
 	env.Runtime.ListAllContainers_ = []runtime.ContainerInfo{
-		{ID: "abc", Name: "paas-app", Image: "app:latest", Status: "running",
-			Labels:    map[string]string{"managed-by": "selfhost-paas", "application-id": "not-a-real-uuid"},
+		{ID: "abc", Name: "belune-app", Image: "app:latest", Status: "running",
+			Labels:    map[string]string{"managed-by": "belune", "application-id": "not-a-real-uuid"},
 			CreatedAt: time.Now()},
 		{ID: "def", Name: "some-foreign", Image: "redis:7", Status: "exited",
 			Labels: map[string]string{}},
 	}
 	env.Runtime.ListImages_ = []runtime.ImageInfo{
 		{ID: "img1", RepoTags: []string{"app:latest"}, Size: 100, Dangling: false,
-			Labels: map[string]string{"managed-by": "selfhost-paas"}},
+			Labels: map[string]string{"managed-by": "belune"}},
 		{ID: "img2", RepoTags: []string{}, Size: 50, Dangling: true},
 	}
 	env.Runtime.ListVolumes_ = []runtime.VolumeInfo{
-		{Name: "paas-vol-data", Driver: "local", Size: 200, RefCount: 1,
-			Labels: map[string]string{"managed-by": "selfhost-paas", "paas-data": "true"}},
+		{Name: "belune-vol-data", Driver: "local", Size: 200, RefCount: 1,
+			Labels: map[string]string{"managed-by": "belune", "belune-data": "true"}},
 		{Name: "orphan", Driver: "local", Size: 10, RefCount: 0, Labels: map[string]string{}},
 	}
 	env.Runtime.ListNetworks_ = []runtime.NetworkInfo{
-		{ID: "net1", Name: "paas-proj", Driver: "bridge", Scope: "local",
-			Labels:     map[string]string{"managed-by": "selfhost-paas"},
-			Containers: []runtime.NetworkContainer{{ID: "abc", Name: "paas-app", IPv4Address: "172.20.0.2/16"}}},
+		{ID: "net1", Name: "belune-proj", Driver: "bridge", Scope: "local",
+			Labels:     map[string]string{"managed-by": "belune"},
+			Containers: []runtime.NetworkContainer{{ID: "abc", Name: "belune-app", IPv4Address: "172.20.0.2/16"}}},
 	}
 	t.Cleanup(func() {
 		env.Runtime.SystemInfo_ = nil
@@ -84,7 +84,7 @@ func TestDockerEndpoints_AdminReadOnly(t *testing.T) {
 	containers := testutil.ReadJSONArray(t, resp)
 	require.Len(t, containers, 2)
 	first := containers[0].(map[string]any)
-	assert.Equal(t, "paas-app", first["name"])
+	assert.Equal(t, "belune-app", first["name"])
 	assert.Equal(t, true, first["managed"])
 	// The label carries an invalid UUID, so owner resolution yields nothing.
 	assert.Nil(t, first["owner"])

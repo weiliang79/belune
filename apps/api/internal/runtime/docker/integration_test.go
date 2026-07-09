@@ -24,7 +24,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/ungweiliang/selfhost-paas/internal/runtime"
+	"github.com/weiling79/belune/internal/runtime"
 )
 
 const testImage = "busybox:latest"
@@ -35,7 +35,7 @@ func uniqueName(t *testing.T, prefix string) string {
 	if _, err := rand.Read(b[:]); err != nil {
 		t.Fatalf("rand: %v", err)
 	}
-	return "paas-it-" + prefix + "-" + hex.EncodeToString(b[:])
+	return "belune-it-" + prefix + "-" + hex.EncodeToString(b[:])
 }
 
 func newTestClient(t *testing.T) *Client {
@@ -103,7 +103,7 @@ func volumeExists(t *testing.T, c *Client, name string) bool {
 
 // TestIntegration_PruneVolumes_PreservesDataAndCache is the data-loss guard for
 // v0.0.26 application volumes: PruneVolumes must never reap persistent
-// application data (paas-data) or build caches (paas-cache). A regression here
+// application data (belune-data) or build caches (belune-cache). A regression here
 // silently deletes user data whenever the cleanup worker runs while an app's
 // container is absent between deploys.
 //
@@ -132,10 +132,10 @@ func TestIntegration_PruneVolumes_PreservesDataAndCache(t *testing.T) {
 
 	// Unlabeled but platform-named volume (legacy, or Docker-auto-created before
 	// the labelling code) — the name guard MUST keep it, since it may hold user
-	// data even though VolumeCreate never (re)applied the paas-data label.
+	// data even though VolumeCreate never (re)applied the belune-data label.
 	var lb [6]byte
 	_, _ = rand.Read(lb[:])
-	legacy := "paas-vol-itlegacy-" + hex.EncodeToString(lb[:])
+	legacy := "belune-vol-itlegacy-" + hex.EncodeToString(lb[:])
 	_, err := c.cli.VolumeCreate(ctx, volume.CreateOptions{Name: legacy}) // deliberately no labels
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = c.RemoveVolume(context.Background(), legacy) })
@@ -150,8 +150,8 @@ func TestIntegration_PruneVolumes_PreservesDataAndCache(t *testing.T) {
 
 	require.NoError(t, c.PruneVolumes(ctx))
 
-	assert.True(t, volumeExists(t, c, data), "paas-data volume must survive prune")
-	assert.True(t, volumeExists(t, c, cache), "paas-cache volume must survive prune")
+	assert.True(t, volumeExists(t, c, data), "belune-data volume must survive prune")
+	assert.True(t, volumeExists(t, c, cache), "belune-cache volume must survive prune")
 	assert.True(t, volumeExists(t, c, legacy), "unlabeled platform-named volume must survive prune")
 	assert.False(t, volumeExists(t, c, foreign), "foreign dangling volume should be reclaimed")
 }
@@ -171,9 +171,9 @@ func TestIntegration_ContainerLifecycle(t *testing.T) {
 	id, err := c.CreateContainer(ctx, runtime.ContainerConfig{
 		Name:    containerName,
 		Image:   testImage,
-		Cmd:     []string{"sh", "-c", "echo hello-from-paas-it && sleep 3600"},
-		Env:     map[string]string{"PAAS_TEST": "1"},
-		Labels:  map[string]string{"paas-integration-test": "true"},
+		Cmd:     []string{"sh", "-c", "echo hello-from-belune-it && sleep 3600"},
+		Env:     map[string]string{"BELUNE_TEST": "1"},
+		Labels:  map[string]string{"belune-integration-test": "true"},
 		Network: networkName,
 		// Conservative limits so this works on constrained CI boxes.
 		CPULimit:    0.5,
@@ -191,7 +191,7 @@ func TestIntegration_ContainerLifecycle(t *testing.T) {
 	for _, ci := range listed {
 		if ci.ID == id {
 			found = true
-			assert.Equal(t, "true", ci.Labels["paas-integration-test"])
+			assert.Equal(t, "true", ci.Labels["belune-integration-test"])
 		}
 	}
 	assert.True(t, found, "created container should appear in ListContainers")
@@ -215,7 +215,7 @@ func TestIntegration_ContainerLifecycle(t *testing.T) {
 	defer logs.Close()
 	buf, err := io.ReadAll(logs)
 	require.NoError(t, err)
-	assert.Contains(t, string(buf), "hello-from-paas-it")
+	assert.Contains(t, string(buf), "hello-from-belune-it")
 
 	require.NoError(t, c.StopContainer(ctx, id))
 	require.NoError(t, c.RemoveContainer(ctx, id))

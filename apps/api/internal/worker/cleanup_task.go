@@ -11,8 +11,8 @@ import (
 	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5/pgtype"
 
-	"github.com/ungweiliang/selfhost-paas/internal/naming"
-	"github.com/ungweiliang/selfhost-paas/internal/store/generated"
+	"github.com/weiling79/belune/internal/naming"
+	"github.com/weiling79/belune/internal/store/generated"
 )
 
 // settingDailyCleanup gates the periodic (scheduled) cleanup run. Absent or any
@@ -162,7 +162,7 @@ func (h *TaskHandler) cleanupAppDeployments(ctx context.Context, appID pgtype.UU
 
 		if appType == "git" && deploymentIDStr != "" {
 			imageName := naming.ImageTag(projectSlug, appSlug, applicationIDStr, deploymentIDStr)
-			oldImageName := fmt.Sprintf("paas-%s:%s", applicationIDStr[:8], deploymentIDStr[:8])
+			oldImageName := fmt.Sprintf("belune-%s:%s", applicationIDStr[:8], deploymentIDStr[:8])
 			if err := h.Runtime.RemoveImage(ctx, imageName); err != nil {
 				slog.Debug("could not remove image", "image", imageName, "error", err)
 			} else {

@@ -9,9 +9,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/ungweiliang/selfhost-paas/internal/naming"
-	"github.com/ungweiliang/selfhost-paas/internal/service"
-	"github.com/ungweiliang/selfhost-paas/internal/testutil"
+	"github.com/weiling79/belune/internal/naming"
+	"github.com/weiling79/belune/internal/service"
+	"github.com/weiling79/belune/internal/testutil"
 )
 
 func TestApplicationService_Create_FinalizesSlugAndWebhookSecret(t *testing.T) {

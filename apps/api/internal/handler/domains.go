@@ -11,9 +11,9 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 
-	"github.com/ungweiliang/selfhost-paas/internal/naming"
-	"github.com/ungweiliang/selfhost-paas/internal/proxy"
-	"github.com/ungweiliang/selfhost-paas/internal/store/generated"
+	"github.com/weiling79/belune/internal/naming"
+	"github.com/weiling79/belune/internal/proxy"
+	"github.com/weiling79/belune/internal/store/generated"
 )
 
 // hostnameRegex validates RFC 1123 hostnames. Each label is 1–63 alphanumeric characters

@@ -14,9 +14,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/ungweiliang/selfhost-paas/internal/naming"
-	"github.com/ungweiliang/selfhost-paas/internal/runtime/docker"
-	"github.com/ungweiliang/selfhost-paas/internal/store/generated"
+	"github.com/weiling79/belune/internal/naming"
+	"github.com/weiling79/belune/internal/runtime/docker"
+	"github.com/weiling79/belune/internal/store/generated"
 )
 
 // TestUpgradeRoundTrip_RealDocker provisions a real Postgres 16 container,
@@ -24,13 +24,13 @@ import (
 // → restore), and verifies the data survived. It exercises the destructive
 // upgrade path against real engine clients — the part mock tests cannot cover.
 //
-// Gated behind PAAS_DOCKER_INTEGRATION because it pulls images and is slow.
+// Gated behind BELUNE_DOCKER_INTEGRATION because it pulls images and is slow.
 //
-//	Run with: PAAS_DOCKER_INTEGRATION=1 go test ./internal/worker/ \
+//	Run with: BELUNE_DOCKER_INTEGRATION=1 go test ./internal/worker/ \
 //		-run TestUpgradeRoundTrip_RealDocker -timeout 600s -v
 func TestUpgradeRoundTrip_RealDocker(t *testing.T) {
-	if os.Getenv("PAAS_DOCKER_INTEGRATION") == "" {
-		t.Skip("set PAAS_DOCKER_INTEGRATION=1 to run the real-Docker upgrade round-trip")
+	if os.Getenv("BELUNE_DOCKER_INTEGRATION") == "" {
+		t.Skip("set BELUNE_DOCKER_INTEGRATION=1 to run the real-Docker upgrade round-trip")
 	}
 
 	ctx := context.Background()
@@ -102,8 +102,8 @@ func TestUpgradeRoundTrip_RealDocker(t *testing.T) {
 // TestUpgradeRoundTrip_MySQL_RealDocker is the MySQL analogue (8.0 → 8.4),
 // exercising mysqldump/mysql restore-as-root against real containers.
 func TestUpgradeRoundTrip_MySQL_RealDocker(t *testing.T) {
-	if os.Getenv("PAAS_DOCKER_INTEGRATION") == "" {
-		t.Skip("set PAAS_DOCKER_INTEGRATION=1 to run the real-Docker MySQL upgrade round-trip")
+	if os.Getenv("BELUNE_DOCKER_INTEGRATION") == "" {
+		t.Skip("set BELUNE_DOCKER_INTEGRATION=1 to run the real-Docker MySQL upgrade round-trip")
 	}
 
 	ctx := context.Background()
@@ -168,8 +168,8 @@ func TestUpgradeRoundTrip_MySQL_RealDocker(t *testing.T) {
 // TestUpgradeRoundTrip_Mongo_RealDocker is the MongoDB analogue (7 → 8),
 // exercising mongodump/mongorestore against real containers.
 func TestUpgradeRoundTrip_Mongo_RealDocker(t *testing.T) {
-	if os.Getenv("PAAS_DOCKER_INTEGRATION") == "" {
-		t.Skip("set PAAS_DOCKER_INTEGRATION=1 to run the real-Docker Mongo upgrade round-trip")
+	if os.Getenv("BELUNE_DOCKER_INTEGRATION") == "" {
+		t.Skip("set BELUNE_DOCKER_INTEGRATION=1 to run the real-Docker Mongo upgrade round-trip")
 	}
 
 	ctx := context.Background()

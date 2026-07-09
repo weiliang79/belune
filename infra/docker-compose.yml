@@ -4,13 +4,13 @@ services:
     ports:
       - "127.0.0.1:5432:5432"
     environment:
-      POSTGRES_USER: paas
-      POSTGRES_PASSWORD: paas
-      POSTGRES_DB: paas
+      POSTGRES_USER: belune
+      POSTGRES_PASSWORD: belune
+      POSTGRES_DB: belune
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U paas"]
+      test: ["CMD-SHELL", "pg_isready -U belune"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -41,9 +41,9 @@ services:
       - ./caddy/logs:/var/log/caddy
     networks:
       - default
-      - paas-infra
+      - belune-infra
     labels:
-      - dev.orbstack.domains=*.paas.local
+      - dev.orbstack.domains=*.belune.local
 
   buildkit:
     image: moby/buildkit:latest
@@ -64,6 +64,6 @@ volumes:
 
 networks:
   default: {}
-  paas-infra:
-    name: paas-infra
+  belune-infra:
+    name: belune-infra
     external: true

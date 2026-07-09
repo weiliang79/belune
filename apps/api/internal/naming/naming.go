@@ -29,9 +29,9 @@ func IntermediateContainerName(projectSlug, applicationID string) string {
 	return fmt.Sprintf("%s-%s", projectSlug, applicationID[:8])
 }
 
-// OldContainerName returns the legacy container name: "paas-{applicationID[:8]}"
+// OldContainerName returns the legacy container name: "belune-{applicationID[:8]}"
 func OldContainerName(applicationID string) string {
-	return fmt.Sprintf("paas-%s", applicationID[:8])
+	return fmt.Sprintf("belune-%s", applicationID[:8])
 }
 
 // ImageTag returns the image tag: "{appSlug}:{deploymentID[:8]}"
@@ -40,9 +40,9 @@ func ImageTag(_, appSlug, _, deploymentID string) string {
 	return fmt.Sprintf("%s:%s", appSlug, deploymentID[:8])
 }
 
-// ProjectNetworkName returns the Docker network name scoped to a project: "paas-{projectSlug}"
+// ProjectNetworkName returns the Docker network name scoped to a project: "belune-{projectSlug}"
 func ProjectNetworkName(projectSlug string) string {
-	return fmt.Sprintf("paas-%s", projectSlug)
+	return fmt.Sprintf("belune-%s", projectSlug)
 }
 
 // CNBCacheVolumeName returns the Docker volume name holding the CNB
@@ -51,9 +51,9 @@ func ProjectNetworkName(projectSlug string) string {
 // cannot poison another app's cache, and clearing is a single volume delete.
 func CNBCacheVolumeName(applicationID string) string {
 	if len(applicationID) < 8 {
-		return fmt.Sprintf("paas-cnb-cache-%s", applicationID)
+		return fmt.Sprintf("belune-cnb-cache-%s", applicationID)
 	}
-	return fmt.Sprintf("paas-cnb-cache-%s", applicationID[:8])
+	return fmt.Sprintf("belune-cnb-cache-%s", applicationID[:8])
 }
 
 // CNBLaunchCacheVolumeName is the companion launch-layer cache volume. Pack
@@ -61,9 +61,9 @@ func CNBCacheVolumeName(applicationID string) string {
 // colocating naming here avoids drift between the two.
 func CNBLaunchCacheVolumeName(applicationID string) string {
 	if len(applicationID) < 8 {
-		return fmt.Sprintf("paas-cnb-launch-%s", applicationID)
+		return fmt.Sprintf("belune-cnb-launch-%s", applicationID)
 	}
-	return fmt.Sprintf("paas-cnb-launch-%s", applicationID[:8])
+	return fmt.Sprintf("belune-cnb-launch-%s", applicationID[:8])
 }
 
 // AppVolumeName returns the Docker named-volume name for a persistent
@@ -76,5 +76,5 @@ func AppVolumeName(applicationID, volumeName string) string {
 	if len(id) >= 8 {
 		id = id[:8]
 	}
-	return fmt.Sprintf("paas-vol-%s-%s", id, volumeName)
+	return fmt.Sprintf("belune-vol-%s-%s", id, volumeName)
 }
