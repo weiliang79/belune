@@ -469,10 +469,12 @@ func (h *TaskHandler) buildFromGit(ctx context.Context, dc *deployContext) error
 		return fmt.Errorf("build: %w", err)
 	}
 
-	if result.Logs != "" {
+	// Persist the structured (NDJSON) build log built from the streamed lines,
+	// so the stored log matches what live viewers received.
+	if buildLogs := logWriter.NDJSON(); buildLogs != "" {
 		h.Queries.UpdateDeploymentBuildLogs(ctx, generated.UpdateDeploymentBuildLogsParams{
 			ID:        dc.deploymentID,
-			BuildLogs: pgtype.Text{String: result.Logs, Valid: true},
+			BuildLogs: pgtype.Text{String: buildLogs, Valid: true},
 		})
 	}
 

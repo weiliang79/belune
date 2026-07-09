@@ -14,6 +14,8 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"go.opentelemetry.io/otel/attribute"
 
+	"github.com/ungweiliang/selfhost-paas/internal/pkg/joblog"
+	"github.com/ungweiliang/selfhost-paas/internal/pkg/loglevel"
 	"github.com/ungweiliang/selfhost-paas/internal/pkg/metrics"
 	"github.com/ungweiliang/selfhost-paas/internal/pkg/tracing"
 	"github.com/ungweiliang/selfhost-paas/internal/store/generated"
@@ -133,6 +135,15 @@ func (h *TaskHandler) finaliseRun(ctx context.Context, id pgtype.UUID, sizeBytes
 		errText = pgtype.Text{String: errMsg, Valid: true}
 	}
 
+	// Convert the verbatim script output to NDJSON (one detected-level entry per
+	// line) so the log viewer renders it like every other log surface. Append
+	// the failure summary as an explicit error line.
+	var lb joblog.Builder
+	lb.AddRaw("stderr", log)
+	if errMsg != "" {
+		lb.Add(loglevel.Error, errMsg)
+	}
+
 	if err := h.Queries.UpdateBackupRun(ctx, generated.UpdateBackupRunParams{
 		ID:         id,
 		FinishedAt: pgtype.Timestamptz{Time: time.Now(), Valid: true},
@@ -140,7 +151,7 @@ func (h *TaskHandler) finaliseRun(ctx context.Context, id pgtype.UUID, sizeBytes
 		RemoteKey:  remoteKey,
 		SizeBytes:  sizeBytes,
 		Error:      errText,
-		Log:        log,
+		Log:        lb.String(),
 	}); err != nil {
 		slog.Warn("backup_now: failed to update run record", "error", err)
 	}

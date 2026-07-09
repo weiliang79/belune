@@ -254,7 +254,7 @@ func (a *App) Run(ctx context.Context) error {
 	g.Go(func() error { a.redisAdapter.RunBuildLogAdapter(gctx); return nil })
 	g.Go(func() error { a.redisAdapter.RunHostMetricsAdapter(gctx); return nil })
 	g.Go(func() error { a.redisAdapter.RunRequestLogAdapter(gctx); return nil })
-	g.Go(func() error { a.redisAdapter.RunAppLogAdapter(gctx); return nil })
+	g.Go(func() error { a.redisAdapter.RunContainerLogAdapter(gctx); return nil })
 	g.Go(func() error { ws.RunAppMetricsBroadcaster(gctx, a.hub, a.dockerClient, a.queries); return nil })
 	g.Go(func() error { a.eventWatcher.Run(gctx); return nil })
 	g.Go(func() error { a.auditSvc.Run(gctx); return nil })

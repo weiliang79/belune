@@ -58,14 +58,6 @@ type ApplicationFileMount struct {
 	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
 }
 
-type ApplicationLog struct {
-	ID            pgtype.UUID        `json:"id"`
-	ApplicationID pgtype.UUID        `json:"application_id"`
-	Stream        string             `json:"stream"`
-	Message       string             `json:"message"`
-	RecordedAt    pgtype.Timestamptz `json:"recorded_at"`
-}
-
 type ApplicationVolume struct {
 	ID            pgtype.UUID        `json:"id"`
 	ApplicationID pgtype.UUID        `json:"application_id"`
@@ -149,6 +141,16 @@ type BackupRun struct {
 	SizeBytes  int64              `json:"size_bytes"`
 	Error      pgtype.Text        `json:"error"`
 	Log        string             `json:"log"`
+}
+
+type ContainerLog struct {
+	ID         pgtype.UUID        `json:"id"`
+	SourceType string             `json:"source_type"`
+	SourceID   pgtype.UUID        `json:"source_id"`
+	Level      string             `json:"level"`
+	Stream     string             `json:"stream"`
+	Message    string             `json:"message"`
+	RecordedAt pgtype.Timestamptz `json:"recorded_at"`
 }
 
 type Database struct {

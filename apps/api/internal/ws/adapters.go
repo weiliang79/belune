@@ -7,6 +7,8 @@ import (
 	"strings"
 
 	"github.com/redis/go-redis/v9"
+
+	"github.com/ungweiliang/selfhost-paas/internal/pkg/buildlog"
 )
 
 // RedisAdapter bridges Redis pub/sub channels to the WebSocket hub.
@@ -21,7 +23,9 @@ func NewRedisAdapter(rdb *redis.Client, hub *Hub) *RedisAdapter {
 	return &RedisAdapter{rdb: rdb, hub: hub}
 }
 
-// RunBuildLogAdapter forwards build-logs:{deploymentID} messages.
+// RunBuildLogAdapter forwards build-logs:{deploymentID} messages. Payloads are
+// NDJSON log entries; the end-of-stream sentinel is forwarded as a distinct
+// "done" event so the frontend can stop and refetch.
 func (a *RedisAdapter) RunBuildLogAdapter(ctx context.Context) {
 	pubsub := a.rdb.PSubscribe(ctx, "build-logs:*")
 	defer pubsub.Close()
@@ -37,9 +41,12 @@ func (a *RedisAdapter) RunBuildLogAdapter(ctx context.Context) {
 			}
 			// Redis channel: "build-logs:{deploymentID}"
 			// WS channel:    "build-logs:{deploymentID}"
-			wsChannel := msg.Channel
-			data := json.RawMessage(`"` + escapeJSON(msg.Payload) + `"`)
-			a.hub.Broadcast(wsChannel, "log", data)
+			if msg.Payload == buildlog.DoneSentinel {
+				a.hub.Broadcast(msg.Channel, "done", json.RawMessage(`null`))
+				continue
+			}
+			// Payload is already a JSON log entry — forward it verbatim.
+			a.hub.Broadcast(msg.Channel, "log", json.RawMessage(msg.Payload))
 		}
 	}
 }
@@ -90,10 +97,11 @@ func (a *RedisAdapter) RunRequestLogAdapter(ctx context.Context) {
 	}
 }
 
-// RunAppLogAdapter forwards app-logs:{applicationID} messages from Redis.
-// The log collector publishes to these channels.
-func (a *RedisAdapter) RunAppLogAdapter(ctx context.Context) {
-	pubsub := a.rdb.PSubscribe(ctx, "app-logs:*")
+// RunContainerLogAdapter forwards container-logs:{sourceID} messages from Redis
+// to the WebSocket channel of the same name. The log collector publishes app
+// and database container log lines (with a level) to these channels.
+func (a *RedisAdapter) RunContainerLogAdapter(ctx context.Context) {
+	pubsub := a.rdb.PSubscribe(ctx, "container-logs:*")
 	defer pubsub.Close()
 
 	ch := pubsub.Channel()
@@ -105,21 +113,11 @@ func (a *RedisAdapter) RunAppLogAdapter(ctx context.Context) {
 			if !ok {
 				return
 			}
-			// Redis channel: "app-logs:{appID}"
-			// WS channel:    "app-logs:{appID}"
+			// Redis channel: "container-logs:{sourceID}"
+			// WS channel:    "container-logs:{sourceID}"
 			a.hub.Broadcast(msg.Channel, "log", json.RawMessage(msg.Payload))
 		}
 	}
-}
-
-// escapeJSON escapes a string for safe embedding in a JSON string value.
-func escapeJSON(s string) string {
-	b, err := json.Marshal(s)
-	if err != nil {
-		return s
-	}
-	// json.Marshal wraps in quotes; strip them
-	return string(b[1 : len(b)-1])
 }
 
 // ContainerStatusBroadcaster provides a method for the event watcher to push status updates.

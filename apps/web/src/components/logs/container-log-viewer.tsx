@@ -1,0 +1,250 @@
+import { ClockIcon, ListIcon } from "lucide-react";
+import { useCallback, useMemo, useRef, useState } from "react";
+import { LevelFilter, type LevelFilterValue } from "@/components/logs/level-filter";
+import { LogView } from "@/components/logs/log-view";
+import type { LogEntry } from "@/components/logs/parse";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import type { ContainerLogSource } from "@/lib/api/container-logs";
+import { useContainerLogs } from "@/lib/hooks/use-container-logs";
+import { useChannel } from "@/lib/hooks/use-websocket";
+import { normalizeLevel } from "@/lib/logs/level";
+
+const MAX_LIVE = 5000;
+
+const LIMIT_OPTIONS = [100, 300, 500, 1000] as const;
+
+const TIME_RANGES = [
+  { value: "all", label: "All time" },
+  { value: "15m", label: "Last 15 min" },
+  { value: "1h", label: "Last hour" },
+  { value: "6h", label: "Last 6 hours" },
+  { value: "24h", label: "Last 24 hours" },
+  { value: "7d", label: "Last 7 days" },
+] as const;
+
+const RANGE_MS: Record<string, number> = {
+  "15m": 15 * 60_000,
+  "1h": 60 * 60_000,
+  "6h": 6 * 60 * 60_000,
+  "24h": 24 * 60 * 60_000,
+  "7d": 7 * 24 * 60 * 60_000,
+};
+
+/**
+ * Shared live + historical log viewer for application and database containers.
+ * Merges the paginated history query with the live WebSocket stream
+ * (container-logs:{sourceId}), and offers level / keyword / limit / time-range
+ * filters plus a line-wrap toggle.
+ */
+export function ContainerLogViewer({
+  source,
+  projectId,
+  sourceId,
+}: {
+  source: ContainerLogSource;
+  projectId: string;
+  sourceId: string;
+}) {
+  const [q, setQ] = useState("");
+  const [inputValue, setInputValue] = useState("");
+  const [level, setLevel] = useState<LevelFilterValue>("");
+  const [limit, setLimit] = useState(500);
+  const [timeRange, setTimeRange] = useState("all");
+  const [wrap, setWrap] = useState(false);
+  const [follow, setFollow] = useState(true);
+  const [liveLogs, setLiveLogs] = useState<LogEntry[]>([]);
+  const liveIdRef = useRef(0);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  function handleSearchChange(value: string) {
+    setInputValue(value);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => setQ(value), 400);
+  }
+
+  // Snapshot the lower bound when the range changes (kept stable so the query
+  // key doesn't churn every render).
+  const since = useMemo(() => {
+    const ms = RANGE_MS[timeRange];
+    return ms ? new Date(Date.now() - ms).toISOString() : undefined;
+  }, [timeRange]);
+
+  const {
+    data: history,
+    isLoading,
+    error,
+  } = useContainerLogs(source, projectId, sourceId, {
+    limit,
+    q: q || undefined,
+    level: level || undefined,
+    since,
+  });
+
+  // Capture every live line unfiltered; filters are applied at render time so
+  // that changing a filter retroactively re-filters already-received lines.
+  const handleMessage = useCallback((_event: string, data: unknown) => {
+    if (!data || typeof data !== "object") return;
+    const obj = data as {
+      level?: string;
+      stream?: string;
+      message?: string;
+      recorded_at?: string;
+    };
+    if (typeof obj.message !== "string") return;
+
+    liveIdRef.current += 1;
+    setLiveLogs((prev) =>
+      [
+        ...prev,
+        {
+          id: `live-${liveIdRef.current}`,
+          level: normalizeLevel(obj.level ?? "info"),
+          stream: obj.stream === "stderr" ? "stderr" : "stdout",
+          message: obj.message as string,
+          recordedAt: obj.recorded_at ?? new Date().toISOString(),
+        },
+      ].slice(-MAX_LIVE),
+    );
+  }, []);
+
+  const { connected } = useChannel(`container-logs:${sourceId}`, handleMessage);
+
+  // History is most-recent first; reverse to chronological, then append live.
+  // History is already filtered server-side; live lines are filtered here.
+  const entries = useMemo<LogEntry[]>(() => {
+    const historical: LogEntry[] = history
+      ? [...history].reverse().map((e) => ({
+          id: e.id,
+          level: normalizeLevel(e.level),
+          stream: e.stream,
+          message: e.message,
+          recordedAt: e.recorded_at,
+        }))
+      : [];
+    const live = liveLogs.filter((e) => {
+      if (level && e.level !== level) return false;
+      if (q && !e.message.toLowerCase().includes(q.toLowerCase())) return false;
+      return true;
+    });
+    return [...historical, ...live];
+  }, [history, liveLogs, level, q]);
+
+  const filtered = q || level || timeRange !== "all";
+
+  return (
+    <div className="space-y-3 pt-3">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-wrap items-center gap-2">
+          <LevelFilter value={level} onChange={setLevel} />
+
+          <Select
+            value={String(limit)}
+            onValueChange={(v) => v && setLimit(Number(v))}
+          >
+            <SelectTrigger className="h-8 w-40 capitalize" aria-label="Line limit">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {LIMIT_OPTIONS.map((n) => (
+                <SelectItem
+                  key={n}
+                  value={String(n)}
+                  icon={<ListIcon />}
+                  className="capitalize"
+                >
+                  {n} lines
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <Select
+            value={timeRange}
+            onValueChange={(v) => v && setTimeRange(v)}
+          >
+            <SelectTrigger className="h-8 w-44 capitalize" aria-label="Time range">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {TIME_RANGES.map((r) => (
+                <SelectItem
+                  key={r.value}
+                  value={r.value}
+                  icon={<ClockIcon />}
+                  className="capitalize"
+                >
+                  {r.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <Input
+            className="h-8 w-48 text-sm"
+            placeholder="Search logs..."
+            value={inputValue}
+            onChange={(e) => handleSearchChange(e.target.value)}
+          />
+        </div>
+
+        <div className="flex items-center gap-2">
+          <span aria-hidden="true" className="relative flex size-2">
+            {connected && (
+              <span className="bg-status-ready absolute inline-flex size-full animate-ping rounded-full opacity-75" />
+            )}
+            <span
+              className={`relative inline-flex size-2 rounded-full ${connected ? "bg-status-ready" : "bg-text-faint"}`}
+            />
+          </span>
+          <span className="text-muted-foreground text-sm">
+            {connected ? "Connected" : "Disconnected"} · {entries.length}{" "}
+            {entries.length === 1 ? "entry" : "entries"}
+          </span>
+          <Button
+            size="sm"
+            variant={wrap ? "default" : "outline"}
+            onClick={() => setWrap(!wrap)}
+          >
+            Wrap
+          </Button>
+          <Button
+            size="sm"
+            variant={follow ? "default" : "outline"}
+            onClick={() => setFollow(!follow)}
+          >
+            {follow ? "Following" : "Follow"}
+          </Button>
+        </div>
+      </div>
+
+      <Card>
+        <CardContent className="p-0">
+          <LogView
+            entries={entries}
+            follow={follow}
+            wrap={wrap}
+            showTimestamp
+            showLevel
+            isLoading={isLoading}
+            error={error ? `Failed to load log history: ${error.message}` : null}
+            emptyMessage={
+              filtered
+                ? "No logs match the current filter."
+                : "Waiting for logs..."
+            }
+            className="h-[600px]"
+          />
+        </CardContent>
+      </Card>
+    </div>
+  );
+}

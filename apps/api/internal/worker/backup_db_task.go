@@ -16,6 +16,8 @@ import (
 	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/ungweiliang/selfhost-paas/internal/pkg/joblog"
+	"github.com/ungweiliang/selfhost-paas/internal/pkg/loglevel"
 	"github.com/ungweiliang/selfhost-paas/internal/runtime"
 	"github.com/ungweiliang/selfhost-paas/internal/service/backup"
 	statuspkg "github.com/ungweiliang/selfhost-paas/internal/status"
@@ -216,23 +218,33 @@ func dbBackupMethod(db generated.Database) string {
 // avoid hammering the database on chatty engine stderr. The finalise* update
 // always writes the complete log, so a skipped intermediate flush is harmless.
 type runLog struct {
-	sb        strings.Builder
+	b         joblog.Builder
 	flush     func(log string)
 	lastFlush time.Time
 }
 
+// step records an informational progress line.
 func (l *runLog) step(format string, args ...any) {
-	fmt.Fprintf(&l.sb, "%s  %s\n", time.Now().UTC().Format("15:04:05Z"), fmt.Sprintf(format, args...))
+	l.b.Add(loglevel.Info, fmt.Sprintf(format, args...))
 	l.persist(true)
 }
 
-// raw appends captured command output verbatim (trimmed of trailing newlines).
+// warn records a non-fatal warning line.
+func (l *runLog) warn(format string, args ...any) {
+	l.b.Add(loglevel.Warning, fmt.Sprintf(format, args...))
+	l.persist(true)
+}
+
+// fail records a terminal error line.
+func (l *runLog) fail(format string, args ...any) {
+	l.b.Add(loglevel.Error, fmt.Sprintf(format, args...))
+	l.persist(true)
+}
+
+// raw appends captured command output verbatim (stderr from dump/restore
+// tools), one detected-level entry per line.
 func (l *runLog) raw(s string) {
-	s = strings.TrimRight(s, "\n")
-	if s != "" {
-		l.sb.WriteString(s)
-		l.sb.WriteByte('\n')
-	}
+	l.b.AddRaw("stderr", s)
 	l.persist(false)
 }
 
@@ -247,7 +259,7 @@ func (l *runLog) persist(force bool) {
 	l.flush(l.String())
 }
 
-func (l *runLog) String() string { return l.sb.String() }
+func (l *runLog) String() string { return l.b.String() }
 
 // backupScopeLabel renders a human label for a target-database value, for logs.
 func backupScopeLabel(target string) string {
@@ -412,7 +424,7 @@ func (h *TaskHandler) HandleBackupDBTask(ctx context.Context, t *asynq.Task) err
 	} else if h.BackupService != nil && h.BackupService.Enabled() {
 		// Off-host copy is best-effort: keep the local archive when the upload fails.
 		if key, upErr := h.BackupService.Upload(ctx, localPath); upErr != nil {
-			lg.step("S3 upload failed (keeping local copy): %v", upErr)
+			lg.warn("S3 upload failed (keeping local copy): %v", upErr)
 			slog.Warn("backup_db: S3 upload failed; keeping local copy", "database_id", payload.DatabaseID, "error", upErr)
 		} else {
 			remoteKey = pgtype.Text{String: key, Valid: true}
@@ -455,7 +467,7 @@ func (h *TaskHandler) HandleBackupDBTask(ctx context.Context, t *asynq.Task) err
 // failure is noted in the run log but does not fail the (already-uploaded) backup.
 func removeLocalAfterUpload(localPath string, lg *runLog) {
 	if err := os.Remove(localPath); err != nil && !os.IsNotExist(err) {
-		lg.step("Warning: could not remove local copy after upload: %v", err)
+		lg.warn("could not remove local copy after upload: %v", err)
 	}
 }
 
@@ -742,7 +754,7 @@ func (h *TaskHandler) failDatabaseRestoreLog(ctx context.Context, id pgtype.UUID
 	slog.Error("database restore failed", "restore_id", formatUUID(id), "error", errMsg)
 	logText := ""
 	if lg != nil {
-		lg.step("Restore failed: %s", errMsg)
+		lg.fail("Restore failed: %s", errMsg)
 		logText = lg.String()
 	}
 	h.finaliseDatabaseRestore(ctx, id, generated.UpdateDatabaseRestoreParams{
@@ -1008,7 +1020,7 @@ func (h *TaskHandler) failDatabaseBackupLog(ctx context.Context, id pgtype.UUID,
 	slog.Error("database backup failed", "backup_id", formatUUID(id), "error", errMsg)
 	logText := ""
 	if lg != nil {
-		lg.step("Backup failed: %s", errMsg)
+		lg.fail("Backup failed: %s", errMsg)
 		logText = lg.String()
 	}
 	h.finaliseDatabaseBackup(ctx, id, generated.UpdateDatabaseBackupParams{

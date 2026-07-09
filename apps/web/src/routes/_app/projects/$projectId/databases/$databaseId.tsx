@@ -7,6 +7,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { useState } from "react";
+import { ContainerLogViewer } from "@/components/logs/container-log-viewer";
 import { BackupConfigFormDialog } from "@/components/databases/backup-config-form-dialog";
 import { BackupConfigRunsSheet } from "@/components/databases/backup-config-runs-sheet";
 import {
@@ -84,14 +85,16 @@ function dbUpgradable(db: Database): boolean {
   return db.type === "postgres" || db.type === "mysql" || db.type === "mongo";
 }
 
-type DbTab = "overview" | "backups" | "advanced";
+type DbTab = "overview" | "logs" | "backups" | "advanced";
 
 export const Route = createFileRoute(
   "/_app/projects/$projectId/databases/$databaseId",
 )({
   component: DatabaseDetailPage,
   validateSearch: (search: Record<string, unknown>): { tab?: DbTab } =>
-    search.tab === "backups" || search.tab === "advanced"
+    search.tab === "logs" ||
+    search.tab === "backups" ||
+    search.tab === "advanced"
       ? { tab: search.tab as DbTab }
       : {},
 });
@@ -298,6 +301,7 @@ function DatabaseDetailPage() {
         {(
           [
             { value: "overview", label: "Overview" },
+            { value: "logs", label: "Logs" },
             { value: "backups", label: "Backups" },
             { value: "advanced", label: "Advanced" },
           ] as const
@@ -390,6 +394,14 @@ function DatabaseDetailPage() {
 
           {db.status === "running" && <ExternalAccessCard db={db} />}
         </div>
+      )}
+
+      {activeTab === "logs" && (
+        <ContainerLogViewer
+          source="database"
+          projectId={projectId}
+          sourceId={databaseId}
+        />
       )}
 
       {activeTab === "backups" && (

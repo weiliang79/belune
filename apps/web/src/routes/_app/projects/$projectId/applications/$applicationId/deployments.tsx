@@ -23,8 +23,11 @@ import {
   formatDateTimeShort,
   formatDuration,
 } from "@/lib/utils/format";
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import { useChannel } from "@/lib/hooks/use-websocket";
+import { BlobLogViewer } from "@/components/logs/blob-log-viewer";
+import type { LogEntry } from "@/components/logs/parse";
+import { normalizeLevel } from "@/lib/logs/level";
 
 export const Route = createFileRoute(
   "/_app/projects/$projectId/applications/$applicationId/deployments",
@@ -43,58 +46,69 @@ const statusVariant: Record<
   failed: "destructive",
 };
 
+// Live build-log lines are kept in a module-level cache keyed by deployment so
+// that navigating away from the Deployments tab and back restores what was
+// already streamed (component state would otherwise reset to empty, and Redis
+// pub/sub does not replay past messages). Cleared when the build finishes.
+const liveBuildLogCache = new Map<string, LogEntry[]>();
+
 function useBuildLogStream(
   projectId: string,
   applicationId: string,
   deploymentId: string,
   isBuilding: boolean,
 ) {
-  const [lines, setLines] = useState<string[]>([]);
+  const [entries, setEntries] = useState<LogEntry[]>(
+    () => liveBuildLogCache.get(deploymentId) ?? [],
+  );
+  const idRef = useRef(entries.length);
   const queryClient = useQueryClient();
 
   const handleMessage = useCallback(
     (event: string, data: unknown) => {
       if (event === "done") {
+        liveBuildLogCache.delete(deploymentId);
         queryClient.invalidateQueries({
           queryKey: queryKeys.deployments.all(projectId, applicationId),
         });
         return;
       }
-      if (typeof data === "string") {
-        setLines((prev) => [...prev, data]);
-      }
+      // Each message is one NDJSON log entry: { ts, level, msg }.
+      if (!data || typeof data !== "object") return;
+      const obj = data as { ts?: string; level?: string; msg?: string };
+      if (typeof obj.msg !== "string") return;
+      idRef.current += 1;
+      setEntries((prev) => {
+        const next = [
+          ...prev,
+          {
+            id: `build-${idRef.current}`,
+            level: normalizeLevel(obj.level ?? "info"),
+            message: obj.msg as string,
+            recordedAt: obj.ts ?? null,
+          },
+        ];
+        liveBuildLogCache.set(deploymentId, next);
+        return next;
+      });
     },
-    [queryClient, projectId, applicationId],
+    [queryClient, projectId, applicationId, deploymentId],
   );
 
   const channel = isBuilding ? `build-logs:${deploymentId}` : null;
   useChannel(channel, handleMessage);
 
-  return lines;
+  return entries;
 }
 
-function BuildLogViewer({ lines }: { lines: string[] }) {
-  const scrollRef = useRef<HTMLPreElement>(null);
-
-  useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-    }
-  }, [lines]);
-
+function BuildLogViewer({ entries }: { entries: LogEntry[] }) {
   return (
-    <pre
-      ref={scrollRef}
-      className="bg-zinc-950 mt-3 max-h-64 overflow-auto rounded p-3 font-mono text-xs text-zinc-200"
-    >
-      {lines.length === 0 ? (
-        <span className="text-zinc-500">Waiting for build output...</span>
-      ) : (
-        lines.map((line, i) => (
-          <div key={i}>{line}</div>
-        ))
-      )}
-    </pre>
+    <BlobLogViewer
+      className="mt-3"
+      entries={entries}
+      running
+      emptyMessage="Waiting for build output..."
+    />
   );
 }
 
@@ -164,7 +178,12 @@ function DeploymentCard({
 }) {
   const [expanded, setExpanded] = useState(false);
   const isBuilding = d.status === "building" || d.status === "pending";
-  const lines = useBuildLogStream(projectId, applicationId, d.id, isBuilding);
+  const liveEntries = useBuildLogStream(
+    projectId,
+    applicationId,
+    d.id,
+    isBuilding,
+  );
   const canRollback = d.status === "success" && !!d.image_tag;
 
   // Overall duration (started → finished)
@@ -227,15 +246,21 @@ function DeploymentCard({
             </div>
           </div>
         </div>
-        {expanded && isBuilding && <BuildLogViewer lines={lines} />}
-        {expanded && !isBuilding && d.build_logs && (
-          <pre className="bg-muted mt-3 max-h-64 overflow-auto rounded p-3 font-mono text-xs">
-            {d.build_logs}
-          </pre>
-        )}
-        {expanded && d.error_message && (
-          <div className="bg-destructive/10 text-destructive mt-3 rounded p-3 text-sm">
-            {d.error_message}
+        {expanded && (
+          // Stop clicks inside the log area (level filter, wrap toggle, text
+          // selection) from bubbling up to the card and collapsing it.
+          <div onClick={(e) => e.stopPropagation()}>
+            {isBuilding && <BuildLogViewer entries={liveEntries} />}
+            {!isBuilding && d.build_logs && (
+              // Open at the bottom so it stays where the live viewer left off
+              // when the build finishes.
+              <BlobLogViewer className="mt-3" blob={d.build_logs} follow />
+            )}
+            {d.error_message && (
+              <div className="bg-destructive/10 text-destructive mt-3 rounded p-3 text-sm">
+                {d.error_message}
+              </div>
+            )}
           </div>
         )}
       </CardContent>

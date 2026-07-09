@@ -188,22 +188,18 @@ func TestCollector_IngestsContainerLogs(t *testing.T) {
 
 	// Poll until the two log lines land in the DB (the stream is finite so the
 	// watcher flushes immediately after EOF).
+	searchParams := generated.SearchContainerLogsParams{
+		SourceType: "application",
+		SourceID:   app.ID,
+		Limit:      10,
+		Offset:     0,
+	}
 	assert.Eventually(t, func() bool {
-		logs, err := testQueries.ListApplicationLogsByApplication(context.Background(),
-			generated.ListApplicationLogsByApplicationParams{
-				ApplicationID: app.ID,
-				Limit:         10,
-				Offset:        0,
-			})
+		logs, err := testQueries.SearchContainerLogs(context.Background(), searchParams)
 		return err == nil && len(logs) >= 2
 	}, 5*time.Second, 50*time.Millisecond, "expected 2 log lines in DB within 5s")
 
-	logs, err := testQueries.ListApplicationLogsByApplication(context.Background(),
-		generated.ListApplicationLogsByApplicationParams{
-			ApplicationID: app.ID,
-			Limit:         10,
-			Offset:        0,
-		})
+	logs, err := testQueries.SearchContainerLogs(context.Background(), searchParams)
 	require.NoError(t, err)
 	require.Len(t, logs, 2)
 
@@ -211,6 +207,7 @@ func TestCollector_IngestsContainerLogs(t *testing.T) {
 	assert.Contains(t, messages, "hello from collector")
 	assert.Contains(t, messages, "second line")
 	assert.Equal(t, "stdout", logs[0].Stream)
+	assert.Equal(t, "info", logs[0].Level)
 }
 
 // TestCollector_ResumesFromLastLogTime verifies the retention boundary: when the
@@ -224,16 +221,21 @@ func TestCollector_ResumesFromLastLogTime(t *testing.T) {
 	ctx := context.Background()
 
 	// Pre-insert a log line so there is a recorded_at to resume from.
-	require.NoError(t, testQueries.InsertApplicationLog(ctx, generated.InsertApplicationLogParams{
-		ApplicationID: app.ID,
-		Stream:        "stdout",
-		Message:       "pre-existing log",
+	require.NoError(t, testQueries.InsertContainerLog(ctx, generated.InsertContainerLogParams{
+		SourceType: "application",
+		SourceID:   app.ID,
+		Level:      "info",
+		Stream:     "stdout",
+		Message:    "pre-existing log",
 	}))
 
 	// Fetch the exact timestamp the DB stamped; the collector must resume from this + 1ns.
-	latest, err := testQueries.GetLatestApplicationLogTime(ctx, app.ID)
+	latest, err := testQueries.GetLatestContainerLogTime(ctx, generated.GetLatestContainerLogTimeParams{
+		SourceType: "application",
+		SourceID:   app.ID,
+	})
 	require.NoError(t, err)
-	require.True(t, latest.Valid, "GetLatestApplicationLogTime must return a valid time after insert")
+	require.True(t, latest.Valid, "GetLatestContainerLogTime must return a valid time after insert")
 	expectedSince := latest.Time.Add(time.Nanosecond)
 
 	rt := &logStreamRuntime{

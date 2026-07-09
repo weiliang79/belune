@@ -62,38 +62,63 @@ func (h *Handler) StreamLogs(w http.ResponseWriter, r *http.Request) {
 
 // ListApplicationLogs returns paginated, filterable historical application logs.
 // GET /api/projects/{projectId}/applications/{applicationId}/logs/history
+func (h *Handler) ListApplicationLogs(w http.ResponseWriter, r *http.Request) {
+	appID := chi.URLParam(r, "applicationId")
+	var appUUID pgtype.UUID
+	if err := appUUID.Scan(appID); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid application id")
+		return
+	}
+	if !h.canAccessApplication(r, appUUID) {
+		writeError(w, http.StatusForbidden, "access denied")
+		return
+	}
+	h.listContainerLogs(w, r, "application", appUUID)
+}
+
+// ListDatabaseLogs returns paginated, filterable historical database logs.
+// GET /api/projects/{projectId}/databases/{databaseId}/logs/history
+func (h *Handler) ListDatabaseLogs(w http.ResponseWriter, r *http.Request) {
+	dbID := chi.URLParam(r, "databaseId")
+	var dbUUID pgtype.UUID
+	if err := dbUUID.Scan(dbID); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid database id")
+		return
+	}
+	if !h.canAccessDatabase(r, dbUUID) {
+		writeError(w, http.StatusForbidden, "access denied")
+		return
+	}
+	h.listContainerLogs(w, r, "database", dbUUID)
+}
+
+// listContainerLogs is the shared implementation behind the application and
+// database log-history endpoints.
 //
 // Query params:
 //
 //	q      — keyword search (case-insensitive substring match on message)
+//	level  — filter by level: "debug" | "info" | "warning" | "error"
 //	stream — filter by stream: "stdout" or "stderr"
 //	since  — RFC3339 timestamp lower bound (inclusive)
 //	until  — RFC3339 timestamp upper bound (inclusive)
 //	limit  — page size (default 500, max 1000)
 //	offset — pagination offset
-func (h *Handler) ListApplicationLogs(w http.ResponseWriter, r *http.Request) {
-	applicationID := chi.URLParam(r, "applicationId")
-	var appUUID pgtype.UUID
-	if err := appUUID.Scan(applicationID); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid application id")
-		return
-	}
-
-	if !h.canAccessApplication(r, appUUID) {
-		writeError(w, http.StatusForbidden, "access denied")
-		return
-	}
-
+func (h *Handler) listContainerLogs(w http.ResponseWriter, r *http.Request, sourceType string, sourceID pgtype.UUID) {
 	q := r.URL.Query()
 	limit, offset := parseLogspagination(r)
 
-	params := generated.SearchApplicationLogsParams{
-		ApplicationID: appUUID,
-		Limit:         limit,
-		Offset:        offset,
+	params := generated.SearchContainerLogsParams{
+		SourceType: sourceType,
+		SourceID:   sourceID,
+		Limit:      limit,
+		Offset:     offset,
 	}
 	if v := q.Get("q"); v != "" {
 		params.Q = pgtype.Text{String: v, Valid: true}
+	}
+	if v := q.Get("level"); v == "debug" || v == "info" || v == "warning" || v == "error" {
+		params.Level = pgtype.Text{String: v, Valid: true}
 	}
 	if v := q.Get("stream"); v == "stdout" || v == "stderr" {
 		params.Stream = pgtype.Text{String: v, Valid: true}
@@ -109,9 +134,9 @@ func (h *Handler) ListApplicationLogs(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	logs, err := h.queries.SearchApplicationLogs(r.Context(), params)
+	logs, err := h.queries.SearchContainerLogs(r.Context(), params)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to list application logs")
+		writeError(w, http.StatusInternalServerError, "failed to list logs")
 		return
 	}
 

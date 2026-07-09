@@ -1,13 +1,13 @@
 // Package logcollector attaches to running container log streams, batch-inserts
-// log lines into the application_logs table, and publishes them to Redis pub/sub
-// so live SSE consumers can receive them.
+// log lines into the container_logs table (tagged with a heuristic severity
+// level), and publishes them to Redis pub/sub so live WebSocket consumers can
+// receive them. It watches both application and database containers.
 package logcollector
 
 import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"fmt"
 	"log/slog"
 	"strings"
 	"sync"
@@ -20,12 +20,38 @@ import (
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 
+	"github.com/ungweiliang/selfhost-paas/internal/pkg/loglevel"
 	"github.com/ungweiliang/selfhost-paas/internal/pkg/tracing"
 	"github.com/ungweiliang/selfhost-paas/internal/runtime"
 	"github.com/ungweiliang/selfhost-paas/internal/store/generated"
 )
 
-const labelApplicationID = "application-id"
+const (
+	labelApplicationID = "application-id"
+	labelDatabaseID    = "database-id"
+
+	sourceApplication = "application"
+	sourceDatabase    = "database"
+)
+
+// containerSource identifies which resource a container belongs to, derived
+// from its labels.
+type containerSource struct {
+	typ string // sourceApplication | sourceDatabase
+	id  string // resource UUID (the label value)
+}
+
+// sourceOf returns the log source for a container, or false if the container
+// carries neither an application-id nor a database-id label.
+func sourceOf(labels map[string]string) (containerSource, bool) {
+	if id := labels[labelApplicationID]; id != "" {
+		return containerSource{typ: sourceApplication, id: id}, true
+	}
+	if id := labels[labelDatabaseID]; id != "" {
+		return containerSource{typ: sourceDatabase, id: id}, true
+	}
+	return containerSource{}, false
+}
 
 // maxConcurrentWatchers caps how many container log streams the collector
 // will track concurrently. Each watcher holds a Docker log stream + a
@@ -92,14 +118,14 @@ func (c *Collector) sync(ctx context.Context) {
 		return
 	}
 
-	// Build set of running container IDs that have our app label.
+	// Build set of running container IDs that belong to an application or
+	// database (i.e. carry one of our resource labels).
 	active := make(map[string]struct{})
 	for _, ctr := range containers {
 		if ctr.Status != "running" {
 			continue
 		}
-		appID, ok := ctr.Labels[labelApplicationID]
-		if !ok || appID == "" {
+		if _, ok := sourceOf(ctr.Labels); !ok {
 			continue
 		}
 		active[ctr.ID] = struct{}{}
@@ -147,6 +173,8 @@ func (c *Collector) sync(ctx context.Context) {
 type logLine struct {
 	stream  string
 	message string
+	level   string
+	ts      time.Time // event time from the Docker log stream (zero if unparsed)
 }
 
 // chanWriter demultiplexes a Docker log stream into lines and sends them to ch.
@@ -163,11 +191,16 @@ func (w *chanWriter) Write(p []byte) (int, error) {
 		if idx < 0 {
 			break
 		}
-		msg := strings.TrimRight(string(w.buf[:idx]), "\r")
-		msg = stripTimestamp(msg)
+		raw := strings.TrimRight(string(w.buf[:idx]), "\r")
+		ts, msg := splitTimestamp(raw)
 		if msg != "" {
 			select {
-			case w.ch <- logLine{stream: w.stream, message: msg}:
+			case w.ch <- logLine{
+				stream:  w.stream,
+				message: msg,
+				level:   string(loglevel.Detect(msg, w.stream)),
+				ts:      ts,
+			}:
 			default: // drop if channel full rather than blocking
 			}
 		}
@@ -176,17 +209,19 @@ func (w *chanWriter) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
-// stripTimestamp removes the Docker-prepended RFC3339Nano timestamp prefix.
-// Format: "2025-01-01T00:00:00.000000000Z message"
-func stripTimestamp(line string) string {
-	if len(line) < 20 {
-		return line
-	}
+// splitTimestamp separates the Docker-prepended RFC3339Nano timestamp prefix
+// from the log message, returning the parsed event time and the remaining text.
+// Format: "2025-01-01T00:00:00.000000000Z message". If the prefix can't be
+// parsed, a zero time and the original line are returned (recorded_at then
+// falls back to the DB's NOW()).
+func splitTimestamp(line string) (time.Time, string) {
 	idx := strings.IndexByte(line, ' ')
-	if idx > 0 && idx <= 36 && line[4] == '-' && strings.ContainsAny(line[:idx], "TZ") {
-		return line[idx+1:]
+	if idx > 0 && idx <= 36 {
+		if ts, err := time.Parse(time.RFC3339Nano, line[:idx]); err == nil {
+			return ts, line[idx+1:]
+		}
 	}
-	return line
+	return time.Time{}, line
 }
 
 func (c *Collector) watchContainer(ctx context.Context, ctr runtime.ContainerInfo) {
@@ -198,21 +233,30 @@ func (c *Collector) watchContainer(ctx context.Context, ctr runtime.ContainerInf
 	)
 	defer span.End()
 
-	appIDStr := ctr.Labels[labelApplicationID]
-	var appUUID pgtype.UUID
-	if err := appUUID.Scan(appIDStr); err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
-		slog.Warn("log collector: invalid application-id label", "container", ctr.Name, "app_id", appIDStr)
+	src, ok := sourceOf(ctr.Labels)
+	if !ok {
 		return
 	}
-	span.SetAttributes(attribute.String("application.id", appIDStr))
+	var srcUUID pgtype.UUID
+	if err := srcUUID.Scan(src.id); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		slog.Warn("log collector: invalid source id label", "container", ctr.Name, "source_type", src.typ, "source_id", src.id)
+		return
+	}
+	span.SetAttributes(
+		attribute.String("log.source_type", src.typ),
+		attribute.String("log.source_id", src.id),
+	)
 
-	// Resume from the last recorded log for this application so a restarted
-	// API server (or a brand-new container) doesn't drop early log lines.
+	// Resume from the last recorded log for this source so a restarted API
+	// server (or a brand-new container) doesn't drop early log lines.
 	// Zero time = fetch from the beginning of the container's log buffer.
 	var since time.Time
-	latest, err := c.queries.GetLatestApplicationLogTime(ctx, appUUID)
+	latest, err := c.queries.GetLatestContainerLogTime(ctx, generated.GetLatestContainerLogTimeParams{
+		SourceType: src.typ,
+		SourceID:   srcUUID,
+	})
 	if err == nil && latest.Valid {
 		// Add 1ns so we don't re-ingest the exact line we already stored.
 		since = latest.Time.Add(time.Nanosecond)
@@ -220,7 +264,8 @@ func (c *Collector) watchContainer(ctx context.Context, ctr runtime.ContainerInf
 
 	slog.Info("log collector: attaching to container",
 		"container", ctr.Name,
-		"app_id", appIDStr,
+		"source_type", src.typ,
+		"source_id", src.id,
 		"since", since.Format(time.RFC3339Nano))
 
 	rc, err := c.runtime.ContainerLogsSince(ctx, ctr.ID, since)
@@ -238,15 +283,30 @@ func (c *Collector) watchContainer(ctx context.Context, ctr runtime.ContainerInf
 		stdcopy.StdCopy(stdout, stderr, rc) //nolint:errcheck
 	}()
 
-	var batch []generated.InsertApplicationLogParams
+	var batch []generated.InsertContainerLogParams
 	flushTicker := time.NewTicker(c.flushEvery)
 	defer flushTicker.Stop()
+
+	appendLine := func(line logLine) {
+		var recordedAt pgtype.Timestamptz
+		if !line.ts.IsZero() {
+			recordedAt = pgtype.Timestamptz{Time: line.ts, Valid: true}
+		}
+		batch = append(batch, generated.InsertContainerLogParams{
+			SourceType: src.typ,
+			SourceID:   srcUUID,
+			Level:      line.level,
+			Stream:     line.stream,
+			Message:    line.message,
+			RecordedAt: recordedAt,
+		})
+	}
 
 	flush := func(flushCtx context.Context) {
 		if len(batch) == 0 {
 			return
 		}
-		c.flush(flushCtx, appUUID, appIDStr, batch)
+		c.flush(flushCtx, src, batch)
 		batch = batch[:0]
 	}
 
@@ -259,11 +319,7 @@ func (c *Collector) watchContainer(ctx context.Context, ctr runtime.ContainerInf
 				slog.Info("log collector: container log stream ended", "container", ctr.Name)
 				return
 			}
-			batch = append(batch, generated.InsertApplicationLogParams{
-				ApplicationID: appUUID,
-				Stream:        line.stream,
-				Message:       line.message,
-			})
+			appendLine(line)
 			if len(batch) >= c.batchSize {
 				flush(ctx)
 			}
@@ -280,11 +336,7 @@ func (c *Collector) watchContainer(ctx context.Context, ctr runtime.ContainerInf
 					if !ok {
 						break drainLoop
 					}
-					batch = append(batch, generated.InsertApplicationLogParams{
-						ApplicationID: appUUID,
-						Stream:        line.stream,
-						Message:       line.message,
-					})
+					appendLine(line)
 				case <-drainTimeout:
 					break drainLoop
 				}
@@ -299,31 +351,37 @@ func (c *Collector) watchContainer(ctx context.Context, ctr runtime.ContainerInf
 	}
 }
 
-func (c *Collector) flush(ctx context.Context, appID pgtype.UUID, appIDStr string, batch []generated.InsertApplicationLogParams) {
+func (c *Collector) flush(ctx context.Context, src containerSource, batch []generated.InsertContainerLogParams) {
 	ctx, span := tracing.Tracer().Start(ctx, "logcollector.flush",
 		trace.WithAttributes(
-			attribute.String("application.id", appIDStr),
+			attribute.String("log.source_type", src.typ),
+			attribute.String("log.source_id", src.id),
 			attribute.Int("log.batch_size", len(batch)),
 		),
 	)
 	defer span.End()
 
+	// All lines in a batch share one source, so the Redis channel is constant.
+	channel := "container-logs:" + src.id
+
 	for _, p := range batch {
-		if err := c.queries.InsertApplicationLog(ctx, p); err != nil {
+		if err := c.queries.InsertContainerLog(ctx, p); err != nil {
 			span.RecordError(err)
-			slog.Warn("log collector: failed to insert application log", "error", err)
+			slog.Warn("log collector: failed to insert container log", "error", err)
 			continue
 		}
 
 		// Publish to Redis for live WebSocket consumers.
+		recordedAt := time.Now()
+		if p.RecordedAt.Valid {
+			recordedAt = p.RecordedAt.Time
+		}
 		payload, _ := json.Marshal(map[string]any{
-			"stream":  p.Stream,
-			"message": p.Message,
+			"level":       p.Level,
+			"stream":      p.Stream,
+			"message":     p.Message,
+			"recorded_at": recordedAt.UTC().Format(time.RFC3339Nano),
 		})
-		appIDFormatted := fmt.Sprintf("%x-%x-%x-%x-%x",
-			appID.Bytes[0:4], appID.Bytes[4:6],
-			appID.Bytes[6:8], appID.Bytes[8:10],
-			appID.Bytes[10:16])
-		c.rdb.Publish(ctx, "app-logs:"+appIDFormatted, string(payload))
+		c.rdb.Publish(ctx, channel, string(payload))
 	}
 }

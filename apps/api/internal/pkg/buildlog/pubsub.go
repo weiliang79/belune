@@ -9,7 +9,11 @@ import (
 )
 
 const channelPrefix = "build-logs:"
-const doneSentinel = "__done__"
+
+// DoneSentinel is published to the channel to signal end-of-stream. It is an
+// exact non-JSON payload so consumers (the WS adapter, the SSE subscriber) can
+// distinguish it from an NDJSON log entry.
+const DoneSentinel = "__done__"
 
 // Publisher publishes build log lines to a Redis Pub/Sub channel.
 type Publisher struct {
@@ -31,7 +35,7 @@ func (p *Publisher) Publish(ctx context.Context, line string) error {
 
 // Close publishes the done sentinel to signal end of stream.
 func (p *Publisher) Close(ctx context.Context) error {
-	return p.rdb.Publish(ctx, p.channel, doneSentinel).Err()
+	return p.rdb.Publish(ctx, p.channel, DoneSentinel).Err()
 }
 
 // Subscriber subscribes to build log lines from a Redis Pub/Sub channel.
@@ -72,7 +76,7 @@ func (s *Subscriber) Channel(ctx context.Context) <-chan string {
 				if !ok {
 					return
 				}
-				if msg.Payload == doneSentinel {
+				if msg.Payload == DoneSentinel {
 					return
 				}
 				select {

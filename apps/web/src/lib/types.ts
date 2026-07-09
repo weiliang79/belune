@@ -234,9 +234,11 @@ export interface RequestLog {
   recorded_at: string;
 }
 
-export interface ApplicationLog {
+export interface ContainerLog {
   id: string;
-  application_id: string;
+  source_type: "application" | "database";
+  source_id: string;
+  level: "debug" | "info" | "warning" | "error";
   stream: "stdout" | "stderr";
   message: string;
   recorded_at: string;

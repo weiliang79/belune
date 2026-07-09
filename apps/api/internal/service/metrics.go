@@ -120,10 +120,10 @@ func (s *MetricsService) RetentionCleanup(ctx context.Context) {
 	}
 
 	daysStr := pgtype.Text{String: fmt.Sprintf("%d", appLogRetentionDays), Valid: true}
-	if err := s.queries.DeleteOldApplicationLogs(ctx, daysStr); err != nil {
-		slog.Error("failed to delete old application logs", "error", err)
+	if err := s.queries.DeleteOldContainerLogs(ctx, daysStr); err != nil {
+		slog.Error("failed to delete old container logs", "error", err)
 	} else {
-		slog.Info("application log retention cleanup completed", "retention_days", appLogRetentionDays)
+		slog.Info("container log retention cleanup completed", "retention_days", appLogRetentionDays)
 	}
 
 	// Request log retention (same period as app logs)

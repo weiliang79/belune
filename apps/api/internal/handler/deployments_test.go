@@ -153,10 +153,12 @@ func TestListApplicationLogs(t *testing.T) {
 	var appUUID pgtype.UUID
 	require.NoError(t, appUUID.Scan(appID))
 	ctx := context.Background()
-	require.NoError(t, env.Queries.InsertApplicationLog(ctx, generated.InsertApplicationLogParams{
-		ApplicationID: appUUID,
-		Stream:        "stdout",
-		Message:       "hello from test",
+	require.NoError(t, env.Queries.InsertContainerLog(ctx, generated.InsertContainerLogParams{
+		SourceType: "application",
+		SourceID:   appUUID,
+		Level:      "info",
+		Stream:     "stdout",
+		Message:    "hello from test",
 	}))
 
 	// Should now return 1 entry

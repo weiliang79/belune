@@ -1,5 +1,5 @@
-import { useEffect, useRef } from "react";
 import { Loader2Icon } from "lucide-react";
+import { BlobLogViewer } from "@/components/logs/blob-log-viewer";
 import {
   Dialog,
   DialogContent,
@@ -10,6 +10,7 @@ import {
 // LiveLogDialog shows a run's log and keeps it scrolled to the bottom as it
 // grows. When `running` is true the log is still streaming in (the parent polls
 // the run and passes the latest log), so it shows a spinner + a waiting hint.
+// The log is rendered with per-line level coloring and a level filter.
 export function LiveLogDialog({
   open,
   onOpenChange,
@@ -23,15 +24,9 @@ export function LiveLogDialog({
   log: string;
   running: boolean;
 }) {
-  const preRef = useRef<HTMLPreElement>(null);
-  useEffect(() => {
-    const el = preRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
-  }, [log]);
-
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-2xl">
+      <DialogContent className="sm:max-w-3xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             {title}
@@ -43,13 +38,12 @@ export function LiveLogDialog({
             )}
           </DialogTitle>
         </DialogHeader>
-        <pre
-          ref={preRef}
-          className="bg-muted/40 max-h-[60vh] overflow-auto rounded-md border p-3 font-mono text-xs whitespace-pre-wrap"
-        >
-          {log.trim() ||
-            (running ? "Waiting for output…" : "No log recorded for this run.")}
-        </pre>
+        <BlobLogViewer
+          blob={log}
+          running={running}
+          emptyMessage="No log recorded for this run."
+          heightClass="h-[60vh]"
+        />
       </DialogContent>
     </Dialog>
   );

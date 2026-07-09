@@ -8,6 +8,7 @@ import {
 } from "@/lib/hooks/use-backups";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { BlobLogViewer } from "@/components/logs/blob-log-viewer";
 import { StatusPill } from "@/components/ui/status-pill";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -214,9 +215,7 @@ export function SystemBackupsPanel() {
                     </div>
                   )}
                   {text ? (
-                    <pre className="bg-elev max-h-96 overflow-auto rounded p-3 font-mono text-xs whitespace-pre-wrap">
-                      {text}
-                    </pre>
+                    <BlobLogViewer blob={text} heightClass="max-h-96" />
                   ) : (
                     <span className="text-text-faint text-xs">
                       No log captured for this run.

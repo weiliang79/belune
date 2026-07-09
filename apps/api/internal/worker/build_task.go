@@ -155,11 +155,11 @@ func (h *TaskHandler) HandleBuildTask(ctx context.Context, t *asynq.Task) error 
 		return fmt.Errorf("build: %w", err)
 	}
 
-	// Store build logs
-	if result.Logs != "" {
+	// Store the structured (NDJSON) build log built from the streamed lines.
+	if buildLogs := logWriter.NDJSON(); buildLogs != "" {
 		h.Queries.UpdateDeploymentBuildLogs(ctx, generated.UpdateDeploymentBuildLogsParams{
 			ID:        deploymentID,
-			BuildLogs: pgtype.Text{String: result.Logs, Valid: true},
+			BuildLogs: pgtype.Text{String: buildLogs, Valid: true},
 		})
 	}
 
