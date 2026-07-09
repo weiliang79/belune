@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Self-Hosted PaaS — Installer
+# Belune — Installer
 # Usage: curl -sSL https://raw.githubusercontent.com/weiling79/belune/main/scripts/install.sh | bash
 set -euo pipefail
 
@@ -24,7 +24,7 @@ random_hex() {
 # ── Pre-flight checks ──────────────────────────────────────────────────────────
 
 echo ""
-echo "  Self-Hosted PaaS — Installer"
+echo "  Belune — Installer"
 echo "  =============================="
 echo ""
 
@@ -74,7 +74,7 @@ else
   INSTALL_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
   cat > .env <<EOF
-# Self-Hosted PaaS — generated on ${INSTALL_DATE}
+# Belune — generated on ${INSTALL_DATE}
 
 POSTGRES_USER=belune
 POSTGRES_PASSWORD=${PG_PASS}
@@ -123,7 +123,7 @@ docker run --rm --entrypoint="" "${IMAGE}" \
 
 # ── Wait for health ────────────────────────────────────────────────────────────
 
-info "Waiting for PaaS to become ready..."
+info "Waiting for Belune to become ready..."
 MAX_WAIT=60
 ELAPSED=0
 until curl -sf http://localhost:8080/healthz >/dev/null 2>&1; do

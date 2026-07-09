@@ -46,7 +46,7 @@
     },
     {
       "type": "timeseries",
-      "title": "Caddy admin calls from PaaS API",
+      "title": "Caddy admin calls from Belune API",
       "gridPos": { "x": 12, "y": 8, "w": 12, "h": 8 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "targets": [

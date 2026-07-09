@@ -1,4 +1,4 @@
-# Self-Hosted PaaS — Project Structure & Architecture
+# Belune — Project Structure & Architecture
 
 ## Overview
 

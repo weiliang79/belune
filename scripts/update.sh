@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Self-Hosted PaaS — Updater
+# Belune — Updater
 # Run from the install directory: bash update.sh
 set -euo pipefail
 
@@ -10,12 +10,12 @@ success() { echo "  [ok]    $*"; }
 die()     { echo "  [err]   $*" >&2; exit 1; }
 
 [[ -f "${INSTALL_DIR}/docker-compose.yml" ]] || \
-  die "No docker-compose.yml found at ${INSTALL_DIR}. Is PaaS installed?"
+  die "No docker-compose.yml found at ${INSTALL_DIR}. Is Belune installed?"
 
 cd "${INSTALL_DIR}"
 
 echo ""
-echo "  Self-Hosted PaaS — Updater"
+echo "  Belune — Updater"
 echo "  ============================"
 echo ""
 
@@ -44,7 +44,7 @@ docker run --rm --entrypoint="" "${BELUNE_IMAGE}" \
 
 # ── Wait for health ────────────────────────────────────────────────────────────
 
-info "Waiting for PaaS to become ready..."
+info "Waiting for Belune to become ready..."
 MAX_WAIT=60
 ELAPSED=0
 until curl -sf http://localhost:8080/healthz >/dev/null 2>&1; do

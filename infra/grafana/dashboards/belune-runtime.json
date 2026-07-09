@@ -1,6 +1,6 @@
 {
   "uid": "belune-runtime",
-  "title": "PaaS Runtime",
+  "title": "Belune Runtime",
   "tags": ["belune"],
   "timezone": "browser",
   "schemaVersion": 39,

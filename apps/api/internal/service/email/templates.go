@@ -26,7 +26,7 @@ func loadTemplates() (map[string]*templateDef, error) {
 		subject string
 	}{
 		{"password_reset", "Reset your password"},
-		{"user_invitation", "You've been invited to Self-Hosted PaaS"},
+		{"user_invitation", "You've been invited to Belune"},
 		{"alert_deploy_failed", "Deployment failed"},
 		{"alert_build_failed", "Build failed"},
 		{"alert_quota_threshold", "Quota threshold reached"},

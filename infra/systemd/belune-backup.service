@@ -1,5 +1,5 @@
 [Unit]
-Description=Self-Hosted PaaS — nightly backup
+Description=Belune — nightly backup
 Documentation=https://github.com/weiling79/belune/blob/main/docs/runbooks/backup-storage.md
 After=docker.service belune.service
 Requires=docker.service

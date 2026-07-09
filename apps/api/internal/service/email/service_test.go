@@ -18,7 +18,7 @@ func logOnlyCfg() *config.Config {
 		SMTPHost:      "",
 		SMTPPort:      587,
 		SMTPFromEmail: "noreply@example.com",
-		SMTPFromName:  "Self-Hosted PaaS",
+		SMTPFromName:  "Belune",
 		SMTPTLSMode:   "starttls",
 		PublicBaseURL: "https://belune.example.com",
 	}
@@ -72,7 +72,7 @@ func TestTemplates_UserInvitation(t *testing.T) {
 	subject, textBody, htmlBody, err := svc.Render("user_invitation", vars)
 	require.NoError(t, err)
 
-	assert.Equal(t, "You've been invited to Self-Hosted PaaS", subject)
+	assert.Equal(t, "You've been invited to Belune", subject)
 	assert.Contains(t, textBody, "operator")
 	assert.Contains(t, textBody, "https://belune.example.com/accept-invite?token=xyz789")
 	assert.Contains(t, textBody, "7 days")

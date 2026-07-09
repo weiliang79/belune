@@ -1,5 +1,5 @@
 [Unit]
-Description=Daily backup timer for Self-Hosted PaaS
+Description=Daily backup timer for Belune
 After=belune.service
 
 [Timer]

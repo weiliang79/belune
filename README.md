@@ -1,4 +1,4 @@
-# Self-Hosted PaaS
+# Belune
 
 A self-hosted Platform-as-a-Service for deploying applications with automatic builds, custom domains, and managed databases.
 

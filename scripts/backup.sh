@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Self-Hosted PaaS — Backup
+# Belune — Backup
 # Creates a timestamped backup of Postgres data and Caddy TLS certs.
 # Usage: bash backup.sh [output-dir]
 #
@@ -31,12 +31,12 @@ success() { echo "  [ok]    $*"; }
 die()     { echo "  [err]   $*" >&2; exit 1; }
 
 [[ -f "${INSTALL_DIR}/docker-compose.yml" ]] || \
-  die "No docker-compose.yml found at ${INSTALL_DIR}. Is PaaS installed?"
+  die "No docker-compose.yml found at ${INSTALL_DIR}. Is Belune installed?"
 
 cd "${INSTALL_DIR}"
 
 echo ""
-echo "  Self-Hosted PaaS — Backup"
+echo "  Belune — Backup"
 echo "  ==========================="
 echo ""
 

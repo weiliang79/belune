@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Self-Hosted PaaS — Restore
+# Belune — Restore
 # Restores a backup created by backup.sh.
 #
 # Usage:
@@ -59,12 +59,12 @@ BACKUP_IDENTITY_FILE="${POSITIONAL[1]:-${BACKUP_IDENTITY_FILE:-}}"
 [[ -n "${BACKUP_ARCHIVE}" ]] || usage 1
 [[ -f "${BACKUP_ARCHIVE}" ]] || die "Backup file not found: ${BACKUP_ARCHIVE}"
 [[ -f "${INSTALL_DIR}/docker-compose.yml" ]] || \
-  die "No docker-compose.yml found at ${INSTALL_DIR}. Is PaaS installed?"
+  die "No docker-compose.yml found at ${INSTALL_DIR}. Is Belune installed?"
 
 cd "${INSTALL_DIR}"
 
 echo ""
-echo "  Self-Hosted PaaS — Restore"
+echo "  Belune — Restore"
 echo "  ============================"
 echo "  Source:  ${BACKUP_ARCHIVE}"
 ${DRY_RUN} && echo "  Mode:    DRY RUN (no changes will be made)"

@@ -78,7 +78,7 @@ type Config struct {
 	SMTPUser      string
 	SMTPPassword  string
 	SMTPFromEmail string
-	SMTPFromName  string // default "Self-Hosted PaaS"
+	SMTPFromName  string // default "Belune"
 	SMTPTLSMode   string // none | starttls | tls (default: starttls)
 
 	// Backup remote storage. When BackupRemoteEnabled is false all BACKUP_S3_*
@@ -156,7 +156,7 @@ func Load() (*Config, error) {
 		SMTPUser:      getEnv("SMTP_USER", ""),
 		SMTPPassword:  getEnv("SMTP_PASSWORD", ""),
 		SMTPFromEmail: getEnv("SMTP_FROM_EMAIL", ""),
-		SMTPFromName:  getEnv("SMTP_FROM_NAME", "Self-Hosted PaaS"),
+		SMTPFromName:  getEnv("SMTP_FROM_NAME", "Belune"),
 		SMTPTLSMode:   getEnv("SMTP_TLS_MODE", "starttls"),
 
 		BackupRemoteEnabled:       getEnvBool("BACKUP_REMOTE_ENABLED", false),

@@ -36,12 +36,12 @@ var (
 
 	httpRequestsTotal = factory.NewCounterVec(prometheus.CounterOpts{
 		Name: "belune_http_requests_total",
-		Help: "HTTP requests served by the PaaS API, labelled by chi route pattern and status class.",
+		Help: "HTTP requests served by the Belune API, labelled by chi route pattern and status class.",
 	}, []string{"method", "pattern", "status"})
 
 	httpRequestDuration = factory.NewHistogramVec(prometheus.HistogramOpts{
 		Name:    "belune_http_request_duration_seconds",
-		Help:    "Latency of HTTP requests served by the PaaS API.",
+		Help:    "Latency of HTTP requests served by the Belune API.",
 		Buckets: []float64{0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10},
 	}, []string{"method", "pattern"})
 

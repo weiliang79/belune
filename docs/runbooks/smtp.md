@@ -22,7 +22,7 @@ SMTP_PORT=587
 SMTP_USER=apikey                      # or full email address, depends on provider
 SMTP_PASSWORD=<secret>
 SMTP_FROM_EMAIL=noreply@example.com
-SMTP_FROM_NAME=Self-Hosted PaaS
+SMTP_FROM_NAME=Belune
 SMTP_TLS_MODE=starttls                # starttls | tls | none
 ```
 

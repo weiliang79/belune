@@ -16,7 +16,7 @@ type settingResponse struct {
 
 // defaultInstanceName is used when the operator has not set one. It seeds both
 // the GitHub App manifest name and the dashboard brand.
-const defaultInstanceName = "Self-Hosted PaaS"
+const defaultInstanceName = "Belune"
 
 // instanceName returns the configured "instance_name" setting, or the default
 // when unset/blank.

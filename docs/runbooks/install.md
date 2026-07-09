@@ -1,6 +1,6 @@
 # Install & First-Run Checklist
 
-End-to-end runbook for bringing a fresh Self-Hosted PaaS install online: DNS,
+End-to-end runbook for bringing a fresh Belune install online: DNS,
 TLS, first deploy, persistence, and updates. Pair with `scripts/install.sh`,
 which handles the boring parts (compose, secrets, image pull) automatically.
 
