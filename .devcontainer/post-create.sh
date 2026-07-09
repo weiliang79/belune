@@ -14,6 +14,9 @@ export GOFLAGS="-p=2"
 echo "==> Ensuring build temp dir is writable..."
 # Must happen first — TMPDIR is set to this path in docker-compose, so Go uses it
 # for its own build cache before we get to the bottom of this script.
+# mkdir -p makes this idempotent even if the bind-mount source wasn't pre-created
+# (e.g. re-running the script in a container that predates the mount).
+sudo mkdir -p /var/tmp/belune-builds
 sudo chmod 777 /var/tmp/belune-builds
 
 echo "==> Fixing ownership of cached Go directories..."
