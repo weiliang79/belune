@@ -66,7 +66,9 @@ export function AuthLayout({
           </ul>
         </div>
 
-        <p className="font-mono text-xs text-white/60">{BRAND.version}</p>
+        <p className="font-mono text-xs text-white/60">
+          {BRAND.name} • {BRAND.version}
+        </p>
       </div>
 
       {/* Form column */}
