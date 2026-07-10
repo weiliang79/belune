@@ -4,8 +4,12 @@
   "service": "api",
   "workspaceFolder": "/workspaces/belune",
   "initializeCommand": "mkdir -p /var/tmp/belune-builds && docker network create belune-infra 2>/dev/null || true",
-  "forwardPorts": [8080],
+  "forwardPorts": [8080, 5173],
   "portsAttributes": {
+    "5173": {
+      "label": "web (Vite dev server)",
+      "onAutoForward": "notify"
+    },
     "9090": {
       "label": "api-metrics (internal)",
       "onAutoForward": "ignore"
@@ -20,6 +24,9 @@
     },
     "ghcr.io/devcontainers/features/go:1": {
       "version": "1.26"
+    },
+    "ghcr.io/devcontainers/features/node:1": {
+      "version": "24"
     }
   },
   "postCreateCommand": "bash /workspaces/belune/.devcontainer/post-create.sh",

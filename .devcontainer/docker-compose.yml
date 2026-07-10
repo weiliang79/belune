@@ -18,6 +18,9 @@ services:
       - go-mod-cache:/home/vscode/go/pkg/mod
       - go-build-cache:/home/vscode/.cache/go-build
       - go-bin-cache:/home/vscode/go/bin
+      # Isolate the web node_modules from the host bind-mount: the host installs
+      # darwin-native esbuild/rollup binaries, but Vite runs on Linux in here.
+      - web-node-modules:/workspaces/belune/apps/web/node_modules
     environment:
       DATABASE_URL: postgres://belune:belune@postgres:5432/belune?sslmode=disable
       REDIS_URL: redis://redis:6379
@@ -43,6 +46,7 @@ volumes:
   go-mod-cache:
   go-build-cache:
   go-bin-cache:
+  web-node-modules:
 
 networks:
   belune-infra:

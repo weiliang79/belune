@@ -26,6 +26,12 @@ echo "==> Fixing ownership of cached Go directories..."
 sudo mkdir -p /home/vscode/go/pkg/mod /home/vscode/.cache/go-build /home/vscode/go/bin
 sudo chown -R vscode:vscode /home/vscode/go /home/vscode/.cache
 
+echo "==> Fixing ownership of the web node_modules volume..."
+# Same story as the Go caches: web-node-modules is a named volume overlaid on
+# apps/web/node_modules (to keep Linux-native esbuild/rollup binaries separate
+# from the host's darwin ones). Root-owned on first mount — chown so npm can write.
+sudo chown vscode:vscode /workspaces/belune/apps/web/node_modules
+
 echo "==> Granting Docker socket access..."
 # Match the GID of the host docker socket, add vscode to that group, and open
 # the socket so the current session can use it without a full login/logout cycle.
@@ -72,6 +78,12 @@ curl -sSL "https://github.com/sqlc-dev/sqlc/releases/download/v1.30.0/sqlc_1.30.
 echo "==> Downloading Go modules..."
 cd /workspaces/belune/apps/api && go mod download
 
+echo "==> Installing web dependencies (npm)..."
+# Runs Vite inside the container so `task dev:web` works here (proxy /api ->
+# localhost:8080 hits the API in this same container). Installs into the
+# isolated web-node-modules volume, not the host's darwin node_modules.
+cd /workspaces/belune/apps/web && npm install --no-audit --no-fund
+
 echo "==> Setting up /opt/belune install mirror (control-plane backup)..."
 # The control-plane backup worker shells out to $BELUNE_DIR/scripts/backup.sh
 # (default /opt/belune/scripts/backup.sh) and that script treats its dir as a real
@@ -97,7 +109,8 @@ printf 'POSTGRES_USER=belune\nPOSTGRES_DB=belune\nCOMPOSE_PROJECT_NAME=infra\n' 
 # Chown before building so the vscode-owned `go build` can write into bin/.
 sudo chown -R vscode:vscode /opt/belune
 # Build the upload helper (same binary install.sh/update.sh extract on a server).
-go build -o /opt/belune/bin/belune-backup-upload ./cmd/backup-upload
+# Explicit cd — ./cmd/backup-upload is relative to the apps/api module.
+cd /workspaces/belune/apps/api && go build -o /opt/belune/bin/belune-backup-upload ./cmd/backup-upload
 
 echo "==> Installing Docker CLI (best-effort)..."
 # The Docker socket is bind-mounted; we just need the CLI binary.

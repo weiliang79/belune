@@ -157,7 +157,7 @@ export function Sidebar({ mobileOpen, onMobileClose }: SidebarProps) {
             background: "linear-gradient(140deg, var(--brand), var(--brand-press))",
           }}
         >
-          <BeluneLogo className="h-[18px] w-[18px]" />
+          <BeluneLogo className="size-6" />
         </div>
         {expanded && (
           <div className="flex min-w-0 flex-col leading-tight">

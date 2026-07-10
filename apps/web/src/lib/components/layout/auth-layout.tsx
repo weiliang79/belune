@@ -41,7 +41,7 @@ export function AuthLayout({
       >
         <div className="flex items-center gap-2.5">
           <div className="grid size-9 place-items-center rounded-lg bg-white/15 backdrop-blur">
-            <BeluneLogo className="size-5" />
+            <BeluneLogo className="size-7" />
           </div>
           <div className="flex flex-col leading-tight">
             <span className="text-lg font-semibold">{instanceName}</span>
@@ -83,7 +83,7 @@ export function AuthLayout({
                   "linear-gradient(140deg, var(--brand), var(--brand-press))",
               }}
             >
-              <BeluneLogo className="size-5" />
+              <BeluneLogo className="size-7" />
             </div>
             <span className="text-lg font-semibold">{instanceName}</span>
           </div>

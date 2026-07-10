@@ -30,7 +30,7 @@ function StatusPageFrame({
               "linear-gradient(140deg, var(--brand), var(--brand-press))",
           }}
         >
-          <BeluneLogo className="size-4.5" />
+          <BeluneLogo className="size-6" />
         </div>
         <span className="text-sm font-semibold">{instanceName}</span>
       </div>

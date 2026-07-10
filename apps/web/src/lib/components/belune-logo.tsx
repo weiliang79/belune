@@ -5,7 +5,8 @@ import type { SVGProps } from "react";
  * + lune). Monochrome via `currentColor`, so it inherits the surrounding text /
  * accent color and themes automatically (white on the brand tile, indigo in light
  * mode, violet in dark). The 86% safe-area and optical-centering nudge are baked
- * into the 192 viewBox, so it stays balanced at any size. Size it with a Tailwind
+ * into the 192 viewBox (translate(3 2) optical nudge), so it stays balanced at
+ * any size. Size it with a Tailwind
  * class (e.g. `className="size-5"`) like a lucide icon.
  */
 export function BeluneLogo(props: SVGProps<SVGSVGElement>) {
@@ -17,7 +18,7 @@ export function BeluneLogo(props: SVGProps<SVGSVGElement>) {
       aria-label="Belune"
       {...props}
     >
-      <g transform="translate(3 -4) translate(96 96) scale(0.86) translate(-96 -96)">
+      <g transform="translate(3 2) translate(96 96) scale(0.86) translate(-96 -96)">
 <g>
 	<path d="M180.63,106.4c-0.5-0.66-0.59-1.24-0.51-2.01c0.22-2.05,0.54-4.11,0.49-6.15
 		c-0.19-6.93-2.34-13.26-6.44-18.85c-5.89-8.03-13.77-12.89-23.73-14.06c-8.99-1.06-17.17,1.38-24.68,6.27

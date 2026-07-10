@@ -36,7 +36,7 @@ RUN set -eux; \
     pack version
 
 # ── Stage: frontend ──────────────────────────────────────────────────────────
-FROM node:22-alpine AS frontend
+FROM node:24-alpine AS frontend
 WORKDIR /web
 COPY apps/web/package*.json ./
 RUN npm ci
