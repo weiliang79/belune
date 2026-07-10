@@ -3,10 +3,8 @@ package buildpacks
 import (
 	"context"
 	"fmt"
-	"io"
 	"log/slog"
 	"os/exec"
-	"strings"
 
 	"github.com/weiling79/belune/internal/build"
 	"github.com/weiling79/belune/internal/naming"
@@ -85,28 +83,20 @@ func (b *Builder) Build(ctx context.Context, opts build.BuildOptions) (*build.Bu
 	slog.Info("running pack build", "image", opts.ImageTag, "builder", builderImage)
 	cmd := exec.CommandContext(ctx, "pack", args...)
 
-	var logBuf strings.Builder
-	writers := []io.Writer{&logBuf}
-	if opts.LogWriter != nil {
-		writers = append(writers, opts.LogWriter)
-	}
-	multi := io.MultiWriter(writers...)
-	cmd.Stdout = multi
-	cmd.Stderr = multi
+	// stdout and stderr stream separately so each line's originating stream is
+	// recorded (nil writer = discarded).
+	cmd.Stdout = opts.StdoutWriter
+	cmd.Stderr = opts.StderrWriter
 
-	err := cmd.Run()
-	logs := logBuf.String()
-
-	if err != nil {
-		// The full build output is streamed to opts.LogWriter and persisted as
-		// the deployment's build_logs, so keep the error itself concise (it
-		// becomes the deployment's error_message) rather than duplicating the
-		// entire output there.
+	if err := cmd.Run(); err != nil {
+		// The full build output is streamed to the stdout/stderr writers and
+		// persisted as the deployment's build_logs, so keep the error itself
+		// concise (it becomes the deployment's error_message) rather than
+		// duplicating the entire output there.
 		return nil, fmt.Errorf("pack build failed: %w", err)
 	}
 
 	return &build.BuildResult{
 		ImageTag: opts.ImageTag,
-		Logs:     logs,
 	}, nil
 }

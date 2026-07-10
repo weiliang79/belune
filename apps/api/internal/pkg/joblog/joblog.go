@@ -18,11 +18,15 @@ import (
 	"github.com/weiling79/belune/internal/pkg/loglevel"
 )
 
-// Entry is a single log line.
+// Entry is a single log line. Stream records the originating OS stream
+// ("stdout"/"stderr") of verbatim tool/build output when known; it is captured
+// for completeness (not currently surfaced in the viewer, which shows level
+// only) and is empty for our own app-generated messages.
 type Entry struct {
-	Ts    time.Time      `json:"ts"`
-	Level loglevel.Level `json:"level"`
-	Msg   string         `json:"msg"`
+	Ts     time.Time      `json:"ts"`
+	Level  loglevel.Level `json:"level"`
+	Stream string         `json:"stream,omitempty"`
+	Msg    string         `json:"msg"`
 }
 
 // MarshalLine renders one entry as a single NDJSON line (no trailing newline).
@@ -37,8 +41,8 @@ func (e Entry) MarshalLine() string {
 }
 
 // Builder accumulates entries and renders them as NDJSON. It is not safe for
-// concurrent use; callers serialize writes (the backup runLog and build
-// LineWriter both do).
+// concurrent use; callers serialize writes (the backup runLog is single-
+// goroutine; the build LogSink guards it with a mutex).
 type Builder struct {
 	sb strings.Builder
 }
@@ -49,9 +53,10 @@ func (b *Builder) Add(level loglevel.Level, msg string) {
 }
 
 // AddDetected appends an entry whose level is inferred from the message and the
-// originating stream (used for verbatim tool/build output).
+// originating stream (used for verbatim tool/build output). The stream is also
+// recorded on the entry.
 func (b *Builder) AddDetected(stream, msg string) {
-	b.add(Entry{Ts: time.Now().UTC(), Level: loglevel.Detect(msg, stream), Msg: msg})
+	b.add(Entry{Ts: time.Now().UTC(), Level: loglevel.Detect(msg, stream), Stream: stream, Msg: msg})
 }
 
 // AddRaw splits verbatim multi-line output into one detected-level entry per

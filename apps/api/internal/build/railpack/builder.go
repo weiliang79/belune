@@ -3,13 +3,11 @@ package railpack
 import (
 	"context"
 	"fmt"
-	"io"
 	"log/slog"
 	"net"
 	"net/url"
 	"os"
 	"os/exec"
-	"strings"
 	"time"
 
 	"github.com/weiling79/belune/internal/build"
@@ -77,28 +75,20 @@ func (b *Builder) Build(ctx context.Context, opts build.BuildOptions) (*build.Bu
 	cmd := exec.CommandContext(ctx, "railpack", args...)
 	cmd.Env = append(os.Environ(), "BUILDKIT_HOST="+buildkitHost())
 
-	var logBuf strings.Builder
-	writers := []io.Writer{&logBuf}
-	if opts.LogWriter != nil {
-		writers = append(writers, opts.LogWriter)
-	}
-	multi := io.MultiWriter(writers...)
-	cmd.Stdout = multi
-	cmd.Stderr = multi
+	// stdout and stderr stream separately so each line's originating stream is
+	// recorded (nil writer = discarded).
+	cmd.Stdout = opts.StdoutWriter
+	cmd.Stderr = opts.StderrWriter
 
-	err := cmd.Run()
-	logs := logBuf.String()
-
-	if err != nil {
-		// The full build output is streamed to opts.LogWriter and persisted as
-		// the deployment's build_logs, so keep the error itself concise (it
-		// becomes the deployment's error_message) rather than duplicating the
-		// entire output there.
+	if err := cmd.Run(); err != nil {
+		// The full build output is streamed to the stdout/stderr writers and
+		// persisted as the deployment's build_logs, so keep the error itself
+		// concise (it becomes the deployment's error_message) rather than
+		// duplicating the entire output there.
 		return nil, fmt.Errorf("railpack build failed: %w", err)
 	}
 
 	return &build.BuildResult{
 		ImageTag: opts.ImageTag,
-		Logs:     logs,
 	}, nil
 }

@@ -445,7 +445,7 @@ func (h *TaskHandler) buildFromGit(ctx context.Context, dc *deployContext) error
 	}
 
 	pub := buildlog.NewPublisher(h.RedisClient, dc.payload.DeploymentID)
-	logWriter := buildlog.NewLineWriter(pub, buildCtx)
+	sink := buildlog.NewLogSink(pub, buildCtx)
 
 	buildOpts := build.BuildOptions{
 		SourceDir:      tmpDir,
@@ -455,16 +455,17 @@ func (h *TaskHandler) buildFromGit(ctx context.Context, dc *deployContext) error
 		Buildpacks:     customBuildpacks,
 		Env:            dc.env,
 		BuildType:      dc.app.BuildType,
-		LogWriter:      logWriter,
+		StdoutWriter:   sink.Writer("stdout"),
+		StderrWriter:   sink.Writer("stderr"),
 		ApplicationID:  dc.payload.ApplicationID,
 	}
 
 	h.updateDeploymentStatus(ctx, dc.deploymentID, status.DeploymentPending, status.DeploymentBuilding)
 
 	slog.Info("building image", "tag", dc.imageName)
-	stopFlush := h.startBuildLogFlusher(ctx, dc.deploymentID, logWriter)
+	stopFlush := h.startBuildLogFlusher(ctx, dc.deploymentID, sink)
 	result, err := h.Chain.Build(buildCtx, buildOpts)
-	logWriter.Flush()
+	sink.Flush()
 	stopFlush()
 	pub.Close(ctx)
 
@@ -472,7 +473,7 @@ func (h *TaskHandler) buildFromGit(ctx context.Context, dc *deployContext) error
 	// so the stored log matches what live viewers received. Do this on failure
 	// too, so a failed deploy surfaces the full build output in the log viewer
 	// instead of only the (summarised) error message.
-	if buildLogs := logWriter.NDJSON(); buildLogs != "" {
+	if buildLogs := sink.NDJSON(); buildLogs != "" {
 		h.Queries.UpdateDeploymentBuildLogs(ctx, generated.UpdateDeploymentBuildLogsParams{
 			ID:        dc.deploymentID,
 			BuildLogs: pgtype.Text{String: buildLogs, Valid: true},
@@ -495,7 +496,7 @@ func (h *TaskHandler) buildFromGit(ctx context.Context, dc *deployContext) error
 // build_logs is otherwise only written once the build ends — so without this a
 // refresh shows nothing until completion. Returns a stop function that halts the
 // flusher and waits for it to exit before the caller writes the final log.
-func (h *TaskHandler) startBuildLogFlusher(ctx context.Context, deploymentID pgtype.UUID, lw *buildlog.LineWriter) func() {
+func (h *TaskHandler) startBuildLogFlusher(ctx context.Context, deploymentID pgtype.UUID, sink *buildlog.LogSink) func() {
 	done := make(chan struct{})
 	stopped := make(chan struct{})
 	go func() {
@@ -507,7 +508,7 @@ func (h *TaskHandler) startBuildLogFlusher(ctx context.Context, deploymentID pgt
 			case <-done:
 				return
 			case <-t.C:
-				if s := lw.NDJSON(); s != "" {
+				if s := sink.NDJSON(); s != "" {
 					h.Queries.UpdateDeploymentBuildLogs(ctx, generated.UpdateDeploymentBuildLogsParams{
 						ID:        deploymentID,
 						BuildLogs: pgtype.Text{String: s, Valid: true},

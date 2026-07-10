@@ -14,7 +14,8 @@ type BuildOptions struct {
 	Buildpacks     []string          // Ordered list of buildpack URIs (for buildpacks builder)
 	Env            map[string]string // Build-time environment variables
 	BuildType      string            // Preferred builder: "dockerfile", "buildpacks", "railpack" (empty = auto)
-	LogWriter      io.Writer         // If set, build output is streamed here in real-time
+	StdoutWriter   io.Writer         // If set, build stdout is streamed here in real-time
+	StderrWriter   io.Writer         // If set, build stderr is streamed here in real-time
 	ApplicationID  string            // Application UUID — keys per-app persistent build caches
 }
 

@@ -133,7 +133,7 @@ func (h *TaskHandler) HandleBuildTask(ctx context.Context, t *asynq.Task) error 
 
 	// Set up build log streaming via Redis pub/sub
 	pub := buildlog.NewPublisher(h.RedisClient, payload.DeploymentID)
-	logWriter := buildlog.NewLineWriter(pub, buildCtx)
+	sink := buildlog.NewLogSink(pub, buildCtx)
 
 	buildOpts := build.BuildOptions{
 		SourceDir:      tmpDir,
@@ -142,21 +142,22 @@ func (h *TaskHandler) HandleBuildTask(ctx context.Context, t *asynq.Task) error 
 		BuilderImage:   app.BuilderImage.String,
 		Buildpacks:     customBuildpacks,
 		Env:            env,
-		LogWriter:      logWriter,
+		StdoutWriter:   sink.Writer("stdout"),
+		StderrWriter:   sink.Writer("stderr"),
 		ApplicationID:  payload.ApplicationID,
 	}
 
 	slog.Info("building image", "tag", imageName)
-	stopFlush := h.startBuildLogFlusher(ctx, deploymentID, logWriter)
+	stopFlush := h.startBuildLogFlusher(ctx, deploymentID, sink)
 	result, err := h.Chain.Build(buildCtx, buildOpts)
-	logWriter.Flush()
+	sink.Flush()
 	stopFlush()
 	pub.Close(ctx)
 
 	// Store the structured (NDJSON) build log built from the streamed lines. Do
 	// this on failure too, so a failed build surfaces the full output in the log
 	// viewer instead of only the (summarised) error message.
-	if buildLogs := logWriter.NDJSON(); buildLogs != "" {
+	if buildLogs := sink.NDJSON(); buildLogs != "" {
 		h.Queries.UpdateDeploymentBuildLogs(ctx, generated.UpdateDeploymentBuildLogsParams{
 			ID:        deploymentID,
 			BuildLogs: pgtype.Text{String: buildLogs, Valid: true},

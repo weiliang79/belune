@@ -3,6 +3,7 @@ package buildlog
 import (
 	"bytes"
 	"context"
+	"io"
 	"sync"
 	"time"
 
@@ -10,63 +11,96 @@ import (
 	"github.com/weiling79/belune/internal/pkg/loglevel"
 )
 
-// LineWriter implements io.Writer over the build output stream. It buffers
-// partial lines until a newline, then for each complete line: infers a level,
-// publishes the line as an NDJSON entry to the Publisher (for live viewers),
-// and accumulates the same NDJSON for the stored build log. Storing the level
-// and timestamp as fields (rather than raw text) lets the log viewer localize
-// the time and filter by level like every other log surface.
-type LineWriter struct {
-	pub *Publisher
-	ctx context.Context
-	buf bytes.Buffer
-	mu  sync.Mutex // guards log (read by NDJSON from the periodic flusher goroutine)
-	log joblog.Builder
+// LogSink accumulates NDJSON build-log entries produced by one or more per-stream
+// writers. For each complete line it infers a level, records the originating
+// stream, publishes the line as an NDJSON entry to the Publisher (for live
+// viewers), and accumulates the same entry for the stored build log. The
+// per-stream writers let a build's stdout and stderr be tagged separately even
+// though they interleave; Write may be called concurrently from both.
+type LogSink struct {
+	pub     *Publisher
+	ctx     context.Context
+	mu      sync.Mutex // guards log (concurrent stdout/stderr writers + NDJSON reader)
+	log     joblog.Builder
+	writers []*streamWriter
 }
 
-func NewLineWriter(pub *Publisher, ctx context.Context) *LineWriter {
-	return &LineWriter{pub: pub, ctx: ctx}
+func NewLogSink(pub *Publisher, ctx context.Context) *LogSink {
+	return &LogSink{pub: pub, ctx: ctx}
 }
 
-func (w *LineWriter) Write(p []byte) (n int, err error) {
-	w.buf.Write(p)
-	for {
-		line, err := w.buf.ReadBytes('\n')
-		if err != nil {
-			// No complete line yet — put the partial data back
-			w.buf.Write(line)
-			break
-		}
-		w.emit(string(bytes.TrimRight(line, "\n\r")))
-	}
-	return len(p), nil
+// Writer returns an io.Writer that tags every line it receives with `stream`
+// (e.g. "stdout"/"stderr"). Create writers before the build starts; Flush drains
+// all of them.
+func (s *LogSink) Writer(stream string) io.Writer {
+	w := &streamWriter{sink: s, stream: stream}
+	s.writers = append(s.writers, w)
+	return w
 }
 
-// Flush publishes any remaining buffered content.
-func (w *LineWriter) Flush() {
-	if w.buf.Len() > 0 {
-		remaining := w.buf.String()
-		w.buf.Reset()
-		w.emit(remaining)
+// Flush emits any buffered partial line from every registered writer. Call after
+// the build finishes (its stream-copy goroutines have stopped).
+func (s *LogSink) Flush() {
+	for _, w := range s.writers {
+		w.flush()
 	}
 }
 
 // NDJSON returns the accumulated build log as newline-delimited JSON entries.
-// Safe to call concurrently with Write (e.g. from a periodic flusher).
-func (w *LineWriter) NDJSON() string {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	return w.log.String()
+// Safe to call concurrently with the build's writes (e.g. from a periodic flusher).
+func (s *LogSink) NDJSON() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.log.String()
 }
 
-func (w *LineWriter) emit(line string) {
+func (s *LogSink) emit(stream, line string) {
 	if line == "" {
 		return
 	}
-	e := joblog.Entry{Ts: time.Now().UTC(), Level: loglevel.Detect(line, ""), Msg: line}
-	w.mu.Lock()
-	w.log.AddEntry(e)
-	w.mu.Unlock()
+	// The level is inferred from the message only. The stream is recorded but
+	// deliberately not used for the level: build tools write most output
+	// (including progress and info) to stderr, so a stderr=>Error fallback would
+	// mislabel almost everything.
+	e := joblog.Entry{
+		Ts:     time.Now().UTC(),
+		Level:  loglevel.Detect(line, ""),
+		Stream: stream,
+		Msg:    line,
+	}
+	s.mu.Lock()
+	s.log.AddEntry(e)
+	s.mu.Unlock()
 	// Don't fail the build if a Redis publish fails.
-	_ = w.pub.Publish(w.ctx, e.MarshalLine())
+	_ = s.pub.Publish(s.ctx, e.MarshalLine())
+}
+
+// streamWriter is one input stream into a LogSink. It buffers partial lines until
+// a newline, then forwards each complete line to the sink tagged with its stream.
+type streamWriter struct {
+	sink   *LogSink
+	stream string
+	buf    bytes.Buffer
+}
+
+func (w *streamWriter) Write(p []byte) (int, error) {
+	w.buf.Write(p)
+	for {
+		line, err := w.buf.ReadBytes('\n')
+		if err != nil {
+			// No complete line yet — put the partial data back.
+			w.buf.Write(line)
+			break
+		}
+		w.sink.emit(w.stream, string(bytes.TrimRight(line, "\n\r")))
+	}
+	return len(p), nil
+}
+
+func (w *streamWriter) flush() {
+	if w.buf.Len() > 0 {
+		remaining := w.buf.String()
+		w.buf.Reset()
+		w.sink.emit(w.stream, remaining)
+	}
 }
