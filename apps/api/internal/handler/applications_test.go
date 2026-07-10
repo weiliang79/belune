@@ -260,14 +260,28 @@ func TestDeployApplication_LockReturns409(t *testing.T) {
 	assert.Equal(t, http.StatusAccepted, resp.StatusCode)
 	resp.Body.Close()
 
-	// Simulate a locked task: next enqueue returns ErrTaskIDConflict
+	// Simulate a deploy genuinely in progress: enqueue returns ErrTaskIDConflict
+	// and the active task cannot be superseded (DeleteTask fails).
 	env.Asynq.EnqueueErr = asynq.ErrTaskIDConflict
+	env.Inspector.DeleteTaskErr = fmt.Errorf("task is active")
 
 	// Second deploy while one is in progress → 409
 	resp = env.DoRequest(t, "POST", fmt.Sprintf("/api/projects/%s/applications/%s/deploy", projectID, appID), nil, testutil.AuthHeader(token))
 	assert.Equal(t, http.StatusConflict, resp.StatusCode)
 	resp.Body.Close()
 
+	// A stale (non-active) locked task instead should be superseded: DeleteTask
+	// succeeds and the re-enqueue goes through, so the deploy is accepted.
+	env.Asynq.EnqueueErr = asynq.ErrTaskIDConflict
+	env.Asynq.EnqueueOnce = true // conflict clears after the first (pre-delete) enqueue
+	env.Inspector.DeleteTaskErr = nil
+	env.Inspector.DeleteTaskCalls = nil
+	resp = env.DoRequest(t, "POST", fmt.Sprintf("/api/projects/%s/applications/%s/deploy", projectID, appID), nil, testutil.AuthHeader(token))
+	assert.Equal(t, http.StatusAccepted, resp.StatusCode)
+	resp.Body.Close()
+	assert.Equal(t, []string{"critical/deploy:" + appID}, env.Inspector.DeleteTaskCalls)
+
 	// Clear the error for subsequent tests
 	env.Asynq.EnqueueErr = nil
+	env.Asynq.EnqueueOnce = false
 }

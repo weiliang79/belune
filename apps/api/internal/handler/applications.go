@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -278,14 +279,8 @@ func (h *Handler) DeployApplication(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	task := asynq.NewTask("deploy", payload)
-	_, err = h.asynq.Enqueue(task,
-		asynq.Queue("critical"),
-		asynq.Timeout(time.Duration(h.cfg.TaskTimeoutMinutes)*time.Minute),
-		asynq.MaxRetry(3),
-		asynq.TaskID("deploy:"+applicationID),
-	)
-	if err != nil {
+	if err := h.enqueueDeployTask(applicationID, payload); err != nil {
+		h.failDeploymentEnqueue(r.Context(), deployment.ID, err)
 		if errors.Is(err, asynq.ErrTaskIDConflict) {
 			writeError(w, http.StatusConflict, "a deployment is already in progress for this application")
 			return
@@ -471,6 +466,7 @@ func (h *Handler) ReloadApplication(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.enqueueDeployTask(applicationID, payload); err != nil {
+		h.failDeploymentEnqueue(r.Context(), deployment.ID, err)
 		if errors.Is(err, asynq.ErrTaskIDConflict) {
 			writeError(w, http.StatusConflict, "a deployment is already in progress for this application")
 			return
@@ -545,6 +541,7 @@ func (h *Handler) RebuildApplication(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.enqueueDeployTask(applicationID, payload); err != nil {
+		h.failDeploymentEnqueue(r.Context(), deployment.ID, err)
 		if errors.Is(err, asynq.ErrTaskIDConflict) {
 			writeError(w, http.StatusConflict, "a deployment is already in progress for this application")
 			return
@@ -565,16 +562,47 @@ func formatDeploymentID(id pgtype.UUID) string {
 		id.Bytes[0:4], id.Bytes[4:6], id.Bytes[6:8], id.Bytes[8:10], id.Bytes[10:16])
 }
 
-// enqueueDeployTask enqueues a deploy task on the critical queue with the
-// per-application TaskID guard that serialises deploys for one app.
-func (h *Handler) enqueueDeployTask(applicationID string, payload []byte) error {
-	_, err := h.asynq.Enqueue(asynq.NewTask("deploy", payload),
-		asynq.Queue("critical"),
-		asynq.Timeout(time.Duration(h.cfg.TaskTimeoutMinutes)*time.Minute),
+// enqueueDeployLike enqueues task on `queue` under the per-application deploy
+// TaskID guard that serialises deploy/build/reload/rebuild/rollback for one app.
+// If that TaskID is already held but only by a *stale* task — pending, retry, or
+// an archived task left by a previous run that exhausted its retries — the stale
+// task is deleted and the new one re-enqueued, so a dead task can't block the
+// app from ever deploying again. asynq.Inspector.DeleteTask refuses to remove an
+// active (running) task, so a delete failure means a run is genuinely in
+// progress and the original ErrTaskIDConflict is returned unchanged.
+func (h *Handler) enqueueDeployLike(queue, applicationID string, task *asynq.Task) error {
+	taskID := "deploy:" + applicationID
+	opts := []asynq.Option{
+		asynq.Queue(queue),
+		asynq.Timeout(time.Duration(h.cfg.TaskTimeoutMinutes) * time.Minute),
 		asynq.MaxRetry(3),
-		asynq.TaskID("deploy:"+applicationID),
-	)
+		asynq.TaskID(taskID),
+	}
+	_, err := h.asynq.Enqueue(task, opts...)
+	if errors.Is(err, asynq.ErrTaskIDConflict) {
+		if delErr := h.inspector.DeleteTask(queue, taskID); delErr == nil {
+			_, err = h.asynq.Enqueue(task, opts...)
+		}
+	}
 	return err
+}
+
+// enqueueDeployTask enqueues the standard deploy task on the critical queue.
+func (h *Handler) enqueueDeployTask(applicationID string, payload []byte) error {
+	return h.enqueueDeployLike("critical", applicationID, asynq.NewTask("deploy", payload))
+}
+
+// failDeploymentEnqueue marks a freshly created deployment row as failed when
+// its task could not be queued, so it does not linger in "pending" forever.
+func (h *Handler) failDeploymentEnqueue(ctx context.Context, deploymentID pgtype.UUID, cause error) {
+	if _, err := h.queries.UpdateDeploymentStatus(ctx, generated.UpdateDeploymentStatusParams{
+		ID:           deploymentID,
+		Status:       status.DeploymentFailed,
+		ErrorMessage: pgtype.Text{String: "could not queue deploy task: " + cause.Error(), Valid: true},
+	}); err != nil {
+		slog.Error("could not mark deployment failed after enqueue error",
+			"deployment_id", formatDeploymentID(deploymentID), "error", err)
+	}
 }
 
 type updateApplicationRequest struct {
@@ -783,14 +811,8 @@ func (h *Handler) BuildApplication(w http.ResponseWriter, r *http.Request) {
 		TraceCarrier:  tracing.InjectContext(r.Context()),
 	})
 
-	task := asynq.NewTask("build", payload)
-	_, err = h.asynq.Enqueue(task,
-		asynq.Queue("default"),
-		asynq.Timeout(time.Duration(h.cfg.TaskTimeoutMinutes)*time.Minute),
-		asynq.MaxRetry(3),
-		asynq.TaskID("deploy:"+applicationID),
-	)
-	if err != nil {
+	if err := h.enqueueDeployLike("default", applicationID, asynq.NewTask("build", payload)); err != nil {
+		h.failDeploymentEnqueue(r.Context(), deployment.ID, err)
 		if errors.Is(err, asynq.ErrTaskIDConflict) {
 			writeError(w, http.StatusConflict, "a deployment is already in progress for this application")
 			return

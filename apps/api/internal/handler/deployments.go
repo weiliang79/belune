@@ -225,14 +225,8 @@ func (h *Handler) RollbackDeployment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	task := asynq.NewTask("deploy", payload)
-	_, err = h.asynq.Enqueue(task,
-		asynq.Queue("critical"),
-		asynq.Timeout(time.Duration(h.cfg.TaskTimeoutMinutes)*time.Minute),
-		asynq.MaxRetry(3),
-		asynq.TaskID("deploy:"+applicationID),
-	)
-	if err != nil {
+	if err := h.enqueueDeployTask(applicationID, payload); err != nil {
+		h.failDeploymentEnqueue(r.Context(), deployment.ID, err)
 		if errors.Is(err, asynq.ErrTaskIDConflict) {
 			writeError(w, http.StatusConflict, "a deployment is already in progress for this application")
 			return

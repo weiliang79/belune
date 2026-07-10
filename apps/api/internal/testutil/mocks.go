@@ -271,6 +271,8 @@ type MockQueueInspector struct {
 	RetryByQ            map[string]int              // counts returned by DeleteAllRetryTasks
 	DeleteArchivedCalls []string
 	DeleteRetryCalls    []string
+	DeleteTaskCalls     []string // "queue/id" for each DeleteTask call
+	DeleteTaskErr       error    // if set, DeleteTask returns it (simulates active task)
 }
 
 func (m *MockQueueInspector) GetQueueInfo(queue string) (*asynq.QueueInfo, error) {
@@ -294,6 +296,13 @@ func (m *MockQueueInspector) DeleteAllRetryTasks(queue string) (int, error) {
 	defer m.mu.Unlock()
 	m.DeleteRetryCalls = append(m.DeleteRetryCalls, queue)
 	return m.RetryByQ[queue], nil
+}
+
+func (m *MockQueueInspector) DeleteTask(queue, id string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.DeleteTaskCalls = append(m.DeleteTaskCalls, queue+"/"+id)
+	return m.DeleteTaskErr
 }
 
 // EnqueuedTask records a task that was enqueued.

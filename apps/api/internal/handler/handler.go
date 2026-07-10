@@ -34,6 +34,10 @@ type QueueInspector interface {
 	GetQueueInfo(queue string) (*asynq.QueueInfo, error)
 	DeleteAllArchivedTasks(queue string) (int, error)
 	DeleteAllRetryTasks(queue string) (int, error)
+	// DeleteTask removes a single task by id. It fails for an active (running)
+	// task, which lets callers distinguish a genuinely in-progress task from a
+	// stale one (pending/retry/archived) holding a unique TaskID.
+	DeleteTask(queue, id string) error
 }
 
 // ReconcilerStatusProvider is the narrow interface the handler consumes to

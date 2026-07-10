@@ -104,14 +104,18 @@ func TestRollbackDeployment(t *testing.T) {
 	require.Len(t, env.Asynq.Tasks, 1)
 	assert.Equal(t, "deploy", env.Asynq.Tasks[0].TypeName)
 
-	// Conflict: another deploy is in progress (simulate by making enqueue return ErrTaskIDConflict)
+	// Conflict: a deploy is genuinely in progress. Enqueue returns
+	// ErrTaskIDConflict and the active task cannot be superseded (DeleteTask
+	// fails), so the rollback is rejected with 409.
 	env.Asynq.EnqueueErr = asynq.ErrTaskIDConflict
-	env.Asynq.EnqueueOnce = true
+	env.Inspector.DeleteTaskErr = fmt.Errorf("task is active")
 	resp = env.DoRequest(t, "POST", fmt.Sprintf("/api/projects/%s/applications/%s/rollback", projectID, appID), map[string]string{
 		"deployment_id": deploymentID,
 	}, testutil.AuthHeader(adminToken))
 	assert.Equal(t, http.StatusConflict, resp.StatusCode)
 	resp.Body.Close()
+	env.Asynq.EnqueueErr = nil
+	env.Inspector.DeleteTaskErr = nil
 
 	// Error: deployment_id missing
 	resp = env.DoRequest(t, "POST", fmt.Sprintf("/api/projects/%s/applications/%s/rollback", projectID, appID), map[string]string{}, testutil.AuthHeader(adminToken))

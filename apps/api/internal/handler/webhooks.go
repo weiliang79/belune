@@ -265,13 +265,8 @@ func (h *Handler) triggerPushDeploy(r *http.Request, app generated.Application, 
 		return false
 	}
 
-	task := asynq.NewTask("deploy", taskPayload)
-	if _, enqErr := h.asynq.Enqueue(task,
-		asynq.Queue("critical"),
-		asynq.Timeout(time.Duration(h.cfg.TaskTimeoutMinutes)*time.Minute),
-		asynq.MaxRetry(3),
-		asynq.TaskID("deploy:"+applicationID),
-	); enqErr != nil {
+	if enqErr := h.enqueueDeployTask(applicationID, taskPayload); enqErr != nil {
+		h.failDeploymentEnqueue(r.Context(), deployment.ID, enqErr)
 		if !errors.Is(enqErr, asynq.ErrTaskIDConflict) {
 			slog.Error("webhook: failed to enqueue deploy", "application", app.Name, "error", enqErr)
 		} else {
