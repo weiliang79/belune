@@ -465,17 +465,20 @@ func (h *TaskHandler) buildFromGit(ctx context.Context, dc *deployContext) error
 	result, err := h.Chain.Build(buildCtx, buildOpts)
 	logWriter.Flush()
 	pub.Close(ctx)
-	if err != nil {
-		return fmt.Errorf("build: %w", err)
-	}
 
 	// Persist the structured (NDJSON) build log built from the streamed lines,
-	// so the stored log matches what live viewers received.
+	// so the stored log matches what live viewers received. Do this on failure
+	// too, so a failed deploy surfaces the full build output in the log viewer
+	// instead of only the (summarised) error message.
 	if buildLogs := logWriter.NDJSON(); buildLogs != "" {
 		h.Queries.UpdateDeploymentBuildLogs(ctx, generated.UpdateDeploymentBuildLogsParams{
 			ID:        dc.deploymentID,
 			BuildLogs: pgtype.Text{String: buildLogs, Valid: true},
 		})
+	}
+
+	if err != nil {
+		return fmt.Errorf("build: %w", err)
 	}
 
 	dc.imageName = result.ImageTag

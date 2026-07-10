@@ -150,17 +150,20 @@ func (h *TaskHandler) HandleBuildTask(ctx context.Context, t *asynq.Task) error 
 	result, err := h.Chain.Build(buildCtx, buildOpts)
 	logWriter.Flush()
 	pub.Close(ctx)
-	if err != nil {
-		h.failDeployment(ctx, deploymentID, "build", fmt.Sprintf("build: %v", err))
-		return fmt.Errorf("build: %w", err)
-	}
 
-	// Store the structured (NDJSON) build log built from the streamed lines.
+	// Store the structured (NDJSON) build log built from the streamed lines. Do
+	// this on failure too, so a failed build surfaces the full output in the log
+	// viewer instead of only the (summarised) error message.
 	if buildLogs := logWriter.NDJSON(); buildLogs != "" {
 		h.Queries.UpdateDeploymentBuildLogs(ctx, generated.UpdateDeploymentBuildLogsParams{
 			ID:        deploymentID,
 			BuildLogs: pgtype.Text{String: buildLogs, Valid: true},
 		})
+	}
+
+	if err != nil {
+		h.failDeployment(ctx, deploymentID, "build", fmt.Sprintf("build: %v", err))
+		return fmt.Errorf("build: %w", err)
 	}
 
 	// Mark as success — no container creation

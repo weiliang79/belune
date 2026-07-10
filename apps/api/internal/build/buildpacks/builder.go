@@ -98,7 +98,11 @@ func (b *Builder) Build(ctx context.Context, opts build.BuildOptions) (*build.Bu
 	logs := logBuf.String()
 
 	if err != nil {
-		return nil, fmt.Errorf("pack build failed: %w\nOutput:\n%s", err, logs)
+		// The full build output is streamed to opts.LogWriter and persisted as
+		// the deployment's build_logs, so keep the error itself concise (it
+		// becomes the deployment's error_message) rather than duplicating the
+		// entire output there.
+		return nil, fmt.Errorf("pack build failed: %w", err)
 	}
 
 	return &build.BuildResult{
