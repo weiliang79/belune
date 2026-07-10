@@ -65,13 +65,9 @@ SQLC_ARCH="$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')"
 curl -sSL "https://github.com/sqlc-dev/sqlc/releases/download/v1.30.0/sqlc_1.30.0_linux_${SQLC_ARCH}.tar.gz" \
   | sudo tar -C /usr/local/bin --no-same-owner -xz sqlc
 
-echo "==> Installing pack CLI (v0.35.1)..."
-curl -sSL "https://github.com/buildpacks/pack/releases/download/v0.35.1/pack-v0.35.1-linux.tgz" \
-  | sudo tar -C /usr/local/bin --no-same-owner -xz pack
-
-echo "==> Installing railpack CLI..."
-# Uses railpack's official installer; drops a binary in /usr/local/bin/railpack.
-curl -sSL https://railpack.com/install.sh | sudo bash
+# NOTE: railpack and pack are no longer installed here — they now live in the
+# shared `build-base` stage of the repo Dockerfile (pinned), which this
+# devcontainer builds from, so dev and prod share one pinned build toolchain.
 
 echo "==> Downloading Go modules..."
 cd /workspaces/belune/apps/api && go mod download
@@ -110,7 +106,7 @@ echo "==> Installing Docker CLI (best-effort)..."
   curl -fsSL https://download.docker.com/linux/debian/gpg \
     | sudo gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
   echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] \
-    https://download.docker.com/linux/debian bookworm stable" \
+    https://download.docker.com/linux/debian $(. /etc/os-release && echo \"$VERSION_CODENAME\") stable" \
     | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
   sudo apt-get update -qq
   sudo apt-get install -y -qq docker-ce-cli

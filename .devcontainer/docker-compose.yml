@@ -1,6 +1,13 @@
 services:
   api:
-    image: mcr.microsoft.com/devcontainers/go:1.26-bookworm
+    # Build from the SAME build-base stage as the prod image (Debian trixie +
+    # pinned railpack/pack) so dev and prod share one build toolchain. Go and the
+    # non-root vscode user are layered on via devcontainer features (see
+    # devcontainer.json).
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      target: build-base
     command: sleep infinity
     volumes:
       - ..:/workspaces/belune:cached

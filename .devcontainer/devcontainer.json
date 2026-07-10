@@ -11,6 +11,17 @@
       "onAutoForward": "ignore"
     }
   },
+  "features": {
+    "ghcr.io/devcontainers/features/common-utils:2": {
+      "username": "vscode",
+      "installZsh": false,
+      "installOhMyZsh": false,
+      "upgradePackages": false
+    },
+    "ghcr.io/devcontainers/features/go:1": {
+      "version": "1.26"
+    }
+  },
   "postCreateCommand": "bash /workspaces/belune/.devcontainer/post-create.sh",
   "customizations": {
     "vscode": {
