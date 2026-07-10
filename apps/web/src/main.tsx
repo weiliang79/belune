@@ -3,7 +3,11 @@ import { createRoot } from "react-dom/client";
 import { RouterProvider, createRouter } from "@tanstack/react-router";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { routeTree } from "./routeTree.gen";
+import { initFavicon } from "./lib/favicon";
 import "./index.css";
+
+// Repaint the favicon from the live brand color (theme + accent aware).
+initFavicon();
 
 const queryClient = new QueryClient({
   defaultOptions: {
