@@ -163,7 +163,7 @@ export function Sidebar({ mobileOpen, onMobileClose }: SidebarProps) {
           <div className="flex min-w-0 flex-col leading-tight">
             <span className="truncate text-sm font-semibold">{instanceName}</span>
             <span className="text-text-faint font-mono text-[11px]">
-              {BRAND.version}
+              {BRAND.name} • {BRAND.version}
             </span>
           </div>
         )}
