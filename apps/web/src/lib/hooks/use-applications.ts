@@ -90,10 +90,20 @@ export function useStopApplication(projectId: string, applicationId: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: () => applicationsApi.stopApplication(projectId, applicationId),
+    // Await BOTH the detail and list refetch so the mutation stays `isPending`
+    // until the row's status actually reflects the change. Without awaiting the
+    // list query, isPending flips false while the list still shows the old
+    // status, briefly rendering the wrong action buttons (e.g. Stop/Restart
+    // flashing between the spinner and Start when stopping).
     onSuccess: () =>
-      qc.invalidateQueries({
-        queryKey: queryKeys.applications.detail(projectId, applicationId),
-      }),
+      Promise.all([
+        qc.invalidateQueries({
+          queryKey: queryKeys.applications.detail(projectId, applicationId),
+        }),
+        qc.invalidateQueries({
+          queryKey: queryKeys.applications.all(projectId),
+        }),
+      ]),
     onError: (error) => toast.error(error.message),
   });
 }
@@ -102,10 +112,20 @@ export function useStartApplication(projectId: string, applicationId: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: () => applicationsApi.startApplication(projectId, applicationId),
+    // Await BOTH the detail and list refetch so the mutation stays `isPending`
+    // until the row's status actually reflects the change. Without awaiting the
+    // list query, isPending flips false while the list still shows the old
+    // status, briefly rendering the wrong action buttons (e.g. Stop/Restart
+    // flashing between the spinner and Start when stopping).
     onSuccess: () =>
-      qc.invalidateQueries({
-        queryKey: queryKeys.applications.detail(projectId, applicationId),
-      }),
+      Promise.all([
+        qc.invalidateQueries({
+          queryKey: queryKeys.applications.detail(projectId, applicationId),
+        }),
+        qc.invalidateQueries({
+          queryKey: queryKeys.applications.all(projectId),
+        }),
+      ]),
     onError: (error) => toast.error(error.message),
   });
 }
@@ -114,10 +134,20 @@ export function useRestartApplication(projectId: string, applicationId: string) 
   const qc = useQueryClient();
   return useMutation({
     mutationFn: () => applicationsApi.restartApplication(projectId, applicationId),
+    // Await BOTH the detail and list refetch so the mutation stays `isPending`
+    // until the row's status actually reflects the change. Without awaiting the
+    // list query, isPending flips false while the list still shows the old
+    // status, briefly rendering the wrong action buttons (e.g. Stop/Restart
+    // flashing between the spinner and Start when stopping).
     onSuccess: () =>
-      qc.invalidateQueries({
-        queryKey: queryKeys.applications.detail(projectId, applicationId),
-      }),
+      Promise.all([
+        qc.invalidateQueries({
+          queryKey: queryKeys.applications.detail(projectId, applicationId),
+        }),
+        qc.invalidateQueries({
+          queryKey: queryKeys.applications.all(projectId),
+        }),
+      ]),
     onError: (error) => toast.error(error.message),
   });
 }

@@ -165,14 +165,14 @@ function ApplicationActions({
       <>
         <IconAction
           label="Stop"
-          onClick={() => stop.mutate(undefined, onSuccess)}
+          onClick={() => stop.mutate()}
           className="text-destructive hover:bg-destructive/10 hover:text-destructive"
         >
           <SquareIcon aria-hidden="true" className="size-4" />
         </IconAction>
         <IconAction
           label="Restart"
-          onClick={() => restart.mutate(undefined, onSuccess)}
+          onClick={() => restart.mutate()}
         >
           <RotateCcwIcon aria-hidden="true" className="size-4" />
         </IconAction>
@@ -182,7 +182,7 @@ function ApplicationActions({
     primary = (
       <IconAction
         label="Restart"
-        onClick={() => restart.mutate(undefined, onSuccess)}
+        onClick={() => restart.mutate()}
       >
         <RotateCcwIcon aria-hidden="true" className="size-4" />
       </IconAction>
@@ -191,7 +191,7 @@ function ApplicationActions({
     primary = (
       <IconAction
         label="Start"
-        onClick={() => start.mutate(undefined, onSuccess)}
+        onClick={() => start.mutate()}
       >
         <PlayIcon aria-hidden="true" className="size-4" />
       </IconAction>

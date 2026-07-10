@@ -70,12 +70,16 @@ function useDatabaseLifecycle(
   const qc = useQueryClient();
   return useMutation({
     mutationFn,
-    onSuccess: () => {
-      qc.invalidateQueries({
-        queryKey: queryKeys.databases.detail(projectId, databaseId),
-      });
-      qc.invalidateQueries({ queryKey: queryKeys.databases.all(projectId) });
-    },
+    // Await both refetches so the mutation stays `isPending` until the row's
+    // status reflects the change — otherwise the action buttons briefly flash
+    // the wrong state (e.g. Stop/Restart) between the spinner and Start.
+    onSuccess: () =>
+      Promise.all([
+        qc.invalidateQueries({
+          queryKey: queryKeys.databases.detail(projectId, databaseId),
+        }),
+        qc.invalidateQueries({ queryKey: queryKeys.databases.all(projectId) }),
+      ]),
     onError: (error: Error) => toast.error(error.message),
   });
 }
