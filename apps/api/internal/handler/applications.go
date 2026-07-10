@@ -575,7 +575,11 @@ func (h *Handler) enqueueDeployLike(queue, applicationID string, task *asynq.Tas
 	opts := []asynq.Option{
 		asynq.Queue(queue),
 		asynq.Timeout(time.Duration(h.cfg.TaskTimeoutMinutes) * time.Minute),
-		asynq.MaxRetry(3),
+		// No automatic retries: a deploy runs exactly once. Deploy failures are
+		// almost always deterministic (bad build, bad config), so retrying just
+		// re-runs the whole build 3 more times and delays the failure the user
+		// needs to see. The user re-triggers manually after fixing the cause.
+		asynq.MaxRetry(0),
 		asynq.TaskID(taskID),
 	}
 	_, err := h.asynq.Enqueue(task, opts...)
