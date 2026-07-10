@@ -355,7 +355,7 @@ function AlertPreferencesCard() {
 }
 
 function AppearanceCard() {
-  const { theme, setTheme } = useTheme();
+  const { theme, setTheme, resolvedTheme } = useTheme();
   const accent = useAccentStore((s) => s.accent);
   const setAccent = useAccentStore((s) => s.setAccent);
 
@@ -364,8 +364,13 @@ function AppearanceCard() {
     { value: "dark", label: "Dark", Icon: MoonIcon },
     { value: "system", label: "System", Icon: MonitorIcon },
   ];
+  // The default accent tracks the theme (indigo in light, violet in dark), so
+  // its swatch must reflect the resolved theme — not var(--brand), which would
+  // read as emerald whenever emerald is the active accent. Fall back to violet
+  // before next-themes has resolved (the app defaults to dark).
+  const defaultSwatch = resolvedTheme === "light" ? "#4249bd" : "#7c3aed";
   const accents: { value: Accent; label: string; swatch: string }[] = [
-    { value: "violet", label: "Violet", swatch: "#7c3aed" },
+    { value: "violet", label: "Default", swatch: defaultSwatch },
     { value: "emerald", label: "Emerald", swatch: "#10b981" },
   ];
 
