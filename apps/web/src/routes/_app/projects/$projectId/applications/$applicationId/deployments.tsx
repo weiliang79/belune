@@ -26,7 +26,7 @@ import {
 import { useState, useCallback, useRef } from "react";
 import { useChannel } from "@/lib/hooks/use-websocket";
 import { BlobLogViewer } from "@/components/logs/blob-log-viewer";
-import type { LogEntry } from "@/components/logs/parse";
+import { parseLogBlob, type LogEntry } from "@/components/logs/parse";
 import { normalizeLevel } from "@/lib/logs/level";
 
 export const Route = createFileRoute(
@@ -57,10 +57,17 @@ function useBuildLogStream(
   applicationId: string,
   deploymentId: string,
   isBuilding: boolean,
+  seedBlob: string | null | undefined,
 ) {
-  const [entries, setEntries] = useState<LogEntry[]>(
-    () => liveBuildLogCache.get(deploymentId) ?? [],
-  );
+  const [entries, setEntries] = useState<LogEntry[]>(() => {
+    const cached = liveBuildLogCache.get(deploymentId);
+    if (cached) return cached;
+    // After a page refresh the module cache is empty and Redis pub/sub can't
+    // replay past lines. Seed from the partial build_logs the worker flushes
+    // every ~2s during the build, so the log isn't blank ("Waiting for
+    // output...") until the next live line arrives or the build finishes.
+    return parseLogBlob(seedBlob ?? "");
+  });
   const idRef = useRef(entries.length);
   const queryClient = useQueryClient();
 
@@ -183,6 +190,7 @@ function DeploymentCard({
     applicationId,
     d.id,
     isBuilding,
+    d.build_logs,
   );
   const canRollback = d.status === "success" && !!d.image_tag;
 

@@ -3,6 +3,7 @@ package buildlog
 import (
 	"bytes"
 	"context"
+	"sync"
 	"time"
 
 	"github.com/weiling79/belune/internal/pkg/joblog"
@@ -19,6 +20,7 @@ type LineWriter struct {
 	pub *Publisher
 	ctx context.Context
 	buf bytes.Buffer
+	mu  sync.Mutex // guards log (read by NDJSON from the periodic flusher goroutine)
 	log joblog.Builder
 }
 
@@ -50,14 +52,21 @@ func (w *LineWriter) Flush() {
 }
 
 // NDJSON returns the accumulated build log as newline-delimited JSON entries.
-func (w *LineWriter) NDJSON() string { return w.log.String() }
+// Safe to call concurrently with Write (e.g. from a periodic flusher).
+func (w *LineWriter) NDJSON() string {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.log.String()
+}
 
 func (w *LineWriter) emit(line string) {
 	if line == "" {
 		return
 	}
 	e := joblog.Entry{Ts: time.Now().UTC(), Level: loglevel.Detect(line, ""), Msg: line}
+	w.mu.Lock()
 	w.log.AddEntry(e)
+	w.mu.Unlock()
 	// Don't fail the build if a Redis publish fails.
 	_ = w.pub.Publish(w.ctx, e.MarshalLine())
 }

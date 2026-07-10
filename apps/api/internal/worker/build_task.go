@@ -147,8 +147,10 @@ func (h *TaskHandler) HandleBuildTask(ctx context.Context, t *asynq.Task) error 
 	}
 
 	slog.Info("building image", "tag", imageName)
+	stopFlush := h.startBuildLogFlusher(ctx, deploymentID, logWriter)
 	result, err := h.Chain.Build(buildCtx, buildOpts)
 	logWriter.Flush()
+	stopFlush()
 	pub.Close(ctx)
 
 	// Store the structured (NDJSON) build log built from the streamed lines. Do

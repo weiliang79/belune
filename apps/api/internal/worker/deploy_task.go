@@ -462,8 +462,10 @@ func (h *TaskHandler) buildFromGit(ctx context.Context, dc *deployContext) error
 	h.updateDeploymentStatus(ctx, dc.deploymentID, status.DeploymentPending, status.DeploymentBuilding)
 
 	slog.Info("building image", "tag", dc.imageName)
+	stopFlush := h.startBuildLogFlusher(ctx, dc.deploymentID, logWriter)
 	result, err := h.Chain.Build(buildCtx, buildOpts)
 	logWriter.Flush()
+	stopFlush()
 	pub.Close(ctx)
 
 	// Persist the structured (NDJSON) build log built from the streamed lines,
@@ -485,6 +487,39 @@ func (h *TaskHandler) buildFromGit(ctx context.Context, dc *deployContext) error
 	slog.Info("build completed", "image", dc.imageName)
 	h.updateDeploymentStatus(ctx, dc.deploymentID, status.DeploymentBuilding, status.DeploymentDeploying)
 	return nil
+}
+
+// startBuildLogFlusher periodically persists the partial build log to
+// deployments.build_logs while a build runs, so a page refresh mid-build can
+// show progress. Live lines go over Redis pub/sub which has no replay, and
+// build_logs is otherwise only written once the build ends — so without this a
+// refresh shows nothing until completion. Returns a stop function that halts the
+// flusher and waits for it to exit before the caller writes the final log.
+func (h *TaskHandler) startBuildLogFlusher(ctx context.Context, deploymentID pgtype.UUID, lw *buildlog.LineWriter) func() {
+	done := make(chan struct{})
+	stopped := make(chan struct{})
+	go func() {
+		defer close(stopped)
+		t := time.NewTicker(2 * time.Second)
+		defer t.Stop()
+		for {
+			select {
+			case <-done:
+				return
+			case <-t.C:
+				if s := lw.NDJSON(); s != "" {
+					h.Queries.UpdateDeploymentBuildLogs(ctx, generated.UpdateDeploymentBuildLogsParams{
+						ID:        deploymentID,
+						BuildLogs: pgtype.Text{String: s, Valid: true},
+					})
+				}
+			}
+		}
+	}()
+	return func() {
+		close(done)
+		<-stopped
+	}
 }
 
 // writeFileMounts materialises the application's file/config mounts to managed
