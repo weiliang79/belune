@@ -43,6 +43,16 @@ var (
 	infoRe  = regexp.MustCompile(`(?i)\b(info|notice)\b`)
 )
 
+// Status glyphs many CLI/build tools (railpack, npm, pnpm, vite, …) prefix a
+// line with instead of a word: a cross for failures, a warning sign for
+// warnings. They're unambiguous, so they carry the same weight as the keywords
+// above — without them a line like "✖ Failed to run mise command" (no "error"
+// word) would fall through to Info.
+var (
+	errGlyphRe  = regexp.MustCompile(`[✖✗✘❌]`)
+	warnGlyphRe = regexp.MustCompile(`⚠`)
+)
+
 // dbSeverityRe matches the colon-delimited severity prefix that databases and
 // many app loggers emit, e.g. Postgres "LOG:  statement: ...", "WARNING: ...",
 // "ERROR: ...". The trailing colon keeps it from matching casual mentions of
@@ -91,11 +101,11 @@ func Detect(message, stream string) Level {
 		}
 	}
 
-	// 4. Keyword scan, highest severity wins.
+	// 4. Keyword / status-glyph scan, highest severity wins.
 	switch {
-	case errRe.MatchString(message):
+	case errRe.MatchString(message) || errGlyphRe.MatchString(message):
 		return Error
-	case warnRe.MatchString(message):
+	case warnRe.MatchString(message) || warnGlyphRe.MatchString(message):
 		return Warning
 	case debugRe.MatchString(message):
 		return Debug

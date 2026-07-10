@@ -38,6 +38,12 @@ func TestDetect(t *testing.T) {
 		{"keyword debug", "debug: entering loop", "stdout", Debug},
 		{"keyword info", "INFO server listening", "stdout", Info},
 		{"keyword priority error over warn", "error while handling warn state", "stdout", Error},
+
+		// Status glyphs used by build tools (railpack et al.) instead of words.
+		{"glyph cross is error", "✖ Failed to run mise command 'mise latest node@22': exit status 1", "", Error},
+		{"glyph warn sign is warning", "⚠ Failed to get package versions from mise", "", Warning},
+		{"glyph heavy cross is error", "✘ build step failed", "stdout", Error},
+		{"glyph error beats warn glyph", "⚠ ✖ both present", "", Error},
 		{"substring not matched", "erroneous is not error-word", "stdout", Error}, // contains "error" whole word? no -> "erroneous" no, but "error-word" has error boundary
 		{"no keyword plain", "just a normal line", "stdout", Info},
 
