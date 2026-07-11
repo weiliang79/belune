@@ -41,6 +41,12 @@ type Client struct {
 	// rest of automatic HTTPS still applies.
 	autoHTTPSSkipCerts map[string]struct{}
 
+	// dashboardUpstream is where Caddy dials to reach the API when serving the
+	// dashboard. Resolved from *Caddy's* network, not ours: "localhost" here is
+	// the Caddy container itself, which is why the previous default silently
+	// refused every connection.
+	dashboardUpstream string
+
 	// tlsErrorSink records why TLS could not be set up for a hostname. Without it
 	// a SetupTLS failure is invisible: the route goes live on :80 and the user is
 	// left to guess why HTTPS never came up. The client has no database of its
@@ -65,6 +71,17 @@ func (c *Client) reportTLSError(ctx context.Context, hostname, reason string) {
 }
 
 const unixScheme = "unix://"
+
+// defaultDashboardUpstream matches the production compose service name.
+const defaultDashboardUpstream = "belune:8080"
+
+// SetDashboardUpstream overrides where Caddy dials to reach the API. Dev runs the
+// API on the host rather than in a container, so it needs a different address.
+func (c *Client) SetDashboardUpstream(addr string) {
+	if addr != "" {
+		c.dashboardUpstream = addr
+	}
+}
 
 // New builds a Caddy admin client. If adminURL begins with `unix://`, the
 // remainder is treated as a filesystem path and all admin requests are
@@ -91,6 +108,7 @@ func New(adminURL string) *Client {
 		httpClient:         httpClient,
 		autoHTTPSSkip:      make(map[string]struct{}),
 		autoHTTPSSkipCerts: make(map[string]struct{}),
+		dashboardUpstream:  defaultDashboardUpstream,
 	}
 }
 

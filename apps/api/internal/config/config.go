@@ -24,6 +24,10 @@ type Config struct {
 	// internal network — never the public hostname, which would leave the check
 	// at the mercy of external DNS and firewalls.
 	CaddyTLSProbeAddr string
+	// DashboardUpstream is the address Caddy dials to reach this API when serving
+	// the dashboard. It must be resolvable *from inside the Caddy container*, so
+	// it is the compose service name — not localhost, which would be Caddy itself.
+	DashboardUpstream string
 	// PublicIP is the address a user's DNS record must point at for a certificate
 	// to be issuable. Empty means autodetect; autodetection failing is not fatal,
 	// it just disables the DNS precheck.
@@ -133,6 +137,7 @@ func Load() (*Config, error) {
 		CaddyAdminURL:      getEnv("CADDY_ADMIN_URL", "http://localhost:2019"),
 		CaddyContainerName: getEnv("CADDY_CONTAINER_NAME", "infra-caddy-1"),
 		CaddyTLSProbeAddr:  getEnv("CADDY_TLS_PROBE_ADDR", "caddy:443"),
+		DashboardUpstream:  getEnv("DASHBOARD_UPSTREAM", "belune:8080"),
 		PublicIP:           getEnv("BELUNE_PUBLIC_IP", ""),
 		AccessLogPath:      getEnv("ACCESS_LOG_PATH", "../../infra/caddy/logs/access.log"),
 		CORSOrigins:        getEnvList("CORS_ORIGINS", []string{"http://localhost:5173"}),

@@ -147,6 +147,25 @@ themselves. Belune notifies admins when one is 14 days from expiry.
 
 ---
 
+## The dashboard's own domain
+
+Everything above is about domains you add to an *application*. Belune's own
+dashboard is separate: it is served on the server's IP over plain HTTP until you
+name a hostname for it under **Server → Configuration → Dashboard domain**.
+
+Naming it there publishes it to Caddy, which is what allows a certificate to be
+issued at all — certificates are only ever obtained for hostnames the proxy has
+been told about. The badge beside the field shows the same statuses as an app
+domain, so you can watch the certificate arrive (or see why it did not).
+
+Clearing the field reverts to plain HTTP on the IP. The requirements are the same
+as any Automatic domain: DNS pointing here, ports 80 and 443 open.
+
+After it goes active, set `PUBLIC_BASE_URL=https://<your-domain>` and
+`SECURE_COOKIES=true` so session cookies are only sent over HTTPS.
+
+---
+
 ## Certificates and Caddy restarts
 
 Uploaded certificates live in the database, encrypted. Caddy holds them only in

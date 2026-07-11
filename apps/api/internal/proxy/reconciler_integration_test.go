@@ -185,3 +185,65 @@ func dialLeaf(t *testing.T, hostname string) *x509.Certificate {
 	t.Fatalf("no certificate served for %s: %v", hostname, lastErr)
 	return nil
 }
+
+// TestRealStack_ReconcilerKeepsDashboardRoute guards the sharpest edge in the
+// dashboard-domain design: the reconciler deletes any host-matched route in Caddy
+// that has no matching row in the domains table, and the dashboard has none by
+// design. Without the exemption it would publish the dashboard and then delete it
+// again within one interval — and the operator would watch their panel die 30
+// seconds after configuring it.
+func TestRealStack_ReconcilerKeepsDashboardRoute(t *testing.T) {
+	if os.Getenv("BELUNE_CADDY_INTEGRATION") == "" {
+		t.Skip("set BELUNE_CADDY_INTEGRATION=1 to run against a real Caddy + Postgres")
+	}
+
+	ctx := context.Background()
+	pool, queries, teardown := testutil.SetupTestDB()
+	defer teardown()
+	t.Cleanup(func() { _ = testutil.TruncateAll(ctx, pool) })
+
+	keyring, err := crypto.ParseKeyringEnv("", testutil.TestEncryptionKey, "")
+	require.NoError(t, err)
+
+	adminURL := os.Getenv("CADDY_ADMIN_URL")
+	if adminURL == "" {
+		adminURL = "http://localhost:2019"
+	}
+	client := caddy.New(adminURL)
+	require.NoError(t, client.Ping(ctx))
+	t.Cleanup(func() { _ = client.SetDashboardRoute(ctx, "") })
+	client.InitCatchAll(ctx)
+
+	const host = "panel.belune.local"
+	_, err = queries.UpsertSetting(ctx, generated.UpsertSettingParams{
+		Key:   proxy.SettingDashboardDomain,
+		Value: host,
+	})
+	require.NoError(t, err)
+
+	r := proxy.NewReconciler(queries, client, keyring, 30*time.Second)
+
+	// The first pass publishes it from the setting…
+	require.NoError(t, r.ReconcileNow(ctx))
+	assert.Equal(t, host, dashboardRouteHostname(t, client),
+		"reconciler should publish the dashboard route from the setting")
+
+	// …and a second pass must not then sweep it away as an unknown domain.
+	require.NoError(t, r.ReconcileNow(ctx))
+	assert.Equal(t, host, dashboardRouteHostname(t, client),
+		"reconciler deleted its own dashboard route as a stale app domain")
+}
+
+// dashboardRouteHostname reads the hostname Caddy currently serves the dashboard
+// on, via the live config rather than our in-memory idea of it.
+func dashboardRouteHostname(t *testing.T, c *caddy.Client) string {
+	t.Helper()
+	routes, err := c.ListRoutes(context.Background())
+	require.NoError(t, err)
+	for _, r := range routes {
+		if r.Hostname == "panel.belune.local" {
+			return r.Hostname
+		}
+	}
+	return ""
+}

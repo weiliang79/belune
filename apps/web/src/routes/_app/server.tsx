@@ -44,6 +44,7 @@ import type { HostMetricPoint, SettingEntry } from "@/lib/types";
 import { UPlotAreaChart } from "@/components/ui/uplot-area-chart";
 import { SystemBackupsPanel } from "@/components/backups/system-backups-panel";
 import { MaintenanceSection } from "@/components/server/maintenance-section";
+import { DashboardDomainSection } from "@/components/server/dashboard-domain-section";
 import { cn } from "@/lib/utils";
 import { formatDateTimeShort } from "@/lib/utils/format";
 
@@ -314,6 +315,10 @@ function ServerSettingsPage() {
                 Shown in the sidebar and used as the default GitHub App name when
                 connecting a provider.
               </p>
+
+              <div className="border-t pt-4">
+                <DashboardDomainSection />
+              </div>
             </CardContent>
           </Card>
 

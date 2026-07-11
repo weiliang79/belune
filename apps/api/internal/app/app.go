@@ -166,6 +166,7 @@ func New(cfg *config.Config) (*App, error) {
 		slog.Warn("failed to start cleanup scheduler", "error", err)
 	}
 
+	caddyClient.SetDashboardUpstream(cfg.DashboardUpstream)
 	caddyClient.InitCatchAll(context.Background())
 	reconciler := proxy.NewReconciler(queries, caddyClient, cfg.Keyring, 30*time.Second)
 

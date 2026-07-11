@@ -5,6 +5,10 @@ import (
 	"encoding/json"
 )
 
+// SettingDashboardDomain is the settings key holding the hostname the Belune
+// dashboard is served on.
+const SettingDashboardDomain = "dashboard_domain"
+
 const (
 	// SSLModeOff serves plain HTTP only: no certificate is obtained for the
 	// hostname and no HTTP→HTTPS redirect is rendered.
@@ -62,6 +66,14 @@ type ProxyManager interface {
 	RemoveRoute(ctx context.Context, hostname string) error
 	SetupTLS(ctx context.Context, hostname string, sslMode, certPEM, keyPEM string) error
 	ListRoutes(ctx context.Context) ([]RouteConfig, error)
+
+	// SetDashboardRoute publishes Belune's own dashboard on a hostname, so it can
+	// have a certificate at all: automatic HTTPS issues only for names that appear
+	// in a host matcher, and the dashboard is otherwise served by a matcher-less
+	// catch-all. An empty hostname clears it. Idempotent — the reconciler
+	// re-asserts it every pass, because a Caddy restart drops it like everything
+	// else pushed over the admin API.
+	SetDashboardRoute(ctx context.Context, hostname string) error
 
 	// SyncCertificates makes the proxy's loaded certificates match the given set,
 	// keyed by hostname. Like routes, certificates pushed over the admin API are

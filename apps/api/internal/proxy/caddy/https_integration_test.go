@@ -38,9 +38,10 @@ import (
 // integration packages, or they will fight over its config.
 
 const (
-	autoHost   = "phase1-auto.belune.local"
-	offHost    = "phase1-off.belune.local"
-	customHost = "phase2-custom.belune.local"
+	autoHost      = "phase1-auto.belune.local"
+	offHost       = "phase1-off.belune.local"
+	customHost    = "phase2-custom.belune.local"
+	dashboardHost = "phase5-dashboard.belune.local"
 )
 
 func liveClient(t *testing.T) *Client {
@@ -308,4 +309,52 @@ func deleteJSON(ctx context.Context, c *Client, path string) error {
 	var body json.RawMessage
 	_ = json.NewDecoder(resp.Body).Decode(&body)
 	return nil
+}
+
+// TestRealCaddy_DashboardRoute covers the reason the dashboard could never have
+// HTTPS: it was served by a matcher-less catch-all, and automatic HTTPS only
+// issues for names that appear in a host matcher. With its own route, Caddy
+// obtains a certificate for it exactly as it does for an app domain.
+func TestRealCaddy_DashboardRoute(t *testing.T) {
+	c := liveClient(t)
+	ctx := context.Background()
+	t.Cleanup(func() { _ = c.SetDashboardRoute(ctx, "") })
+
+	c.InitCatchAll(ctx)
+	require.NoError(t, c.SetDashboardRoute(ctx, dashboardHost))
+
+	// Caddy issues for it, which is the whole point.
+	state, err := leafFor(t, dashboardHost, 15*time.Second)
+	require.NoError(t, err, "no certificate served for the dashboard hostname")
+	assert.Contains(t, state.PeerCertificates[0].DNSNames, dashboardHost)
+
+	// Idempotent: the reconciler re-asserts this every 30s and must not churn
+	// Caddy's config (each write is a full config reload).
+	before := routeIDs(t, c)
+	require.NoError(t, c.SetDashboardRoute(ctx, dashboardHost))
+	assert.Equal(t, before, routeIDs(t, c), "re-applying the same hostname rewrote the route table")
+
+	// The catch-all matches everything, so it must stay last or it would shadow
+	// the dashboard route.
+	ids := routeIDs(t, c)
+	assert.Equal(t, "route-catch-all", ids[len(ids)-1], "catch-all must remain the last route")
+
+	// Clearing it falls back to the catch-all (the bare-IP install).
+	require.NoError(t, c.SetDashboardRoute(ctx, ""))
+	assert.NotContains(t, routeIDs(t, c), "route-dashboard")
+}
+
+func routeIDs(t *testing.T, c *Client) []string {
+	t.Helper()
+	raw, err := c.fetchRawRoutes(context.Background())
+	require.NoError(t, err)
+	ids := make([]string, 0, len(raw))
+	for _, r := range raw {
+		var probe struct {
+			ID string `json:"@id"`
+		}
+		_ = json.Unmarshal(r, &probe)
+		ids = append(ids, probe.ID)
+	}
+	return ids
 }

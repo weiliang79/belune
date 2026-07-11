@@ -37,6 +37,9 @@ services:
       # Dev hostnames are *.belune.local — no public DNS, so ACME can never
       # succeed. Issue from Caddy's internal CA instead (see Caddyfile.template).
       BELUNE_CADDY_GLOBAL_OPTIONS: local_certs
+      # In dev the API runs on the host (air), not in a container, so Caddy has to
+      # reach back out to the host to serve the dashboard.
+      BELUNE_DASHBOARD_UPSTREAM: host.docker.internal:8080
     volumes:
       - ./caddy/Caddyfile.template:/etc/caddy/Caddyfile
       - ./caddy/sites:/etc/caddy/sites

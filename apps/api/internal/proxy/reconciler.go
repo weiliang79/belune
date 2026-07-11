@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"strings"
 	"sync"
 	"time"
 
@@ -162,6 +163,16 @@ func (r *Reconciler) reconcile(ctx context.Context) {
 		recordErr(err)
 	}
 
+	// The dashboard's own route, likewise. It is not backed by a domains row, so
+	// it is both re-asserted here and exempted from the stale-route sweep below —
+	// otherwise the sweep would see a host-matched route with no matching domain
+	// and delete the dashboard within one interval.
+	dashboardHost := r.dashboardHost(ctx)
+	if err := r.proxy.SetDashboardRoute(ctx, dashboardHost); err != nil {
+		slog.Warn("proxy reconciler: failed to sync dashboard route", "error", err)
+		recordErr(err)
+	}
+
 	current, err := r.proxy.ListRoutes(ctx)
 	if err != nil {
 		slog.Warn("proxy reconciler: failed to list current routes", "error", err)
@@ -196,6 +207,9 @@ func (r *Reconciler) reconcile(ctx context.Context) {
 
 	// Remove routes in Caddy that no longer exist in DB.
 	for hostname := range currentSet {
+		if hostname == dashboardHost && dashboardHost != "" {
+			continue // Belune's own dashboard: no domains row backs it.
+		}
 		if _, exists := expectedSet[hostname]; !exists {
 			if err := r.proxy.RemoveRoute(ctx, hostname); err != nil {
 				slog.Warn("proxy reconciler: failed to remove stale route", "hostname", hostname, "error", err)
@@ -282,4 +296,15 @@ func (r *Reconciler) syncCertificates(ctx context.Context) error {
 	}
 
 	return r.proxy.SyncCertificates(ctx, certs)
+}
+
+// dashboardHost reads the operator-configured dashboard hostname. An unset or
+// unreadable setting means "no dashboard route" rather than an error: the
+// catch-all still serves the dashboard on any host over plain HTTP.
+func (r *Reconciler) dashboardHost(ctx context.Context) string {
+	setting, err := r.queries.GetSetting(ctx, SettingDashboardDomain)
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(setting.Value)
 }

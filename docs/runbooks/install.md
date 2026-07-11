@@ -32,8 +32,10 @@ This:
 - Pulls `ghcr.io/weiling79/belune:latest` and runs `docker compose up -d`.
 - Waits for `GET /healthz` to return 200.
 
-When it finishes, the panel is reachable at `http://<host>:80` and the API
-health probe at `http://<host>:8080/healthz`.
+When it finishes, the panel is reachable at `http://<host>` — the server's bare
+IP address, over plain HTTP. That is expected: you set a domain from inside the
+dashboard in step 5, and HTTPS follows. The API is not published on a public port;
+it is reached through Caddy.
 
 > Reference for every other config option: `.env.defaults` in the repo.
 
@@ -81,41 +83,60 @@ the preview subdomain template you configure on each app — typically
 
 ---
 
-## 5. TLS
+## 5. HTTPS for the dashboard
 
-Caddy handles TLS automatically. Two paths:
+Out of the box the dashboard answers on the server's IP over plain HTTP. To serve
+it on your own hostname with a Let's Encrypt certificate:
 
-### 5a. HTTP-01 (default, simplest)
+1. Open `http://<host>` and create the admin account (step 6 below) — the first
+   login happens over HTTP on the IP, before a certificate can exist.
+2. Go to **Server → Configuration → Dashboard domain**.
+3. Enter your panel hostname (`belune.example.com`) and **Save**.
 
-Once the A records resolve, point a browser at `https://belune.example.com`
-and Caddy issues a cert on first visit. Set `TLS_ENABLED=true` and
-`SECURE_COOKIES=true` in `/opt/belune/.env`, then:
+Belune publishes that hostname to Caddy, which requests a certificate from Let's
+Encrypt automatically. The badge under the field goes from *Waiting for
+certificate* to **HTTPS active**, usually within a minute. If it does not, the
+badge tells you why — see [`tls.md`](./tls.md).
+
+This needs the DNS record from step 4 to already resolve, and ports 80 and 443
+open to the internet. **Port 80 is required even though the site runs on 443** —
+it is how Let's Encrypt validates that you control the domain.
+
+Once it is active, set these in `/opt/belune/.env` and restart so cookies and
+links use HTTPS:
+
+```env
+PUBLIC_BASE_URL=https://belune.example.com
+SECURE_COOKIES=true
+TLS_ENABLED=true          # adds the HSTS header
+```
 
 ```sh
 sudo systemctl restart belune.service
 ```
 
-### 5b. DNS-01 (wildcard certs)
-
-HTTP-01 cannot issue `*.example.com`. For wildcard certs (recommended for
-preview envs) you need a DNS provider Caddy supports — Cloudflare, Route53,
-DigitalOcean, etc. Build a Caddy image bundled with the matching plugin and
-edit the Caddyfile to declare the issuer. See the
-[Caddy DNS providers wiki](https://github.com/caddyserver/caddy/wiki/Configuring-Caddy-to-Use-a-DNS-Provider).
-
-Verify TLS is live:
+Verify:
 
 ```sh
 curl -sSI https://belune.example.com/healthz | head -1   # 200 OK
-curl -sS https://belune.example.com/healthz              # {"status":"ok"}
 ```
+
+**Wildcard certificates** (`*.example.com`) cannot be issued this way — Let's
+Encrypt only issues wildcards over a DNS challenge, which Belune does not support.
+Each app domain you add gets its own certificate automatically, which covers the
+normal case. If you genuinely need a wildcard, issue it elsewhere and upload it
+under **Settings → Certificates**, then set the domain's SSL mode to *Custom*.
 
 ---
 
 ## 6. Bootstrap the admin account
 
-Visit `https://belune.example.com` in a browser. The first-run page asks you
-to create an admin account. After that, login is required for everything.
+Visit `http://<host>` in a browser — the server's IP address. The first-run page
+asks you to create an admin account. After that, login is required for everything.
+
+Do this before step 5: the dashboard domain is configured from inside the
+dashboard, so the very first login is over plain HTTP on the IP. Once HTTPS is
+active you reach it at `https://belune.example.com` instead.
 
 Useful CLI sanity checks:
 

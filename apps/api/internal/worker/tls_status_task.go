@@ -2,121 +2,30 @@ package worker
 
 import (
 	"context"
-	"crypto/tls"
-	"crypto/x509"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log/slog"
-	"net"
-	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/weiling79/belune/internal/proxy"
 	"github.com/weiling79/belune/internal/store/generated"
+	"github.com/weiling79/belune/internal/tlsstatus"
 )
 
-// TLS status values, mirroring the CHECK on domains.tls_status.
+// TLS status values. The state machine and the probe itself live in the
+// tlsstatus package, shared with the handler that reports the dashboard's own
+// certificate — there must be exactly one definition of what "active" means.
 const (
-	TLSStatusUnknown  = "unknown"
-	TLSStatusDisabled = "disabled"
-	TLSStatusPending  = "pending"
-	TLSStatusActive   = "active"
-	TLSStatusExpiring = "expiring"
-	TLSStatusExpired  = "expired"
-	TLSStatusFailed   = "failed"
+	TLSStatusUnknown  = tlsstatus.StatusUnknown
+	TLSStatusDisabled = tlsstatus.StatusDisabled
+	TLSStatusPending  = tlsstatus.StatusPending
+	TLSStatusActive   = tlsstatus.StatusActive
+	TLSStatusExpiring = tlsstatus.StatusExpiring
+	TLSStatusExpired  = tlsstatus.StatusExpired
+	TLSStatusFailed   = tlsstatus.StatusFailed
 )
-
-// tlsExpiryWarning is how far ahead of expiry a certificate is reported as
-// `expiring`. Let's Encrypt certificates are 90 days and renew at 30 days left,
-// so 14 days means renewal has already failed several times — this is a real
-// problem, not routine churn.
-const tlsExpiryWarning = 14 * 24 * time.Hour
-
-// caddyInternalIssuer appears in the issuer CN of certificates Caddy mints from
-// its own CA. Serving one means automatic HTTPS has not obtained a real
-// certificate yet, so the domain is still pending rather than active.
-const caddyInternalIssuer = "Caddy Local Authority"
-
-// TLSProbeResult is what a single probe observed on the wire. It is derived
-// purely from the handshake, so the status the user sees is what a browser
-// would actually get — not what our config says should happen.
-type TLSProbeResult struct {
-	Status   string
-	Issuer   string
-	NotAfter time.Time
-	Error    string
-}
-
-// deriveTLSStatus turns a probe observation into the status stored on the
-// domain. Split out from the dialling so the state machine is testable without
-// a live proxy.
-//
-// recordedErr is any error already known for the domain (a failed SetupTLS, an
-// ACME failure lifted from Caddy's logs, a DNS mismatch). It is what separates
-// "no certificate yet, still working on it" from "no certificate, and here is
-// why" — the distinction the whole feature exists to make.
-func deriveTLSStatus(sslMode string, leaf *x509.Certificate, hostname string, dialErr error, recordedErr string, now time.Time) TLSProbeResult {
-	if sslMode == proxy.SSLModeOff {
-		return TLSProbeResult{Status: TLSStatusDisabled}
-	}
-
-	// No certificate served: either issuance is still in flight, or it failed and
-	// something already told us why.
-	if dialErr != nil || leaf == nil {
-		res := TLSProbeResult{Status: TLSStatusPending, Error: recordedErr}
-		if recordedErr != "" {
-			res.Status = TLSStatusFailed
-		}
-		return res
-	}
-
-	// A certificate is served, but not for this hostname — Caddy fell back to
-	// another SNI's certificate, which a browser would reject.
-	if !certMatchesHost(leaf, hostname) {
-		return TLSProbeResult{
-			Status: TLSStatusFailed,
-			Error:  fmt.Sprintf("the certificate served for %s is valid only for %s", hostname, strings.Join(leaf.DNSNames, ", ")),
-		}
-	}
-
-	res := TLSProbeResult{
-		Issuer:   leaf.Issuer.CommonName,
-		NotAfter: leaf.NotAfter,
-		Error:    recordedErr,
-	}
-
-	// Caddy's own CA is a placeholder while ACME is still working (or failing).
-	// Reporting it as active would tell the user HTTPS is fine when no browser
-	// would trust it.
-	if strings.Contains(leaf.Issuer.CommonName, caddyInternalIssuer) {
-		res.Status = TLSStatusPending
-		if recordedErr != "" {
-			res.Status = TLSStatusFailed
-		}
-		return res
-	}
-
-	switch {
-	case now.After(leaf.NotAfter):
-		res.Status = TLSStatusExpired
-	case leaf.NotAfter.Sub(now) < tlsExpiryWarning:
-		res.Status = TLSStatusExpiring
-	default:
-		res.Status = TLSStatusActive
-		// A live, valid certificate settles any older complaint.
-		res.Error = ""
-	}
-	return res
-}
-
-// certMatchesHost reports whether the leaf covers the hostname, honouring
-// wildcard SANs the same way a browser does.
-func certMatchesHost(leaf *x509.Certificate, hostname string) bool {
-	return leaf.VerifyHostname(hostname) == nil
-}
 
 // HandleTLSStatusSweep probes every domain and records what the proxy actually
 // serves for it. Registered @every 1m; domain create/update also enqueues a
@@ -147,8 +56,8 @@ func (h *TaskHandler) probeDomain(ctx context.Context, d generated.ListDomainsFo
 		}
 	}
 
-	leaf, dialErr := h.probeTLS(ctx, d.Hostname)
-	res := deriveTLSStatus(d.SslMode, leaf, d.Hostname, dialErr, recordedErr, time.Now())
+	leaf, dialErr := tlsstatus.Probe(ctx, h.Config.CaddyTLSProbeAddr, d.Hostname)
+	res := tlsstatus.Derive(d.SslMode, leaf, d.Hostname, dialErr, recordedErr, time.Now())
 
 	var notAfter pgtype.Timestamptz
 	if !res.NotAfter.IsZero() {
@@ -171,37 +80,10 @@ func (h *TaskHandler) probeDomain(ctx context.Context, d generated.ListDomainsFo
 	}
 }
 
-// probeTLS completes a TLS handshake against the local proxy with the domain's
-// hostname as SNI, and returns the leaf it presented. The certificate is
-// inspected, never trusted: it may legitimately be self-signed or expired, which
-// is exactly what we are trying to detect.
-func (h *TaskHandler) probeTLS(ctx context.Context, hostname string) (*x509.Certificate, error) {
-	addr := h.Config.CaddyTLSProbeAddr
-	if addr == "" {
-		return nil, errors.New("no TLS probe address configured")
-	}
-
-	dialer := &net.Dialer{Timeout: 5 * time.Second}
-	conn, err := tls.DialWithDialer(dialer, "tcp", addr, &tls.Config{
-		ServerName:         hostname,
-		InsecureSkipVerify: true, //nolint:gosec // we inspect the leaf; trusting it would defeat the check
-	})
-	if err != nil {
-		return nil, err
-	}
-	defer conn.Close()
-
-	state := conn.ConnectionState()
-	if len(state.PeerCertificates) == 0 {
-		return nil, errors.New("no certificate presented")
-	}
-	return state.PeerCertificates[0], nil
-}
-
 // notifyTLSTransition tells admins when a domain enters a state that needs
 // human action. Only transitions notify, so a domain that stays broken does not
 // re-notify every minute.
-func (h *TaskHandler) notifyTLSTransition(ctx context.Context, hostname string, res TLSProbeResult) {
+func (h *TaskHandler) notifyTLSTransition(ctx context.Context, hostname string, res tlsstatus.ProbeResult) {
 	if h.Notifier == nil {
 		return
 	}

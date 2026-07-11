@@ -121,7 +121,7 @@ func (c *Client) InitCatchAll(ctx context.Context) {
 	// Re-append catch-all with known @id at the end.
 	catchAllJSON, _ := json.Marshal(caddyRoute{
 		ID:     catchAllRouteID,
-		Handle: []caddyHandle{newReverseProxyHandle([]caddyUpstream{{Dial: "localhost:8080"}}, "")},
+		Handle: []caddyHandle{newReverseProxyHandle([]caddyUpstream{{Dial: c.dashboardUpstream}}, "")},
 	})
 	newRoutes := append(domainRoutes, catchAllJSON)
 
@@ -492,7 +492,7 @@ func (c *Client) moveCatchAllToEnd(ctx context.Context) error {
 	if len(catchAll) == 0 {
 		catchAll, err = json.Marshal(caddyRoute{
 			ID:     catchAllRouteID,
-			Handle: []caddyHandle{newReverseProxyHandle([]caddyUpstream{{Dial: "localhost:8080"}}, "")},
+			Handle: []caddyHandle{newReverseProxyHandle([]caddyUpstream{{Dial: c.dashboardUpstream}}, "")},
 		})
 		if err != nil {
 			return fmt.Errorf("marshal catch-all: %w", err)

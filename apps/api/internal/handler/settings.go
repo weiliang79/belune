@@ -3,9 +3,11 @@ package handler
 import (
 	"context"
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"strings"
 
+	"github.com/weiling79/belune/internal/proxy"
 	"github.com/weiling79/belune/internal/store/generated"
 )
 
@@ -53,6 +55,23 @@ func (h *Handler) UpdateSettings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// The dashboard domain is not just a stored string: it decides the hostname
+	// Caddy obtains a certificate for, so it is validated before it is written and
+	// applied to the proxy afterwards.
+	dashboardDomain, changingDashboard := "", false
+	for i, s := range req {
+		if s.Key != proxy.SettingDashboardDomain {
+			continue
+		}
+		host := strings.TrimSpace(s.Value)
+		if host != "" && !hostnameRegex.MatchString(host) {
+			writeError(w, http.StatusBadRequest, "invalid dashboard domain: must be a hostname such as belune.example.com")
+			return
+		}
+		req[i].Value = host
+		dashboardDomain, changingDashboard = host, true
+	}
+
 	for _, s := range req {
 		if s.Key == "" {
 			continue
@@ -62,6 +81,17 @@ func (h *Handler) UpdateSettings(w http.ResponseWriter, r *http.Request) {
 			Value: s.Value,
 		}); err != nil {
 			writeError(w, http.StatusInternalServerError, "failed to update setting")
+			return
+		}
+	}
+
+	if changingDashboard {
+		// Publish (or clear) the dashboard's own route. A failure here leaves the
+		// setting saved but the proxy unchanged; the reconciler re-applies it on its
+		// next pass, so report it rather than pretending nothing happened.
+		if err := h.proxy.SetDashboardRoute(r.Context(), dashboardDomain); err != nil {
+			slog.Error("failed to apply dashboard domain to proxy", "hostname", dashboardDomain, "error", err)
+			writeError(w, http.StatusInternalServerError, "domain saved, but the proxy could not be updated — it will retry shortly")
 			return
 		}
 	}

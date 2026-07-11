@@ -4,12 +4,15 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/weiling79/belune/internal/proxy"
+	"github.com/weiling79/belune/internal/tlsstatus"
 	"github.com/weiling79/belune/internal/worker"
 )
 
@@ -99,4 +102,44 @@ func timestampPtr(ts pgtype.Timestamptz) *time.Time {
 	}
 	t := ts.Time
 	return &t
+}
+
+// dashboardTLSResponse reports the dashboard's own certificate. The dashboard has
+// no row in the domains table, so its status is probed on demand rather than by
+// the sweep — the operator is watching the page while Let's Encrypt works.
+type dashboardTLSResponse struct {
+	Domain      string     `json:"domain"`
+	TLSStatus   string     `json:"tls_status"`
+	TLSIssuer   string     `json:"tls_issuer,omitempty"`
+	TLSNotAfter *time.Time `json:"tls_not_after"`
+	TLSError    string     `json:"tls_error,omitempty"`
+}
+
+// GetDashboardTLS probes the certificate the proxy currently serves for the
+// configured dashboard domain.
+func (h *Handler) GetDashboardTLS(w http.ResponseWriter, r *http.Request) {
+	setting, err := h.queries.GetSetting(r.Context(), proxy.SettingDashboardDomain)
+	domain := ""
+	if err == nil {
+		domain = strings.TrimSpace(setting.Value)
+	}
+	if domain == "" {
+		writeJSON(w, http.StatusOK, dashboardTLSResponse{TLSStatus: tlsstatus.StatusUnknown})
+		return
+	}
+
+	leaf, dialErr := tlsstatus.Probe(r.Context(), h.cfg.CaddyTLSProbeAddr, domain)
+	res := tlsstatus.Derive("automatic", leaf, domain, dialErr, "", time.Now())
+
+	out := dashboardTLSResponse{
+		Domain:    domain,
+		TLSStatus: res.Status,
+		TLSIssuer: res.Issuer,
+		TLSError:  res.Error,
+	}
+	if !res.NotAfter.IsZero() {
+		t := res.NotAfter
+		out.TLSNotAfter = &t
+	}
+	writeJSON(w, http.StatusOK, out)
 }

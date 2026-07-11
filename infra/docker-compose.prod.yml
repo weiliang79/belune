@@ -5,7 +5,10 @@ services:
       context: ..
       dockerfile: Dockerfile
     ports:
-      - "8080:8080"
+      # Bound to loopback: Caddy serves the dashboard on :80/:443 and reaches the
+      # API over the compose network. Publishing 8080 publicly would expose the
+      # login page — and every API route — in plaintext, bypassing TLS entirely.
+      - "127.0.0.1:8080:8080"
     env_file:
       - ../.env
     environment:

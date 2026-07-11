@@ -291,6 +291,8 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService,
 				r.Get("/api/requests", h.ListAllRequestLogs)
 				r.Get("/api/requests/summary", h.GetAllRequestsSummary)
 				r.Get("/api/server/services", h.GetServerServices)
+				// Live TLS state of the dashboard's own domain.
+				r.Get("/api/server/dashboard-tls", h.GetDashboardTLS)
 				// Read-only Docker inspect pages (containers/images/volumes/networks).
 				r.Get("/api/docker/overview", h.GetDockerOverview)
 				r.Get("/api/docker/containers", h.ListDockerContainers)

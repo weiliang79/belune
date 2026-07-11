@@ -25,7 +25,11 @@
 # port, so writing `:80, :443` would split this into srv0=:443 + srv1=:80 and
 # quietly strand every dynamically-added route on the wrong server.
 :80 {
-	reverse_proxy api:8080
+	# The API's address *on Caddy's network* — the compose service name, not
+	# localhost, which from in here is Caddy itself. The API re-asserts this at
+	# startup (DASHBOARD_UPSTREAM); the default keeps a freshly-started Caddy
+	# working before it connects.
+	reverse_proxy {$BELUNE_DASHBOARD_UPSTREAM:belune:8080}
 }
 
 # Per-app configs are managed dynamically via the Caddy Admin API.

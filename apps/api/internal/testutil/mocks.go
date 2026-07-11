@@ -244,6 +244,8 @@ func (m *MockProxyManager) SyncAutoHTTPS(_ context.Context, _, _ []string) error
 func (m *MockProxyManager) SyncCertificates(_ context.Context, _ []proxy.HostCertificate) error {
 	return nil
 }
+
+func (m *MockProxyManager) SetDashboardRoute(_ context.Context, _ string) error { return nil }
 func (m *MockProxyManager) ListRoutes(_ context.Context) ([]proxy.RouteConfig, error) {
 	return nil, nil
 }
