@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -26,6 +27,15 @@ import (
 type Client struct {
 	adminURL   string
 	httpClient *http.Client
+
+	// skipMu guards autoHTTPSSkip: the set of hostnames Caddy must not attempt
+	// to obtain a certificate for (ssl_mode=off). It is mirrored into srv0's
+	// automatic_https.skip on every change. Holding it in memory rather than
+	// read-modify-writing Caddy's copy keeps concurrent AddRoute callers from
+	// clobbering each other; the reconciler re-asserts the set from DB truth on
+	// every pass, which is also how it survives a Caddy restart.
+	skipMu        sync.Mutex
+	autoHTTPSSkip map[string]struct{}
 }
 
 const unixScheme = "unix://"
@@ -51,16 +61,18 @@ func New(adminURL string) *Client {
 	}
 
 	return &Client{
-		adminURL:   adminURL,
-		httpClient: httpClient,
+		adminURL:      adminURL,
+		httpClient:    httpClient,
+		autoHTTPSSkip: make(map[string]struct{}),
 	}
 }
 
-// Ping checks that the Caddy admin API is reachable and responding.
-// GET / is a lightweight liveness endpoint that returns {"version":"..."} without
-// fetching the full config tree (as GET /config/ would).
+// Ping checks that the Caddy admin API is reachable and serving Belune's server.
+// It reads srv0's listener list: a small response that proves both liveness and
+// that our config is loaded, without pulling the whole config tree down as
+// GET /config/ would. (The admin API has no root endpoint — GET / is a 404.)
 func (c *Client) Ping(ctx context.Context) error {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.adminURL+"/", nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.adminURL+"/config/apps/http/servers/srv0/listen", nil)
 	if err != nil {
 		return fmt.Errorf("caddy ping: build request: %w", err)
 	}

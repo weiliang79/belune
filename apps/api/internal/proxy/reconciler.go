@@ -133,6 +133,22 @@ func (r *Reconciler) reconcile(ctx context.Context) {
 		return
 	}
 
+	// Re-assert the server-level config (HTTPS listener, auto-HTTPS policy, skip
+	// list) before touching routes. A restarted Caddy comes back up with only its
+	// static Caddyfile, so this is what restores the :443 listener — and doing it
+	// first means a route re-added below cannot briefly trigger a doomed
+	// certificate attempt for an ssl_mode=off hostname.
+	var skip []string
+	for _, cfg := range expected {
+		if cfg.SSLMode == SSLModeOff {
+			skip = append(skip, cfg.Hostname)
+		}
+	}
+	if err := r.proxy.SyncAutoHTTPSSkip(ctx, skip); err != nil {
+		slog.Warn("proxy reconciler: failed to sync auto-HTTPS config", "error", err)
+		recordErr(err)
+	}
+
 	current, err := r.proxy.ListRoutes(ctx)
 	if err != nil {
 		slog.Warn("proxy reconciler: failed to list current routes", "error", err)

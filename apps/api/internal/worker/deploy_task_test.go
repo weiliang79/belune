@@ -55,6 +55,7 @@ func (p *failingProxy) AddRoute(_ context.Context, cfg proxy.RouteConfig) error 
 
 func (p *failingProxy) RemoveRoute(_ context.Context, _ string) error             { return nil }
 func (p *failingProxy) SetupTLS(_ context.Context, _, _, _, _ string) error       { return nil }
+func (p *failingProxy) SyncAutoHTTPSSkip(_ context.Context, _ []string) error     { return nil }
 func (p *failingProxy) ListRoutes(_ context.Context) ([]proxy.RouteConfig, error) { return nil, nil }
 
 // createFailRuntime wraps MockContainerRuntime so CreateContainer always fails.
@@ -280,8 +281,8 @@ func TestHandleDeployTask_RollbackUsesProvidedImageTag(t *testing.T) {
 	// rollback path and skips the PullImage call entirely.
 	const rollbackTag = "nginx:1.20"
 	payload, err := json.Marshal(map[string]string{
-		"application_id":    uuidString(app.ID),
-		"deployment_id":     uuidString(dep.ID),
+		"application_id":     uuidString(app.ID),
+		"deployment_id":      uuidString(dep.ID),
 		"rollback_image_tag": rollbackTag,
 	})
 	require.NoError(t, err)

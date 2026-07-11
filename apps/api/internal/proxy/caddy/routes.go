@@ -11,6 +11,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"sort"
 	"strings"
 
 	"github.com/weiling79/belune/internal/pkg/metrics"
@@ -124,8 +125,11 @@ func (c *Client) InitCatchAll(ctx context.Context) {
 	})
 	newRoutes := append(domainRoutes, catchAllJSON)
 
-	c.replaceAllRoutes(ctx, newRoutes)
-	slog.Info("caddy catch-all route initialised")
+	if err := c.ensureServer(ctx, newRoutes); err != nil {
+		slog.Warn("caddy: InitCatchAll failed to write server config", "error", err)
+		return
+	}
+	slog.Info("caddy catch-all route initialised", "listen", serverListen)
 }
 
 func (c *Client) AddRoute(ctx context.Context, cfg proxy.RouteConfig) (err error) {
@@ -149,7 +153,7 @@ func (c *Client) AddRoute(ctx context.Context, cfg proxy.RouteConfig) (err error
 	))
 
 	// If ForceHTTPS is enabled, prepend an HTTP→HTTPS redirect subroute.
-	if cfg.ForceHTTPS && cfg.SSLMode != "off" {
+	if cfg.ForceHTTPS && cfg.SSLMode != proxy.SSLModeOff {
 		handlers = append([]caddyHandle{
 			{
 				"handler": "subroute",
@@ -176,6 +180,17 @@ func (c *Client) AddRoute(ctx context.Context, cfg proxy.RouteConfig) (err error
 	body, err := json.Marshal(route)
 	if err != nil {
 		return fmt.Errorf("marshal route: %w", err)
+	}
+
+	// Update the auto-HTTPS skip set *before* the route lands: srv0 listens on
+	// :443, so the moment a host matcher appears Caddy starts trying to issue a
+	// certificate for it — which for an ssl_mode=off domain would fail loudly and
+	// pointlessly. A failure here is not fatal (the route itself is still
+	// correct) and the reconciler re-asserts the set on its next pass.
+	if c.setSkip(cfg.Hostname, cfg.SSLMode == proxy.SSLModeOff) {
+		if err := c.ensureServer(ctx, nil); err != nil {
+			slog.Warn("caddy: failed to update auto-HTTPS skip list", "hostname", cfg.Hostname, "error", err)
+		}
 	}
 
 	// Append the domain route (order doesn't matter here; moveCatchAllToEnd fixes it).
@@ -325,11 +340,11 @@ func headerOpsToMap(ops *proxy.HeaderOps) map[string]any {
 // rejected so user-supplied JSON cannot attach arbitrary modules (e.g. a
 // reverse_proxy that routes to an attacker-controlled upstream).
 var advancedHandlerAllowlist = map[string]struct{}{
-	"headers":     {},
-	"rewrite":     {},
-	"redir":       {},
-	"handle_path": {},
-	"subroute":    {},
+	"headers":        {},
+	"rewrite":        {},
+	"redir":          {},
+	"handle_path":    {},
+	"subroute":       {},
 	"authentication": {}, // scoped to http_basic by parser below
 }
 
@@ -388,6 +403,13 @@ func (c *Client) RemoveRoute(ctx context.Context, hostname string) (err error) {
 			return nil
 		}
 		return fmt.Errorf("caddy remove route: HTTP %d: %s", resp.StatusCode, bodyStr)
+	}
+
+	// The hostname no longer exists, so it has no business in the skip set.
+	if c.setSkip(hostname, false) {
+		if err := c.ensureServer(ctx, nil); err != nil {
+			slog.Warn("caddy: failed to prune auto-HTTPS skip list", "hostname", hostname, "error", err)
+		}
 	}
 
 	slog.Info("caddy route removed", "hostname", hostname)
@@ -528,31 +550,139 @@ func (c *Client) fetchRawRoutes(ctx context.Context) ([]json.RawMessage, error) 
 	return routes, nil
 }
 
-// replaceAllRoutes replaces the entire routes array in srv0 by patching the
-// server object. A direct PUT on the routes path can fail with "key already
-// exists", so we PATCH the parent server instead.
-func (c *Client) replaceAllRoutes(ctx context.Context, routes []json.RawMessage) {
-	wrapper := map[string]any{
-		"listen": []string{":80"},
-		"routes": routes,
-	}
-	body, err := json.Marshal(wrapper)
+// serverListen is the listener set srv0 must always have. The HTTPS listener is
+// asserted from here rather than the Caddyfile because the Caddyfile adapter
+// emits one server per port: `:80, :443` would produce srv0=:443 + srv1=:80,
+// stranding every route below (all of which address srv0 by name) on the wrong
+// server. Without :443 in this list Caddy applies no automatic HTTPS at all.
+var serverListen = []string{":80", ":443"}
+
+// ensureServer writes Belune's required srv0 configuration: the dual listener,
+// the automatic-HTTPS policy, and a TLS connection policy (without at least one
+// policy Caddy accepts TCP on :443 but never completes a handshake). Passing a
+// non-nil routes replaces the route table; nil leaves it untouched.
+//
+// Caddy's PATCH replaces the whole object at the given path, and PATCH cannot
+// create a key that does not exist yet (tls_connection_policies is absent from
+// the adapted Caddyfile), so this reads the current server and merges into it —
+// preserving keys it does not own, notably the `logs` set by ConfigureAccessLogs.
+func (c *Client) ensureServer(ctx context.Context, routes []json.RawMessage) error {
+	server, err := c.fetchServer(ctx)
 	if err != nil {
-		slog.Warn("caddy: failed to marshal server for route replacement", "error", err)
-		return
+		return err
+	}
+
+	server["listen"] = serverListen
+	server["automatic_https"] = map[string]any{
+		// Belune owns HTTP→HTTPS redirection per-domain via the ForceHTTPS
+		// subroute in AddRoute; Caddy's own redirect routes would shadow it.
+		"disable_redirects": true,
+		// Hostnames with ssl_mode=off: Caddy must not try to issue for them.
+		"skip": c.skipList(),
+	}
+	server["tls_connection_policies"] = []map[string]any{{}}
+	if routes != nil {
+		server["routes"] = routes
+	}
+
+	body, err := json.Marshal(server)
+	if err != nil {
+		return fmt.Errorf("marshal server: %w", err)
 	}
 	url := fmt.Sprintf("%s/config/apps/http/servers/srv0", c.adminURL)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPatch, url, bytes.NewReader(body))
 	if err != nil {
-		return
+		return fmt.Errorf("create request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
+
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		slog.Warn("caddy: replaceAllRoutes failed", "error", err)
-		return
+		if isTransportError(err) {
+			return fmt.Errorf("%w: %v", ErrCaddyUnreachable, err)
+		}
+		return fmt.Errorf("patch server: %w", err)
 	}
-	resp.Body.Close()
+	defer resp.Body.Close()
+	if resp.StatusCode >= 400 {
+		respBody, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("patch server: HTTP %d: %s", resp.StatusCode, string(respBody))
+	}
+	return nil
+}
+
+// fetchServer returns srv0's current configuration as a mutable map.
+func (c *Client) fetchServer(ctx context.Context) (map[string]any, error) {
+	url := fmt.Sprintf("%s/config/apps/http/servers/srv0", c.adminURL)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("create request: %w", err)
+	}
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		if isTransportError(err) {
+			return nil, fmt.Errorf("%w: %v", ErrCaddyUnreachable, err)
+		}
+		return nil, fmt.Errorf("fetch server: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 400 {
+		respBody, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("fetch server: HTTP %d: %s", resp.StatusCode, string(respBody))
+	}
+
+	server := map[string]any{}
+	if err := json.NewDecoder(resp.Body).Decode(&server); err != nil {
+		return nil, fmt.Errorf("decode server: %w", err)
+	}
+	return server, nil
+}
+
+// SyncAutoHTTPSSkip replaces the auto-HTTPS skip set with the given hostnames
+// (those whose domains are ssl_mode=off) and re-asserts the full server config.
+// The reconciler calls this every pass, which is what restores the :443 listener
+// and the skip list after Caddy restarts back to its Caddyfile-only config.
+func (c *Client) SyncAutoHTTPSSkip(ctx context.Context, hostnames []string) error {
+	c.skipMu.Lock()
+	c.autoHTTPSSkip = make(map[string]struct{}, len(hostnames))
+	for _, h := range hostnames {
+		c.autoHTTPSSkip[h] = struct{}{}
+	}
+	c.skipMu.Unlock()
+
+	return c.ensureServer(ctx, nil)
+}
+
+// setSkip adds or removes one hostname from the skip set, reporting whether the
+// set actually changed.
+func (c *Client) setSkip(hostname string, skip bool) bool {
+	c.skipMu.Lock()
+	defer c.skipMu.Unlock()
+
+	_, present := c.autoHTTPSSkip[hostname]
+	switch {
+	case skip && !present:
+		c.autoHTTPSSkip[hostname] = struct{}{}
+	case !skip && present:
+		delete(c.autoHTTPSSkip, hostname)
+	default:
+		return false
+	}
+	return true
+}
+
+// skipList returns the skip set as a sorted slice, so an unchanged set always
+// renders to identical JSON and does not churn Caddy's config.
+func (c *Client) skipList() []string {
+	c.skipMu.Lock()
+	defer c.skipMu.Unlock()
+
+	list := make([]string, 0, len(c.autoHTTPSSkip))
+	for h := range c.autoHTTPSSkip {
+		list = append(list, h)
+	}
+	sort.Strings(list)
+	return list
 }
 
 // targetToDial converts "http://host:port" to "host:port" for Caddy upstream dial.

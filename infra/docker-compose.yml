@@ -33,6 +33,10 @@ services:
       - "80:80"
       - "443:443"
       - "127.0.0.1:2019:2019"
+    environment:
+      # Dev hostnames are *.belune.local — no public DNS, so ACME can never
+      # succeed. Issue from Caddy's internal CA instead (see Caddyfile.template).
+      BELUNE_CADDY_GLOBAL_OPTIONS: local_certs
     volumes:
       - ./caddy/Caddyfile.template:/etc/caddy/Caddyfile
       - ./caddy/sites:/etc/caddy/sites

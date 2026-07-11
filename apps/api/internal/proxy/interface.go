@@ -5,11 +5,15 @@ import (
 	"encoding/json"
 )
 
+// SSLModeOff is the domain ssl_mode that serves plain HTTP only: no certificate
+// is obtained for the hostname and no HTTP→HTTPS redirect is rendered.
+const SSLModeOff = "off"
+
 // RouteFeature represents a middleware feature applied to a route.
 // Config is kept as raw JSON so it can be validated against a typed schema
 // via ParseFeatureConfig at the route-builder boundary.
 type RouteFeature struct {
-	Type    string          `json:"type"`    // basic_auth, redirect, headers, ip_allowlist, rate_limit
+	Type    string          `json:"type"` // basic_auth, redirect, headers, ip_allowlist, rate_limit
 	Config  json.RawMessage `json:"config"`
 	Enabled bool            `json:"enabled"`
 }
@@ -35,4 +39,11 @@ type ProxyManager interface {
 	RemoveRoute(ctx context.Context, hostname string) error
 	SetupTLS(ctx context.Context, hostname string, sslMode, certPath, keyPath string) error
 	ListRoutes(ctx context.Context) ([]RouteConfig, error)
+
+	// SyncAutoHTTPSSkip declares the hostnames the proxy must not obtain
+	// certificates for (ssl_mode=off) and re-asserts the server-level config that
+	// automatic HTTPS depends on. The reconciler calls it every pass: a restarted
+	// Caddy comes back up with only its static Caddyfile, so the HTTPS listener
+	// and the skip list have to be re-applied the same way routes are.
+	SyncAutoHTTPSSkip(ctx context.Context, hostnames []string) error
 }

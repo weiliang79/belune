@@ -1,5 +1,15 @@
 {
 	admin 0.0.0.0:2019
+	# Belune renders its own per-domain HTTP→HTTPS redirect (the ForceHTTPS
+	# subroute in proxy/caddy/routes.go). Caddy's automatic redirect routes
+	# would shadow it and ignore the per-domain toggle, so suppress them.
+	auto_https disable_redirects
+	# Optional extra global options, injected per-environment. The dev stack sets
+	# this to `local_certs` so Caddy issues from its own internal CA: dev
+	# hostnames (*.belune.local) have no public DNS, so a real ACME challenge
+	# could only ever fail — repeatedly, against Let's Encrypt's rate limits.
+	# Unset in production, where the default public ACME issuer is what we want.
+	{$BELUNE_CADDY_GLOBAL_OPTIONS}
 	# Expose Caddy's own runtime metrics at /metrics on the admin API
 	# (scraped by Prometheus in the observability stack).
 	servers {
@@ -7,7 +17,13 @@
 	}
 }
 
-# Default site — PaaS dashboard (not logged — internal traffic only)
+# Default site — Belune dashboard (not logged — internal traffic only).
+#
+# This declares :80 only, yet srv0 ends up listening on :443 as well. The
+# HTTPS listener is added at runtime by the API (proxy/caddy.ensureServer),
+# deliberately rather than here: the Caddyfile adapter emits one server per
+# port, so writing `:80, :443` would split this into srv0=:443 + srv1=:80 and
+# quietly strand every dynamically-added route on the wrong server.
 :80 {
 	reverse_proxy api:8080
 }

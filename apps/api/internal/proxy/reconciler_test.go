@@ -39,6 +39,8 @@ func (m *mockProxy) ListRoutes(_ context.Context) ([]proxy.RouteConfig, error) {
 
 func (m *mockProxy) SetupTLS(_ context.Context, _, _, _, _ string) error { return nil }
 
+func (m *mockProxy) SyncAutoHTTPSSkip(_ context.Context, _ []string) error { return nil }
+
 // reconcileOnce exercises the diff logic by building expected/current sets and
 // calling AddRoute / RemoveRoute via the exported Reconciler. We test the diff
 // behaviour by constructing scenarios directly using the exported constructor.
