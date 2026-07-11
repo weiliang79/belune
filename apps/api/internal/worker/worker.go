@@ -126,6 +126,13 @@ func (w *Worker) Start() error {
 		w.handler.HandleBackupScheduleSweep(ctx)
 		return nil
 	})
+	mux.HandleFunc(TypeTLSStatusSweep, func(ctx context.Context, t *asynq.Task) error {
+		w.handler.HandleTLSStatusSweep(ctx)
+		return nil
+	})
+	mux.HandleFunc(TypeTLSProbe, func(ctx context.Context, t *asynq.Task) error {
+		return w.handler.HandleTLSProbeTask(ctx, t.Payload())
+	})
 
 	// Reconcile any database left mid-upgrade by a previous crash/restart before
 	// accepting new work — upgrades never auto-retry, so these would otherwise sit
@@ -188,7 +195,15 @@ func (w *Worker) StartScheduler() (*asynq.Scheduler, error) {
 		return nil, err
 	}
 
-	slog.Info("starting scheduler (cleanup: 24h, retention: 24h, host-metrics-cleanup: 1h, auth-token-cleanup: 1h, quota-sweep: 6h, backup-rotate: 24h, backup-sched-sweep: 1m)")
+	// TLS status sweep every minute — probes what the proxy actually serves for
+	// each domain, so a stuck certificate surfaces in the UI within a minute
+	// rather than never.
+	tlsSweepTask := asynq.NewTask(TypeTLSStatusSweep, nil)
+	if _, err := scheduler.Register("@every 1m", tlsSweepTask, asynq.Queue("low")); err != nil {
+		return nil, err
+	}
+
+	slog.Info("starting scheduler (cleanup: 24h, retention: 24h, host-metrics-cleanup: 1h, auth-token-cleanup: 1h, quota-sweep: 6h, backup-rotate: 24h, backup-sched-sweep: 1m, tls-status-sweep: 1m)")
 	if err := scheduler.Start(); err != nil {
 		return nil, err
 	}

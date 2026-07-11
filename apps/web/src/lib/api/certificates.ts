@@ -28,3 +28,34 @@ export function uploadCertificate(data: UploadCertificate) {
 export function deleteCertificate(id: string) {
   return api.delete<void>(`/certificates/${id}`);
 }
+
+/** One row of the central Domain TLS view. */
+export interface DomainTLSStatus {
+  id: string;
+  hostname: string;
+  ssl_mode: string;
+  tls_status: string;
+  tls_issuer?: string;
+  tls_not_after: string | null;
+  tls_last_checked_at: string | null;
+  tls_error?: string;
+  certificate_name?: string;
+  application_id: string;
+  application_name: string;
+  project_id: string;
+}
+
+export function listDomainTLSStatus() {
+  return api.get<DomainTLSStatus[]>("/domains/tls");
+}
+
+export function recheckDomainTLS(
+  projectId: string,
+  applicationId: string,
+  domainId: string,
+) {
+  return api.post<void>(
+    `/projects/${projectId}/applications/${applicationId}/domains/${domainId}/tls/recheck`,
+    {},
+  );
+}

@@ -178,4 +178,3 @@ func previewConfigView(app generated.Application) previewConfigResponse {
 		PreviewDomainTemplate: app.PreviewDomainTemplate.String,
 	}
 }
-

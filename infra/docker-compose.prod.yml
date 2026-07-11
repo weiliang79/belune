@@ -109,6 +109,10 @@ services:
       - caddydata:/data
       - caddyconfig:/config
       - caddylogs:/var/log/caddy
+    labels:
+      # Streams Caddy's own logs into container_logs, which is how ACME failure
+      # reasons reach the TLS status badge instead of dying in stdout.
+      - belune-system=caddy
     restart: unless-stopped
     deploy:
       resources:

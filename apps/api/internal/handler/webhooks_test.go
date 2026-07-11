@@ -31,7 +31,7 @@ func TestUpdateApplicationWebhook(t *testing.T) {
 	secret := "my-webhook-secret"
 	branch := "develop"
 	resp := env.DoRequest(t, "PUT", fmt.Sprintf("/api/projects/%s/applications/%s/webhook", projectID, appID), map[string]any{
-		"webhook_secret":    secret,
+		"webhook_secret":     secret,
 		"auto_deploy_branch": branch,
 	}, testutil.AuthHeader(token))
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
@@ -63,7 +63,7 @@ func TestWebhookPush_GitHub(t *testing.T) {
 
 	// Simulate GitHub push webhook
 	payload := map[string]any{
-		"ref": "refs/heads/main",
+		"ref":   "refs/heads/main",
 		"after": "abc123def456",
 		"repository": map[string]any{
 			"clone_url": "https://github.com/test/repo.git",
@@ -77,7 +77,7 @@ func TestWebhookPush_GitHub(t *testing.T) {
 	signature := "sha256=" + hex.EncodeToString(mac.Sum(nil))
 
 	resp := env.DoRequest(t, "POST", "/api/webhooks/push", payload, map[string]string{
-		"X-GitHub-Event":  "push",
+		"X-GitHub-Event":      "push",
 		"X-Hub-Signature-256": signature,
 	})
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
@@ -160,7 +160,7 @@ func TestWebhookPush_BranchMismatch(t *testing.T) {
 
 	// Push to develop branch (mismatch)
 	payload := map[string]any{
-		"ref": "refs/heads/develop",
+		"ref":   "refs/heads/develop",
 		"after": "abc123def456",
 		"repository": map[string]any{
 			"clone_url": "https://github.com/test/repo.git",
@@ -173,7 +173,7 @@ func TestWebhookPush_BranchMismatch(t *testing.T) {
 	signature := "sha256=" + hex.EncodeToString(mac.Sum(nil))
 
 	resp := env.DoRequest(t, "POST", "/api/webhooks/push", payload, map[string]string{
-		"X-GitHub-Event":  "push",
+		"X-GitHub-Event":      "push",
 		"X-Hub-Signature-256": signature,
 	})
 	assert.Equal(t, http.StatusOK, resp.StatusCode)

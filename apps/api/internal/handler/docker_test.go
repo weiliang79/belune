@@ -199,8 +199,8 @@ func TestDockerVolumes_OwnerFromApp(t *testing.T) {
 
 	volName := naming.AppVolumeName(uuid.UUID(app.ID.Bytes).String(), "data")
 	env.Runtime.ListVolumes_ = []runtime.VolumeInfo{
-		{Name: volName, Driver: "local", Size: 100, RefCount: 1},   // owned
-		{Name: "some-foreign-vol", Driver: "local", Size: 10},      // unowned
+		{Name: volName, Driver: "local", Size: 100, RefCount: 1}, // owned
+		{Name: "some-foreign-vol", Driver: "local", Size: 10},    // unowned
 	}
 	t.Cleanup(func() { env.Runtime.ListVolumes_ = nil })
 

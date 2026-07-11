@@ -38,3 +38,8 @@ DELETE FROM users WHERE id = $1;
 
 -- name: CountAdmins :one
 SELECT COUNT(*) FROM users WHERE role = 'admin';
+
+-- name: ListAdminUserIDs :many
+-- Recipients for instance-wide alerts (TLS failures, expiries) that belong to no
+-- single project owner.
+SELECT id FROM users WHERE role = 'admin';

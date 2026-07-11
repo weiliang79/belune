@@ -1,24 +1,21 @@
 import { Badge } from "@/components/ui/badge";
-import type { DomainExpanded } from "@/lib/types";
-
-type Status = "active" | "pending" | "custom" | "off" | "error";
-
-function statusFor(domain: DomainExpanded): Status {
-  const mode = domain.ssl_mode ?? "automatic";
-  if (mode === "off") return "off";
-  if (mode === "custom") {
-    // Phase 3 replaces this inference with the server's own tls_status.
-    return domain.certificate_id ? "custom" : "error";
-  }
-  if (mode === "automatic" || mode === "dns_challenge") {
-    return domain.verified_at ? "active" : "pending";
-  }
-  return "error";
-}
+import { Button } from "@/components/ui/button";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { useRecheckDomainTLS } from "@/lib/hooks/use-certificates";
+import type { DomainExpanded, TLSStatus } from "@/lib/types";
+import { RefreshCw } from "lucide-react";
 
 const STYLES: Record<
-  Status,
-  { label: string; variant: "default" | "secondary" | "outline" | "destructive"; className?: string }
+  TLSStatus,
+  {
+    label: string;
+    variant: "default" | "secondary" | "outline" | "destructive";
+    className?: string;
+  }
 > = {
   active: {
     label: "Active",
@@ -30,17 +27,109 @@ const STYLES: Record<
     variant: "default",
     className: "bg-amber-500 hover:bg-amber-500",
   },
-  custom: { label: "Custom", variant: "secondary" },
-  off: { label: "Off", variant: "outline" },
-  error: { label: "Error", variant: "destructive" },
+  expiring: {
+    label: "Expiring",
+    variant: "default",
+    className: "bg-amber-500 hover:bg-amber-500",
+  },
+  expired: { label: "Expired", variant: "destructive" },
+  failed: { label: "Failed", variant: "destructive" },
+  disabled: { label: "Off", variant: "outline" },
+  unknown: { label: "Checking…", variant: "secondary" },
 };
 
-export function DomainTLSBadge({ domain }: { domain: DomainExpanded }) {
-  const status = statusFor(domain);
-  const style = STYLES[status];
+function formatDate(iso?: string | null): string | null {
+  if (!iso) return null;
+  return new Date(iso).toLocaleString();
+}
+
+/**
+ * The badge reports what the server last observed on the wire — the certificate
+ * a browser would actually be handed — rather than inferring a status from the
+ * domain's configuration. A configured domain whose certificate never issued
+ * used to look identical to a working one; now it says so, and says why.
+ */
+export function DomainTLSBadge({
+  domain,
+  projectId,
+  applicationId,
+}: {
+  domain: DomainExpanded;
+  projectId: string;
+  applicationId: string;
+}) {
+  const recheck = useRecheckDomainTLS(projectId, applicationId);
+  const status: TLSStatus = domain.tls_status ?? "unknown";
+  const style = STYLES[status] ?? STYLES.unknown;
+
+  const expires = formatDate(domain.tls_not_after);
+  const checked = formatDate(domain.tls_last_checked_at);
+
   return (
-    <Badge variant={style.variant} className={style.className}>
-      TLS: {style.label}
-    </Badge>
+    <Popover>
+      <PopoverTrigger
+        render={
+          <button type="button" aria-label={`TLS status: ${style.label}`} />
+        }
+      >
+        <Badge
+          variant={style.variant}
+          className={`${style.className ?? ""} cursor-pointer`}
+        >
+          TLS: {style.label}
+        </Badge>
+      </PopoverTrigger>
+      <PopoverContent className="w-80 space-y-3 text-sm">
+        <div className="flex items-center justify-between gap-2">
+          <span className="font-medium">{domain.hostname}</span>
+          <Badge variant={style.variant} className={style.className}>
+            {style.label}
+          </Badge>
+        </div>
+
+        {domain.tls_error && (
+          <p className="text-destructive bg-destructive/10 rounded-md p-2 text-xs break-words">
+            {domain.tls_error}
+          </p>
+        )}
+
+        <dl className="text-muted-foreground grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
+          {domain.tls_issuer && (
+            <>
+              <dt>Issuer</dt>
+              <dd className="text-foreground break-words">
+                {domain.tls_issuer}
+              </dd>
+            </>
+          )}
+          {expires && (
+            <>
+              <dt>Expires</dt>
+              <dd className="text-foreground">{expires}</dd>
+            </>
+          )}
+          <dt>Checked</dt>
+          <dd className="text-foreground">{checked ?? "not yet"}</dd>
+        </dl>
+
+        {status === "pending" && !domain.tls_error && (
+          <p className="text-muted-foreground text-xs">
+            Waiting on a certificate. Issuance needs ports 80 and 443 reachable
+            from the internet and this hostname pointing at this server.
+          </p>
+        )}
+
+        <Button
+          size="sm"
+          variant="outline"
+          className="w-full"
+          disabled={recheck.isPending}
+          onClick={() => recheck.mutate(domain.id)}
+        >
+          <RefreshCw className="mr-2 h-3.5 w-3.5" />
+          {recheck.isPending ? "Rechecking…" : "Recheck now"}
+        </Button>
+      </PopoverContent>
+    </Popover>
   );
 }

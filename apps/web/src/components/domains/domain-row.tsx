@@ -122,7 +122,11 @@ export function DomainRow({ projectId, applicationId, domain, onEdit }: Props) {
             onClick={() => setExpanded(!expanded)}
           >
             <span className="font-mono text-sm">{domain.hostname}</span>
-            <DomainTLSBadge domain={domain} />
+            <DomainTLSBadge
+              domain={domain}
+              projectId={projectId}
+              applicationId={applicationId}
+            />
             {domain.force_https && <Badge variant="outline">HTTPS</Badge>}
             {domain.container_port && (
               <Badge variant="outline">:{domain.container_port}</Badge>

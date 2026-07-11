@@ -50,3 +50,41 @@ FROM applications a
 LEFT JOIN domains d ON d.application_id = a.id
 WHERE a.project_id = $1 AND a.parent_application_id IS NULL
 ORDER BY a.id, d.created_at ASC;
+
+-- name: ListDomainsForTLSProbe :many
+-- Every domain the probe worker checks, with the SSL mode that decides what a
+-- healthy result even looks like.
+SELECT id, hostname, ssl_mode, ssl_enabled, tls_status, tls_error
+FROM domains
+ORDER BY hostname;
+
+-- name: UpdateDomainTLSStatus :exec
+UPDATE domains SET
+    tls_status = $2,
+    tls_issuer = $3,
+    tls_not_after = $4,
+    tls_error = $5,
+    tls_last_checked_at = NOW()
+WHERE id = $1;
+
+-- name: SetDomainTLSError :exec
+-- Records a failure reason without disturbing the observed certificate metadata:
+-- used by the Caddy log parser and by a failed SetupTLS, both of which know why
+-- TLS is broken but not what (if anything) is currently being served.
+UPDATE domains SET
+    tls_error = $2,
+    tls_status = CASE WHEN tls_status IN ('active', 'expiring') THEN tls_status ELSE 'failed' END,
+    tls_last_checked_at = NOW()
+WHERE id = $1;
+
+-- name: ListDomainsWithTLSStatus :many
+-- The central "Domain TLS" table on the certificates page: every domain with the
+-- certificate it serves and what the server last observed for it.
+SELECT d.id, d.hostname, d.ssl_mode, d.tls_status, d.tls_issuer, d.tls_not_after,
+       d.tls_last_checked_at, d.tls_error, c.name AS certificate_name,
+       a.name AS application_name, a.id AS application_id, p.id AS project_id
+FROM domains d
+JOIN applications a ON a.id = d.application_id
+JOIN projects p ON p.id = a.project_id
+LEFT JOIN certificates c ON c.id = d.certificate_id
+ORDER BY d.hostname;

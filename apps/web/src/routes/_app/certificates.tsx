@@ -9,8 +9,9 @@ import {
   useCertificates,
   useUploadCertificate,
   useDeleteCertificate,
+  useDomainTLSStatus,
 } from "@/lib/hooks/use-certificates";
-import type { Certificate } from "@/lib/api/certificates";
+import type { Certificate, DomainTLSStatus } from "@/lib/api/certificates";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page-header";
@@ -215,6 +216,8 @@ function CertificatesPage() {
         </CardContent>
       </Card>
 
+      <DomainTLSTable />
+
       <UploadCertificateDialog open={uploadOpen} onOpenChange={setUploadOpen} />
       {deleteTarget && (
         <DeleteCertificateDialog
@@ -405,5 +408,134 @@ function DeleteCertificateDialog({
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
+  );
+}
+
+const TLS_STATUS_STYLES: Record<
+  string,
+  {
+    label: string;
+    variant: "default" | "secondary" | "outline" | "destructive";
+    className?: string;
+  }
+> = {
+  active: {
+    label: "Active",
+    variant: "default",
+    className: "bg-emerald-600 hover:bg-emerald-600",
+  },
+  pending: {
+    label: "Pending",
+    variant: "default",
+    className: "bg-amber-500 hover:bg-amber-500",
+  },
+  expiring: {
+    label: "Expiring",
+    variant: "default",
+    className: "bg-amber-500 hover:bg-amber-500",
+  },
+  expired: { label: "Expired", variant: "destructive" },
+  failed: { label: "Failed", variant: "destructive" },
+  disabled: { label: "Off", variant: "outline" },
+  unknown: { label: "Checking…", variant: "secondary" },
+};
+
+/**
+ * Every domain's TLS state in one place. Without this an operator has to open
+ * each application in turn to discover which certificate is stuck — the thing
+ * that makes a silent ACME failure so expensive to notice.
+ */
+function DomainTLSTable() {
+  const { data: domains, isLoading } = useDomainTLSStatus();
+
+  const columns = useMemo<ColumnDef<DomainTLSStatus>[]>(
+    () => [
+      {
+        accessorKey: "hostname",
+        header: "Domain",
+        cell: ({ row }) => (
+          <div className="flex flex-col">
+            <span className="font-medium">{row.original.hostname}</span>
+            <span className="text-muted-foreground text-xs">
+              {row.original.application_name}
+            </span>
+          </div>
+        ),
+      },
+      {
+        accessorKey: "tls_status",
+        header: "Status",
+        cell: ({ row }) => {
+          const style =
+            TLS_STATUS_STYLES[row.original.tls_status] ??
+            TLS_STATUS_STYLES.unknown;
+          return (
+            <Badge variant={style.variant} className={style.className}>
+              {style.label}
+            </Badge>
+          );
+        },
+      },
+      {
+        accessorKey: "ssl_mode",
+        header: "Mode",
+        cell: ({ row }) => (
+          <span className="text-muted-foreground capitalize">
+            {row.original.ssl_mode}
+            {row.original.certificate_name && (
+              <span className="text-foreground ml-1">
+                · {row.original.certificate_name}
+              </span>
+            )}
+          </span>
+        ),
+      },
+      {
+        accessorKey: "tls_issuer",
+        header: "Issuer",
+        cell: ({ row }) => (
+          <span className="text-muted-foreground truncate">
+            {row.original.tls_issuer || "—"}
+          </span>
+        ),
+      },
+      {
+        accessorKey: "tls_not_after",
+        header: "Expires",
+        cell: ({ row }) => <ExpiryCell notAfter={row.original.tls_not_after} />,
+      },
+      {
+        accessorKey: "tls_error",
+        header: "Detail",
+        cell: ({ row }) =>
+          row.original.tls_error ? (
+            // The whole point of the pipeline: the reason, in the UI, in words.
+            <span className="text-destructive text-xs break-words">
+              {row.original.tls_error}
+            </span>
+          ) : (
+            <span className="text-muted-foreground">—</span>
+          ),
+      },
+    ],
+    [],
+  );
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Domain TLS</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <DataTable
+          columns={columns}
+          data={domains ?? []}
+          isLoading={isLoading}
+          getRowId={(d) => d.id}
+          enableSorting
+          emptyMessage="No domains configured yet."
+        />
+      </CardContent>
+    </Card>
   );
 }

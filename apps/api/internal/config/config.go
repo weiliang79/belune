@@ -10,15 +10,24 @@ import (
 )
 
 type Config struct {
-	Port                int
-	DatabaseURL         string
-	RedisURL            string
-	JWTSecret           string
-	JWTExpiryHours      int // access-token TTL in hours (legacy name; default 1)
-	JWTRefreshHours     int // refresh-token TTL in hours (default 168 = 7 days)
-	Keyring             *crypto.Keyring
-	CaddyAdminURL       string
-	CaddyContainerName  string // Docker container name/ID for Caddy; used to attach it to per-project networks
+	Port               int
+	DatabaseURL        string
+	RedisURL           string
+	JWTSecret          string
+	JWTExpiryHours     int // access-token TTL in hours (legacy name; default 1)
+	JWTRefreshHours    int // refresh-token TTL in hours (default 168 = 7 days)
+	Keyring            *crypto.Keyring
+	CaddyAdminURL      string
+	CaddyContainerName string // Docker container name/ID for Caddy; used to attach it to per-project networks
+	// CaddyTLSProbeAddr is where the TLS status probe dials to see what Caddy
+	// actually serves. It is the proxy's own HTTPS listener, reached over the
+	// internal network — never the public hostname, which would leave the check
+	// at the mercy of external DNS and firewalls.
+	CaddyTLSProbeAddr string
+	// PublicIP is the address a user's DNS record must point at for a certificate
+	// to be issuable. Empty means autodetect; autodetection failing is not fatal,
+	// it just disables the DNS precheck.
+	PublicIP            string
 	AccessLogPath       string
 	CORSOrigins         []string
 	SecureCookies       bool
@@ -123,6 +132,8 @@ func Load() (*Config, error) {
 		JWTRefreshHours:    getEnvInt("JWT_REFRESH_HOURS", 24*7),
 		CaddyAdminURL:      getEnv("CADDY_ADMIN_URL", "http://localhost:2019"),
 		CaddyContainerName: getEnv("CADDY_CONTAINER_NAME", "infra-caddy-1"),
+		CaddyTLSProbeAddr:  getEnv("CADDY_TLS_PROBE_ADDR", "caddy:443"),
+		PublicIP:           getEnv("BELUNE_PUBLIC_IP", ""),
 		AccessLogPath:      getEnv("ACCESS_LOG_PATH", "../../infra/caddy/logs/access.log"),
 		CORSOrigins:        getEnvList("CORS_ORIGINS", []string{"http://localhost:5173"}),
 		SecureCookies:      getEnvBool("SECURE_COOKIES", false),

@@ -195,7 +195,11 @@ func (c *Client) AddRoute(ctx context.Context, cfg proxy.RouteConfig) (err error
 	}
 	if cfg.TLS && cfg.SSLMode == proxy.SSLModeCustom {
 		if err := c.SetupTLS(ctx, cfg.Hostname, cfg.SSLMode, cfg.CertPEM, cfg.KeyPEM); err != nil {
+			// The route still goes live — serving the app over HTTP beats serving
+			// nothing — but the failure is no longer invisible: it lands on the
+			// domain's tls_error and the badge turns red with the reason.
 			slog.Warn("caddy: TLS setup failed", "hostname", cfg.Hostname, "error", err)
+			c.reportTLSError(ctx, cfg.Hostname, err.Error())
 		}
 	}
 

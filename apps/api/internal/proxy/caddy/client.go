@@ -40,6 +40,28 @@ type Client struct {
 	// so Caddy must not manage (and cache) one of its own for the name, but the
 	// rest of automatic HTTPS still applies.
 	autoHTTPSSkipCerts map[string]struct{}
+
+	// tlsErrorSink records why TLS could not be set up for a hostname. Without it
+	// a SetupTLS failure is invisible: the route goes live on :80 and the user is
+	// left to guess why HTTPS never came up. The client has no database of its
+	// own, so the owner of the domain rows injects this.
+	tlsErrorSink TLSErrorSink
+}
+
+// TLSErrorSink records a TLS failure against the domain it concerns.
+type TLSErrorSink func(ctx context.Context, hostname, reason string)
+
+// SetTLSErrorSink installs the sink for SetupTLS failures.
+func (c *Client) SetTLSErrorSink(sink TLSErrorSink) {
+	c.tlsErrorSink = sink
+}
+
+// reportTLSError is nil-safe, so a client without a sink (tests, dev without a
+// database) behaves exactly as before.
+func (c *Client) reportTLSError(ctx context.Context, hostname, reason string) {
+	if c.tlsErrorSink != nil {
+		c.tlsErrorSink(ctx, hostname, reason)
+	}
 }
 
 const unixScheme = "unix://"

@@ -142,9 +142,9 @@ func TestDeleteProject(t *testing.T) {
 
 	// Create an application in the project to test cascade
 	env.CreateApplication(t, token, projectID, map[string]any{
-		"name":       "Test App",
-		"type":       "git",
-		"build_type": "dockerfile",
+		"name":        "Test App",
+		"type":        "git",
+		"build_type":  "dockerfile",
 		"source_repo": "https://github.com/test/repo",
 	})
 

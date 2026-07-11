@@ -38,3 +38,32 @@ export function useDeleteCertificate() {
     onError: (err) => toast.error(err.message),
   });
 }
+
+export function useDomainTLSStatus() {
+  return useQuery({
+    queryKey: queryKeys.domainTLSStatus,
+    queryFn: certificatesApi.listDomainTLSStatus,
+    // The sweep runs every minute; a domain mid-issuance should not look stuck
+    // just because the page was left open.
+    refetchInterval: 30000,
+  });
+}
+
+export function useRecheckDomainTLS(projectId: string, applicationId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (domainId: string) =>
+      certificatesApi.recheckDomainTLS(projectId, applicationId, domainId),
+    onSuccess: () => {
+      toast.success("Rechecking certificate…");
+      // The probe is asynchronous; give it a moment before re-reading.
+      setTimeout(() => {
+        qc.invalidateQueries({ queryKey: queryKeys.domainTLSStatus });
+        qc.invalidateQueries({
+          queryKey: queryKeys.domains.all(projectId, applicationId),
+        });
+      }, 2000);
+    },
+    onError: (err) => toast.error(err.message),
+  });
+}

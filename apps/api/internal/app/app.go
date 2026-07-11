@@ -36,6 +36,7 @@ import (
 	"github.com/weiling79/belune/internal/store"
 	"github.com/weiling79/belune/internal/store/generated"
 	"github.com/weiling79/belune/internal/terminal"
+	"github.com/weiling79/belune/internal/tlsstatus"
 	"github.com/weiling79/belune/internal/worker"
 	"github.com/weiling79/belune/internal/ws"
 )
@@ -191,7 +192,7 @@ func New(cfg *config.Config) (*App, error) {
 		}
 	}
 
-	return &App{
+	app := &App{
 		cfg:          cfg,
 		db:           db,
 		queries:      queries,
@@ -219,7 +220,22 @@ func New(cfg *config.Config) (*App, error) {
 		logCollector:   logcollector.New(dockerClient, queries, rdb),
 		redisAdapter:   ws.NewRedisAdapter(rdb, hub),
 		eventWatcher:   eventwatcher.New(dockerClient, queries, broadcaster),
-	}, nil
+	}
+
+	// Caddy's own logs carry the reason a certificate failed to issue. Hook the
+	// collector so those reasons land on the domain they belong to, instead of
+	// leaving the user with a "pending" badge and no explanation.
+	tlsRecorder := tlsstatus.NewRecorder(queries)
+	app.logCollector.SetLineHook(func(hookCtx context.Context, srcType, name, message string) {
+		if name == logcollector.SystemCaddy {
+			tlsRecorder.HandleCaddyLine(hookCtx, message)
+		}
+	})
+	// A failed SetupTLS used to be a log line and nothing more. Give it the same
+	// destination as an ACME error, so a broken custom certificate is visible.
+	caddyClient.SetTLSErrorSink(tlsRecorder.Record)
+
+	return app, nil
 }
 
 // Run starts all background goroutines and the HTTP server. It blocks until ctx

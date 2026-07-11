@@ -175,6 +175,10 @@ func (h *Handler) AddDomain(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Probe immediately so the TLS badge settles within seconds instead of
+	// showing "unknown" until the next sweep.
+	h.enqueueTLSProbe(uuidToString(domain.ID))
+
 	h.audit(r, "add_domain", "domain", uuidToString(domain.ID), map[string]any{"hostname": req.Hostname})
 
 	writeJSON(w, http.StatusCreated, domain)
@@ -298,6 +302,8 @@ func (h *Handler) UpdateDomain(w http.ResponseWriter, r *http.Request) {
 	}); err != nil {
 		slog.Error("failed to update proxy route", "hostname", req.Hostname, "error", err)
 	}
+
+	h.enqueueTLSProbe(domainID)
 
 	h.audit(r, "update_domain", "domain", domainID, map[string]any{"hostname": req.Hostname})
 

@@ -214,4 +214,3 @@ func (h *Handler) HandleTerminalWebSocket(w http.ResponseWriter, r *http.Request
 		}
 	}
 }
-

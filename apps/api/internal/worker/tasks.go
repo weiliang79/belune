@@ -19,4 +19,6 @@ const (
 	TypeBackupSchedSweep    = "backup:sched_sweep"
 	TypeBackupVolume        = "backup:volume"
 	TypeRestoreVolume       = "restore:volume"
+	TypeTLSStatusSweep      = "tls:status_sweep"
+	TypeTLSProbe            = "tls:probe"
 )

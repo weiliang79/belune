@@ -29,26 +29,54 @@ import (
 const (
 	labelApplicationID = "application-id"
 	labelDatabaseID    = "database-id"
+	// labelSystem marks Belune's own infrastructure containers (currently only
+	// Caddy). Collecting the proxy's logs is what lets the TLS status pipeline
+	// tell a user *why* a certificate failed, instead of leaving the reason in a
+	// stdout nobody reads.
+	labelSystem = "belune-system"
 
 	sourceApplication = "application"
 	sourceDatabase    = "database"
+	sourceSystem      = "system"
+
+	// SystemCaddy is the value of the belune-system label on the proxy.
+	SystemCaddy = "caddy"
 )
+
+// systemSourceIDs maps a system component to a fixed source_id. container_logs
+// keys every row by a UUID (applications and databases have one naturally), so
+// infrastructure containers need a stable synthetic one rather than a new column.
+var systemSourceIDs = map[string]string{
+	SystemCaddy: "00000000-0000-0000-0000-0000000000ca",
+}
+
+// CaddySourceID is the container_logs.source_id under which Caddy's own logs are
+// stored. Exported so the API can serve them without re-deriving it.
+var CaddySourceID = systemSourceIDs[SystemCaddy]
 
 // containerSource identifies which resource a container belongs to, derived
 // from its labels.
 type containerSource struct {
-	typ string // sourceApplication | sourceDatabase
-	id  string // resource UUID (the label value)
+	typ  string // sourceApplication | sourceDatabase | sourceSystem
+	id   string // resource UUID (synthetic for system containers)
+	name string // system component name, empty for applications and databases
 }
 
 // sourceOf returns the log source for a container, or false if the container
-// carries neither an application-id nor a database-id label.
+// carries none of our resource labels.
 func sourceOf(labels map[string]string) (containerSource, bool) {
 	if id := labels[labelApplicationID]; id != "" {
 		return containerSource{typ: sourceApplication, id: id}, true
 	}
 	if id := labels[labelDatabaseID]; id != "" {
 		return containerSource{typ: sourceDatabase, id: id}, true
+	}
+	if name := labels[labelSystem]; name != "" {
+		id, ok := systemSourceIDs[name]
+		if !ok {
+			return containerSource{}, false
+		}
+		return containerSource{typ: sourceSystem, id: id, name: name}, true
 	}
 	return containerSource{}, false
 }
@@ -60,6 +88,10 @@ func sourceOf(labels map[string]string) (containerSource, bool) {
 // single-host PaaS instances run dozens of apps, not hundreds.
 const maxConcurrentWatchers = 200
 
+// LineHook observes a single collected log line. It runs inline on the
+// collector's read path, so it must be cheap and must not block.
+type LineHook func(ctx context.Context, src string, name string, message string)
+
 // Collector watches running containers and persists their logs.
 type Collector struct {
 	runtime    runtime.ContainerRuntime
@@ -70,6 +102,14 @@ type Collector struct {
 	maxWatch   int
 	batchSize  int
 	flushEvery time.Duration
+	lineHook   LineHook
+}
+
+// SetLineHook installs an observer called for every collected line. It is how
+// the TLS status pipeline sees Caddy's certificate errors as they are emitted,
+// without the collector needing to know anything about TLS.
+func (c *Collector) SetLineHook(hook LineHook) {
+	c.lineHook = hook
 }
 
 // New creates a new log collector.
@@ -288,6 +328,9 @@ func (c *Collector) watchContainer(ctx context.Context, ctr runtime.ContainerInf
 	defer flushTicker.Stop()
 
 	appendLine := func(line logLine) {
+		if c.lineHook != nil {
+			c.lineHook(ctx, src.typ, src.name, line.message)
+		}
 		var recordedAt pgtype.Timestamptz
 		if !line.ts.IsZero() {
 			recordedAt = pgtype.Timestamptz{Time: line.ts, Valid: true}

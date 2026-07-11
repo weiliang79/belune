@@ -352,6 +352,17 @@ export interface RouteFeature {
   updated_at: string;
 }
 
+/** What the server last observed on the wire for a domain — not what its
+ *  configuration says should happen. */
+export type TLSStatus =
+  | "unknown"
+  | "disabled"
+  | "pending"
+  | "active"
+  | "expiring"
+  | "expired"
+  | "failed";
+
 export interface DomainExpanded extends Domain {
   container_port?: number | null;
   force_https: boolean;
@@ -360,6 +371,11 @@ export interface DomainExpanded extends Domain {
   certificate_id?: string | null;
   advanced_config?: unknown;
   features?: RouteFeature[];
+  tls_status?: TLSStatus;
+  tls_issuer?: string | null;
+  tls_not_after?: string | null;
+  tls_last_checked_at?: string | null;
+  tls_error?: string | null;
 }
 
 export interface AuditLog {

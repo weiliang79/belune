@@ -14,7 +14,7 @@ import (
 const createDomain = `-- name: CreateDomain :one
 INSERT INTO domains (application_id, hostname, ssl_enabled, container_port, force_https, ssl_mode, ssl_provider, ssl_credentials_encrypted, certificate_id, advanced_config)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-RETURNING id, application_id, hostname, ssl_enabled, caddy_config_id, container_port, force_https, ssl_mode, ssl_provider, ssl_credentials_encrypted, advanced_config, verified_at, created_at, certificate_id
+RETURNING id, application_id, hostname, ssl_enabled, caddy_config_id, container_port, force_https, ssl_mode, ssl_provider, ssl_credentials_encrypted, advanced_config, verified_at, created_at, certificate_id, tls_status, tls_issuer, tls_not_after, tls_last_checked_at, tls_error
 `
 
 type CreateDomainParams struct {
@@ -59,6 +59,11 @@ func (q *Queries) CreateDomain(ctx context.Context, arg CreateDomainParams) (Dom
 		&i.VerifiedAt,
 		&i.CreatedAt,
 		&i.CertificateID,
+		&i.TlsStatus,
+		&i.TlsIssuer,
+		&i.TlsNotAfter,
+		&i.TlsLastCheckedAt,
+		&i.TlsError,
 	)
 	return i, err
 }
@@ -73,7 +78,7 @@ func (q *Queries) DeleteDomain(ctx context.Context, id pgtype.UUID) error {
 }
 
 const getDomain = `-- name: GetDomain :one
-SELECT id, application_id, hostname, ssl_enabled, caddy_config_id, container_port, force_https, ssl_mode, ssl_provider, ssl_credentials_encrypted, advanced_config, verified_at, created_at, certificate_id FROM domains WHERE id = $1
+SELECT id, application_id, hostname, ssl_enabled, caddy_config_id, container_port, force_https, ssl_mode, ssl_provider, ssl_credentials_encrypted, advanced_config, verified_at, created_at, certificate_id, tls_status, tls_issuer, tls_not_after, tls_last_checked_at, tls_error FROM domains WHERE id = $1
 `
 
 func (q *Queries) GetDomain(ctx context.Context, id pgtype.UUID) (Domain, error) {
@@ -94,12 +99,17 @@ func (q *Queries) GetDomain(ctx context.Context, id pgtype.UUID) (Domain, error)
 		&i.VerifiedAt,
 		&i.CreatedAt,
 		&i.CertificateID,
+		&i.TlsStatus,
+		&i.TlsIssuer,
+		&i.TlsNotAfter,
+		&i.TlsLastCheckedAt,
+		&i.TlsError,
 	)
 	return i, err
 }
 
 const getDomainByHostname = `-- name: GetDomainByHostname :one
-SELECT id, application_id, hostname, ssl_enabled, caddy_config_id, container_port, force_https, ssl_mode, ssl_provider, ssl_credentials_encrypted, advanced_config, verified_at, created_at, certificate_id FROM domains WHERE hostname = $1
+SELECT id, application_id, hostname, ssl_enabled, caddy_config_id, container_port, force_https, ssl_mode, ssl_provider, ssl_credentials_encrypted, advanced_config, verified_at, created_at, certificate_id, tls_status, tls_issuer, tls_not_after, tls_last_checked_at, tls_error FROM domains WHERE hostname = $1
 `
 
 func (q *Queries) GetDomainByHostname(ctx context.Context, hostname string) (Domain, error) {
@@ -120,6 +130,11 @@ func (q *Queries) GetDomainByHostname(ctx context.Context, hostname string) (Dom
 		&i.VerifiedAt,
 		&i.CreatedAt,
 		&i.CertificateID,
+		&i.TlsStatus,
+		&i.TlsIssuer,
+		&i.TlsNotAfter,
+		&i.TlsLastCheckedAt,
+		&i.TlsError,
 	)
 	return i, err
 }
@@ -139,7 +154,7 @@ func (q *Queries) GetDomainOwnerUserID(ctx context.Context, id pgtype.UUID) (pgt
 }
 
 const listDomainsByApplication = `-- name: ListDomainsByApplication :many
-SELECT id, application_id, hostname, ssl_enabled, caddy_config_id, container_port, force_https, ssl_mode, ssl_provider, ssl_credentials_encrypted, advanced_config, verified_at, created_at, certificate_id FROM domains WHERE application_id = $1 ORDER BY created_at DESC
+SELECT id, application_id, hostname, ssl_enabled, caddy_config_id, container_port, force_https, ssl_mode, ssl_provider, ssl_credentials_encrypted, advanced_config, verified_at, created_at, certificate_id, tls_status, tls_issuer, tls_not_after, tls_last_checked_at, tls_error FROM domains WHERE application_id = $1 ORDER BY created_at DESC
 `
 
 func (q *Queries) ListDomainsByApplication(ctx context.Context, applicationID pgtype.UUID) ([]Domain, error) {
@@ -166,6 +181,11 @@ func (q *Queries) ListDomainsByApplication(ctx context.Context, applicationID pg
 			&i.VerifiedAt,
 			&i.CreatedAt,
 			&i.CertificateID,
+			&i.TlsStatus,
+			&i.TlsIssuer,
+			&i.TlsNotAfter,
+			&i.TlsLastCheckedAt,
+			&i.TlsError,
 		); err != nil {
 			return nil, err
 		}
@@ -178,7 +198,7 @@ func (q *Queries) ListDomainsByApplication(ctx context.Context, applicationID pg
 }
 
 const listDomainsByApplicationWithFeatures = `-- name: ListDomainsByApplicationWithFeatures :many
-SELECT d.id, d.application_id, d.hostname, d.ssl_enabled, d.caddy_config_id, d.container_port, d.force_https, d.ssl_mode, d.ssl_provider, d.ssl_credentials_encrypted, d.advanced_config, d.verified_at, d.created_at, d.certificate_id, COALESCE(
+SELECT d.id, d.application_id, d.hostname, d.ssl_enabled, d.caddy_config_id, d.container_port, d.force_https, d.ssl_mode, d.ssl_provider, d.ssl_credentials_encrypted, d.advanced_config, d.verified_at, d.created_at, d.certificate_id, d.tls_status, d.tls_issuer, d.tls_not_after, d.tls_last_checked_at, d.tls_error, COALESCE(
     (SELECT json_agg(json_build_object(
         'id', f.id, 'feature_type', f.feature_type,
         'config', f.config, 'enabled', f.enabled
@@ -205,6 +225,11 @@ type ListDomainsByApplicationWithFeaturesRow struct {
 	VerifiedAt              pgtype.Timestamptz `json:"verified_at"`
 	CreatedAt               pgtype.Timestamptz `json:"created_at"`
 	CertificateID           pgtype.UUID        `json:"certificate_id"`
+	TlsStatus               string             `json:"tls_status"`
+	TlsIssuer               pgtype.Text        `json:"tls_issuer"`
+	TlsNotAfter             pgtype.Timestamptz `json:"tls_not_after"`
+	TlsLastCheckedAt        pgtype.Timestamptz `json:"tls_last_checked_at"`
+	TlsError                pgtype.Text        `json:"tls_error"`
 	RouteFeatures           interface{}        `json:"route_features"`
 }
 
@@ -232,7 +257,117 @@ func (q *Queries) ListDomainsByApplicationWithFeatures(ctx context.Context, appl
 			&i.VerifiedAt,
 			&i.CreatedAt,
 			&i.CertificateID,
+			&i.TlsStatus,
+			&i.TlsIssuer,
+			&i.TlsNotAfter,
+			&i.TlsLastCheckedAt,
+			&i.TlsError,
 			&i.RouteFeatures,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listDomainsForTLSProbe = `-- name: ListDomainsForTLSProbe :many
+SELECT id, hostname, ssl_mode, ssl_enabled, tls_status, tls_error
+FROM domains
+ORDER BY hostname
+`
+
+type ListDomainsForTLSProbeRow struct {
+	ID         pgtype.UUID `json:"id"`
+	Hostname   string      `json:"hostname"`
+	SslMode    string      `json:"ssl_mode"`
+	SslEnabled bool        `json:"ssl_enabled"`
+	TlsStatus  string      `json:"tls_status"`
+	TlsError   pgtype.Text `json:"tls_error"`
+}
+
+// Every domain the probe worker checks, with the SSL mode that decides what a
+// healthy result even looks like.
+func (q *Queries) ListDomainsForTLSProbe(ctx context.Context) ([]ListDomainsForTLSProbeRow, error) {
+	rows, err := q.db.Query(ctx, listDomainsForTLSProbe)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListDomainsForTLSProbeRow{}
+	for rows.Next() {
+		var i ListDomainsForTLSProbeRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Hostname,
+			&i.SslMode,
+			&i.SslEnabled,
+			&i.TlsStatus,
+			&i.TlsError,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listDomainsWithTLSStatus = `-- name: ListDomainsWithTLSStatus :many
+SELECT d.id, d.hostname, d.ssl_mode, d.tls_status, d.tls_issuer, d.tls_not_after,
+       d.tls_last_checked_at, d.tls_error, c.name AS certificate_name,
+       a.name AS application_name, a.id AS application_id, p.id AS project_id
+FROM domains d
+JOIN applications a ON a.id = d.application_id
+JOIN projects p ON p.id = a.project_id
+LEFT JOIN certificates c ON c.id = d.certificate_id
+ORDER BY d.hostname
+`
+
+type ListDomainsWithTLSStatusRow struct {
+	ID               pgtype.UUID        `json:"id"`
+	Hostname         string             `json:"hostname"`
+	SslMode          string             `json:"ssl_mode"`
+	TlsStatus        string             `json:"tls_status"`
+	TlsIssuer        pgtype.Text        `json:"tls_issuer"`
+	TlsNotAfter      pgtype.Timestamptz `json:"tls_not_after"`
+	TlsLastCheckedAt pgtype.Timestamptz `json:"tls_last_checked_at"`
+	TlsError         pgtype.Text        `json:"tls_error"`
+	CertificateName  pgtype.Text        `json:"certificate_name"`
+	ApplicationName  string             `json:"application_name"`
+	ApplicationID    pgtype.UUID        `json:"application_id"`
+	ProjectID        pgtype.UUID        `json:"project_id"`
+}
+
+// The central "Domain TLS" table on the certificates page: every domain with the
+// certificate it serves and what the server last observed for it.
+func (q *Queries) ListDomainsWithTLSStatus(ctx context.Context) ([]ListDomainsWithTLSStatusRow, error) {
+	rows, err := q.db.Query(ctx, listDomainsWithTLSStatus)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListDomainsWithTLSStatusRow{}
+	for rows.Next() {
+		var i ListDomainsWithTLSStatusRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Hostname,
+			&i.SslMode,
+			&i.TlsStatus,
+			&i.TlsIssuer,
+			&i.TlsNotAfter,
+			&i.TlsLastCheckedAt,
+			&i.TlsError,
+			&i.CertificateName,
+			&i.ApplicationName,
+			&i.ApplicationID,
+			&i.ProjectID,
 		); err != nil {
 			return nil, err
 		}
@@ -281,13 +416,34 @@ func (q *Queries) ListProjectAppPrimaryDomain(ctx context.Context, projectID pgt
 	return items, nil
 }
 
+const setDomainTLSError = `-- name: SetDomainTLSError :exec
+UPDATE domains SET
+    tls_error = $2,
+    tls_status = CASE WHEN tls_status IN ('active', 'expiring') THEN tls_status ELSE 'failed' END,
+    tls_last_checked_at = NOW()
+WHERE id = $1
+`
+
+type SetDomainTLSErrorParams struct {
+	ID       pgtype.UUID `json:"id"`
+	TlsError pgtype.Text `json:"tls_error"`
+}
+
+// Records a failure reason without disturbing the observed certificate metadata:
+// used by the Caddy log parser and by a failed SetupTLS, both of which know why
+// TLS is broken but not what (if anything) is currently being served.
+func (q *Queries) SetDomainTLSError(ctx context.Context, arg SetDomainTLSErrorParams) error {
+	_, err := q.db.Exec(ctx, setDomainTLSError, arg.ID, arg.TlsError)
+	return err
+}
+
 const updateDomain = `-- name: UpdateDomain :one
 UPDATE domains SET
     hostname = $2, ssl_enabled = $3, container_port = $4, force_https = $5,
     ssl_mode = $6, ssl_provider = $7, ssl_credentials_encrypted = $8,
     certificate_id = $9, advanced_config = $10
 WHERE id = $1
-RETURNING id, application_id, hostname, ssl_enabled, caddy_config_id, container_port, force_https, ssl_mode, ssl_provider, ssl_credentials_encrypted, advanced_config, verified_at, created_at, certificate_id
+RETURNING id, application_id, hostname, ssl_enabled, caddy_config_id, container_port, force_https, ssl_mode, ssl_provider, ssl_credentials_encrypted, advanced_config, verified_at, created_at, certificate_id, tls_status, tls_issuer, tls_not_after, tls_last_checked_at, tls_error
 `
 
 type UpdateDomainParams struct {
@@ -332,6 +488,40 @@ func (q *Queries) UpdateDomain(ctx context.Context, arg UpdateDomainParams) (Dom
 		&i.VerifiedAt,
 		&i.CreatedAt,
 		&i.CertificateID,
+		&i.TlsStatus,
+		&i.TlsIssuer,
+		&i.TlsNotAfter,
+		&i.TlsLastCheckedAt,
+		&i.TlsError,
 	)
 	return i, err
+}
+
+const updateDomainTLSStatus = `-- name: UpdateDomainTLSStatus :exec
+UPDATE domains SET
+    tls_status = $2,
+    tls_issuer = $3,
+    tls_not_after = $4,
+    tls_error = $5,
+    tls_last_checked_at = NOW()
+WHERE id = $1
+`
+
+type UpdateDomainTLSStatusParams struct {
+	ID          pgtype.UUID        `json:"id"`
+	TlsStatus   string             `json:"tls_status"`
+	TlsIssuer   pgtype.Text        `json:"tls_issuer"`
+	TlsNotAfter pgtype.Timestamptz `json:"tls_not_after"`
+	TlsError    pgtype.Text        `json:"tls_error"`
+}
+
+func (q *Queries) UpdateDomainTLSStatus(ctx context.Context, arg UpdateDomainTLSStatusParams) error {
+	_, err := q.db.Exec(ctx, updateDomainTLSStatus,
+		arg.ID,
+		arg.TlsStatus,
+		arg.TlsIssuer,
+		arg.TlsNotAfter,
+		arg.TlsError,
+	)
+	return err
 }

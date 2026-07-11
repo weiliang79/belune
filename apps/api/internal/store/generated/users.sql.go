@@ -140,6 +140,32 @@ func (q *Queries) GetUserByUsername(ctx context.Context, username string) (User,
 	return i, err
 }
 
+const listAdminUserIDs = `-- name: ListAdminUserIDs :many
+SELECT id FROM users WHERE role = 'admin'
+`
+
+// Recipients for instance-wide alerts (TLS failures, expiries) that belong to no
+// single project owner.
+func (q *Queries) ListAdminUserIDs(ctx context.Context) ([]pgtype.UUID, error) {
+	rows, err := q.db.Query(ctx, listAdminUserIDs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []pgtype.UUID{}
+	for rows.Next() {
+		var id pgtype.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listUsers = `-- name: ListUsers :many
 SELECT u.id, u.email, u.role, u.username, u.first_name, u.last_name, u.created_at,
        (SELECT max(rt.last_used_at) FROM refresh_tokens rt WHERE rt.user_id = u.id) AS last_active_at

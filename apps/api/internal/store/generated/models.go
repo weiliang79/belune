@@ -266,6 +266,11 @@ type Domain struct {
 	VerifiedAt              pgtype.Timestamptz `json:"verified_at"`
 	CreatedAt               pgtype.Timestamptz `json:"created_at"`
 	CertificateID           pgtype.UUID        `json:"certificate_id"`
+	TlsStatus               string             `json:"tls_status"`
+	TlsIssuer               pgtype.Text        `json:"tls_issuer"`
+	TlsNotAfter             pgtype.Timestamptz `json:"tls_not_after"`
+	TlsLastCheckedAt        pgtype.Timestamptz `json:"tls_last_checked_at"`
+	TlsError                pgtype.Text        `json:"tls_error"`
 }
 
 type DomainRouteFeature struct {

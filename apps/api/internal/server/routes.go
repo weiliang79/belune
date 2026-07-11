@@ -240,6 +240,7 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService,
 			r.Delete("/api/projects/{projectId}/applications/{applicationId}/domains/{domainId}", h.RemoveDomain)
 
 			// Domain route features
+			r.Post("/api/projects/{projectId}/applications/{applicationId}/domains/{domainId}/tls/recheck", h.RecheckDomainTLS)
 			r.Get("/api/projects/{projectId}/applications/{applicationId}/domains/{domainId}/features", h.ListRouteFeatures)
 			r.Put("/api/projects/{projectId}/applications/{applicationId}/domains/{domainId}/features", h.UpsertRouteFeature)
 			r.Delete("/api/projects/{projectId}/applications/{applicationId}/domains/{domainId}/features/{featureId}", h.DeleteRouteFeature)
@@ -309,6 +310,8 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService,
 				r.Delete("/api/quotas/{scope}/{scopeId}", h.DeleteQuota)
 				// Centralised TLS certificate store (upload once, use per-domain)
 				r.Get("/api/certificates", h.ListCertificates)
+				// Every domain's observed TLS state in one view.
+				r.Get("/api/domains/tls", h.ListDomainTLSStatus)
 				r.Post("/api/certificates", h.UploadCertificate)
 				r.Delete("/api/certificates/{certificateId}", h.DeleteCertificate)
 				// Git provider app configs (per-instance GitHub App / OAuth clients)

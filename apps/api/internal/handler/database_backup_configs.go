@@ -17,18 +17,18 @@ import (
 )
 
 type databaseBackupConfigResponse struct {
-	ID             string     `json:"id"`
-	DatabaseID     string     `json:"database_id"`
-	DestinationID  string     `json:"destination_id"`
-	Prefix         string     `json:"prefix"`
-	Schedule       string     `json:"schedule"`
-	KeepLatest     *int32     `json:"keep_latest,omitempty"`
-	Enabled        bool       `json:"enabled"`
-	Databases      []string   `json:"databases"`
-	AllDatabases   bool       `json:"all_databases"`
-	LastRunAt      *time.Time `json:"last_run_at,omitempty"`
-	CreatedAt      time.Time  `json:"created_at"`
-	UpdatedAt      time.Time  `json:"updated_at"`
+	ID            string     `json:"id"`
+	DatabaseID    string     `json:"database_id"`
+	DestinationID string     `json:"destination_id"`
+	Prefix        string     `json:"prefix"`
+	Schedule      string     `json:"schedule"`
+	KeepLatest    *int32     `json:"keep_latest,omitempty"`
+	Enabled       bool       `json:"enabled"`
+	Databases     []string   `json:"databases"`
+	AllDatabases  bool       `json:"all_databases"`
+	LastRunAt     *time.Time `json:"last_run_at,omitempty"`
+	CreatedAt     time.Time  `json:"created_at"`
+	UpdatedAt     time.Time  `json:"updated_at"`
 }
 
 func toBackupConfigResponse(c generated.DatabaseBackupConfig) databaseBackupConfigResponse {
