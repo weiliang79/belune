@@ -49,3 +49,4 @@ coverage/
 # ignore rule, which un-ignored the old directory and swept a database dump into
 # a commit — and any dev with a pre-rename checkout still has one on disk.
 .paas-data/
+belune-trial.tgz
