@@ -112,6 +112,12 @@ services:
       - caddydata:/data
       - caddyconfig:/config
       - caddylogs:/var/log/caddy
+    environment:
+      # Extra Caddy global options, injected per-deployment. Leave unset for
+      # normal operation (public Let's Encrypt). Point it at the ACME staging
+      # directory to rehearse issuance without burning production rate limits:
+      #   BELUNE_CADDY_GLOBAL_OPTIONS=acme_ca https://acme-staging-v02.api.letsencrypt.org/directory
+      BELUNE_CADDY_GLOBAL_OPTIONS: ${BELUNE_CADDY_GLOBAL_OPTIONS:-}
     labels:
       # Streams Caddy's own logs into container_logs, which is how ACME failure
       # reasons reach the TLS status badge instead of dying in stdout.
