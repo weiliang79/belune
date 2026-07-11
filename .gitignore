@@ -45,3 +45,7 @@ coverage/
 
 # Local dev backup dump dir (DATABASE_BACKUP_DIR)
 .belune-data/
+# Pre-rename name for the same directory. Kept because the rename moved the
+# ignore rule, which un-ignored the old directory and swept a database dump into
+# a commit — and any dev with a pre-rename checkout still has one on disk.
+.paas-data/
