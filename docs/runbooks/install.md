@@ -102,12 +102,12 @@ This needs the DNS record from step 4 to already resolve, and ports 80 and 443
 open to the internet. **Port 80 is required even though the site runs on 443** —
 it is how Let's Encrypt validates that you control the domain.
 
-Once it is active, set these in `/opt/belune/.env` and restart so cookies and
-links use HTTPS:
+Session cookies become `Secure` on their own as soon as the panel is served over
+HTTPS — there is nothing to toggle. Two settings are still worth having in
+`/opt/belune/.env` so generated links and HSTS are right:
 
 ```env
 PUBLIC_BASE_URL=https://belune.example.com
-SECURE_COOKIES=true
 TLS_ENABLED=true          # adds the HSTS header
 ```
 

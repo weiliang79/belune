@@ -168,7 +168,7 @@ func (h *Handler) StartGitIntegrationConnect(w http.ResponseWriter, r *http.Requ
 		Value:    state,
 		Path:     "/api/git/integrations/callback",
 		HttpOnly: true,
-		Secure:   h.cfg.SecureCookies,
+		Secure:   h.secureCookies(r),
 		SameSite: http.SameSiteLaxMode,
 		MaxAge:   int(connectStateTTL.Seconds()),
 	})
@@ -198,7 +198,7 @@ func (h *Handler) HandleGitIntegrationCallback(w http.ResponseWriter, r *http.Re
 	cookie, cookieErr := r.Cookie(gitConnectStateCookie)
 	http.SetCookie(w, &http.Cookie{
 		Name: gitConnectStateCookie, Value: "", Path: "/api/git/integrations/callback",
-		HttpOnly: true, Secure: h.cfg.SecureCookies, SameSite: http.SameSiteLaxMode, MaxAge: -1,
+		HttpOnly: true, Secure: h.secureCookies(r), SameSite: http.SameSiteLaxMode, MaxAge: -1,
 	})
 	if cookieErr != nil || subtle.ConstantTimeCompare([]byte(cookie.Value), []byte(state)) != 1 {
 		writeError(w, http.StatusBadRequest, "state cookie mismatch")

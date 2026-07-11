@@ -161,8 +161,12 @@ domain, so you can watch the certificate arrive (or see why it did not).
 Clearing the field reverts to plain HTTP on the IP. The requirements are the same
 as any Automatic domain: DNS pointing here, ports 80 and 443 open.
 
-After it goes active, set `PUBLIC_BASE_URL=https://<your-domain>` and
-`SECURE_COOKIES=true` so session cookies are only sent over HTTPS.
+After it goes active, set `PUBLIC_BASE_URL=https://<your-domain>` so generated
+links (invitations, password resets, webhooks) point at the right place.
+
+Session cookies need no configuration: they are marked `Secure` automatically on
+any HTTPS request, so they start being withheld from plain HTTP the moment the
+panel is served over TLS.
 
 ---
 

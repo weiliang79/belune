@@ -319,7 +319,7 @@ func (h *Handler) AcceptInvitation(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.setSessionCookies(w, result, csrfToken)
+	h.setSessionCookies(w, r, result, csrfToken)
 
 	if h.auditSvc != nil {
 		uid := uuidToString(user.ID)

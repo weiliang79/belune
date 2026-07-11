@@ -81,7 +81,7 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.setSessionCookies(w, result, csrfToken)
+	h.setSessionCookies(w, r, result, csrfToken)
 
 	if h.auditSvc != nil {
 		uid := uuidToString(result.User.ID)
@@ -105,7 +105,7 @@ func (h *Handler) Refresh(w http.ResponseWriter, r *http.Request) {
 	result, err := h.auth.Refresh(r.Context(), cookie.Value, r.UserAgent(), clientIP)
 	if err != nil {
 		// Clear the bad cookie so the client doesn't keep retrying with it.
-		h.clearSessionCookies(w)
+		h.clearSessionCookies(w, r)
 		writeError(w, http.StatusUnauthorized, "invalid refresh token")
 		return
 	}
@@ -116,7 +116,7 @@ func (h *Handler) Refresh(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.setSessionCookies(w, result, csrfToken)
+	h.setSessionCookies(w, r, result, csrfToken)
 	writeJSON(w, http.StatusOK, result)
 }
 
@@ -135,27 +135,51 @@ func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	h.clearSessionCookies(w)
+	h.clearSessionCookies(w, r)
 
 	h.audit(r, "logout", "user", "", nil)
 
 	writeJSON(w, http.StatusOK, map[string]string{"status": "logged out"})
 }
 
+// secureCookies reports whether session cookies should carry the Secure
+// attribute, i.e. be withheld from any plain-HTTP request.
+//
+// Derived from the request rather than read only from config, because the
+// dashboard's domain — and therefore whether it is served over HTTPS at all — is
+// set from inside the UI at runtime. A config-only flag would leave session
+// cookies non-Secure after an operator switched to HTTPS, until someone
+// remembered to edit .env and restart.
+//
+// Trusting X-Forwarded-Proto is safe here: Caddy overwrites whatever the client
+// sent with the real scheme (verified in both directions), and the API is not
+// reachable except through it — port 8080 is bound to loopback. SECURE_COOKIES
+// still forces the attribute on, for deployments fronted by something else.
+func (h *Handler) secureCookies(r *http.Request) bool {
+	if h.cfg.SecureCookies {
+		return true
+	}
+	if r.TLS != nil {
+		return true
+	}
+	return strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https")
+}
+
 // setSessionCookies emits the access, refresh, and CSRF cookies for a
 // successful login or refresh. The refresh cookie is scoped to /api/auth so
 // it is never sent to non-auth endpoints — defence-in-depth in case of a
 // rogue endpoint that echoes Cookie headers.
-func (h *Handler) setSessionCookies(w http.ResponseWriter, result *service.LoginResult, csrfToken string) {
+func (h *Handler) setSessionCookies(w http.ResponseWriter, r *http.Request, result *service.LoginResult, csrfToken string) {
 	accessTTL := h.auth.AccessExpiry()
 	refreshTTL := h.auth.RefreshExpiry()
+	secure := h.secureCookies(r)
 
 	http.SetCookie(w, &http.Cookie{
 		Name:     "token",
 		Value:    result.Token,
 		Path:     "/",
 		HttpOnly: true,
-		Secure:   h.cfg.SecureCookies,
+		Secure:   secure,
 		SameSite: http.SameSiteLaxMode,
 		MaxAge:   int(accessTTL / time.Second),
 	})
@@ -165,7 +189,7 @@ func (h *Handler) setSessionCookies(w http.ResponseWriter, result *service.Login
 		Value:    result.RefreshToken,
 		Path:     refreshCookiePath,
 		HttpOnly: true,
-		Secure:   h.cfg.SecureCookies,
+		Secure:   secure,
 		SameSite: http.SameSiteLaxMode,
 		MaxAge:   int(refreshTTL / time.Second),
 	})
@@ -177,26 +201,28 @@ func (h *Handler) setSessionCookies(w http.ResponseWriter, result *service.Login
 		Value:    csrfToken,
 		Path:     "/",
 		HttpOnly: false,
-		Secure:   h.cfg.SecureCookies,
+		Secure:   secure,
 		SameSite: http.SameSiteLaxMode,
 		MaxAge:   int(refreshTTL / time.Second),
 	})
 }
 
-func (h *Handler) clearSessionCookies(w http.ResponseWriter) {
+func (h *Handler) clearSessionCookies(w http.ResponseWriter, r *http.Request) {
+	secure := h.secureCookies(r)
+
 	http.SetCookie(w, &http.Cookie{
 		Name: "token", Value: "", Path: "/",
-		HttpOnly: true, Secure: h.cfg.SecureCookies,
+		HttpOnly: true, Secure: secure,
 		SameSite: http.SameSiteLaxMode, MaxAge: -1,
 	})
 	http.SetCookie(w, &http.Cookie{
 		Name: refreshCookieName, Value: "", Path: refreshCookiePath,
-		HttpOnly: true, Secure: h.cfg.SecureCookies,
+		HttpOnly: true, Secure: secure,
 		SameSite: http.SameSiteLaxMode, MaxAge: -1,
 	})
 	http.SetCookie(w, &http.Cookie{
 		Name: middleware.CSRFCookieName, Value: "", Path: "/",
-		HttpOnly: false, Secure: h.cfg.SecureCookies,
+		HttpOnly: false, Secure: secure,
 		SameSite: http.SameSiteLaxMode, MaxAge: -1,
 	})
 }
