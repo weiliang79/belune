@@ -357,8 +357,7 @@ export interface DomainExpanded extends Domain {
   force_https: boolean;
   ssl_mode: string;
   ssl_provider?: string | null;
-  cert_path?: string | null;
-  key_path?: string | null;
+  certificate_id?: string | null;
   advanced_config?: unknown;
   features?: RouteFeature[];
 }

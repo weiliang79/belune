@@ -2,8 +2,8 @@
 SELECT * FROM domains WHERE application_id = $1 ORDER BY created_at DESC;
 
 -- name: CreateDomain :one
-INSERT INTO domains (application_id, hostname, ssl_enabled, container_port, force_https, ssl_mode, ssl_provider, ssl_credentials_encrypted, cert_path, key_path, advanced_config)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+INSERT INTO domains (application_id, hostname, ssl_enabled, container_port, force_https, ssl_mode, ssl_provider, ssl_credentials_encrypted, certificate_id, advanced_config)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 RETURNING *;
 
 -- name: GetDomain :one
@@ -25,7 +25,7 @@ WHERE d.id = $1;
 UPDATE domains SET
     hostname = $2, ssl_enabled = $3, container_port = $4, force_https = $5,
     ssl_mode = $6, ssl_provider = $7, ssl_credentials_encrypted = $8,
-    cert_path = $9, key_path = $10, advanced_config = $11
+    certificate_id = $9, advanced_config = $10
 WHERE id = $1
 RETURNING *;
 

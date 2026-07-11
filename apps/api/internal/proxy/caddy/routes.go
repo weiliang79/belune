@@ -182,14 +182,20 @@ func (c *Client) AddRoute(ctx context.Context, cfg proxy.RouteConfig) (err error
 		return fmt.Errorf("marshal route: %w", err)
 	}
 
-	// Update the auto-HTTPS skip set *before* the route lands: srv0 listens on
-	// :443, so the moment a host matcher appears Caddy starts trying to issue a
-	// certificate for it — which for an ssl_mode=off domain would fail loudly and
-	// pointlessly. A failure here is not fatal (the route itself is still
-	// correct) and the reconciler re-asserts the set on its next pass.
-	if c.setSkip(cfg.Hostname, cfg.SSLMode == proxy.SSLModeOff) {
+	// Everything TLS must be in place *before* the route lands: srv0 listens on
+	// :443, so the moment a host matcher appears Caddy runs automatic HTTPS for
+	// that name — issuing a doomed certificate for an ssl_mode=off domain, or
+	// minting an internal one that would then be served in preference to the
+	// operator's uploaded certificate. Failures here are not fatal (the route
+	// itself is still correct); the reconciler re-asserts both on its next pass.
+	if c.setMode(cfg.Hostname, cfg.SSLMode) {
 		if err := c.ensureServer(ctx, nil); err != nil {
-			slog.Warn("caddy: failed to update auto-HTTPS skip list", "hostname", cfg.Hostname, "error", err)
+			slog.Warn("caddy: failed to update auto-HTTPS exclusions", "hostname", cfg.Hostname, "error", err)
+		}
+	}
+	if cfg.TLS && cfg.SSLMode == proxy.SSLModeCustom {
+		if err := c.SetupTLS(ctx, cfg.Hostname, cfg.SSLMode, cfg.CertPEM, cfg.KeyPEM); err != nil {
+			slog.Warn("caddy: TLS setup failed", "hostname", cfg.Hostname, "error", err)
 		}
 	}
 
@@ -218,16 +224,6 @@ func (c *Client) AddRoute(ctx context.Context, cfg proxy.RouteConfig) (err error
 	// Ensure the catch-all stays last so it doesn't shadow this new domain route.
 	if err := c.moveCatchAllToEnd(ctx); err != nil {
 		return fmt.Errorf("reorder catch-all: %w", err)
-	}
-
-	// Configure TLS if needed.
-	if cfg.TLS {
-		if err := c.SetupTLS(ctx, cfg.Hostname, cfg.SSLMode, cfg.CertPath, cfg.KeyPath); err != nil {
-			// TLS provisioning is best-effort: the route itself is live, so we
-			// log rather than unwind. Callers can still observe the error via
-			// future cert-status polling once implemented.
-			slog.Warn("caddy: TLS setup failed", "hostname", cfg.Hostname, "error", err)
-		}
 	}
 
 	slog.Info("caddy route added", "hostname", cfg.Hostname, "target", cfg.TargetURL)
@@ -405,10 +401,10 @@ func (c *Client) RemoveRoute(ctx context.Context, hostname string) (err error) {
 		return fmt.Errorf("caddy remove route: HTTP %d: %s", resp.StatusCode, bodyStr)
 	}
 
-	// The hostname no longer exists, so it has no business in the skip set.
-	if c.setSkip(hostname, false) {
+	// The hostname no longer exists, so it has no business in either exclusion set.
+	if c.forgetHost(hostname) {
 		if err := c.ensureServer(ctx, nil); err != nil {
-			slog.Warn("caddy: failed to prune auto-HTTPS skip list", "hostname", hostname, "error", err)
+			slog.Warn("caddy: failed to prune auto-HTTPS exclusions", "hostname", hostname, "error", err)
 		}
 	}
 
@@ -573,12 +569,17 @@ func (c *Client) ensureServer(ctx context.Context, routes []json.RawMessage) err
 	}
 
 	server["listen"] = serverListen
+	skip, skipCerts := c.skipLists()
 	server["automatic_https"] = map[string]any{
 		// Belune owns HTTP→HTTPS redirection per-domain via the ForceHTTPS
 		// subroute in AddRoute; Caddy's own redirect routes would shadow it.
 		"disable_redirects": true,
-		// Hostnames with ssl_mode=off: Caddy must not try to issue for them.
-		"skip": c.skipList(),
+		// ssl_mode=off: no automatic HTTPS for these names at all.
+		"skip": skip,
+		// ssl_mode=custom: the operator's certificate is loaded in-band, so Caddy
+		// must not manage one of its own — without this it mints an internal-CA
+		// cert for the name and serves that in preference to the uploaded one.
+		"skip_certificates": skipCerts,
 	}
 	server["tls_connection_policies"] = []map[string]any{{}}
 	if routes != nil {
@@ -638,48 +639,73 @@ func (c *Client) fetchServer(ctx context.Context) (map[string]any, error) {
 	return server, nil
 }
 
-// SyncAutoHTTPSSkip replaces the auto-HTTPS skip set with the given hostnames
-// (those whose domains are ssl_mode=off) and re-asserts the full server config.
-// The reconciler calls this every pass, which is what restores the :443 listener
-// and the skip list after Caddy restarts back to its Caddyfile-only config.
-func (c *Client) SyncAutoHTTPSSkip(ctx context.Context, hostnames []string) error {
+// SyncAutoHTTPS replaces both auto-HTTPS exclusion sets and re-asserts the full
+// server config. The reconciler calls this every pass, which is what restores the
+// :443 listener and the exclusion lists after Caddy restarts back to its
+// Caddyfile-only config.
+func (c *Client) SyncAutoHTTPS(ctx context.Context, skip, skipCertificates []string) error {
 	c.skipMu.Lock()
-	c.autoHTTPSSkip = make(map[string]struct{}, len(hostnames))
-	for _, h := range hostnames {
-		c.autoHTTPSSkip[h] = struct{}{}
-	}
+	c.autoHTTPSSkip = toSet(skip)
+	c.autoHTTPSSkipCerts = toSet(skipCertificates)
 	c.skipMu.Unlock()
 
 	return c.ensureServer(ctx, nil)
 }
 
-// setSkip adds or removes one hostname from the skip set, reporting whether the
-// set actually changed.
-func (c *Client) setSkip(hostname string, skip bool) bool {
+// setMode places a hostname in whichever exclusion set its SSL mode calls for
+// (and out of the other), reporting whether anything actually changed.
+func (c *Client) setMode(hostname, sslMode string) bool {
 	c.skipMu.Lock()
 	defer c.skipMu.Unlock()
 
-	_, present := c.autoHTTPSSkip[hostname]
+	changed := setMembership(c.autoHTTPSSkip, hostname, sslMode == proxy.SSLModeOff)
+	changed = setMembership(c.autoHTTPSSkipCerts, hostname, sslMode == proxy.SSLModeCustom) || changed
+	return changed
+}
+
+// forgetHost drops a hostname from both exclusion sets.
+func (c *Client) forgetHost(hostname string) bool {
+	c.skipMu.Lock()
+	defer c.skipMu.Unlock()
+
+	changed := setMembership(c.autoHTTPSSkip, hostname, false)
+	changed = setMembership(c.autoHTTPSSkipCerts, hostname, false) || changed
+	return changed
+}
+
+// skipLists returns both sets as sorted slices, so an unchanged set always
+// renders to identical JSON and does not churn Caddy's config.
+func (c *Client) skipLists() (skip, skipCertificates []string) {
+	c.skipMu.Lock()
+	defer c.skipMu.Unlock()
+	return sortedKeys(c.autoHTTPSSkip), sortedKeys(c.autoHTTPSSkipCerts)
+}
+
+func setMembership(set map[string]struct{}, key string, want bool) bool {
+	_, present := set[key]
 	switch {
-	case skip && !present:
-		c.autoHTTPSSkip[hostname] = struct{}{}
-	case !skip && present:
-		delete(c.autoHTTPSSkip, hostname)
+	case want && !present:
+		set[key] = struct{}{}
+	case !want && present:
+		delete(set, key)
 	default:
 		return false
 	}
 	return true
 }
 
-// skipList returns the skip set as a sorted slice, so an unchanged set always
-// renders to identical JSON and does not churn Caddy's config.
-func (c *Client) skipList() []string {
-	c.skipMu.Lock()
-	defer c.skipMu.Unlock()
+func toSet(keys []string) map[string]struct{} {
+	set := make(map[string]struct{}, len(keys))
+	for _, k := range keys {
+		set[k] = struct{}{}
+	}
+	return set
+}
 
-	list := make([]string, 0, len(c.autoHTTPSSkip))
-	for h := range c.autoHTTPSSkip {
-		list = append(list, h)
+func sortedKeys(set map[string]struct{}) []string {
+	list := make([]string, 0, len(set))
+	for k := range set {
+		list = append(list, k)
 	}
 	sort.Strings(list)
 	return list

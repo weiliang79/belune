@@ -18,6 +18,7 @@ import (
 type Reconciler struct {
 	queries  *generated.Queries
 	proxy    ProxyManager
+	dec      Decryptor
 	interval time.Duration
 
 	// runMu serialises whole reconcile passes so a manual ReconcileNow can't
@@ -45,11 +46,13 @@ type ReconcilerStatus struct {
 	TotalDrift int64 `json:"total_drift"`
 }
 
-// NewReconciler creates a Reconciler with the given tick interval.
-func NewReconciler(queries *generated.Queries, proxy ProxyManager, interval time.Duration) *Reconciler {
+// NewReconciler creates a Reconciler with the given tick interval. dec unwraps
+// the stored certificate PEM for domains serving an uploaded certificate.
+func NewReconciler(queries *generated.Queries, proxy ProxyManager, dec Decryptor, interval time.Duration) *Reconciler {
 	return &Reconciler{
 		queries:  queries,
 		proxy:    proxy,
+		dec:      dec,
 		interval: interval,
 		status:   ReconcilerStatus{IntervalSeconds: int(interval / time.Second)},
 	}
@@ -138,14 +141,24 @@ func (r *Reconciler) reconcile(ctx context.Context) {
 	// static Caddyfile, so this is what restores the :443 listener — and doing it
 	// first means a route re-added below cannot briefly trigger a doomed
 	// certificate attempt for an ssl_mode=off hostname.
-	var skip []string
+	var skip, skipCerts []string
 	for _, cfg := range expected {
-		if cfg.SSLMode == SSLModeOff {
+		switch cfg.SSLMode {
+		case SSLModeOff:
 			skip = append(skip, cfg.Hostname)
+		case SSLModeCustom:
+			skipCerts = append(skipCerts, cfg.Hostname)
 		}
 	}
-	if err := r.proxy.SyncAutoHTTPSSkip(ctx, skip); err != nil {
+	if err := r.proxy.SyncAutoHTTPS(ctx, skip, skipCerts); err != nil {
 		slog.Warn("proxy reconciler: failed to sync auto-HTTPS config", "error", err)
+		recordErr(err)
+	}
+
+	// Uploaded certificates are held in Caddy's memory, so a restart drops them
+	// just as it drops routes. Re-assert the whole set from the DB each pass.
+	if err := r.syncCertificates(ctx); err != nil {
+		slog.Warn("proxy reconciler: failed to sync certificates", "error", err)
 		recordErr(err)
 	}
 
@@ -229,7 +242,7 @@ func (r *Reconciler) buildExpected(ctx context.Context) ([]RouteConfig, error) {
 		}
 
 		for _, domain := range domains {
-			cfg, err := BuildRouteConfigFromDB(ctx, r.queries, domain, containerName, app.HealthCheckPath.String)
+			cfg, err := BuildRouteConfigFromDB(ctx, r.queries, r.dec, domain, containerName, app.HealthCheckPath.String)
 			if err != nil {
 				slog.Warn("proxy reconciler: failed to build route config", "hostname", domain.Hostname, "error", err)
 				continue
@@ -239,4 +252,34 @@ func (r *Reconciler) buildExpected(ctx context.Context) ([]RouteConfig, error) {
 	}
 
 	return configs, nil
+}
+
+// syncCertificates pushes the PEM pair of every ssl_mode=custom domain into the
+// proxy's in-band certificate store.
+func (r *Reconciler) syncCertificates(ctx context.Context) error {
+	rows, err := r.queries.ListCustomCertDomains(ctx)
+	if err != nil {
+		return err
+	}
+
+	certs := make([]HostCertificate, 0, len(rows))
+	for _, row := range rows {
+		certPEM, err := r.dec.Decrypt(row.CertPemEncrypted)
+		if err != nil {
+			slog.Warn("proxy reconciler: failed to decrypt certificate", "hostname", row.Hostname, "error", err)
+			continue
+		}
+		keyPEM, err := r.dec.Decrypt(row.KeyPemEncrypted)
+		if err != nil {
+			slog.Warn("proxy reconciler: failed to decrypt certificate key", "hostname", row.Hostname, "error", err)
+			continue
+		}
+		certs = append(certs, HostCertificate{
+			Hostname: row.Hostname,
+			CertPEM:  string(certPEM),
+			KeyPEM:   string(keyPEM),
+		})
+	}
+
+	return r.proxy.SyncCertificates(ctx, certs)
 }

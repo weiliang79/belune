@@ -239,7 +239,11 @@ func (m *MockProxyManager) RemoveRoute(_ context.Context, hostname string) error
 
 func (m *MockProxyManager) SetupTLS(_ context.Context, _, _, _, _ string) error { return nil }
 
-func (m *MockProxyManager) SyncAutoHTTPSSkip(_ context.Context, _ []string) error { return nil }
+func (m *MockProxyManager) SyncAutoHTTPS(_ context.Context, _, _ []string) error { return nil }
+
+func (m *MockProxyManager) SyncCertificates(_ context.Context, _ []proxy.HostCertificate) error {
+	return nil
+}
 func (m *MockProxyManager) ListRoutes(_ context.Context) ([]proxy.RouteConfig, error) {
 	return nil, nil
 }

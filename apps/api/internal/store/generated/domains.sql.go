@@ -12,9 +12,9 @@ import (
 )
 
 const createDomain = `-- name: CreateDomain :one
-INSERT INTO domains (application_id, hostname, ssl_enabled, container_port, force_https, ssl_mode, ssl_provider, ssl_credentials_encrypted, cert_path, key_path, advanced_config)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-RETURNING id, application_id, hostname, ssl_enabled, caddy_config_id, container_port, force_https, ssl_mode, ssl_provider, ssl_credentials_encrypted, cert_path, key_path, advanced_config, verified_at, created_at
+INSERT INTO domains (application_id, hostname, ssl_enabled, container_port, force_https, ssl_mode, ssl_provider, ssl_credentials_encrypted, certificate_id, advanced_config)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+RETURNING id, application_id, hostname, ssl_enabled, caddy_config_id, container_port, force_https, ssl_mode, ssl_provider, ssl_credentials_encrypted, advanced_config, verified_at, created_at, certificate_id
 `
 
 type CreateDomainParams struct {
@@ -26,8 +26,7 @@ type CreateDomainParams struct {
 	SslMode                 string      `json:"ssl_mode"`
 	SslProvider             pgtype.Text `json:"ssl_provider"`
 	SslCredentialsEncrypted []byte      `json:"ssl_credentials_encrypted"`
-	CertPath                pgtype.Text `json:"cert_path"`
-	KeyPath                 pgtype.Text `json:"key_path"`
+	CertificateID           pgtype.UUID `json:"certificate_id"`
 	AdvancedConfig          []byte      `json:"advanced_config"`
 }
 
@@ -41,8 +40,7 @@ func (q *Queries) CreateDomain(ctx context.Context, arg CreateDomainParams) (Dom
 		arg.SslMode,
 		arg.SslProvider,
 		arg.SslCredentialsEncrypted,
-		arg.CertPath,
-		arg.KeyPath,
+		arg.CertificateID,
 		arg.AdvancedConfig,
 	)
 	var i Domain
@@ -57,11 +55,10 @@ func (q *Queries) CreateDomain(ctx context.Context, arg CreateDomainParams) (Dom
 		&i.SslMode,
 		&i.SslProvider,
 		&i.SslCredentialsEncrypted,
-		&i.CertPath,
-		&i.KeyPath,
 		&i.AdvancedConfig,
 		&i.VerifiedAt,
 		&i.CreatedAt,
+		&i.CertificateID,
 	)
 	return i, err
 }
@@ -76,7 +73,7 @@ func (q *Queries) DeleteDomain(ctx context.Context, id pgtype.UUID) error {
 }
 
 const getDomain = `-- name: GetDomain :one
-SELECT id, application_id, hostname, ssl_enabled, caddy_config_id, container_port, force_https, ssl_mode, ssl_provider, ssl_credentials_encrypted, cert_path, key_path, advanced_config, verified_at, created_at FROM domains WHERE id = $1
+SELECT id, application_id, hostname, ssl_enabled, caddy_config_id, container_port, force_https, ssl_mode, ssl_provider, ssl_credentials_encrypted, advanced_config, verified_at, created_at, certificate_id FROM domains WHERE id = $1
 `
 
 func (q *Queries) GetDomain(ctx context.Context, id pgtype.UUID) (Domain, error) {
@@ -93,17 +90,16 @@ func (q *Queries) GetDomain(ctx context.Context, id pgtype.UUID) (Domain, error)
 		&i.SslMode,
 		&i.SslProvider,
 		&i.SslCredentialsEncrypted,
-		&i.CertPath,
-		&i.KeyPath,
 		&i.AdvancedConfig,
 		&i.VerifiedAt,
 		&i.CreatedAt,
+		&i.CertificateID,
 	)
 	return i, err
 }
 
 const getDomainByHostname = `-- name: GetDomainByHostname :one
-SELECT id, application_id, hostname, ssl_enabled, caddy_config_id, container_port, force_https, ssl_mode, ssl_provider, ssl_credentials_encrypted, cert_path, key_path, advanced_config, verified_at, created_at FROM domains WHERE hostname = $1
+SELECT id, application_id, hostname, ssl_enabled, caddy_config_id, container_port, force_https, ssl_mode, ssl_provider, ssl_credentials_encrypted, advanced_config, verified_at, created_at, certificate_id FROM domains WHERE hostname = $1
 `
 
 func (q *Queries) GetDomainByHostname(ctx context.Context, hostname string) (Domain, error) {
@@ -120,11 +116,10 @@ func (q *Queries) GetDomainByHostname(ctx context.Context, hostname string) (Dom
 		&i.SslMode,
 		&i.SslProvider,
 		&i.SslCredentialsEncrypted,
-		&i.CertPath,
-		&i.KeyPath,
 		&i.AdvancedConfig,
 		&i.VerifiedAt,
 		&i.CreatedAt,
+		&i.CertificateID,
 	)
 	return i, err
 }
@@ -144,7 +139,7 @@ func (q *Queries) GetDomainOwnerUserID(ctx context.Context, id pgtype.UUID) (pgt
 }
 
 const listDomainsByApplication = `-- name: ListDomainsByApplication :many
-SELECT id, application_id, hostname, ssl_enabled, caddy_config_id, container_port, force_https, ssl_mode, ssl_provider, ssl_credentials_encrypted, cert_path, key_path, advanced_config, verified_at, created_at FROM domains WHERE application_id = $1 ORDER BY created_at DESC
+SELECT id, application_id, hostname, ssl_enabled, caddy_config_id, container_port, force_https, ssl_mode, ssl_provider, ssl_credentials_encrypted, advanced_config, verified_at, created_at, certificate_id FROM domains WHERE application_id = $1 ORDER BY created_at DESC
 `
 
 func (q *Queries) ListDomainsByApplication(ctx context.Context, applicationID pgtype.UUID) ([]Domain, error) {
@@ -167,11 +162,10 @@ func (q *Queries) ListDomainsByApplication(ctx context.Context, applicationID pg
 			&i.SslMode,
 			&i.SslProvider,
 			&i.SslCredentialsEncrypted,
-			&i.CertPath,
-			&i.KeyPath,
 			&i.AdvancedConfig,
 			&i.VerifiedAt,
 			&i.CreatedAt,
+			&i.CertificateID,
 		); err != nil {
 			return nil, err
 		}
@@ -184,7 +178,7 @@ func (q *Queries) ListDomainsByApplication(ctx context.Context, applicationID pg
 }
 
 const listDomainsByApplicationWithFeatures = `-- name: ListDomainsByApplicationWithFeatures :many
-SELECT d.id, d.application_id, d.hostname, d.ssl_enabled, d.caddy_config_id, d.container_port, d.force_https, d.ssl_mode, d.ssl_provider, d.ssl_credentials_encrypted, d.cert_path, d.key_path, d.advanced_config, d.verified_at, d.created_at, COALESCE(
+SELECT d.id, d.application_id, d.hostname, d.ssl_enabled, d.caddy_config_id, d.container_port, d.force_https, d.ssl_mode, d.ssl_provider, d.ssl_credentials_encrypted, d.advanced_config, d.verified_at, d.created_at, d.certificate_id, COALESCE(
     (SELECT json_agg(json_build_object(
         'id', f.id, 'feature_type', f.feature_type,
         'config', f.config, 'enabled', f.enabled
@@ -207,11 +201,10 @@ type ListDomainsByApplicationWithFeaturesRow struct {
 	SslMode                 string             `json:"ssl_mode"`
 	SslProvider             pgtype.Text        `json:"ssl_provider"`
 	SslCredentialsEncrypted []byte             `json:"ssl_credentials_encrypted"`
-	CertPath                pgtype.Text        `json:"cert_path"`
-	KeyPath                 pgtype.Text        `json:"key_path"`
 	AdvancedConfig          []byte             `json:"advanced_config"`
 	VerifiedAt              pgtype.Timestamptz `json:"verified_at"`
 	CreatedAt               pgtype.Timestamptz `json:"created_at"`
+	CertificateID           pgtype.UUID        `json:"certificate_id"`
 	RouteFeatures           interface{}        `json:"route_features"`
 }
 
@@ -235,11 +228,10 @@ func (q *Queries) ListDomainsByApplicationWithFeatures(ctx context.Context, appl
 			&i.SslMode,
 			&i.SslProvider,
 			&i.SslCredentialsEncrypted,
-			&i.CertPath,
-			&i.KeyPath,
 			&i.AdvancedConfig,
 			&i.VerifiedAt,
 			&i.CreatedAt,
+			&i.CertificateID,
 			&i.RouteFeatures,
 		); err != nil {
 			return nil, err
@@ -293,9 +285,9 @@ const updateDomain = `-- name: UpdateDomain :one
 UPDATE domains SET
     hostname = $2, ssl_enabled = $3, container_port = $4, force_https = $5,
     ssl_mode = $6, ssl_provider = $7, ssl_credentials_encrypted = $8,
-    cert_path = $9, key_path = $10, advanced_config = $11
+    certificate_id = $9, advanced_config = $10
 WHERE id = $1
-RETURNING id, application_id, hostname, ssl_enabled, caddy_config_id, container_port, force_https, ssl_mode, ssl_provider, ssl_credentials_encrypted, cert_path, key_path, advanced_config, verified_at, created_at
+RETURNING id, application_id, hostname, ssl_enabled, caddy_config_id, container_port, force_https, ssl_mode, ssl_provider, ssl_credentials_encrypted, advanced_config, verified_at, created_at, certificate_id
 `
 
 type UpdateDomainParams struct {
@@ -307,8 +299,7 @@ type UpdateDomainParams struct {
 	SslMode                 string      `json:"ssl_mode"`
 	SslProvider             pgtype.Text `json:"ssl_provider"`
 	SslCredentialsEncrypted []byte      `json:"ssl_credentials_encrypted"`
-	CertPath                pgtype.Text `json:"cert_path"`
-	KeyPath                 pgtype.Text `json:"key_path"`
+	CertificateID           pgtype.UUID `json:"certificate_id"`
 	AdvancedConfig          []byte      `json:"advanced_config"`
 }
 
@@ -322,8 +313,7 @@ func (q *Queries) UpdateDomain(ctx context.Context, arg UpdateDomainParams) (Dom
 		arg.SslMode,
 		arg.SslProvider,
 		arg.SslCredentialsEncrypted,
-		arg.CertPath,
-		arg.KeyPath,
+		arg.CertificateID,
 		arg.AdvancedConfig,
 	)
 	var i Domain
@@ -338,11 +328,10 @@ func (q *Queries) UpdateDomain(ctx context.Context, arg UpdateDomainParams) (Dom
 		&i.SslMode,
 		&i.SslProvider,
 		&i.SslCredentialsEncrypted,
-		&i.CertPath,
-		&i.KeyPath,
 		&i.AdvancedConfig,
 		&i.VerifiedAt,
 		&i.CreatedAt,
+		&i.CertificateID,
 	)
 	return i, err
 }

@@ -7,8 +7,8 @@ function statusFor(domain: DomainExpanded): Status {
   const mode = domain.ssl_mode ?? "automatic";
   if (mode === "off") return "off";
   if (mode === "custom") {
-    if (domain.cert_path && domain.key_path) return "custom";
-    return "error";
+    // Phase 3 replaces this inference with the server's own tls_status.
+    return domain.certificate_id ? "custom" : "error";
   }
   if (mode === "automatic" || mode === "dns_challenge") {
     return domain.verified_at ? "active" : "pending";

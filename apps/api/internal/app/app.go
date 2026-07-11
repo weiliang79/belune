@@ -166,7 +166,7 @@ func New(cfg *config.Config) (*App, error) {
 	}
 
 	caddyClient.InitCatchAll(context.Background())
-	reconciler := proxy.NewReconciler(queries, caddyClient, 30*time.Second)
+	reconciler := proxy.NewReconciler(queries, caddyClient, cfg.Keyring, 30*time.Second)
 
 	if err := caddyClient.ConfigureAccessLogs(context.Background()); err != nil {
 		slog.Warn("failed to configure Caddy access logs", "error", err)

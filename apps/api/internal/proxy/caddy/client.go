@@ -28,14 +28,18 @@ type Client struct {
 	adminURL   string
 	httpClient *http.Client
 
-	// skipMu guards autoHTTPSSkip: the set of hostnames Caddy must not attempt
-	// to obtain a certificate for (ssl_mode=off). It is mirrored into srv0's
-	// automatic_https.skip on every change. Holding it in memory rather than
-	// read-modify-writing Caddy's copy keeps concurrent AddRoute callers from
-	// clobbering each other; the reconciler re-asserts the set from DB truth on
-	// every pass, which is also how it survives a Caddy restart.
-	skipMu        sync.Mutex
+	// skipMu guards the two auto-HTTPS exclusion sets, mirrored into srv0 on every
+	// change. Holding them in memory rather than read-modify-writing Caddy's copy
+	// keeps concurrent AddRoute callers from clobbering each other; the reconciler
+	// re-asserts both from DB truth on every pass, which is also how they survive
+	// a Caddy restart.
+	skipMu sync.Mutex
+	// autoHTTPSSkip: ssl_mode=off — Caddy does no automatic HTTPS at all here.
 	autoHTTPSSkip map[string]struct{}
+	// autoHTTPSSkipCerts: ssl_mode=custom — the operator supplies the certificate,
+	// so Caddy must not manage (and cache) one of its own for the name, but the
+	// rest of automatic HTTPS still applies.
+	autoHTTPSSkipCerts map[string]struct{}
 }
 
 const unixScheme = "unix://"
@@ -61,9 +65,10 @@ func New(adminURL string) *Client {
 	}
 
 	return &Client{
-		adminURL:      adminURL,
-		httpClient:    httpClient,
-		autoHTTPSSkip: make(map[string]struct{}),
+		adminURL:           adminURL,
+		httpClient:         httpClient,
+		autoHTTPSSkip:      make(map[string]struct{}),
+		autoHTTPSSkipCerts: make(map[string]struct{}),
 	}
 }
 

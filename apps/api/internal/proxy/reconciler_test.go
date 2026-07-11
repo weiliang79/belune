@@ -39,7 +39,9 @@ func (m *mockProxy) ListRoutes(_ context.Context) ([]proxy.RouteConfig, error) {
 
 func (m *mockProxy) SetupTLS(_ context.Context, _, _, _, _ string) error { return nil }
 
-func (m *mockProxy) SyncAutoHTTPSSkip(_ context.Context, _ []string) error { return nil }
+func (m *mockProxy) SyncAutoHTTPS(_ context.Context, _, _ []string) error { return nil }
+
+func (m *mockProxy) SyncCertificates(_ context.Context, _ []proxy.HostCertificate) error { return nil }
 
 // reconcileOnce exercises the diff logic by building expected/current sets and
 // calling AddRoute / RemoveRoute via the exported Reconciler. We test the diff
@@ -118,7 +120,7 @@ func TestReconcilerDiff_AddAndRemove(t *testing.T) {
 }
 
 func TestReconcilerStatus_Initial(t *testing.T) {
-	r := proxy.NewReconciler(nil, &mockProxy{}, 30*time.Second)
+	r := proxy.NewReconciler(nil, &mockProxy{}, nil, 30*time.Second)
 	s := r.Status()
 	if s.IntervalSeconds != 30 {
 		t.Fatalf("expected interval 30, got %d", s.IntervalSeconds)

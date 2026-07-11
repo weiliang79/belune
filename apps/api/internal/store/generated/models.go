@@ -143,6 +143,20 @@ type BackupRun struct {
 	Log        string             `json:"log"`
 }
 
+type Certificate struct {
+	ID               pgtype.UUID        `json:"id"`
+	Name             string             `json:"name"`
+	CertPemEncrypted []byte             `json:"cert_pem_encrypted"`
+	KeyPemEncrypted  []byte             `json:"key_pem_encrypted"`
+	Issuer           pgtype.Text        `json:"issuer"`
+	Subjects         []string           `json:"subjects"`
+	NotBefore        pgtype.Timestamptz `json:"not_before"`
+	NotAfter         pgtype.Timestamptz `json:"not_after"`
+	CreatedBy        pgtype.UUID        `json:"created_by"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+}
+
 type ContainerLog struct {
 	ID         pgtype.UUID        `json:"id"`
 	SourceType string             `json:"source_type"`
@@ -248,11 +262,10 @@ type Domain struct {
 	SslMode                 string             `json:"ssl_mode"`
 	SslProvider             pgtype.Text        `json:"ssl_provider"`
 	SslCredentialsEncrypted []byte             `json:"ssl_credentials_encrypted"`
-	CertPath                pgtype.Text        `json:"cert_path"`
-	KeyPath                 pgtype.Text        `json:"key_path"`
 	AdvancedConfig          []byte             `json:"advanced_config"`
 	VerifiedAt              pgtype.Timestamptz `json:"verified_at"`
 	CreatedAt               pgtype.Timestamptz `json:"created_at"`
+	CertificateID           pgtype.UUID        `json:"certificate_id"`
 }
 
 type DomainRouteFeature struct {

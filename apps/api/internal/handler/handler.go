@@ -71,6 +71,9 @@ type Handler struct {
 	termManager       *terminal.Manager
 	quotaSvc          *quota.Service
 	emailSvc          *email.Service
+	// certSvc is built here rather than injected: it needs only queries and the
+	// keyring, both already held above, and nothing outside the handler uses it.
+	certSvc *service.CertificateService
 }
 
 func New(
@@ -120,6 +123,7 @@ func New(
 		termManager:       termMgr,
 		quotaSvc:          quotaSvc,
 		emailSvc:          emailSvc,
+		certSvc:           service.NewCertificateService(queries, cfg.Keyring),
 	}
 }
 

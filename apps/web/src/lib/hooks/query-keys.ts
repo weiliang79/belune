@@ -175,6 +175,7 @@ export const queryKeys = {
   requestSummary: (params?: object) => ["requests-summary", params] as const,
   auditLogs: (params?: object) => ["audit-logs", params] as const,
   auditActions: ["audit-actions"] as const,
+  certificates: ["certificates"] as const,
   gitProviders: ["git-providers"] as const,
   gitIntegrations: ["git-integrations"] as const,
   gitAvailableProviders: ["git-available-providers"] as const,

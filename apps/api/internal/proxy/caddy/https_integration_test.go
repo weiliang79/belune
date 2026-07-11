@@ -2,9 +2,16 @@ package caddy
 
 import (
 	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
 	"crypto/tls"
+	"crypto/x509"
+	"crypto/x509/pkix"
 	"encoding/json"
+	"encoding/pem"
 	"fmt"
+	"math/big"
 	"net"
 	"net/http"
 	"os"
@@ -28,8 +35,9 @@ import (
 //	BELUNE_CADDY_INTEGRATION=1 go test ./internal/proxy/caddy/ -run RealCaddy -v
 
 const (
-	autoHost = "phase1-auto.belune.local"
-	offHost  = "phase1-off.belune.local"
+	autoHost   = "phase1-auto.belune.local"
+	offHost    = "phase1-off.belune.local"
+	customHost = "phase2-custom.belune.local"
 )
 
 func liveClient(t *testing.T) *Client {
@@ -165,7 +173,7 @@ func TestRealCaddy_SyncRestoresServerAfterRestart(t *testing.T) {
 	before := serverConfig(t, c)
 	require.Equal(t, []any{":80"}, before["listen"], "precondition: HTTPS listener is gone")
 
-	require.NoError(t, c.SyncAutoHTTPSSkip(ctx, []string{offHost}))
+	require.NoError(t, c.SyncAutoHTTPS(ctx, []string{offHost}, nil))
 
 	server := serverConfig(t, c)
 	assert.Equal(t, []any{":80", ":443"}, server["listen"], "sync must restore the HTTPS listener")
@@ -188,11 +196,95 @@ func TestRealCaddy_ServerWriteKeepsAccessLogs(t *testing.T) {
 	// Idempotent: re-running (as an API restart does) must not 409 out.
 	require.NoError(t, c.ConfigureAccessLogs(ctx))
 
-	require.NoError(t, c.SyncAutoHTTPSSkip(ctx, nil))
+	require.NoError(t, c.SyncAutoHTTPS(ctx, nil, nil))
 
 	logs, _ := serverConfig(t, c)["logs"].(map[string]any)
 	require.NotNil(t, logs, "server write dropped the access-log config")
 	assert.Equal(t, "http.access.srv0", logs["default_logger_name"])
+}
+
+// selfSignedFor mints a certificate/key PEM pair for the given hostname.
+func selfSignedFor(t *testing.T, hostname string) proxy.HostCertificate {
+	t.Helper()
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	require.NoError(t, err)
+
+	tmpl := &x509.Certificate{
+		SerialNumber: big.NewInt(7),
+		Subject:      pkix.Name{CommonName: "belune-integration-ca"},
+		NotBefore:    time.Now().Add(-time.Hour),
+		NotAfter:     time.Now().Add(24 * time.Hour),
+		DNSNames:     []string{hostname},
+	}
+	der, err := x509.CreateCertificate(rand.Reader, tmpl, tmpl, &key.PublicKey, key)
+	require.NoError(t, err)
+	keyDER, err := x509.MarshalECPrivateKey(key)
+	require.NoError(t, err)
+
+	return proxy.HostCertificate{
+		Hostname: hostname,
+		CertPEM:  string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})),
+		KeyPEM:   string(pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: keyDER})),
+	}
+}
+
+// TestRealCaddy_CustomCertificateIsServed is the Phase 2 contract: an uploaded
+// certificate pushed in-band (load_pem) is the one Caddy actually serves for that
+// SNI — chosen over the internal CA it would otherwise mint — and it never
+// touches Caddy's filesystem.
+func TestRealCaddy_CustomCertificateIsServed(t *testing.T) {
+	c := liveClient(t)
+	ctx := context.Background()
+	t.Cleanup(func() {
+		_ = c.RemoveRoute(ctx, customHost)
+		_ = c.SyncCertificates(ctx, nil)
+	})
+
+	c.InitCatchAll(ctx)
+	cert := selfSignedFor(t, customHost)
+
+	cfg := routeCfg(customHost, proxy.SSLModeCustom)
+	cfg.CertPEM, cfg.KeyPEM = cert.CertPEM, cert.KeyPEM
+	require.NoError(t, c.AddRoute(ctx, cfg))
+
+	state, err := leafFor(t, customHost, 15*time.Second)
+	require.NoError(t, err, "TLS handshake against local Caddy failed")
+	leaf := state.PeerCertificates[0]
+
+	assert.Contains(t, leaf.DNSNames, customHost)
+	assert.Contains(t, leaf.Issuer.CommonName, "belune-integration-ca",
+		"Caddy served its own internal cert instead of the uploaded one")
+}
+
+// TestRealCaddy_SyncCertificatesRestoresAfterRestart proves the reconciler's cert
+// sync closes the gap a Caddy restart opens: load_pem certificates live in memory
+// only, so without a re-push the domain would fall back to a cert Caddy mints
+// itself — or to no certificate at all.
+func TestRealCaddy_SyncCertificatesRestoresAfterRestart(t *testing.T) {
+	c := liveClient(t)
+	ctx := context.Background()
+	t.Cleanup(func() { _ = c.SyncCertificates(ctx, nil) })
+
+	cert := selfSignedFor(t, customHost)
+	require.NoError(t, c.SyncCertificates(ctx, []proxy.HostCertificate{cert}))
+
+	loaded, err := c.listPEMCerts(ctx)
+	require.NoError(t, err)
+	require.Len(t, loaded, 1)
+	assert.Equal(t, []string{customHost}, loaded[0].Tags)
+
+	// Simulate the restart: Caddy comes back with no in-band certificates.
+	require.NoError(t, c.SyncCertificates(ctx, nil))
+	loaded, err = c.listPEMCerts(ctx)
+	require.NoError(t, err)
+	require.Empty(t, loaded, "precondition: certificates are gone")
+
+	// The reconciler's pass re-pushes from DB truth.
+	require.NoError(t, c.SyncCertificates(ctx, []proxy.HostCertificate{cert}))
+	loaded, err = c.listPEMCerts(ctx)
+	require.NoError(t, err)
+	require.Len(t, loaded, 1)
+	assert.Equal(t, cert.CertPEM, loaded[0].Certificate)
 }
 
 func patchJSON(ctx context.Context, c *Client, path string, payload any) error {

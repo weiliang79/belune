@@ -70,9 +70,9 @@ func (h *TaskHandler) maybeSendQuotaAlert(ctx context.Context, projectID, ownerU
 	}
 
 	task, err := NewEmailSendTask("alert_quota_threshold", ownerInfo.Email, map[string]any{
-		"ProjectName":     ownerInfo.ProjectName,
-		"QuotaType":       "applications",
-		"UsagePercent":    alert.CurrentPercent,
+		"ProjectName":      ownerInfo.ProjectName,
+		"QuotaType":        "applications",
+		"UsagePercent":     alert.CurrentPercent,
 		"ThresholdPercent": alert.Threshold,
 	})
 	if err != nil {

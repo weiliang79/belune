@@ -33,6 +33,7 @@ import {
   TabsTrigger,
 } from "@/components/ui/tabs";
 import { useAddDomain, useUpdateDomain } from "@/lib/hooks/use-domains";
+import { useCertificates } from "@/lib/hooks/use-certificates";
 import type { DomainExpanded } from "@/lib/types";
 
 const HOSTNAME_REGEX =
@@ -100,14 +101,19 @@ function DomainForm({
   const updateDomain = useUpdateDomain(projectId, applicationId);
   const pending = addDomain.isPending || updateDomain.isPending;
 
+  // Only admins can manage certificates, so a non-admin editing a domain sees an
+  // empty picker rather than an error; the form explains where they come from.
+  const { data: certificateList, isLoading: certificatesLoading } =
+    useCertificates();
+  const certificates = certificateList ?? [];
+
   const form = useForm({
     defaultValues: {
       hostname: domain?.hostname ?? "",
       ssl_mode: domain?.ssl_mode ?? "automatic",
       container_port: domain?.container_port?.toString() ?? "",
       force_https: domain?.force_https ?? true,
-      cert_path: domain?.cert_path ?? "",
-      key_path: domain?.key_path ?? "",
+      certificate_id: domain?.certificate_id ?? "",
     },
     onSubmit: ({ value }) => {
       const trimmed = value.hostname.trim();
@@ -123,8 +129,7 @@ function DomainForm({
               ssl_mode: value.ssl_mode,
               force_https: value.force_https,
               container_port: portNum,
-              cert_path: value.cert_path || undefined,
-              key_path: value.key_path || undefined,
+              certificate_id: value.certificate_id || undefined,
             })
           : addDomain.mutateAsync({
               hostname: trimmed,
@@ -132,8 +137,7 @@ function DomainForm({
               ssl_mode: value.ssl_mode,
               force_https: value.force_https,
               container_port: portNum ?? undefined,
-              cert_path: value.cert_path || undefined,
-              key_path: value.key_path || undefined,
+              certificate_id: value.certificate_id || undefined,
             });
 
       toast.promise(action.then(() => onClose()), {
@@ -277,66 +281,59 @@ function DomainForm({
             selector={(s) => s.values.ssl_mode}
             children={(sslMode) =>
               sslMode === "custom" ? (
-                <div className="space-y-3">
-                  <form.Field
-                    name="cert_path"
-                    validators={{
-                      onChangeListenTo: ["ssl_mode"],
-                      onChange: ({ value, fieldApi }) =>
-                        fieldApi.form.getFieldValue("ssl_mode") === "custom" &&
-                        !value.trim()
-                          ? "Certificate path is required"
-                          : undefined,
-                    }}
-                    children={(field) => {
-                      const error = fieldError(field.state.meta.errors);
-                      return (
-                        <div className="space-y-2">
-                          <Label>Certificate Path</Label>
-                          <Input
-                            value={field.state.value}
-                            onBlur={field.handleBlur}
-                            onChange={(e) => field.handleChange(e.target.value)}
-                            placeholder="/path/to/cert.pem"
-                            className="font-mono text-xs"
-                          />
-                          {error && (
-                            <p className="text-destructive text-xs">{error}</p>
-                          )}
-                        </div>
-                      );
-                    }}
-                  />
-                  <form.Field
-                    name="key_path"
-                    validators={{
-                      onChangeListenTo: ["ssl_mode"],
-                      onChange: ({ value, fieldApi }) =>
-                        fieldApi.form.getFieldValue("ssl_mode") === "custom" &&
-                        !value.trim()
-                          ? "Key path is required"
-                          : undefined,
-                    }}
-                    children={(field) => {
-                      const error = fieldError(field.state.meta.errors);
-                      return (
-                        <div className="space-y-2">
-                          <Label>Key Path</Label>
-                          <Input
-                            value={field.state.value}
-                            onBlur={field.handleBlur}
-                            onChange={(e) => field.handleChange(e.target.value)}
-                            placeholder="/path/to/key.pem"
-                            className="font-mono text-xs"
-                          />
-                          {error && (
-                            <p className="text-destructive text-xs">{error}</p>
-                          )}
-                        </div>
-                      );
-                    }}
-                  />
-                </div>
+                <form.Field
+                  name="certificate_id"
+                  validators={{
+                    onChangeListenTo: ["ssl_mode"],
+                    onChange: ({ value, fieldApi }) =>
+                      fieldApi.form.getFieldValue("ssl_mode") === "custom" &&
+                      !value
+                        ? "Select a certificate"
+                        : undefined,
+                  }}
+                  children={(field) => {
+                    const error = fieldError(field.state.meta.errors);
+                    return (
+                      <div className="space-y-2">
+                        <Label>Certificate</Label>
+                        <Select
+                          value={field.state.value}
+                          onValueChange={(v) => field.handleChange(v ?? "")}
+                          disabled={certificatesLoading}
+                        >
+                          <SelectTrigger>
+                            <SelectValue
+                              placeholder={
+                                certificatesLoading
+                                  ? "Loading…"
+                                  : "Select a certificate"
+                              }
+                            />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {certificates.map((cert) => (
+                              <SelectItem key={cert.id} value={cert.id}>
+                                {cert.name}
+                                <span className="text-muted-foreground ml-2 font-mono text-xs">
+                                  {cert.subjects.join(", ")}
+                                </span>
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        {!certificatesLoading && certificates.length === 0 && (
+                          <p className="text-muted-foreground text-xs">
+                            No certificates uploaded yet. An admin can add one
+                            under Settings → Certificates.
+                          </p>
+                        )}
+                        {error && (
+                          <p className="text-destructive text-xs">{error}</p>
+                        )}
+                      </div>
+                    );
+                  }}
+                />
               ) : null
             }
           />

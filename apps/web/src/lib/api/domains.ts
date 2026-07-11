@@ -17,8 +17,7 @@ export function addDomain(
     force_https?: boolean;
     ssl_mode?: string;
     ssl_provider?: string;
-    cert_path?: string;
-    key_path?: string;
+    certificate_id?: string;
   },
 ) {
   return api.post<DomainExpanded>(
@@ -37,8 +36,7 @@ export function updateDomain(
     force_https?: boolean;
     ssl_mode?: string;
     ssl_provider?: string;
-    cert_path?: string;
-    key_path?: string;
+    certificate_id?: string;
   },
 ) {
   return api.put<DomainExpanded>(

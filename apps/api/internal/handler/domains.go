@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -63,14 +64,13 @@ func (h *Handler) ListDomains(w http.ResponseWriter, r *http.Request) {
 }
 
 type addDomainRequest struct {
-	Hostname      string          `json:"hostname"`
-	SSLEnabled    bool            `json:"ssl_enabled"`
-	ContainerPort *int32          `json:"container_port,omitempty"`
-	ForceHTTPS    *bool           `json:"force_https,omitempty"`
-	SSLMode       string          `json:"ssl_mode,omitempty"`
-	SSLProvider   string          `json:"ssl_provider,omitempty"`
-	CertPath      string          `json:"cert_path,omitempty"`
-	KeyPath       string          `json:"key_path,omitempty"`
+	Hostname       string          `json:"hostname"`
+	SSLEnabled     bool            `json:"ssl_enabled"`
+	ContainerPort  *int32          `json:"container_port,omitempty"`
+	ForceHTTPS     *bool           `json:"force_https,omitempty"`
+	SSLMode        string          `json:"ssl_mode,omitempty"`
+	SSLProvider    string          `json:"ssl_provider,omitempty"`
+	CertificateID  string          `json:"certificate_id,omitempty"`
 	AdvancedConfig json.RawMessage `json:"advanced_config,omitempty"`
 }
 
@@ -116,6 +116,12 @@ func (h *Handler) AddDomain(w http.ResponseWriter, r *http.Request) {
 		forceHTTPS = *req.ForceHTTPS
 	}
 
+	certUUID, err := parseCertificateID(sslMode, req.CertificateID)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
 	params := generated.CreateDomainParams{
 		ApplicationID:  applicationUUID,
 		Hostname:       req.Hostname,
@@ -123,8 +129,7 @@ func (h *Handler) AddDomain(w http.ResponseWriter, r *http.Request) {
 		ForceHttps:     forceHTTPS,
 		SslMode:        sslMode,
 		SslProvider:    pgtype.Text{String: req.SSLProvider, Valid: req.SSLProvider != ""},
-		CertPath:       pgtype.Text{String: req.CertPath, Valid: req.CertPath != ""},
-		KeyPath:        pgtype.Text{String: req.KeyPath, Valid: req.KeyPath != ""},
+		CertificateID:  certUUID,
 		AdvancedConfig: req.AdvancedConfig,
 	}
 	if req.ContainerPort != nil {
@@ -149,6 +154,8 @@ func (h *Handler) AddDomain(w http.ResponseWriter, r *http.Request) {
 		port = *req.ContainerPort
 	}
 
+	cert := h.domainCertificate(r.Context(), domain)
+
 	containerName := naming.ContainerName(row.ProjectSlug, row.Slug, applicationID)
 	if err := h.proxy.AddRoute(r.Context(), proxy.RouteConfig{
 		Hostname:       req.Hostname,
@@ -156,8 +163,8 @@ func (h *Handler) AddDomain(w http.ResponseWriter, r *http.Request) {
 		TLS:            req.SSLEnabled,
 		ForceHTTPS:     forceHTTPS,
 		SSLMode:        sslMode,
-		CertPath:       req.CertPath,
-		KeyPath:        req.KeyPath,
+		CertPEM:        cert.CertPEM,
+		KeyPEM:         cert.KeyPEM,
 		AdvancedConfig: req.AdvancedConfig,
 	}); err != nil {
 		slog.Error("failed to add proxy route for domain", "hostname", req.Hostname, "container", containerName, "error", err)
@@ -180,8 +187,7 @@ type updateDomainRequest struct {
 	ForceHTTPS     bool            `json:"force_https"`
 	SSLMode        string          `json:"ssl_mode"`
 	SSLProvider    string          `json:"ssl_provider,omitempty"`
-	CertPath       string          `json:"cert_path,omitempty"`
-	KeyPath        string          `json:"key_path,omitempty"`
+	CertificateID  string          `json:"certificate_id,omitempty"`
 	AdvancedConfig json.RawMessage `json:"advanced_config,omitempty"`
 }
 
@@ -220,6 +226,12 @@ func (h *Handler) UpdateDomain(w http.ResponseWriter, r *http.Request) {
 		req.SSLMode = "automatic"
 	}
 
+	certUUID, err := parseCertificateID(req.SSLMode, req.CertificateID)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
 	// Fetch existing domain to detect hostname changes
 	oldDomain, err := h.queries.GetDomain(r.Context(), domainUUID)
 	if err != nil {
@@ -234,8 +246,7 @@ func (h *Handler) UpdateDomain(w http.ResponseWriter, r *http.Request) {
 		ForceHttps:     req.ForceHTTPS,
 		SslMode:        req.SSLMode,
 		SslProvider:    pgtype.Text{String: req.SSLProvider, Valid: req.SSLProvider != ""},
-		CertPath:       pgtype.Text{String: req.CertPath, Valid: req.CertPath != ""},
-		KeyPath:        pgtype.Text{String: req.KeyPath, Valid: req.KeyPath != ""},
+		CertificateID:  certUUID,
 		AdvancedConfig: req.AdvancedConfig,
 	}
 	if req.ContainerPort != nil {
@@ -270,6 +281,7 @@ func (h *Handler) UpdateDomain(w http.ResponseWriter, r *http.Request) {
 
 	// Load route features for this domain
 	features := h.loadRouteFeatures(r, domainUUID)
+	cert := h.domainCertificate(r.Context(), domain)
 
 	containerName := naming.ContainerName(row.ProjectSlug, row.Slug, uuidToString(domain.ApplicationID))
 	if err := h.proxy.AddRoute(r.Context(), proxy.RouteConfig{
@@ -279,8 +291,8 @@ func (h *Handler) UpdateDomain(w http.ResponseWriter, r *http.Request) {
 		ForceHTTPS:     req.ForceHTTPS,
 		SSLMode:        req.SSLMode,
 		SSLProvider:    req.SSLProvider,
-		CertPath:       req.CertPath,
-		KeyPath:        req.KeyPath,
+		CertPEM:        cert.CertPEM,
+		KeyPEM:         cert.KeyPEM,
 		Features:       features,
 		AdvancedConfig: req.AdvancedConfig,
 	}); err != nil {
@@ -290,6 +302,36 @@ func (h *Handler) UpdateDomain(w http.ResponseWriter, r *http.Request) {
 	h.audit(r, "update_domain", "domain", domainID, map[string]any{"hostname": req.Hostname})
 
 	writeJSON(w, http.StatusOK, domain)
+}
+
+// parseCertificateID validates the certificate selection against the SSL mode.
+// Only ssl_mode=custom serves an uploaded certificate, and it cannot do so
+// without one; any other mode clears the reference, so a domain switched away
+// from custom stops pinning a certificate against deletion.
+func parseCertificateID(sslMode, certificateID string) (pgtype.UUID, error) {
+	var id pgtype.UUID
+	if sslMode != proxy.SSLModeCustom {
+		return id, nil
+	}
+	if certificateID == "" {
+		return id, fmt.Errorf("ssl_mode custom requires certificate_id")
+	}
+	if err := id.Scan(certificateID); err != nil {
+		return pgtype.UUID{}, fmt.Errorf("invalid certificate_id")
+	}
+	return id, nil
+}
+
+// domainCertificate returns the decrypted PEM pair a domain serves. A lookup or
+// decrypt failure is logged and treated as "no certificate": SetupTLS then
+// reports a TLS failure for that hostname rather than failing the whole request
+// and leaving the domain unrouted.
+func (h *Handler) domainCertificate(ctx context.Context, domain generated.Domain) proxy.HostCertificate {
+	cert, err := proxy.ResolveCertificate(ctx, h.queries, h.cfg.Keyring, domain)
+	if err != nil {
+		slog.Error("failed to resolve domain certificate", "hostname", domain.Hostname, "error", err)
+	}
+	return cert
 }
 
 // loadRouteFeatures fetches route features from DB and converts to proxy.RouteFeature slice.
@@ -437,6 +479,7 @@ func (h *Handler) rebuildDomainRoute(r *http.Request, domainID pgtype.UUID) {
 	}
 
 	features := h.loadRouteFeatures(r, domainID)
+	cert := h.domainCertificate(r.Context(), domain)
 
 	appIDStr := uuidToString(domain.ApplicationID)
 	containerName := naming.ContainerName(row.ProjectSlug, row.Slug, appIDStr)
@@ -451,8 +494,8 @@ func (h *Handler) rebuildDomainRoute(r *http.Request, domainID pgtype.UUID) {
 		ForceHTTPS:     domain.ForceHttps,
 		SSLMode:        domain.SslMode,
 		SSLProvider:    domain.SslProvider.String,
-		CertPath:       domain.CertPath.String,
-		KeyPath:        domain.KeyPath.String,
+		CertPEM:        cert.CertPEM,
+		KeyPEM:         cert.KeyPEM,
 		Features:       features,
 		AdvancedConfig: domain.AdvancedConfig,
 	}); err != nil {
