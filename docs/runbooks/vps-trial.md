@@ -87,9 +87,15 @@ the first run.
 
 ```sh
 cd /opt/belune/infra
-docker compose -f docker-compose.prod.yml up -d --build
-docker compose -f docker-compose.prod.yml ps
+docker compose --env-file ../.env -f docker-compose.prod.yml up -d
+docker compose --env-file ../.env -f docker-compose.prod.yml ps
 ```
+
+**`--env-file ../.env` is not optional.** Compose resolves `${BELUNE_IMAGE}` and
+`${DOCKER_GID}` from the project directory (`infra/`), not from the `env_file:`
+entry — those only reach the container's environment. Omit it and both fall back
+to their defaults; worse, an unresolved image makes Compose *build from source*
+rather than fail, which on a small VPS looks like a hang.
 
 The API is deliberately **not** published on a public port — Caddy serves it on
 :80/:443 and reaches it over the compose network.
@@ -121,7 +127,7 @@ certificate. Watch the badge under the field:
 Follow along from the box if you want the detail:
 
 ```sh
-docker compose -f docker-compose.prod.yml logs -f caddy | grep -i "tls\|acme"
+docker compose --env-file ../.env -f docker-compose.prod.yml logs -f caddy | grep -i "tls\|acme"
 ```
 
 ## 7. Switch to production Let's Encrypt
@@ -132,9 +138,9 @@ certificates** so Caddy issues fresh ones from the real CA:
 
 ```sh
 cd /opt/belune/infra
-docker compose -f docker-compose.prod.yml down
+docker compose --env-file ../.env -f docker-compose.prod.yml down
 docker volume rm infra_caddydata      # staging certs live here
-docker compose -f docker-compose.prod.yml up -d
+docker compose --env-file ../.env -f docker-compose.prod.yml up -d
 ```
 
 Reload the dashboard on `https://belune.example.com`. A real browser padlock —

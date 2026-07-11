@@ -1,3 +1,14 @@
+# IMPORTANT: run compose with `--env-file ../.env`.
+#
+#   docker compose --env-file ../.env -f docker-compose.prod.yml up -d
+#
+# `env_file:` below passes variables *into the container*, but ${VAR} substitution
+# in this file is resolved by Compose from the project directory (infra/), not
+# from env_file. Without --env-file, BELUNE_IMAGE and DOCKER_GID silently fall
+# back to their defaults — and because a `build:` section exists, an unresolved
+# image makes Compose build from source instead of erroring. On a small box that
+# looks like a hang, not a misconfiguration.
+
 services:
   belune:
     image: ${BELUNE_IMAGE:-ghcr.io/weiliang79/belune:latest}
