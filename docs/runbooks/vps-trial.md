@@ -60,6 +60,10 @@ ENCRYPTION_KEY=$(openssl rand -hex 32)
 CADDY_ADMIN_URL=http://caddy:2019
 PORT=8080
 
+# The API container runs as a non-root user and must join the host group that
+# owns the Docker socket, or it cannot manage containers at all.
+DOCKER_GID=$(getent group docker | cut -d: -f3)
+
 # Lets Belune check a domain's DNS against this box and tell you it is
 # mispointed *before* Let's Encrypt does.
 BELUNE_PUBLIC_IP=<vps-ip>
@@ -89,6 +93,12 @@ docker compose -f docker-compose.prod.yml ps
 
 The API is deliberately **not** published on a public port — Caddy serves it on
 :80/:443 and reaches it over the compose network.
+
+If `docker compose ps` shows belune **unhealthy**, or the logs say
+`Cannot connect to the Docker daemon at unix:///var/run/docker.sock`, then
+`DOCKER_GID` is wrong or missing — the container is running as a non-root user
+that is not in the socket's group. Check it with
+`getent group docker | cut -d: -f3` and recreate: `docker compose up -d`.
 
 ## 6. Bootstrap, then claim the domain
 

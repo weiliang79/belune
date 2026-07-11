@@ -15,9 +15,19 @@ services:
       # railpack (and pack) build via this BuildKit daemon on the internal network.
       BUILDKIT_HOST: tcp://buildkit:1234
     volumes:
+      # Belune's whole job is managing containers, so it needs the Docker API.
+      # Without this it starts, serves the UI, and can do nothing: no deploys, no
+      # log collection, and /healthz reports 503 because the Docker check fails.
+      - /var/run/docker.sock:/var/run/docker.sock
       # Persist managed-database logical dumps (DATABASE_BACKUP_DIR=/data/backups/databases)
       # so local restore works across container recreation.
       - belunedata:/data
+    # The image runs as the non-root `belune` user, so mounting the socket is not
+    # enough — it must also be in the group that owns it on the host. The GID
+    # differs per distro (Debian/Ubuntu usually 999), hence the override:
+    #   echo "DOCKER_GID=$(getent group docker | cut -d: -f3)" >> .env
+    group_add:
+      - "${DOCKER_GID:-999}"
     depends_on:
       postgres:
         condition: service_healthy
