@@ -33,8 +33,8 @@ var allowedSchemes = map[string]struct{}{
 // blockedHosts covers obviously-local hostnames that should never appear
 // as a clone target. Hostname matching is case-insensitive.
 var blockedHosts = map[string]struct{}{
-	"localhost":    {},
-	"localhost.":   {},
+	"localhost":     {},
+	"localhost.":    {},
 	"ip6-localhost": {},
 }
 

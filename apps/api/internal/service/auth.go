@@ -42,11 +42,11 @@ const (
 // Redis restarts), login-lockout state, and forced-session revocation
 // (used on role change and admin password reset).
 type AuthService struct {
-	queries        *generated.Queries
-	jwtSecret      []byte
-	accessExpiry   time.Duration
-	refreshExpiry  time.Duration
-	rdb            *redis.Client
+	queries       *generated.Queries
+	jwtSecret     []byte
+	accessExpiry  time.Duration
+	refreshExpiry time.Duration
+	rdb           *redis.Client
 }
 
 // AuthClaims are the JWT body. UserID + Email + Role are duplicated from the

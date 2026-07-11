@@ -31,7 +31,7 @@ import (
 // is served, the probe observes it on the wire, and the domain's badge reflects
 // what a browser would actually be handed.
 //
-//	BELUNE_CADDY_INTEGRATION=1 go test ./internal/worker/ -run RealStackTLS -v
+//	BELUNE_CADDY_INTEGRATION=1 go test -p 1 ./internal/worker/ -run RealStackTLS -v
 
 const probeHost = "phase3-probe.belune.local"
 

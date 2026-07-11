@@ -29,7 +29,7 @@ import (
 var envelopeMagic = []byte{'P', 'a', 'a', 'S', 0x01}
 
 const (
-	envelopeHeaderLen = 6  // magic(5) + kek_ver(1)
+	envelopeHeaderLen = 6 // magic(5) + kek_ver(1)
 	dekNonceLen       = 12
 	wrappedDEKLen     = 48 // 32 key bytes + 16 GCM tag
 	dataNonceLen      = 12

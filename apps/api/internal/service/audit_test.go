@@ -13,14 +13,14 @@ func TestRedactDetails_NilReturnsNil(t *testing.T) {
 
 func TestRedactDetails_MasksSensitiveKeys(t *testing.T) {
 	in := map[string]any{
-		"email":          "user@example.com",
-		"password":       "hunter2",
-		"webhook_secret": "abcdef",
-		"api_key":        "sk_live_1234",
+		"email":           "user@example.com",
+		"password":        "hunter2",
+		"webhook_secret":  "abcdef",
+		"api_key":         "sk_live_1234",
 		"X-Hub-Signature": "sha256=...",
-		"authorization":  "Bearer xyz",
-		"cookie":         "session=foo",
-		"token_hash":     []byte{1, 2, 3}, // value type irrelevant when key matches
+		"authorization":   "Bearer xyz",
+		"cookie":          "session=foo",
+		"token_hash":      []byte{1, 2, 3}, // value type irrelevant when key matches
 	}
 
 	out := redactDetails(in)
@@ -37,10 +37,10 @@ func TestRedactDetails_MasksSensitiveKeys(t *testing.T) {
 
 func TestRedactDetails_ScrubsInlineCredsInStrings(t *testing.T) {
 	in := map[string]any{
-		"clone_url":       "https://x-token:ghp_foobar@github.com/me/repo.git",
-		"error":           "Bearer eyJhbGciOiJIUzI1NiJ9.payload.sig failed",
-		"safe_message":    "deploy succeeded",
-		"x-api-key":       "kept-as-key-mask", // value redacted by key match
+		"clone_url":    "https://x-token:ghp_foobar@github.com/me/repo.git",
+		"error":        "Bearer eyJhbGciOiJIUzI1NiJ9.payload.sig failed",
+		"safe_message": "deploy succeeded",
+		"x-api-key":    "kept-as-key-mask", // value redacted by key match
 	}
 
 	out := redactDetails(in)

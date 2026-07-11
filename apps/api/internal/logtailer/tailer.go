@@ -45,24 +45,24 @@ type caddyLogRequest struct {
 
 // Tailer watches a Caddy access log file and stores parsed entries.
 type Tailer struct {
-	logPath    string
-	queries    *generated.Queries
-	rdb        *redis.Client
+	logPath     string
+	queries     *generated.Queries
+	rdb         *redis.Client
 	domainCache map[string]pgtype.UUID // hostname → application_id
-	cacheMu    sync.RWMutex
-	batchSize  int
-	flushEvery time.Duration
+	cacheMu     sync.RWMutex
+	batchSize   int
+	flushEvery  time.Duration
 }
 
 // New creates a new log tailer.
 func New(logPath string, queries *generated.Queries, rdb *redis.Client) *Tailer {
 	return &Tailer{
-		logPath:    logPath,
-		queries:    queries,
-		rdb:        rdb,
+		logPath:     logPath,
+		queries:     queries,
+		rdb:         rdb,
 		domainCache: make(map[string]pgtype.UUID),
-		batchSize:  100,
-		flushEvery: 2 * time.Second,
+		batchSize:   100,
+		flushEvery:  2 * time.Second,
 	}
 }
 

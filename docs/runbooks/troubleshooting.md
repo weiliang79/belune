@@ -51,11 +51,20 @@ Common problems and their resolutions for the self-hosted PaaS.
 
 ## Caddy not issuing TLS certificates
 
-**Symptoms:** HTTPS shows a certificate error; Caddy logs show ACME failures.
+**Symptoms:** HTTPS shows a certificate error; a domain's TLS badge stays on
+`Pending` or turns `Failed`.
+
+**Start with the UI.** Click the domain's TLS badge — when issuance fails, the
+reason from the ACME server is shown there, and **Settings → Certificates** lists
+every domain's TLS status in one table. [`tls.md`](tls.md) explains each status,
+the common ACME failures, and the Cloudflare Full (strict) setup. The steps below
+are for when the badge itself tells you nothing.
 
 **Steps:**
 1. Check Caddy logs: `docker compose logs caddy --tail 100`
-2. Ensure the domain DNS A/AAAA record points to the server's public IP.
+2. Ensure the domain DNS A/AAAA record points to the server's public IP. Setting
+   `BELUNE_PUBLIC_IP` lets Belune check this for you and report a mismatch on the
+   badge.
 3. Ensure ports 80 and 443 are open in the firewall and not already bound by another process:
    ```
    ss -tlnp | grep -E ':80|:443'

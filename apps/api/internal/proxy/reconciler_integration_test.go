@@ -31,7 +31,7 @@ import (
 // the real keyring, through the real reconciler, into a real Caddy. Everything
 // between an operator uploading a PEM pair and Caddy serving it on the wire.
 //
-//	BELUNE_CADDY_INTEGRATION=1 go test ./internal/proxy/ -run RealStack -v
+//	BELUNE_CADDY_INTEGRATION=1 go test -p 1 ./internal/proxy/ -run RealStack -v
 
 const reconcileHost = "phase2-reconcile.belune.local"
 

@@ -19,11 +19,11 @@ import (
 )
 
 type DeployService struct {
-	runtime      runtime.ContainerRuntime
-	proxy        proxy.ProxyManager
-	queries      *generated.Queries
-	asynq        *asynq.Client
-	taskTimeout  time.Duration
+	runtime     runtime.ContainerRuntime
+	proxy       proxy.ProxyManager
+	queries     *generated.Queries
+	asynq       *asynq.Client
+	taskTimeout time.Duration
 }
 
 func NewDeployService(

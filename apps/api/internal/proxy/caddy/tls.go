@@ -45,9 +45,10 @@ func (c *Client) SetupTLS(ctx context.Context, hostname, sslMode, certPEM, keyPE
 		return nil
 
 	case "dns_challenge":
-		// Rejected at the API; the stock caddy image carries no DNS provider
-		// modules, so a policy referencing one would be refused here anyway.
-		return fmt.Errorf("ssl_mode dns_challenge is not supported")
+		// Withdrawn, and rejected at the API. Reachable only for a domain created
+		// before that: the stock caddy image carries no DNS provider modules, so a
+		// policy referencing one would be refused here anyway.
+		return fmt.Errorf("DNS challenge is not supported; switch this domain to Automatic or Custom")
 
 	case proxy.SSLModeCustom:
 		if certPEM == "" || keyPEM == "" {

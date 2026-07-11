@@ -39,12 +39,26 @@ import type { DomainExpanded } from "@/lib/types";
 const HOSTNAME_REGEX =
   /^([a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$/;
 
+// DNS Challenge is deliberately absent: it needs a Caddy build carrying DNS
+// provider modules, which the stock image does not have, so offering it would
+// only ever produce a domain stuck on "pending". The API rejects it too. A domain
+// created before this was removed still renders (see legacyModeFor) so it can be
+// switched to something that works.
 const SSL_MODES = [
   { value: "automatic", label: "Automatic (ACME)", Icon: ShieldCheckIcon },
-  { value: "dns_challenge", label: "DNS Challenge", Icon: GlobeIcon },
   { value: "custom", label: "Custom Certificate", Icon: KeyRoundIcon },
   { value: "off", label: "Off", Icon: ShieldOffIcon },
 ] as const;
+
+/** An unsupported mode a domain is already on, so the Select is never blank. */
+function legacyModeFor(mode: string | undefined) {
+  if (!mode || SSL_MODES.some((m) => m.value === mode)) return null;
+  return {
+    value: mode,
+    label: `${mode.replace(/_/g, " ")} (no longer supported)`,
+    Icon: GlobeIcon,
+  } as const;
+}
 
 interface Props {
   projectId: string;
@@ -106,6 +120,7 @@ function DomainForm({
   const { data: certificateList, isLoading: certificatesLoading } =
     useCertificates();
   const certificates = certificateList ?? [];
+  const legacyMode = legacyModeFor(domain?.ssl_mode);
 
   const form = useForm({
     defaultValues: {
@@ -262,7 +277,10 @@ function DomainForm({
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {SSL_MODES.map((m) => (
+                    {[
+                      ...SSL_MODES,
+                      ...(legacyMode ? [legacyMode] : []),
+                    ].map((m) => (
                       <SelectItem
                         key={m.value}
                         value={m.value}

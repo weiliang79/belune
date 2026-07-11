@@ -171,9 +171,9 @@ type ImageInfo struct {
 	ID         string
 	RepoTags   []string
 	Size       int64
-	SharedSize int64            // shared layer bytes; -1 if not computed
-	Containers int64            // containers using this image; -1 if unknown
-	Dangling   bool             // untagged (no usable RepoTags)
+	SharedSize int64 // shared layer bytes; -1 if not computed
+	Containers int64 // containers using this image; -1 if unknown
+	Dangling   bool  // untagged (no usable RepoTags)
 	Labels     map[string]string
 	CreatedAt  time.Time
 }
@@ -184,8 +184,8 @@ type VolumeInfo struct {
 	Driver     string
 	Mountpoint string
 	Scope      string
-	Size       int64            // on-disk bytes; -1 if unknown
-	RefCount   int64            // containers referencing; -1 if unknown
+	Size       int64 // on-disk bytes; -1 if unknown
+	RefCount   int64 // containers referencing; -1 if unknown
 	Labels     map[string]string
 	CreatedAt  time.Time
 }

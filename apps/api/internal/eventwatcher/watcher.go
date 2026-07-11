@@ -143,8 +143,8 @@ func (w *Watcher) reconcile(ctx context.Context) {
 // watchEvents subscribes to Docker events and processes them.
 func (w *Watcher) watchEvents(ctx context.Context) error {
 	eventCh, errCh := w.runtime.ContainerEvents(ctx, map[string][]string{
-		"label":  {"managed-by=belune"},
-		"event":  {"start", "stop", "die", "restart", "oom"},
+		"label": {"managed-by=belune"},
+		"event": {"start", "stop", "die", "restart", "oom"},
 	})
 
 	for {

@@ -33,6 +33,9 @@ import (
 // issues from its internal CA instead of failing ACME against *.belune.local:
 //
 //	BELUNE_CADDY_INTEGRATION=1 go test ./internal/proxy/caddy/ -run RealCaddy -v
+//
+// These drive one shared Caddy, so run them serially (-p 1) alongside the other
+// integration packages, or they will fight over its config.
 
 const (
 	autoHost   = "phase1-auto.belune.local"

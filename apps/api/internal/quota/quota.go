@@ -34,9 +34,9 @@ const (
 
 // Usage is a point-in-time snapshot of resources consumed inside a scope.
 type Usage struct {
-	Applications int64 `json:"applications"`
+	Applications int64   `json:"applications"`
 	CPU          float64 `json:"cpu"`          // cpu cores (sum of cpu_limit; apps with 0 contribute nothing)
-	MemoryBytes  int64 `json:"memory_bytes"` // bytes (sum of memory_limit)
+	MemoryBytes  int64   `json:"memory_bytes"` // bytes (sum of memory_limit)
 }
 
 // Limits are the configured caps for a scope. A nil pointer means no cap for

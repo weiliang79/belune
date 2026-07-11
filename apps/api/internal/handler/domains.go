@@ -35,10 +35,27 @@ var validFeatureTypes = map[string]bool{
 }
 
 var validSSLModes = map[string]bool{
-	"automatic":     true,
-	"dns_challenge": true,
-	"custom":        true,
-	"off":           true,
+	"automatic": true,
+	"custom":    true,
+	"off":       true,
+}
+
+// sslModeDNSChallenge is accepted by the database CHECK (and may exist on rows
+// created before it was withdrawn) but can no longer be set: it needs a Caddy
+// build carrying DNS provider modules, which the stock image does not have, so a
+// domain using it would sit on "pending" forever. Rejecting it with a reason
+// beats silently accepting a mode that cannot work.
+const sslModeDNSChallenge = "dns_challenge"
+
+// validateSSLMode returns a user-facing reason when the mode cannot be used.
+func validateSSLMode(mode string) string {
+	if mode == sslModeDNSChallenge {
+		return "DNS challenge is not supported. Use Automatic, or upload a certificate and choose Custom."
+	}
+	if !validSSLModes[mode] {
+		return "invalid ssl_mode: must be automatic, custom, or off"
+	}
+	return ""
 }
 
 func (h *Handler) ListDomains(w http.ResponseWriter, r *http.Request) {
@@ -105,8 +122,8 @@ func (h *Handler) AddDomain(w http.ResponseWriter, r *http.Request) {
 	// Defaults
 	sslMode := "automatic"
 	if req.SSLMode != "" {
-		if !validSSLModes[req.SSLMode] {
-			writeError(w, http.StatusBadRequest, "invalid ssl_mode: must be automatic, dns_challenge, custom, or off")
+		if reason := validateSSLMode(req.SSLMode); reason != "" {
+			writeError(w, http.StatusBadRequest, reason)
 			return
 		}
 		sslMode = req.SSLMode
@@ -222,9 +239,11 @@ func (h *Handler) UpdateDomain(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid hostname format")
 		return
 	}
-	if req.SSLMode != "" && !validSSLModes[req.SSLMode] {
-		writeError(w, http.StatusBadRequest, "invalid ssl_mode")
-		return
+	if req.SSLMode != "" {
+		if reason := validateSSLMode(req.SSLMode); reason != "" {
+			writeError(w, http.StatusBadRequest, reason)
+			return
+		}
 	}
 	if req.SSLMode == "" {
 		req.SSLMode = "automatic"

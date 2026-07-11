@@ -11,9 +11,9 @@ import (
 )
 
 const (
-	writeWait  = 10 * time.Second
-	pongWait   = 60 * time.Second
-	pingPeriod = 30 * time.Second
+	writeWait   = 10 * time.Second
+	pongWait    = 60 * time.Second
+	pingPeriod  = 30 * time.Second
 	sendBufSize = 64
 )
 
