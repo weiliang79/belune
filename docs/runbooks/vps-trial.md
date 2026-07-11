@@ -10,7 +10,7 @@ are published to GHCR, [`install.md`](./install.md) is the real path and this fi
 becomes redundant.
 
 > **`install.sh` does not work yet.** It downloads compose files from GitHub and
-> pulls `ghcr.io/weiling79/belune:latest`. The repository is not pushed and no
+> pulls `ghcr.io/weiliang79/belune:latest`. The repository is not pushed and no
 > image is published, so both fail. Build from source instead, as below.
 
 ---

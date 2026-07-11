@@ -16,7 +16,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgtype"
 
-	"github.com/weiling79/belune/internal/store/generated"
+	"github.com/weiliang79/belune/internal/store/generated"
 )
 
 // caddyTLSLogger is the logger name Caddy uses for certificate issuance. Its

@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/weiling79/belune/internal/store/generated"
+	"github.com/weiliang79/belune/internal/store/generated"
 )
 
 // BuildRouteConfig constructs a RouteConfig from a domain and its pre-loaded

@@ -8,8 +8,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/weiling79/belune/internal/config"
-	"github.com/weiling79/belune/internal/service/email"
+	"github.com/weiliang79/belune/internal/config"
+	"github.com/weiliang79/belune/internal/service/email"
 )
 
 // logOnlyCfg returns a config with no SMTP host (log-only mode).

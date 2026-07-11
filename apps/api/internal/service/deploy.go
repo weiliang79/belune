@@ -10,12 +10,12 @@ import (
 	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5/pgtype"
 
-	"github.com/weiling79/belune/internal/naming"
-	"github.com/weiling79/belune/internal/pkg/tracing"
-	"github.com/weiling79/belune/internal/proxy"
-	"github.com/weiling79/belune/internal/runtime"
-	"github.com/weiling79/belune/internal/status"
-	"github.com/weiling79/belune/internal/store/generated"
+	"github.com/weiliang79/belune/internal/naming"
+	"github.com/weiliang79/belune/internal/pkg/tracing"
+	"github.com/weiliang79/belune/internal/proxy"
+	"github.com/weiliang79/belune/internal/runtime"
+	"github.com/weiliang79/belune/internal/status"
+	"github.com/weiliang79/belune/internal/store/generated"
 )
 
 type DeployService struct {

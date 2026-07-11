@@ -10,8 +10,8 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
-	"github.com/weiling79/belune/internal/pkg/sse"
-	"github.com/weiling79/belune/internal/store/generated"
+	"github.com/weiliang79/belune/internal/pkg/sse"
+	"github.com/weiliang79/belune/internal/store/generated"
 )
 
 // ListRequestLogs returns paginated HTTP request logs for an application.

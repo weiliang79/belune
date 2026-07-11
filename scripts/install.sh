@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # Belune — Installer
-# Usage: curl -sSL https://raw.githubusercontent.com/weiling79/belune/main/scripts/install.sh | bash
+# Usage: curl -sSL https://raw.githubusercontent.com/weiliang79/belune/main/scripts/install.sh | bash
 set -euo pipefail
 
 INSTALL_DIR="${BELUNE_DIR:-/opt/belune}"
-GITHUB_REPO="weiling79/belune"
+GITHUB_REPO="weiliang79/belune"
 IMAGE="ghcr.io/${GITHUB_REPO}:latest"
 
 # ── Helpers ────────────────────────────────────────────────────────────────────

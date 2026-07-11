@@ -14,7 +14,7 @@ import (
 
 	"github.com/minio/minio-go/v7"
 
-	"github.com/weiling79/belune/internal/config"
+	"github.com/weiliang79/belune/internal/config"
 )
 
 // BackupObject is a single remote backup entry returned by List.

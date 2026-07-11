@@ -13,9 +13,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/weiling79/belune/internal/naming"
-	"github.com/weiling79/belune/internal/runtime/docker"
-	"github.com/weiling79/belune/internal/store/generated"
+	"github.com/weiliang79/belune/internal/naming"
+	"github.com/weiliang79/belune/internal/runtime/docker"
+	"github.com/weiliang79/belune/internal/store/generated"
 )
 
 // otherRedisDB seeds an "other"-type database backed by redis:7-alpine (a small,

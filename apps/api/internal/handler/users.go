@@ -10,9 +10,9 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"golang.org/x/crypto/bcrypt"
 
-	"github.com/weiling79/belune/internal/server/middleware"
-	"github.com/weiling79/belune/internal/service"
-	"github.com/weiling79/belune/internal/store/generated"
+	"github.com/weiliang79/belune/internal/server/middleware"
+	"github.com/weiliang79/belune/internal/service"
+	"github.com/weiliang79/belune/internal/store/generated"
 )
 
 func (h *Handler) ListUsers(w http.ResponseWriter, r *http.Request) {

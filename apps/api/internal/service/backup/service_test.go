@@ -14,8 +14,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/weiling79/belune/internal/config"
-	"github.com/weiling79/belune/internal/service/backup"
+	"github.com/weiliang79/belune/internal/config"
+	"github.com/weiliang79/belune/internal/service/backup"
 )
 
 // startMinio spins up a MinIO testcontainer and returns a configured Service.

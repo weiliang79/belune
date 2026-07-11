@@ -11,9 +11,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/weiling79/belune/internal/store"
-	"github.com/weiling79/belune/internal/store/generated"
-	"github.com/weiling79/belune/internal/testutil"
+	"github.com/weiliang79/belune/internal/store"
+	"github.com/weiliang79/belune/internal/store/generated"
+	"github.com/weiliang79/belune/internal/testutil"
 )
 
 var (

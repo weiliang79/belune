@@ -8,9 +8,9 @@ import (
 
 	"github.com/jackc/pgx/v5/pgtype"
 
-	"github.com/weiling79/belune/internal/naming"
-	"github.com/weiling79/belune/internal/runtime"
-	"github.com/weiling79/belune/internal/store/generated"
+	"github.com/weiliang79/belune/internal/naming"
+	"github.com/weiliang79/belune/internal/runtime"
+	"github.com/weiliang79/belune/internal/store/generated"
 )
 
 // RunAppMetricsBroadcaster polls Docker container stats for applications that

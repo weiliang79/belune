@@ -13,8 +13,8 @@ import (
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
 	"github.com/testcontainers/testcontainers-go/wait"
 
-	"github.com/weiling79/belune/internal/migrations"
-	"github.com/weiling79/belune/internal/store/generated"
+	"github.com/weiliang79/belune/internal/migrations"
+	"github.com/weiliang79/belune/internal/store/generated"
 )
 
 // SetupTestDB spins up a PostgreSQL 16 testcontainer, runs migrations,

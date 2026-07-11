@@ -9,8 +9,8 @@ import (
 	"net/http"
 	"sort"
 
-	"github.com/weiling79/belune/internal/pkg/metrics"
-	"github.com/weiling79/belune/internal/proxy"
+	"github.com/weiliang79/belune/internal/pkg/metrics"
+	"github.com/weiliang79/belune/internal/proxy"
 )
 
 // SetupTLS error handling: transport-level failures are wrapped with

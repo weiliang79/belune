@@ -11,8 +11,8 @@ import (
 	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5/pgtype"
 
-	"github.com/weiling79/belune/internal/naming"
-	"github.com/weiling79/belune/internal/store/generated"
+	"github.com/weiliang79/belune/internal/naming"
+	"github.com/weiliang79/belune/internal/store/generated"
 )
 
 // settingDailyCleanup gates the periodic (scheduled) cleanup run. Absent or any

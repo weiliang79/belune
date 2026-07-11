@@ -11,10 +11,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/weiling79/belune/internal/naming"
-	"github.com/weiling79/belune/internal/runtime"
-	"github.com/weiling79/belune/internal/store/generated"
-	"github.com/weiling79/belune/internal/testutil"
+	"github.com/weiliang79/belune/internal/naming"
+	"github.com/weiliang79/belune/internal/runtime"
+	"github.com/weiliang79/belune/internal/store/generated"
+	"github.com/weiliang79/belune/internal/testutil"
 )
 
 func TestDockerEndpoints_AdminReadOnly(t *testing.T) {

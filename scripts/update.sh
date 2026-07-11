@@ -21,7 +21,7 @@ echo ""
 
 # ── Pull latest image ──────────────────────────────────────────────────────────
 
-BELUNE_IMAGE=$(grep 'BELUNE_IMAGE' .env 2>/dev/null | cut -d= -f2 || echo "ghcr.io/weiling79/belune:latest")
+BELUNE_IMAGE=$(grep 'BELUNE_IMAGE' .env 2>/dev/null | cut -d= -f2 || echo "ghcr.io/weiliang79/belune:latest")
 info "Pulling ${BELUNE_IMAGE}..."
 docker pull "${BELUNE_IMAGE}"
 
@@ -32,7 +32,7 @@ docker compose up -d --no-deps belune
 
 # ── Re-extract helper binaries ─────────────────────────────────────────────────
 
-BELUNE_IMAGE=$(grep 'BELUNE_IMAGE' .env 2>/dev/null | cut -d= -f2 || echo "ghcr.io/weiling79/belune:latest")
+BELUNE_IMAGE=$(grep 'BELUNE_IMAGE' .env 2>/dev/null | cut -d= -f2 || echo "ghcr.io/weiliang79/belune:latest")
 mkdir -p "${INSTALL_DIR}/bin"
 info "Re-extracting belune-backup-upload helper..."
 docker run --rm --entrypoint="" "${BELUNE_IMAGE}" \

@@ -7,8 +7,8 @@ import (
 
 	"github.com/jackc/pgx/v5/pgtype"
 
-	"github.com/weiling79/belune/internal/naming"
-	"github.com/weiling79/belune/internal/runtime"
+	"github.com/weiliang79/belune/internal/naming"
+	"github.com/weiliang79/belune/internal/runtime"
 )
 
 // Read-only Docker inspect endpoints powering the admin Docker page. These

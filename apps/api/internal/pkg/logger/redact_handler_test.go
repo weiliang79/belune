@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/weiling79/belune/internal/pkg/logger"
+	"github.com/weiliang79/belune/internal/pkg/logger"
 )
 
 // captureHandler records the last handled record's output as JSON text.

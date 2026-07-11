@@ -13,7 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/weiling79/belune/internal/testutil"
+	"github.com/weiliang79/belune/internal/testutil"
 )
 
 var env *testutil.TestEnv

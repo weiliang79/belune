@@ -10,11 +10,11 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/weiling79/belune/internal/naming"
-	"github.com/weiling79/belune/internal/pkg/crypto"
-	"github.com/weiling79/belune/internal/runtime"
-	"github.com/weiling79/belune/internal/store"
-	"github.com/weiling79/belune/internal/store/generated"
+	"github.com/weiliang79/belune/internal/naming"
+	"github.com/weiliang79/belune/internal/pkg/crypto"
+	"github.com/weiliang79/belune/internal/runtime"
+	"github.com/weiliang79/belune/internal/store"
+	"github.com/weiliang79/belune/internal/store/generated"
 )
 
 type ApplicationService struct {

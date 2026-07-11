@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/weiling79/belune/internal/pkg/crypto"
+	"github.com/weiliang79/belune/internal/pkg/crypto"
 )
 
 type Config struct {

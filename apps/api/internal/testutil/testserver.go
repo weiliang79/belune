@@ -7,10 +7,10 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 
-	"github.com/weiling79/belune/internal/config"
-	"github.com/weiling79/belune/internal/pkg/crypto"
-	"github.com/weiling79/belune/internal/server"
-	"github.com/weiling79/belune/internal/store/generated"
+	"github.com/weiliang79/belune/internal/config"
+	"github.com/weiliang79/belune/internal/pkg/crypto"
+	"github.com/weiliang79/belune/internal/server"
+	"github.com/weiliang79/belune/internal/store/generated"
 )
 
 // TestEncryptionKey is a valid 32-byte hex-encoded key for AES-256 in tests.

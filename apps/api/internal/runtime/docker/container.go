@@ -14,8 +14,8 @@ import (
 	"github.com/docker/docker/api/types/network"
 	"github.com/docker/go-connections/nat"
 
-	"github.com/weiling79/belune/internal/pkg/metrics"
-	"github.com/weiling79/belune/internal/runtime"
+	"github.com/weiliang79/belune/internal/pkg/metrics"
+	"github.com/weiliang79/belune/internal/runtime"
 )
 
 const labelManagedBy = "managed-by"

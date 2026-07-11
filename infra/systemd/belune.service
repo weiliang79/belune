@@ -1,6 +1,6 @@
 [Unit]
 Description=Belune (docker compose stack)
-Documentation=https://github.com/weiling79/belune/blob/main/docs/runbooks/install.md
+Documentation=https://github.com/weiliang79/belune/blob/main/docs/runbooks/install.md
 Requires=docker.service
 After=docker.service network-online.target
 Wants=network-online.target

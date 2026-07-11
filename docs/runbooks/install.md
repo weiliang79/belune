@@ -20,7 +20,7 @@ which handles the boring parts (compose, secrets, image pull) automatically.
 ## 2. Run the installer
 
 ```sh
-curl -sSL https://raw.githubusercontent.com/weiling79/belune/main/scripts/install.sh | bash
+curl -sSL https://raw.githubusercontent.com/weiliang79/belune/main/scripts/install.sh | bash
 ```
 
 This:
@@ -29,7 +29,7 @@ This:
 - Downloads `docker-compose.yml` and the Caddyfile template.
 - Generates a `.env` containing fresh `JWT_SECRET`, `ENCRYPTION_KEY`, and
   Postgres password — keep this file out of version control.
-- Pulls `ghcr.io/weiling79/belune:latest` and runs `docker compose up -d`.
+- Pulls `ghcr.io/weiliang79/belune:latest` and runs `docker compose up -d`.
 - Waits for `GET /healthz` to return 200.
 
 When it finishes, the panel is reachable at `http://<host>` — the server's bare

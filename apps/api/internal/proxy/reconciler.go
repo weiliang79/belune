@@ -8,9 +8,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/weiling79/belune/internal/naming"
-	"github.com/weiling79/belune/internal/status"
-	"github.com/weiling79/belune/internal/store/generated"
+	"github.com/weiliang79/belune/internal/naming"
+	"github.com/weiliang79/belune/internal/status"
+	"github.com/weiliang79/belune/internal/store/generated"
 )
 
 // Reconciler periodically compares DB-declared routes against Caddy's live

@@ -6,8 +6,8 @@ import (
 
 	"github.com/docker/docker/api/types"
 
-	"github.com/weiling79/belune/internal/pkg/metrics"
-	"github.com/weiling79/belune/internal/runtime"
+	"github.com/weiliang79/belune/internal/pkg/metrics"
+	"github.com/weiliang79/belune/internal/runtime"
 )
 
 // SystemInfo returns a trimmed `docker info` for the read-only overview page.

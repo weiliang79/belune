@@ -14,10 +14,10 @@ import (
 	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5/pgtype"
 
-	"github.com/weiling79/belune/internal/naming"
-	"github.com/weiling79/belune/internal/status"
-	"github.com/weiling79/belune/internal/store"
-	"github.com/weiling79/belune/internal/store/generated"
+	"github.com/weiliang79/belune/internal/naming"
+	"github.com/weiliang79/belune/internal/status"
+	"github.com/weiliang79/belune/internal/store"
+	"github.com/weiliang79/belune/internal/store/generated"
 )
 
 var defaultVersions = map[string]string{

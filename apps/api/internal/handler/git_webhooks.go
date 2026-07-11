@@ -8,9 +8,9 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
-	"github.com/weiling79/belune/internal/git/providers"
-	"github.com/weiling79/belune/internal/preview"
-	"github.com/weiling79/belune/internal/store/generated"
+	"github.com/weiliang79/belune/internal/git/providers"
+	"github.com/weiliang79/belune/internal/preview"
+	"github.com/weiliang79/belune/internal/store/generated"
 )
 
 // HandleProviderWebhook receives push webhooks for a connected provider app

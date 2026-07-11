@@ -14,7 +14,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
-	"github.com/weiling79/belune/internal/store/generated"
+	"github.com/weiliang79/belune/internal/store/generated"
 )
 
 const alertHysteresis = 10 // pp below threshold before resetting alert state

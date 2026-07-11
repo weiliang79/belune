@@ -9,7 +9,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgtype"
 
-	"github.com/weiling79/belune/internal/store/generated"
+	"github.com/weiliang79/belune/internal/store/generated"
 )
 
 // auditLogDTO wraps a generated audit row but exposes `details` as raw JSON.

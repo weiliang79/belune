@@ -7,7 +7,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
-	"github.com/weiling79/belune/internal/runtime"
+	"github.com/weiliang79/belune/internal/runtime"
 )
 
 // serviceMetrics is a per-service runtime snapshot for the project overview.

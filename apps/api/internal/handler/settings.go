@@ -7,8 +7,8 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/weiling79/belune/internal/proxy"
-	"github.com/weiling79/belune/internal/store/generated"
+	"github.com/weiliang79/belune/internal/proxy"
+	"github.com/weiliang79/belune/internal/store/generated"
 )
 
 type settingResponse struct {

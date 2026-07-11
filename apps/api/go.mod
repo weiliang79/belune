@@ -1,4 +1,4 @@
-module github.com/weiling79/belune
+module github.com/weiliang79/belune
 
 go 1.25.0
 

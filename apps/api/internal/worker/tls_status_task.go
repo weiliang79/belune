@@ -9,9 +9,9 @@ import (
 
 	"github.com/jackc/pgx/v5/pgtype"
 
-	"github.com/weiling79/belune/internal/proxy"
-	"github.com/weiling79/belune/internal/store/generated"
-	"github.com/weiling79/belune/internal/tlsstatus"
+	"github.com/weiliang79/belune/internal/proxy"
+	"github.com/weiliang79/belune/internal/store/generated"
+	"github.com/weiliang79/belune/internal/tlsstatus"
 )
 
 // TLS status values. The state machine and the probe itself live in the

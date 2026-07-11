@@ -3,7 +3,7 @@ package handler
 import (
 	"net/http"
 
-	"github.com/weiling79/belune/internal/build/railpack"
+	"github.com/weiliang79/belune/internal/build/railpack"
 )
 
 func (h *Handler) GetFeatures(w http.ResponseWriter, r *http.Request) {

@@ -9,7 +9,7 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/weiling79/belune/internal/pkg/metrics"
+	"github.com/weiliang79/belune/internal/pkg/metrics"
 )
 
 // dashboardRouteID is the Belune dashboard's own route. It is kept separate from

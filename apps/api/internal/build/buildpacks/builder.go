@@ -6,9 +6,9 @@ import (
 	"log/slog"
 	"os/exec"
 
-	"github.com/weiling79/belune/internal/build"
-	"github.com/weiling79/belune/internal/naming"
-	"github.com/weiling79/belune/internal/runtime"
+	"github.com/weiliang79/belune/internal/build"
+	"github.com/weiliang79/belune/internal/naming"
+	"github.com/weiliang79/belune/internal/runtime"
 )
 
 // Builder runs Cloud Native Buildpacks (CNB) via `pack build`.

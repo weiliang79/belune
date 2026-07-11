@@ -7,7 +7,7 @@ A self-hosted Platform-as-a-Service for deploying applications with automatic bu
 One-command install on a fresh Linux host:
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/weiling79/belune/main/scripts/install.sh | bash
+curl -sSL https://raw.githubusercontent.com/weiliang79/belune/main/scripts/install.sh | bash
 ```
 
 Then follow [`docs/runbooks/install.md`](docs/runbooks/install.md) for DNS,

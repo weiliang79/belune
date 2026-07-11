@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/weiling79/belune/internal/service"
+	"github.com/weiliang79/belune/internal/service"
 )
 
 type contextKey string

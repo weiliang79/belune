@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/weiling79/belune/internal/proxy"
+	"github.com/weiliang79/belune/internal/proxy"
 )
 
 // mockProxy records AddRoute and RemoveRoute calls for assertion.

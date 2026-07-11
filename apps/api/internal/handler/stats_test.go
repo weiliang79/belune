@@ -6,7 +6,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/weiling79/belune/internal/testutil"
+	"github.com/weiliang79/belune/internal/testutil"
 )
 
 func TestGetStats_AdminAndMemberSplit(t *testing.T) {

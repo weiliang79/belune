@@ -8,7 +8,7 @@ import (
 
 	"github.com/redis/go-redis/v9"
 
-	"github.com/weiling79/belune/internal/pkg/buildlog"
+	"github.com/weiliang79/belune/internal/pkg/buildlog"
 )
 
 // RedisAdapter bridges Redis pub/sub channels to the WebSocket hub.

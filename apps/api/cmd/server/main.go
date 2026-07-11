@@ -8,10 +8,10 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/weiling79/belune/internal/app"
-	"github.com/weiling79/belune/internal/config"
-	"github.com/weiling79/belune/internal/pkg/logger"
-	"github.com/weiling79/belune/internal/pkg/tracing"
+	"github.com/weiliang79/belune/internal/app"
+	"github.com/weiliang79/belune/internal/config"
+	"github.com/weiliang79/belune/internal/pkg/logger"
+	"github.com/weiliang79/belune/internal/pkg/tracing"
 )
 
 func main() {

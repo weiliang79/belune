@@ -13,9 +13,9 @@ import (
 	"github.com/stretchr/testify/require"
 	tcminio "github.com/testcontainers/testcontainers-go/modules/minio"
 
-	"github.com/weiling79/belune/internal/config"
-	"github.com/weiling79/belune/internal/service/backup"
-	"github.com/weiling79/belune/internal/testutil"
+	"github.com/weiliang79/belune/internal/config"
+	"github.com/weiliang79/belune/internal/service/backup"
+	"github.com/weiliang79/belune/internal/testutil"
 )
 
 // TestRestoreFromS3_RealDocker verifies the resolveBackupFile remote branch: a

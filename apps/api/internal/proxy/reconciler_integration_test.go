@@ -19,12 +19,12 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/weiling79/belune/internal/pkg/crypto"
-	"github.com/weiling79/belune/internal/proxy"
-	"github.com/weiling79/belune/internal/proxy/caddy"
-	"github.com/weiling79/belune/internal/status"
-	"github.com/weiling79/belune/internal/store/generated"
-	"github.com/weiling79/belune/internal/testutil"
+	"github.com/weiliang79/belune/internal/pkg/crypto"
+	"github.com/weiliang79/belune/internal/proxy"
+	"github.com/weiliang79/belune/internal/proxy/caddy"
+	"github.com/weiliang79/belune/internal/status"
+	"github.com/weiliang79/belune/internal/store/generated"
+	"github.com/weiliang79/belune/internal/testutil"
 )
 
 // This closes the one seam the other tests cannot reach: real DB rows, through

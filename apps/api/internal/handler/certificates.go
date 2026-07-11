@@ -9,8 +9,8 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 
-	"github.com/weiling79/belune/internal/server/middleware"
-	"github.com/weiling79/belune/internal/service"
+	"github.com/weiliang79/belune/internal/server/middleware"
+	"github.com/weiliang79/belune/internal/service"
 )
 
 // ListCertificates returns metadata for every stored certificate. Responses

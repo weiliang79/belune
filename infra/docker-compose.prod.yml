@@ -1,6 +1,6 @@
 services:
   belune:
-    image: ${BELUNE_IMAGE:-ghcr.io/weiling79/belune:latest}
+    image: ${BELUNE_IMAGE:-ghcr.io/weiliang79/belune:latest}
     build:
       context: ..
       dockerfile: Dockerfile

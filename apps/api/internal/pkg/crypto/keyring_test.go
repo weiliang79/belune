@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/weiling79/belune/internal/pkg/crypto"
+	"github.com/weiliang79/belune/internal/pkg/crypto"
 )
 
 const (
