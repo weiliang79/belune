@@ -271,6 +271,7 @@ type Domain struct {
 	TlsNotAfter             pgtype.Timestamptz `json:"tls_not_after"`
 	TlsLastCheckedAt        pgtype.Timestamptz `json:"tls_last_checked_at"`
 	TlsError                pgtype.Text        `json:"tls_error"`
+	TlsAdvisory             pgtype.Text        `json:"tls_advisory"`
 }
 
 type DomainRouteFeature struct {

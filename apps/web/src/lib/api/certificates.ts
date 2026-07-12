@@ -39,6 +39,8 @@ export interface DomainTLSStatus {
   tls_not_after: string | null;
   tls_last_checked_at: string | null;
   tls_error?: string;
+  /** A suspicion that explains a pending domain; never a verdict. */
+  tls_advisory?: string;
   certificate_name?: string;
   application_id: string;
   application_name: string;

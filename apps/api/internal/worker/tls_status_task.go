@@ -69,10 +69,14 @@ func (h *TaskHandler) probeDomain(ctx context.Context, d generated.ListDomainsFo
 	leaf, dialErr := tlsstatus.Probe(ctx, h.Config.CaddyTLSProbeAddr, d.Hostname)
 	res := tlsstatus.Derive(d.SslMode, leaf, d.Hostname, dialErr, recordedErr, time.Now())
 
-	// Show the advisory only when nothing more definite is known, so it explains a
-	// domain sitting on "pending" without ever being the reason it says "failed".
-	if res.Error == "" && advisory != "" && res.Status == tlsstatus.StatusPending {
-		res.Error = advisory
+	// The advisory is persisted to its own column, never to tls_error. Writing it
+	// to tls_error made it indistinguishable from a real ACME failure when the
+	// next sweep read it back as recordedErr, which escalated the domain to
+	// "failed" — so a proxied domain, which always resolves to the proxy rather
+	// than to us, went red one minute into a perfectly healthy issuance.
+	// A live certificate settles the question, so drop the suspicion once serving.
+	if res.Status == tlsstatus.StatusActive || res.Status == tlsstatus.StatusExpiring {
+		advisory = ""
 	}
 
 	var notAfter pgtype.Timestamptz
@@ -85,6 +89,7 @@ func (h *TaskHandler) probeDomain(ctx context.Context, d generated.ListDomainsFo
 		TlsIssuer:   pgtype.Text{String: res.Issuer, Valid: res.Issuer != ""},
 		TlsNotAfter: notAfter,
 		TlsError:    pgtype.Text{String: res.Error, Valid: res.Error != ""},
+		TlsAdvisory: pgtype.Text{String: advisory, Valid: advisory != ""},
 	}); err != nil {
 		slog.Warn("tls probe: failed to record status", "hostname", d.Hostname, "error", err)
 		return

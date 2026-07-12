@@ -27,10 +27,14 @@ type domainTLSStatus struct {
 	TLSNotAfter      *time.Time `json:"tls_not_after"`
 	TLSLastCheckedAt *time.Time `json:"tls_last_checked_at"`
 	TLSError         string     `json:"tls_error,omitempty"`
-	CertificateName  string     `json:"certificate_name,omitempty"`
-	ApplicationID    string     `json:"application_id"`
-	ApplicationName  string     `json:"application_name"`
-	ProjectID        string     `json:"project_id"`
+	// TLSAdvisory is a suspicion, not a verdict — it explains a domain that is
+	// still pending without asserting that anything is wrong. Kept apart from
+	// TLSError, which is authoritative and decides the status.
+	TLSAdvisory     string `json:"tls_advisory,omitempty"`
+	CertificateName string `json:"certificate_name,omitempty"`
+	ApplicationID   string `json:"application_id"`
+	ApplicationName string `json:"application_name"`
+	ProjectID       string `json:"project_id"`
 }
 
 // ListDomainTLSStatus returns every domain's TLS state in one place — the view
@@ -54,6 +58,7 @@ func (h *Handler) ListDomainTLSStatus(w http.ResponseWriter, r *http.Request) {
 			TLSNotAfter:      timestampPtr(row.TlsNotAfter),
 			TLSLastCheckedAt: timestampPtr(row.TlsLastCheckedAt),
 			TLSError:         row.TlsError.String,
+			TLSAdvisory:      row.TlsAdvisory.String,
 			CertificateName:  row.CertificateName.String,
 			ApplicationID:    uuidToString(row.ApplicationID),
 			ApplicationName:  row.ApplicationName,

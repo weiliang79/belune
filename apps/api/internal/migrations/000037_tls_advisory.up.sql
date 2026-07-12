@@ -1,0 +1,13 @@
+-- tls_error carries a reason the domain is broken, and it decides the status:
+-- a non-empty error escalates a still-issuing domain to "failed". The DNS
+-- precheck also wanted to say something, but what it has to say is only ever a
+-- suspicion — "this hostname resolves somewhere that isn't us" is exactly what a
+-- proxy in front of us looks like, and issuance through Cloudflare's orange
+-- cloud demonstrably works.
+--
+-- Writing that suspicion into tls_error made it indistinguishable from a real
+-- ACME failure on the next sweep, which read it back and escalated: every
+-- proxied domain went "failed" one minute into a healthy issuance. Give the
+-- advisory its own column so provenance survives the round-trip. Only tls_error
+-- may decide the status; tls_advisory only ever explains.
+ALTER TABLE domains ADD COLUMN tls_advisory TEXT;

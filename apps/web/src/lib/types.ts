@@ -376,6 +376,8 @@ export interface DomainExpanded extends Domain {
   tls_not_after?: string | null;
   tls_last_checked_at?: string | null;
   tls_error?: string | null;
+  /** A suspicion that explains a pending domain; never a verdict on it. */
+  tls_advisory?: string | null;
 }
 
 export interface AuditLog {

@@ -93,6 +93,15 @@ export function DomainTLSBadge({
           </p>
         )}
 
+        {/* An advisory is a suspicion, not a verdict — styled as a caution rather
+            than an error, because a hostname resolving somewhere that isn't us is
+            also just what a proxy in front of us looks like. */}
+        {!domain.tls_error && domain.tls_advisory && (
+          <p className="text-status-building bg-status-building/10 rounded-md p-2 text-xs break-words">
+            {domain.tls_advisory}
+          </p>
+        )}
+
         <dl className="text-muted-foreground grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
           {domain.tls_issuer && (
             <>
@@ -112,7 +121,7 @@ export function DomainTLSBadge({
           <dd className="text-foreground">{checked ?? "not yet"}</dd>
         </dl>
 
-        {status === "pending" && !domain.tls_error && (
+        {status === "pending" && !domain.tls_error && !domain.tls_advisory && (
           <p className="text-muted-foreground text-xs">
             Waiting on a certificate. Issuance needs ports 80 and 443 reachable
             from the internet and this hostname pointing at this server.

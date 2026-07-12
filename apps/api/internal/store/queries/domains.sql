@@ -59,11 +59,15 @@ FROM domains
 ORDER BY hostname;
 
 -- name: UpdateDomainTLSStatus :exec
+-- tls_error is authoritative and decides the status; tls_advisory only explains
+-- (see migration 000037). Keeping them apart is what stops a DNS suspicion being
+-- read back next sweep as a real ACME failure.
 UPDATE domains SET
     tls_status = $2,
     tls_issuer = $3,
     tls_not_after = $4,
     tls_error = $5,
+    tls_advisory = $6,
     tls_last_checked_at = NOW()
 WHERE id = $1;
 
@@ -81,7 +85,7 @@ WHERE id = $1;
 -- The central "Domain TLS" table on the certificates page: every domain with the
 -- certificate it serves and what the server last observed for it.
 SELECT d.id, d.hostname, d.ssl_mode, d.tls_status, d.tls_issuer, d.tls_not_after,
-       d.tls_last_checked_at, d.tls_error, c.name AS certificate_name,
+       d.tls_last_checked_at, d.tls_error, d.tls_advisory, c.name AS certificate_name,
        a.name AS application_name, a.id AS application_id, p.id AS project_id
 FROM domains d
 JOIN applications a ON a.id = d.application_id
