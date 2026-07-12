@@ -78,9 +78,10 @@ server's actual complaint. The usual ones:
 
 The hostname points somewhere else. Fix the DNS `A` record, then **Recheck now**.
 
-If the domain is *deliberately* behind a proxy (Cloudflare's orange cloud, for
-example), Automatic cannot work — the challenge never reaches you. Use the
-Cloudflare walkthrough below instead.
+If the domain is *deliberately* behind Cloudflare's proxy (orange cloud), this
+message is expected and harmless: the domain resolves to Cloudflare's IPs, not
+yours. Automatic issuance still works — Cloudflare forwards the ACME challenge to
+your origin — so the certificate arrives anyway. See the Cloudflare section below.
 
 ### "…does not resolve"
 
@@ -115,10 +116,33 @@ Automatic.
 ## Cloudflare Full (strict)
 
 With Cloudflare proxying enabled ("orange cloud"), Cloudflare terminates TLS for
-your visitors, and Automatic issuance cannot work — the ACME challenge reaches
-Cloudflare, not you. **Flexible** mode would leave the hop between Cloudflare and
-your server unencrypted. **Full (strict)** encrypts it and verifies the
-certificate, which is what you want.
+your visitors and forwards requests to your server. The hop between Cloudflare and
+you is a second, separate TLS connection — and **Flexible** mode leaves it
+*unencrypted*. **Full (strict)** encrypts it and verifies your certificate, which
+is what you want.
+
+**Automatic works behind the orange cloud.** Cloudflare forwards the ACME
+challenge (`/.well-known/acme-challenge/`) to your origin, so Let's Encrypt still
+validates and issues normally — verified against a real proxied domain. The
+domain's TLS badge may note that the hostname resolves to Cloudflare's IPs rather
+than your server; that is expected here and does not stop issuance.
+
+So the simplest supported setup is:
+
+1. Leave the domain on **Automatic**, and wait for its badge to reach **Active** —
+   Belune now holds a publicly trusted Let's Encrypt certificate.
+2. Set Cloudflare to **SSL/TLS → Overview → Full (strict)**. It validates the
+   Let's Encrypt certificate on your origin, and the whole path is encrypted.
+
+Nothing to upload.
+
+### Using a Cloudflare Origin CA certificate instead
+
+An Origin CA certificate is an alternative, not a requirement. It is worth using
+when you would rather not depend on Let's Encrypt at the origin at all — it is
+valid for up to 15 years, is not subject to ACME rate limits, and is trusted only
+by Cloudflare, which means the origin cannot be served directly to the public with
+a valid certificate.
 
 1. **Create an Origin CA certificate.** In the Cloudflare dashboard: *SSL/TLS →
    Origin Server → Create Certificate*. Accept the defaults (Cloudflare generates
@@ -141,6 +165,14 @@ certificate, which is what you want.
 6. **Verify.** The domain's TLS badge should go **Active** within a minute, with
    the issuer showing as the Cloudflare Origin CA. If it does not, click
    **Recheck now** and read the reason.
+
+To check which certificate your origin is really serving — the badge and the
+browser can disagree, because the browser sees Cloudflare's edge certificate:
+
+```sh
+echo | openssl s_client -connect <server-ip>:443 -servername belune.example.com \
+  2>/dev/null | openssl x509 -noout -subject -issuer
+```
 
 Origin CA certificates are long-lived (up to 15 years), but they do not renew
 themselves. Belune notifies admins when one is 14 days from expiry.
