@@ -242,3 +242,24 @@ to be restarted — `update.sh` only bounces the `belune` container.
 - [`scaling.md`](./scaling.md) — vertical / horizontal headroom and resource caps.
 - [`troubleshooting.md`](./troubleshooting.md) — first stop when something is wrong.
 - [`disaster-recovery.md`](./disaster-recovery.md) — restore from backup.
+
+## Upgrading from a release before request logs worked
+
+Caddy creates its access log `0600` root-owned by default. Belune runs as a
+non-root user and tails that file from its own container, so it could not read
+it: request logging silently collected nothing. Belune now asks Caddy for mode
+`0644`, but **Caddy only applies the mode when it creates the file** — an
+existing log keeps its old permissions, so a one-time fix is needed on an
+existing install:
+
+```bash
+docker exec infra-caddy-1 chmod 644 /var/log/caddy/access.log
+```
+
+Fresh installs need nothing. Verify with:
+
+```bash
+docker exec infra-postgres-1 psql -U belune -d belune -tAc "select count(*) from request_logs"
+```
+
+A count that climbs after a few page loads means the tailer is reading.

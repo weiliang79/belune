@@ -32,6 +32,14 @@ func (c *Client) ConfigureAccessLogs(ctx context.Context) error {
 					"roll_size_mb":   100,
 					"roll_keep":      5,
 					"roll_keep_days": 7, // verified via `caddy adapt` against caddy:2-alpine
+					// Caddy defaults the log file to 0600 root-owned. Belune runs as
+					// a non-root user and tails this file from its own container, so
+					// the default made every read fail with "permission denied" and
+					// request logging silently collected nothing in production.
+					// The file holds request metadata, not secrets. Verified against
+					// caddy:2-alpine (2.11): the writer accepts `mode` as a string
+					// and the file lands as -rw-r--r--.
+					"mode": "0644",
 				},
 				"encoder": map[string]any{
 					"format": "json",
