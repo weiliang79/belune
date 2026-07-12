@@ -9,29 +9,31 @@ import { useRecheckDomainTLS } from "@/lib/hooks/use-certificates";
 import type { DomainExpanded, TLSStatus } from "@/lib/types";
 import { RefreshCw } from "lucide-react";
 
+// Mirrors TLS_STATUS_STYLES on the certificates page — the two views must not
+// disagree about what a healthy certificate looks like. Coloured text on a
+// low-opacity fill of the same colour with a matching border, which is the shape
+// `destructive` already had. Active is the accent (`light`), so it follows the
+// user's accent; Pending/Expiring use the amber status tokens.
 const STYLES: Record<
   TLSStatus,
   {
     label: string;
-    variant: "default" | "secondary" | "outline" | "destructive";
+    variant: "default" | "secondary" | "outline" | "destructive" | "light";
     className?: string;
   }
 > = {
-  // No className: the default variant is bg-primary — the accent the user chose.
-  // Kept in step with the Domain TLS table on the certificates page.
-  active: {
-    label: "Active",
-    variant: "default",
-  },
+  active: { label: "Active", variant: "light" },
   pending: {
     label: "Pending",
-    variant: "default",
-    className: "bg-amber-500 hover:bg-amber-500",
+    variant: "outline",
+    className:
+      "border-status-building-line bg-status-building-soft text-status-building",
   },
   expiring: {
     label: "Expiring",
-    variant: "default",
-    className: "bg-amber-500 hover:bg-amber-500",
+    variant: "outline",
+    className:
+      "border-status-building-line bg-status-building-soft text-status-building",
   },
   expired: { label: "Expired", variant: "destructive" },
   failed: { label: "Failed", variant: "destructive" },

@@ -461,31 +461,35 @@ function DeleteCertificateDialog({
   );
 }
 
+// Every status wears the same shape: coloured text on a low-opacity fill of the
+// same colour, with a matching border. That is what `destructive` already is
+// (border-destructive/20 bg-destructive/10 text-destructive), so Failed set the
+// pattern and the rest now follow it instead of being solid blocks of colour.
+//
+// Active uses the `light` variant, which is that same pattern in the accent —
+// so it tracks whatever accent the user picked. Pending and Expiring use the
+// amber status tokens, which exist for exactly this: `-soft` is the fill and
+// `-line` is the border, both defined per-theme in index.css.
 const TLS_STATUS_STYLES: Record<
   string,
   {
     label: string;
-    variant: "default" | "secondary" | "outline" | "destructive";
+    variant: "default" | "secondary" | "outline" | "destructive" | "light";
     className?: string;
   }
 > = {
-  // No className: the default variant is bg-primary, i.e. the accent the user
-  // chose. A hardcoded emerald overrode it, so a healthy certificate was the one
-  // badge in the app that ignored the theme — and it did not match how every
-  // other page marks a healthy thing (Docker's "Running" is the same variant).
-  active: {
-    label: "Active",
-    variant: "default",
-  },
+  active: { label: "Active", variant: "light" },
   pending: {
     label: "Pending",
-    variant: "default",
-    className: "bg-amber-500 hover:bg-amber-500",
+    variant: "outline",
+    className:
+      "border-status-building-line bg-status-building-soft text-status-building",
   },
   expiring: {
     label: "Expiring",
-    variant: "default",
-    className: "bg-amber-500 hover:bg-amber-500",
+    variant: "outline",
+    className:
+      "border-status-building-line bg-status-building-soft text-status-building",
   },
   expired: { label: "Expired", variant: "destructive" },
   failed: { label: "Failed", variant: "destructive" },
