@@ -69,8 +69,11 @@ type Handler struct {
 	auditSvc          *service.AuditService
 	notifySvc         *service.NotificationService
 	termManager       *terminal.Manager
-	quotaSvc          *quota.Service
-	emailSvc          *email.Service
+	// docker system df is far too slow to run inside a request (33s on a small
+	// VPS), so the Docker overview reads it from here.
+	diskUsage diskUsageCache
+	quotaSvc  *quota.Service
+	emailSvc  *email.Service
 	// certSvc is built here rather than injected: it needs only queries and the
 	// keyring, both already held above, and nothing outside the handler uses it.
 	certSvc *service.CertificateService

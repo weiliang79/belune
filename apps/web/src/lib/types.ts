@@ -523,7 +523,10 @@ export interface DockerDiskUsage {
 
 export interface DockerOverview {
   info: DockerSystemInfo;
-  disk_usage: DockerDiskUsage;
+  /** Null while it is still being computed: `docker system df` is far too slow
+   *  to run inside the request (33s on a small VPS), so it is refreshed in the
+   *  background and arrives on a later poll rather than failing the page. */
+  disk_usage: DockerDiskUsage | null;
   counts: {
     containers_running: number;
     containers_total: number;

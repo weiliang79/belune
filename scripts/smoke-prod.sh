@@ -253,6 +253,29 @@ noisy="$(belune_logs | grep -ciE 'permission denied|no such file or directory|ta
   && pass "no tailer/permission/missing-file errors in the log" \
   || fail "$noisy tailer/permission/missing-file errors in the log" "$(belune_logs | grep -m1 -iE 'permission denied|no such file or directory|tailer error')"
 
+info "10. Deep links and refreshes work"
+# Caught: the SPA fallback rewrote the request path to /index.html and handed it
+# to http.FileServer — which redirects anything ending in /index.html to "./".
+# A refresh on /server bounced to / (and the router then sent the user to
+# /projects); a deep path bounced to its own parent, forever:
+#   /projects/x/applications/y → ./ → /projects/x/applications/ → ./ → …
+# which the browser reports as TOO_MANY_REDIRECTS. Vite hides this in dev by
+# doing the fallback itself.
+for route in /server /projects/abc-123/applications/def-456 /docker; do
+  code="$(curl -s -o /dev/null -w '%{http_code}' -H "Host: $DASHBOARD_HOST" "$CADDY_URL$route")"
+  if [[ "$code" == "200" ]]; then
+    pass "GET $route → 200 (no redirect)"
+  else
+    fail "GET $route → $code" "the SPA fallback is redirecting instead of serving the shell"
+  fi
+done
+# ...and a real asset must still be served as itself, not swallowed by the fallback.
+asset="$(curl -s -H "Host: $DASHBOARD_HOST" "$CADDY_URL/" | grep -o '/assets/[^"]*\.js' | head -1)"
+ctype="$(curl -s -o /dev/null -w '%{content_type}' -H "Host: $DASHBOARD_HOST" "$CADDY_URL$asset")"
+[[ "$ctype" == *javascript* ]] \
+  && pass "assets are still served as assets ($asset)" \
+  || fail "asset served as '$ctype'" "the fallback is swallowing real files"
+
 # --- result ------------------------------------------------------------------
 
 info "Result"

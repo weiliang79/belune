@@ -34,7 +34,7 @@ export function DockerOverviewTab({ enabled }: { enabled: boolean }) {
           subtitle={`${counts.containers_running} running`}
         />
         <CountCard title="Images" value={counts.images} />
-        <CountCard title="Volumes" value={counts.volumes} />
+        <CountCard title="Volumes" value={du ? counts.volumes : null} />
         <CountCard title="CPUs" value={info.ncpu} subtitle={formatBytes(info.mem_total) + " RAM"} />
       </div>
 
@@ -73,10 +73,22 @@ export function DockerOverviewTab({ enabled }: { enabled: boolean }) {
                 </tr>
               </thead>
               <tbody className="divide-border divide-y">
-                <UsageRow label="Images" entry={du.images} />
-                <UsageRow label="Containers" entry={du.containers} />
-                <UsageRow label="Local volumes" entry={du.volumes} />
-                <UsageRow label="Build cache" entry={du.build_cache} />
+                {du ? (
+                  <>
+                    <UsageRow label="Images" entry={du.images} />
+                    <UsageRow label="Containers" entry={du.containers} />
+                    <UsageRow label="Local volumes" entry={du.volumes} />
+                    <UsageRow label="Build cache" entry={du.build_cache} />
+                  </>
+                ) : (
+                  <tr>
+                    <td colSpan={4} className="text-muted-foreground py-4 text-center text-xs">
+                      Still measuring — `docker system df` walks every image, container
+                      and volume, which can take a while on a small host. It will appear
+                      here shortly.
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>
@@ -96,7 +108,8 @@ function CountCard({
   subtitle,
 }: {
   title: string;
-  value: number;
+  // null while the figure is still being computed in the background.
+  value: number | null;
   subtitle?: string;
 }) {
   return (
@@ -105,7 +118,7 @@ function CountCard({
         <p className="text-muted-foreground text-sm font-medium">{title}</p>
       </CardHeader>
       <CardContent>
-        <p className="text-3xl font-bold">{value}</p>
+        <p className="text-3xl font-bold">{value ?? "—"}</p>
         {subtitle && <p className="text-text-faint mt-1 text-xs">{subtitle}</p>}
       </CardContent>
     </Card>

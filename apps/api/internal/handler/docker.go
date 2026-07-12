@@ -2,7 +2,9 @@ package handler
 
 import (
 	"context"
+	"log/slog"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
@@ -64,6 +66,90 @@ type dockerOverviewResponse struct {
 	Counts    dockerCounts              `json:"counts"`
 }
 
+// Disk usage is computed out of band, because `docker system df` walks every
+// image, container, volume and build-cache record. On a small VPS that measured
+// 33 seconds — four times the whole request's budget — so the call timed out and
+// the handler turned one slow sub-call into a 502 that took down the entire
+// Overview page, even though `docker info` (which carries most of what the page
+// shows) had already succeeded.
+//
+// So: serve what we have immediately, refresh the expensive part in the
+// background, and let disk usage arrive on a subsequent poll. A page that is
+// mostly right now beats a page that is perfectly right in half a minute, or —
+// as it actually behaved — never.
+const (
+	diskUsageTTL     = 2 * time.Minute
+	diskUsageTimeout = 90 * time.Second
+	// How long a request waits when there is nothing cached at all. A healthy host
+	// answers in well under a second, so this is normally not felt; a slow one
+	// gives up here and the figure arrives on a later poll, rather than holding the
+	// page hostage for half a minute.
+	diskUsageColdWait = 3 * time.Second
+)
+
+type diskUsageCache struct {
+	mu         sync.Mutex
+	value      *runtime.DockerDiskUsage
+	computed   time.Time
+	refreshing bool
+	done       chan struct{} // closed when the in-flight refresh finishes
+}
+
+// get returns the disk usage, refreshing it in the background when stale.
+//
+// A stale value is served immediately — two minutes out of date is not worth a
+// slow page. A cold cache has nothing to serve, so it waits briefly for the first
+// result and then gives up and returns nil rather than blocking. The response
+// models that as null and the UI says it is still measuring.
+func (c *diskUsageCache) get(ctx context.Context, rt runtime.ContainerRuntime) *runtime.DockerDiskUsage {
+	c.mu.Lock()
+	if c.value != nil && time.Since(c.computed) <= diskUsageTTL {
+		v := c.value
+		c.mu.Unlock()
+		return v
+	}
+	if !c.refreshing {
+		c.refreshing = true
+		c.done = make(chan struct{})
+		go c.refresh(rt)
+	}
+	done, stale := c.done, c.value
+	c.mu.Unlock()
+
+	if stale != nil {
+		return stale // usable; the refresh will land shortly
+	}
+
+	select {
+	case <-done:
+	case <-time.After(diskUsageColdWait):
+	case <-ctx.Done():
+	}
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.value
+}
+
+func (c *diskUsageCache) refresh(rt runtime.ContainerRuntime) {
+	// Deliberately not the request's context: the whole point is to outlive it.
+	ctx, cancel := context.WithTimeout(context.Background(), diskUsageTimeout)
+	defer cancel()
+
+	du, err := rt.SystemDiskUsage(ctx)
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.refreshing = false
+	close(c.done)
+	if err != nil {
+		slog.Warn("docker: failed to compute disk usage", "error", err)
+		return
+	}
+	c.value = du
+	c.computed = time.Now()
+}
+
 // GetDockerOverview returns `docker info` + `docker system df` for the admin
 // Docker overview tab. GET /api/docker/overview (admin only).
 func (h *Handler) GetDockerOverview(w http.ResponseWriter, r *http.Request) {
@@ -75,21 +161,23 @@ func (h *Handler) GetDockerOverview(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadGateway, "failed to read Docker info")
 		return
 	}
-	du, err := h.runtime.SystemDiskUsage(ctx)
-	if err != nil {
-		writeError(w, http.StatusBadGateway, "failed to read Docker disk usage")
-		return
+
+	// May be nil on the first request, while the background refresh runs.
+	du := h.diskUsage.get(ctx, h.runtime)
+
+	counts := dockerCounts{
+		ContainersRunning: info.ContainersRunning,
+		ContainersTotal:   info.Containers,
+		Images:            info.Images,
+	}
+	if du != nil {
+		counts.Volumes = du.Volumes.Count
 	}
 
 	writeJSON(w, http.StatusOK, dockerOverviewResponse{
 		Info:      info,
 		DiskUsage: du,
-		Counts: dockerCounts{
-			ContainersRunning: info.ContainersRunning,
-			ContainersTotal:   info.Containers,
-			Images:            info.Images,
-			Volumes:           du.Volumes.Count,
-		},
+		Counts:    counts,
 	})
 }
 
