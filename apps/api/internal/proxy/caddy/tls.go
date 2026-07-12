@@ -1,6 +1,7 @@
 package caddy
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -139,11 +140,26 @@ func (c *Client) listPEMCerts(ctx context.Context) ([]tlsPEMCert, error) {
 	}
 	defer resp.Body.Close()
 
+	// "No certificates" arrives in three different shapes depending on how much of
+	// the TLS app exists, and none of them is an error:
+	//
+	//   - the tls app is absent entirely (a stock Caddy with no TLS config, i.e.
+	//     production): 400 "invalid traversal path" — the path cannot even be
+	//     walked;
+	//   - the tls app exists but has no certificates object: 200 with a null body;
+	//   - 404, for completeness.
+	//
+	// Development has a tls app (local_certs creates one), which hid the 400 case
+	// entirely — and because SyncCertificates bails on this error before reaching
+	// the write, uploaded certificates were never pushed to a production Caddy.
 	if resp.StatusCode == http.StatusNotFound {
 		return nil, nil
 	}
 	if resp.StatusCode >= 400 {
 		respBody, _ := io.ReadAll(resp.Body)
+		if resp.StatusCode == http.StatusBadRequest && bytes.Contains(respBody, []byte("invalid traversal path")) {
+			return nil, nil
+		}
 		return nil, fmt.Errorf("list certificates: HTTP %d: %s", resp.StatusCode, string(respBody))
 	}
 
