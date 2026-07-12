@@ -25,11 +25,19 @@ services:
     environment:
       # railpack (and pack) build via this BuildKit daemon on the internal network.
       BUILDKIT_HOST: tcp://buildkit:1234
+      # Where Caddy's access log lands inside THIS container. The default is a
+      # repo-relative dev path (../../infra/caddy/logs/access.log) that does not
+      # exist here, so without this the tailer silently found nothing and the
+      # request-log feature was dead in production — zero rows, no error.
+      ACCESS_LOG_PATH: /var/log/caddy/access.log
     volumes:
       # Belune's whole job is managing containers, so it needs the Docker API.
       # Without this it starts, serves the UI, and can do nothing: no deploys, no
       # log collection, and /healthz reports 503 because the Docker check fails.
       - /var/run/docker.sock:/var/run/docker.sock
+      # Caddy writes its access log here; Belune tails it. Read-only: only Caddy
+      # should ever write to it.
+      - caddylogs:/var/log/caddy:ro
       # Persist managed-database logical dumps (DATABASE_BACKUP_DIR=/data/backups/databases)
       # so local restore works across container recreation.
       - belunedata:/data
