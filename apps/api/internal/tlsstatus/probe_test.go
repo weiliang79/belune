@@ -127,3 +127,59 @@ func TestDerive(t *testing.T) {
 		})
 	}
 }
+
+// A CommonName is optional in a distinguished name, and Cloudflare's Origin CA
+// omits it — the issuer DN carries only C/O/OU/L/ST. Reading CommonName alone
+// left custom-certificate domains with a blank issuer in the UI while ACME ones
+// (Let's Encrypt sets a CN) were populated. The DNs here are the real ones, off
+// a live Origin CA certificate and a live Let's Encrypt certificate.
+func TestDeriveIssuerName(t *testing.T) {
+	now := time.Date(2026, 7, 12, 12, 0, 0, 0, time.UTC)
+	host := "whoami-custom.brandoncaryn.com"
+	expiry := now.Add(365 * 24 * time.Hour)
+
+	tests := []struct {
+		name       string
+		issuer     pkix.Name
+		wantIssuer string
+	}{
+		{
+			name: "cloudflare origin CA has no issuer CN, falls back to the organization",
+			issuer: pkix.Name{
+				Country:            []string{"US"},
+				Organization:       []string{"CloudFlare, Inc."},
+				OrganizationalUnit: []string{"CloudFlare Origin SSL Certificate Authority"},
+				Locality:           []string{"San Francisco"},
+				Province:           []string{"California"},
+			},
+			wantIssuer: "CloudFlare, Inc.",
+		},
+		{
+			name: "a CN is preferred when present",
+			issuer: pkix.Name{
+				Country:      []string{"US"},
+				Organization: []string{"Let's Encrypt"},
+				CommonName:   "YE2",
+			},
+			wantIssuer: "YE2",
+		},
+		{
+			name:       "neither CN nor organization yields an empty issuer, not a panic",
+			issuer:     pkix.Name{Country: []string{"US"}},
+			wantIssuer: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			leaf := &x509.Certificate{
+				Issuer:   tt.issuer,
+				DNSNames: []string{host},
+				NotAfter: expiry,
+			}
+			res := Derive("custom", leaf, host, nil, "", now)
+			assert.Equal(t, StatusActive, res.Status)
+			assert.Equal(t, tt.wantIssuer, res.Issuer)
+		})
+	}
+}

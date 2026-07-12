@@ -105,7 +105,7 @@ func Derive(sslMode string, leaf *x509.Certificate, hostname string, dialErr err
 	}
 
 	res := ProbeResult{
-		Issuer:   leaf.Issuer.CommonName,
+		Issuer:   issuerName(leaf),
 		NotAfter: leaf.NotAfter,
 		Error:    recordedErr,
 	}
@@ -132,4 +132,21 @@ func Derive(sslMode string, leaf *x509.Certificate, hostname string, dialErr err
 		res.Error = ""
 	}
 	return res
+}
+
+// issuerName names the CA that signed the certificate, for display.
+//
+// The obvious choice is the issuer's CommonName, but a CN is optional in a
+// distinguished name and real CAs do omit it: Cloudflare's Origin CA carries
+// only O and OU, so a custom-certificate domain recorded an empty issuer while
+// an ACME one (Let's Encrypt sets a CN) recorded a name. Fall back to the
+// organization so the column is populated either way.
+func issuerName(leaf *x509.Certificate) string {
+	if cn := leaf.Issuer.CommonName; cn != "" {
+		return cn
+	}
+	if len(leaf.Issuer.Organization) > 0 {
+		return leaf.Issuer.Organization[0]
+	}
+	return ""
 }
