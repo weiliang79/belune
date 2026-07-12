@@ -50,14 +50,30 @@ func (h *TaskHandler) probeDomain(ctx context.Context, d generated.ListDomainsFo
 	// Check DNS before the handshake: a hostname pointing somewhere else can
 	// never get a certificate, and saying so is far more useful than a generic
 	// "pending" that never resolves.
+	//
+	// Only a fatal finding (the record does not exist) may override the recorded
+	// ACME error and so decide the status. An advisory one — "resolves somewhere
+	// that isn't us" — is what a proxy in front of us looks like, and issuance
+	// through one works, so it is surfaced without condemning the domain.
+	var advisory string
 	if d.SslMode != proxy.SSLModeOff {
-		if mismatch := h.checkDNS(ctx, d.Hostname); mismatch != "" {
-			recordedErr = mismatch
+		if msg, fatal := h.checkDNS(ctx, d.Hostname); msg != "" {
+			if fatal {
+				recordedErr = msg
+			} else {
+				advisory = msg
+			}
 		}
 	}
 
 	leaf, dialErr := tlsstatus.Probe(ctx, h.Config.CaddyTLSProbeAddr, d.Hostname)
 	res := tlsstatus.Derive(d.SslMode, leaf, d.Hostname, dialErr, recordedErr, time.Now())
+
+	// Show the advisory only when nothing more definite is known, so it explains a
+	// domain sitting on "pending" without ever being the reason it says "failed".
+	if res.Error == "" && advisory != "" && res.Status == tlsstatus.StatusPending {
+		res.Error = advisory
+	}
 
 	var notAfter pgtype.Timestamptz
 	if !res.NotAfter.IsZero() {

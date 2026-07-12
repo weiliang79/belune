@@ -25,14 +25,25 @@ import (
 // over every domain, and a black-holed resolver must not stall it.
 const dnsCheckTimeout = 3 * time.Second
 
-// checkDNS reports a human-readable mismatch when hostname resolves somewhere
-// other than this server, or "" when it matches, cannot be determined, or the
-// server's own public IP is unknown. It is deliberately conservative: a false
-// "your DNS is wrong" is worse than staying quiet.
-func (h *TaskHandler) checkDNS(ctx context.Context, hostname string) string {
+// checkDNS reports a human-readable problem with hostname's DNS, and whether
+// that problem is fatal to certificate issuance.
+//
+// The distinction matters. A hostname that does not resolve at all can never be
+// issued a certificate, so that is fatal and may decide the domain's status. But
+// a hostname that resolves *somewhere else* is ambiguous: that is precisely what
+// a proxy in front of us looks like, and issuance through Cloudflare's orange
+// cloud demonstrably works — the challenge is forwarded to the origin. Treating
+// that as fatal marked every proxied domain Failed while it was still legitimately
+// issuing. It is reported, but it never decides the status; the real ACME error
+// does that.
+//
+// Returns ("", false) when the DNS matches, cannot be determined, or the server's
+// own public IP is unknown. Deliberately conservative: a false "your DNS is wrong"
+// is worse than staying quiet.
+func (h *TaskHandler) checkDNS(ctx context.Context, hostname string) (msg string, fatal bool) {
 	public := h.publicIP()
 	if public == "" {
-		return "" // no baseline to compare against — skip the check
+		return "", false // no baseline to compare against — skip the check
 	}
 
 	ctx, cancel := context.WithTimeout(ctx, dnsCheckTimeout)
@@ -44,32 +55,30 @@ func (h *TaskHandler) checkDNS(ctx context.Context, hostname string) string {
 		// timeout or a broken resolver says nothing about the user's DNS.
 		var dnsErr *net.DNSError
 		if errors.As(err, &dnsErr) && dnsErr.IsNotFound {
-			return fmt.Sprintf("%s does not resolve — add a DNS A record pointing at %s, or a certificate can never be issued", hostname, public)
+			return fmt.Sprintf("%s does not resolve — add a DNS A record pointing at %s, or a certificate can never be issued", hostname, public), true
 		}
 		slog.Debug("tls dns check: lookup failed", "hostname", hostname, "error", err)
-		return ""
+		return "", false
 	}
 
 	for _, a := range addrs {
 		if a == public {
-			return ""
+			return "", false
 		}
 	}
 
-	// Resolving somewhere else is not always fatal — a CDN or proxy in front of
-	// us (Cloudflare's orange cloud) is a legitimate setup — so the wording says
-	// what we see and what it implies, rather than asserting a misconfiguration.
 	return fmt.Sprintf(
 		"%s resolves to %s, not this server (%s). Unless a proxy sits in front, certificate issuance will fail.",
 		hostname, strings.Join(addrs, ", "), public,
-	)
+	), false
 }
 
 // publicIPOnce caches autodetection: it opens a UDP socket, which is cheap but
 // pointless to redo for every domain on every sweep.
 var (
-	publicIPOnce  sync.Once
-	publicIPValue string
+	publicIPOnce         sync.Once
+	publicIPValue        string
+	configuredIPWarnOnce sync.Once
 )
 
 // publicIP returns the configured public IP, falling back to the local address
@@ -77,7 +86,17 @@ var (
 // VPS and wrong behind NAT, which is exactly why BELUNE_PUBLIC_IP exists.
 func (h *TaskHandler) publicIP() string {
 	if h.Config != nil && h.Config.PublicIP != "" {
-		return h.Config.PublicIP
+		// Validate rather than trust: an unsubstituted placeholder (BELUNE_PUBLIC_IP=VPS_IP)
+		// would otherwise become the baseline, match nothing, and report every
+		// domain as pointing at "not this server (VPS_IP)". Garbage in the
+		// baseline is worse than no baseline, so fall through to autodetection.
+		if ip := net.ParseIP(h.Config.PublicIP); ip != nil {
+			return h.Config.PublicIP
+		}
+		configuredIPWarnOnce.Do(func() {
+			slog.Warn("tls dns check: BELUNE_PUBLIC_IP is not a valid IP address; ignoring it",
+				"value", h.Config.PublicIP)
+		})
 	}
 	publicIPOnce.Do(func() {
 		// No packets are sent: connecting a UDP socket only fixes the route, and
