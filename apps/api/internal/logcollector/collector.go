@@ -158,6 +158,17 @@ func (c *Collector) sync(ctx context.Context) {
 		return
 	}
 
+	// The proxy is not managed-by=belune — that label marks containers the cleanup
+	// worker may reap — so ListContainers filters it out at the Docker API and it
+	// was never watched. Caddy's log is where ACME failure reasons live, so without
+	// this a domain whose certificate failed showed no reason at all.
+	system, err := c.runtime.ListSystemContainers(ctx)
+	if err != nil {
+		slog.Warn("log collector: failed to list system containers", "error", err)
+	} else {
+		containers = append(containers, system...)
+	}
+
 	// Build set of running container IDs that belong to an application or
 	// database (i.e. carry one of our resource labels).
 	active := make(map[string]struct{})

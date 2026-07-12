@@ -87,6 +87,16 @@ type ContainerRuntime interface {
 	// Docker inspect page. Unlike ListContainers it does not filter by the
 	// managed-by label.
 	ListAllContainers(ctx context.Context) ([]ContainerInfo, error)
+	// ListSystemContainers lists Belune's own infrastructure containers — the ones
+	// carrying the belune-system label, currently just the Caddy proxy.
+	//
+	// These deliberately do NOT carry the managed-by label that ListContainers
+	// filters on: that label marks containers the platform owns and may reap, and
+	// the cleanup worker treats anything wearing it with no matching database row
+	// as an orphan. Labelling the proxy that way would eventually delete it. So
+	// system containers need a lookup of their own; the log collector uses it to
+	// read Caddy's logs, which is where ACME failure reasons come from.
+	ListSystemContainers(ctx context.Context) ([]ContainerInfo, error)
 	// ListImages lists all images on the host (read-only, admin inspect page).
 	ListImages(ctx context.Context) ([]ImageInfo, error)
 	// ResolveImageDigest inspects a locally-present image reference and returns a

@@ -21,6 +21,10 @@ import (
 const labelManagedBy = "managed-by"
 const labelValue = "belune"
 
+// labelSystem marks Belune's own infrastructure containers (the Caddy proxy).
+// Mirrors logcollector.labelSystem; kept here to avoid an import cycle.
+const labelSystem = "belune-system"
+
 func (c *Client) CreateContainer(ctx context.Context, cfg runtime.ContainerConfig) (id string, err error) {
 	defer func() { metrics.RecordDockerOp("create_container", err) }()
 	// Convert env map to Docker format
@@ -175,6 +179,23 @@ func (c *Client) ListContainers(ctx context.Context) ([]runtime.ContainerInfo, e
 	})
 	if err != nil {
 		return nil, fmt.Errorf("list containers: %w", err)
+	}
+	return mapContainerSummaries(containers), nil
+}
+
+// ListSystemContainers lists Belune's own infrastructure containers, matched on
+// the belune-system label. They are not managed-by=belune (see the interface
+// doc: that label makes the cleanup worker consider them orphans), so
+// ListContainers filters them out at the Docker API and never sees them.
+func (c *Client) ListSystemContainers(ctx context.Context) ([]runtime.ContainerInfo, error) {
+	containers, err := c.cli.ContainerList(ctx, container.ListOptions{
+		All: true,
+		Filters: filters.NewArgs(
+			filters.Arg("label", labelSystem),
+		),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list system containers: %w", err)
 	}
 	return mapContainerSummaries(containers), nil
 }

@@ -24,12 +24,13 @@ type MockContainerRuntime struct {
 	ListContainers_ []runtime.ContainerInfo
 
 	// Read-only admin Docker inspect fixtures (nil → empty result).
-	ListAllContainers_ []runtime.ContainerInfo
-	ListImages_        []runtime.ImageInfo
-	ListVolumes_       []runtime.VolumeInfo
-	ListNetworks_      []runtime.NetworkInfo
-	SystemInfo_        *runtime.DockerSystemInfo
-	SystemDiskUsage_   *runtime.DockerDiskUsage
+	ListAllContainers_    []runtime.ContainerInfo
+	ListSystemContainers_ []runtime.ContainerInfo
+	ListImages_           []runtime.ImageInfo
+	ListVolumes_          []runtime.VolumeInfo
+	ListNetworks_         []runtime.NetworkInfo
+	SystemInfo_           *runtime.DockerSystemInfo
+	SystemDiskUsage_      *runtime.DockerDiskUsage
 
 	// ResolveImageDigest_ is returned by ResolveImageDigest; ResolveDigestCalls
 	// records the refs it was asked to resolve.
@@ -100,6 +101,12 @@ func (m *MockContainerRuntime) ListAllContainers(_ context.Context) ([]runtime.C
 		return []runtime.ContainerInfo{}, nil
 	}
 	return m.ListAllContainers_, nil
+}
+
+func (m *MockContainerRuntime) ListSystemContainers(_ context.Context) ([]runtime.ContainerInfo, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.ListSystemContainers_, nil
 }
 
 func (m *MockContainerRuntime) ListImages(_ context.Context) ([]runtime.ImageInfo, error) {

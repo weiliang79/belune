@@ -275,3 +275,50 @@ func TestCollector_ResumesFromLastLogTime(t *testing.T) {
 	assert.Equal(t, expectedSince, gotSince,
 		"collector must resume from lastRecordedAt+1ns, not from zero time")
 }
+
+// The Caddy proxy carries belune-system=caddy but deliberately NOT
+// managed-by=belune — that label marks containers the cleanup worker may reap as
+// orphans. ListContainers filters on managed-by at the Docker API, so the proxy
+// was never returned and never watched, and Caddy's log is where ACME failure
+// reasons come from: a domain whose certificate failed showed no reason at all.
+// The collector must therefore pull system containers in as well.
+func TestCollector_WatchesTheCaddyProxy(t *testing.T) {
+	t.Cleanup(func() { _ = testutil.TruncateAll(context.Background(), testPool) })
+
+	rt := &logStreamRuntime{
+		MockContainerRuntime: &testutil.MockContainerRuntime{
+			// Empty: the proxy is invisible to the managed-by lookup, which is
+			// exactly the bug. It must be found via the system lookup instead.
+			ListContainers_: []runtime.ContainerInfo{},
+			ListSystemContainers_: []runtime.ContainerInfo{
+				{
+					ID:     "ctr-caddy",
+					Name:   "infra-caddy-1",
+					Status: "running",
+					Labels: map[string]string{"belune-system": "caddy"},
+				},
+			},
+		},
+		stream: makeDockerStdoutStream(`{"level":"error","logger":"tls.obtain","msg":"could not get certificate from issuer"}`),
+	}
+	rdb := startMiniredis(t)
+	c := logcollector.New(rt, testQueries, rdb)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go c.Run(ctx)
+
+	var caddyID pgtype.UUID
+	require.NoError(t, caddyID.Scan(logcollector.CaddySourceID))
+
+	searchParams := generated.SearchContainerLogsParams{
+		SourceType: "system",
+		SourceID:   caddyID,
+		Limit:      10,
+		Offset:     0,
+	}
+	assert.Eventually(t, func() bool {
+		logs, err := testQueries.SearchContainerLogs(context.Background(), searchParams)
+		return err == nil && len(logs) >= 1
+	}, 5*time.Second, 50*time.Millisecond, "collector never attached to the Caddy proxy")
+}
