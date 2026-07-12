@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
+import { useAuthStore } from "@/lib/stores/auth";
 import { useForm } from "@tanstack/react-form";
 import { z } from "zod";
 import type { ColumnDef } from "@tanstack/react-table";
@@ -80,7 +81,36 @@ function ExpiryCell({ notAfter }: { notAfter: string | null }) {
   return <span>{formatted}</span>;
 }
 
+// The API guards these endpoints with RequireRole("admin"), and the Domain TLS
+// query is deliberately unscoped — it returns every domain on the instance, not
+// just the caller's. That role check is the only thing standing between a
+// non-admin and every project's domains, so match it in the UI rather than
+// letting a non-admin land on a page whose every request 403s.
+//
+// The guard wraps the content instead of living inside it: the hooks below fetch
+// on mount, and a hook cannot be called conditionally.
 function CertificatesPage() {
+  const isAdmin = useAuthStore((s) => s.user?.role === "admin");
+
+  if (!isAdmin) {
+    return (
+      <div className="space-y-6">
+        <PageHeader
+          icon={<Lock className="size-5" />}
+          title="Certificates"
+          description="Certificates you upload once and select on any domain set to Custom SSL."
+        />
+        <p className="text-muted-foreground text-sm">
+          Certificate management is restricted to administrators.
+        </p>
+      </div>
+    );
+  }
+
+  return <CertificatesContent />;
+}
+
+function CertificatesContent() {
   const { data: certificates, isLoading } = useCertificates();
   const [uploadOpen, setUploadOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Certificate | null>(null);
@@ -514,15 +544,28 @@ function DomainTLSTable() {
       {
         accessorKey: "tls_error",
         header: "Detail",
-        cell: ({ row }) =>
-          row.original.tls_error ? (
-            // The whole point of the pipeline: the reason, in the UI, in words.
-            <span className="text-destructive text-xs break-words">
-              {row.original.tls_error}
-            </span>
-          ) : (
-            <span className="text-muted-foreground">—</span>
-          ),
+        cell: ({ row }) => {
+          const { tls_error: error, tls_advisory: advisory } = row.original;
+          // The whole point of the pipeline: the reason, in the UI, in words.
+          if (error) {
+            return (
+              <span className="text-destructive text-xs break-words">
+                {error}
+              </span>
+            );
+          }
+          // An advisory is a suspicion, not a verdict — a hostname resolving
+          // somewhere that isn't us is also just what a proxy in front of us
+          // looks like. Shown as a caution, and only when nothing worse is known.
+          if (advisory) {
+            return (
+              <span className="text-status-building text-xs break-words">
+                {advisory}
+              </span>
+            );
+          }
+          return <span className="text-muted-foreground">—</span>;
+        },
       },
     ],
     [],
