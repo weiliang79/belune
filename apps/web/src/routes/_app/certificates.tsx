@@ -54,6 +54,11 @@ export const Route = createFileRoute("/_app/certificates")({
 // EXPIRY_WARNING_DAYS mirrors the threshold the backend will notify on.
 const EXPIRY_WARNING_DAYS = 14;
 
+// How many subject badges a row shows before deferring to the detail panel.
+// Enough to identify the certificate at a glance; few enough that a 40-SAN cert
+// cannot turn one row into half a page.
+const SUBJECTS_SHOWN = 3;
+
 function daysUntil(iso: string | null): number | null {
   if (!iso) return null;
   return Math.floor(
@@ -136,15 +141,29 @@ function CertificatesContent() {
       {
         accessorKey: "subjects",
         header: "Subjects",
-        cell: ({ row }) => (
-          <div className="flex flex-wrap gap-1">
-            {row.original.subjects.map((s) => (
-              <Badge key={s} variant="secondary" className="font-mono text-xs">
-                {s}
-              </Badge>
-            ))}
-          </div>
-        ),
+        // Capped, because nothing bounded this: a certificate with 40 SANs — an
+        // ordinary internal or wildcard cert — grew its row to several hundred
+        // pixels and pushed the rest of the page off the screen. The full list
+        // lives in the detail panel, which is what the panel is for.
+        cell: ({ row }) => {
+          const subjects = row.original.subjects;
+          const shown = subjects.slice(0, SUBJECTS_SHOWN);
+          const rest = subjects.length - shown.length;
+          return (
+            <div className="flex flex-wrap items-center gap-1">
+              {shown.map((s) => (
+                <Badge key={s} variant="secondary" className="font-mono text-xs">
+                  {s}
+                </Badge>
+              ))}
+              {rest > 0 && (
+                <span className="text-muted-foreground text-xs">
+                  +{rest} more
+                </span>
+              )}
+            </div>
+          );
+        },
       },
       {
         accessorKey: "not_after",
@@ -582,16 +601,30 @@ function DetailField({
 }
 
 function CertificateDetail({ certificate }: { certificate: Certificate }) {
+  const { subjects } = certificate;
   return (
-    <div className="grid gap-4 py-1 sm:grid-cols-2">
-      <DetailField label="Issuer">
-        {certificate.issuer || (
-          <span className="text-muted-foreground">Unknown</span>
-        )}
-      </DetailField>
-      <DetailField label="Added">
-        {new Date(certificate.created_at).toLocaleString()}
-      </DetailField>
+    <div className="space-y-4 py-1">
+      <div className="grid gap-4 sm:grid-cols-2">
+        <DetailField label="Issuer">
+          {certificate.issuer || (
+            <span className="text-muted-foreground">Unknown</span>
+          )}
+        </DetailField>
+        <DetailField label="Added">
+          {new Date(certificate.created_at).toLocaleString()}
+        </DetailField>
+      </div>
+      {subjects.length > SUBJECTS_SHOWN && (
+        <DetailField label={`Subjects (${subjects.length})`}>
+          <div className="flex flex-wrap gap-1">
+            {subjects.map((s) => (
+              <Badge key={s} variant="secondary" className="font-mono text-xs">
+                {s}
+              </Badge>
+            ))}
+          </div>
+        </DetailField>
+      )}
     </div>
   );
 }
