@@ -265,7 +265,10 @@ function UploadCertificateDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-2xl">
+      {/* The shared DialogContent sets no max height, so on a short viewport a
+          tall dialog runs off both edges and the footer becomes unreachable.
+          Cap it and let the body scroll. */}
+      <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>Upload Certificate</DialogTitle>
           <DialogDescription>
@@ -305,7 +308,11 @@ function UploadCertificateDialog({
                   id="cert_pem"
                   rows={7}
                   spellCheck={false}
-                  className="font-mono text-xs"
+                  // field-sizing-fixed opts out of the shared Textarea's
+                  // content-sizing, which would otherwise grow the box to fit
+                  // and push a pasted chain past the bottom of the dialog. Held
+                  // at rows, the textarea scrolls on its own.
+                  className="field-sizing-fixed resize-y overflow-y-auto font-mono text-xs"
                   placeholder="-----BEGIN CERTIFICATE-----"
                   value={field.state.value}
                   onChange={(e) => field.handleChange(e.target.value)}
@@ -327,7 +334,7 @@ function UploadCertificateDialog({
                   id="key_pem"
                   rows={7}
                   spellCheck={false}
-                  className="font-mono text-xs"
+                  className="field-sizing-fixed resize-y overflow-y-auto font-mono text-xs"
                   placeholder="-----BEGIN PRIVATE KEY-----"
                   value={field.state.value}
                   onChange={(e) => field.handleChange(e.target.value)}
