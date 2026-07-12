@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useAuthStore } from "@/lib/stores/auth";
 import { useForm } from "@tanstack/react-form";
@@ -147,15 +147,6 @@ function CertificatesContent() {
         ),
       },
       {
-        accessorKey: "issuer",
-        header: "Issuer",
-        cell: ({ row }) => (
-          <span className="text-muted-foreground truncate">
-            {row.original.issuer || "—"}
-          </span>
-        ),
-      },
-      {
         accessorKey: "not_after",
         header: "Expires",
         cell: ({ row }) => <ExpiryCell notAfter={row.original.not_after} />,
@@ -241,6 +232,9 @@ function CertificatesContent() {
             isLoading={isLoading}
             getRowId={(c) => c.id}
             enableSorting
+            renderDetailPanel={({ row }) => (
+              <CertificateDetail certificate={row.original} />
+            )}
             emptyMessage='No certificates uploaded. Click "Upload Certificate" to add one.'
           />
         </CardContent>
@@ -516,15 +510,20 @@ function DomainTLSTable() {
       {
         accessorKey: "ssl_mode",
         header: "Mode",
+        // Two lines, mirroring the Domain column. `capitalize` sits on the mode
+        // alone: it used to wrap both, which title-cased the certificate's name —
+        // a name the user chose, and not ours to rewrite.
         cell: ({ row }) => (
-          <span className="text-muted-foreground capitalize">
-            {row.original.ssl_mode}
+          <div className="flex flex-col">
+            <span className="text-muted-foreground capitalize">
+              {row.original.ssl_mode}
+            </span>
             {row.original.certificate_name && (
-              <span className="text-foreground ml-1">
-                · {row.original.certificate_name}
+              <span className="text-muted-foreground text-xs">
+                {row.original.certificate_name}
               </span>
             )}
-          </span>
+          </div>
         ),
       },
       {
@@ -540,32 +539,6 @@ function DomainTLSTable() {
         accessorKey: "tls_not_after",
         header: "Expires",
         cell: ({ row }) => <ExpiryCell notAfter={row.original.tls_not_after} />,
-      },
-      {
-        accessorKey: "tls_error",
-        header: "Detail",
-        cell: ({ row }) => {
-          const { tls_error: error, tls_advisory: advisory } = row.original;
-          // The whole point of the pipeline: the reason, in the UI, in words.
-          if (error) {
-            return (
-              <span className="text-destructive text-xs break-words">
-                {error}
-              </span>
-            );
-          }
-          // An advisory is a suspicion, not a verdict — a hostname resolving
-          // somewhere that isn't us is also just what a proxy in front of us
-          // looks like. Shown as a caution, and only when nothing worse is known.
-          if (advisory) {
-            return (
-              <span className="text-status-building text-xs break-words">
-                {advisory}
-              </span>
-            );
-          }
-          return <span className="text-muted-foreground">—</span>;
-        },
       },
     ],
     [],
@@ -583,9 +556,74 @@ function DomainTLSTable() {
           isLoading={isLoading}
           getRowId={(d) => d.id}
           enableSorting
+          renderDetailPanel={({ row }) => <DomainTLSDetail domain={row.original} />}
           emptyMessage="No domains configured yet."
         />
       </CardContent>
     </Card>
+  );
+}
+
+function DetailField({
+  label,
+  children,
+}: {
+  label: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="space-y-1">
+      <p className="text-text-faint text-xs font-medium tracking-wider uppercase">
+        {label}
+      </p>
+      <div className="text-sm break-words">{children}</div>
+    </div>
+  );
+}
+
+function CertificateDetail({ certificate }: { certificate: Certificate }) {
+  return (
+    <div className="grid gap-4 py-1 sm:grid-cols-2">
+      <DetailField label="Issuer">
+        {certificate.issuer || (
+          <span className="text-muted-foreground">Unknown</span>
+        )}
+      </DetailField>
+      <DetailField label="Added">
+        {new Date(certificate.created_at).toLocaleString()}
+      </DetailField>
+    </div>
+  );
+}
+
+// The reason lives here rather than in a column: it is a paragraph, and a
+// paragraph in a table cell either wraps the row to three lines or gets
+// truncated to uselessness. Last checked comes along so the panel is worth
+// opening on a healthy domain too, rather than expanding to "nothing to report".
+function DomainTLSDetail({ domain }: { domain: DomainTLSStatus }) {
+  const { tls_error: error, tls_advisory: advisory } = domain;
+
+  return (
+    <div className="space-y-4 py-1">
+      <DetailField label="Detail">
+        {error ? (
+          <span className="text-destructive">{error}</span>
+        ) : advisory ? (
+          // An advisory is a suspicion, not a verdict — a hostname resolving
+          // somewhere that isn't us is also just what a proxy in front of us
+          // looks like. A caution, and only when nothing worse is known.
+          <span className="text-status-building">{advisory}</span>
+        ) : (
+          <span className="text-muted-foreground">No issues reported.</span>
+        )}
+      </DetailField>
+      <DetailField label="Last checked">
+        {domain.tls_last_checked_at ? (
+          new Date(domain.tls_last_checked_at).toLocaleString()
+        ) : (
+          <span className="text-muted-foreground">Not yet checked</span>
+        )}
+      </DetailField>
+    </div>
   );
 }
