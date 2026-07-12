@@ -17,10 +17,11 @@ const STYLES: Record<
     className?: string;
   }
 > = {
+  // No className: the default variant is bg-primary — the accent the user chose.
+  // Kept in step with the Domain TLS table on the certificates page.
   active: {
     label: "Active",
     variant: "default",
-    className: "bg-emerald-600 hover:bg-emerald-600",
   },
   pending: {
     label: "Pending",

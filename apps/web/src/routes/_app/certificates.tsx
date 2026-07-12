@@ -469,10 +469,13 @@ const TLS_STATUS_STYLES: Record<
     className?: string;
   }
 > = {
+  // No className: the default variant is bg-primary, i.e. the accent the user
+  // chose. A hardcoded emerald overrode it, so a healthy certificate was the one
+  // badge in the app that ignored the theme — and it did not match how every
+  // other page marks a healthy thing (Docker's "Running" is the same variant).
   active: {
     label: "Active",
     variant: "default",
-    className: "bg-emerald-600 hover:bg-emerald-600",
   },
   pending: {
     label: "Pending",
