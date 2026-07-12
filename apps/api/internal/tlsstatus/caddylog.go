@@ -12,6 +12,7 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
+	"regexp"
 	"strings"
 
 	"github.com/jackc/pgx/v5/pgtype"
@@ -73,7 +74,36 @@ func ParseCaddyTLSError(line string) (hostname, reason string, ok bool) {
 	if hostname == "" || reason == "" {
 		return "", "", false
 	}
-	return hostname, reason, true
+	return hostname, cleanACMEReason(reason), true
+}
+
+// acmeProblemURN matches the ACME problem type that precedes the CA's own
+// explanation, e.g. "…HTTP 400 urn:ietf:params:acme:error:dns - DNS problem: …".
+var acmeProblemURN = regexp.MustCompile(`urn:ietf:params:acme:error:[a-zA-Z]+ - `)
+
+// cleanACMEReason reduces Caddy's raw error to the part an operator can act on.
+//
+// The raw string is layered with protocol wrapping — "Obtain: [host] solving
+// challenge: host: [host] authorization failed: HTTP 400 urn:…:error:dns - " —
+// before it ever reaches the sentence the CA actually wrote, and the hostname is
+// repeated three times along the way. This subsystem exists to hand the operator
+// a reason, so hand them the reason.
+func cleanACMEReason(reason string) string {
+	// certmagic appends the CA it used. After a first failure it deliberately
+	// retries against Let's Encrypt's *staging* endpoint, so it does not burn the
+	// production failed-validation rate limit on a configuration that is plainly
+	// broken. That is correct behaviour, but shown to an operator it reads as
+	// "your certificate will be untrusted" — which is not what it means, and not
+	// something they can do anything about.
+	if i := strings.Index(reason, " (ca=http"); i >= 0 {
+		reason = reason[:i]
+	}
+	// Everything up to and including the problem URN is wrapping; what follows is
+	// the CA's own sentence, which is the part worth reading.
+	if loc := acmeProblemURN.FindStringIndex(reason); loc != nil {
+		reason = reason[loc[1]:]
+	}
+	return strings.TrimSpace(reason)
 }
 
 // splitBracketedHost pulls "app.example.com" out of a leading "[app.example.com] rest…"
