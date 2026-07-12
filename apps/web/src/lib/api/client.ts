@@ -111,11 +111,16 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
     throw new ApiError(message, res.status, retryAfter);
   }
 
-  if (res.status === 204) {
+  // A successful response need not carry a body: 204 obviously, but also 202
+  // (the TLS recheck only enqueues a probe). res.json() on an empty body throws
+  // "Unexpected end of JSON input", which surfaces as a bogus error toast on an
+  // action that in fact succeeded. Decide by what arrived, not by the status.
+  const text = await res.text();
+  if (text === "") {
     return undefined as T;
   }
 
-  return res.json();
+  return JSON.parse(text) as T;
 }
 
 export const api = {
