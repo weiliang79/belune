@@ -50,3 +50,4 @@ coverage/
 # a commit — and any dev with a pre-rename checkout still has one on disk.
 .paas-data/
 belune-trial.tgz
+.env.smoke

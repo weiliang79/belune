@@ -66,6 +66,11 @@ func New(logPath string, queries *generated.Queries, rdb *redis.Client) *Tailer 
 	}
 }
 
+// missingLogGrace is how long the access log may be absent before we say so.
+// Caddy creates it on the first request, so a little patience avoids a spurious
+// warning on a cold start; beyond this, the path is wrong and someone needs to know.
+const missingLogGrace = 60 * time.Second
+
 // Run starts the tailer loop, blocking until ctx is cancelled.
 func (t *Tailer) Run(ctx context.Context) {
 	slog.Info("access log tailer starting", "path", t.logPath)
@@ -89,7 +94,14 @@ func (t *Tailer) Run(ctx context.Context) {
 }
 
 func (t *Tailer) tail(ctx context.Context) error {
-	// Wait for the log file to exist
+	// Wait for the log file to exist. Caddy may not have created it yet, so being
+	// patient is right — but this was a Debug line in an unbounded loop, so when the
+	// path was simply wrong (the default is a repo-relative dev path that does not
+	// exist inside the container) the tailer waited forever and said nothing at all.
+	// Request logging was dead in production for months and the only evidence was an
+	// empty table. Stay patient; stop being quiet.
+	waitStart := time.Now()
+	warned := false
 	for {
 		if _, err := os.Stat(t.logPath); err == nil {
 			break
@@ -98,7 +110,13 @@ func (t *Tailer) tail(ctx context.Context) error {
 		case <-ctx.Done():
 			return nil
 		case <-time.After(5 * time.Second):
-			slog.Debug("access log file not found, waiting", "path", t.logPath)
+			if !warned && time.Since(waitStart) > missingLogGrace {
+				slog.Warn("access log file still does not exist — request logging is recording nothing. Check ACCESS_LOG_PATH, and that Caddy's log volume is mounted into this container.",
+					"path", t.logPath, "waited", time.Since(waitStart).Round(time.Second))
+				warned = true
+			} else {
+				slog.Debug("access log file not found, waiting", "path", t.logPath)
+			}
 		}
 	}
 

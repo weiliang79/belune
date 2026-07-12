@@ -176,8 +176,13 @@ jobs:
 
           echo "Restore drill passed: all rows survived the round-trip."
 
-  docker-build:
-    name: Docker build (smoke test)
+  # Building the image proved only that it compiles. Every bug found during the
+  # v0.0.29 VPS trial compiled perfectly and shipped a running container that
+  # quietly did nothing — request logging and ACME failure reporting were both
+  # entirely dead in production while every test was green. So this job boots the
+  # real production stack and asserts the features are alive.
+  prod-smoke:
+    name: Production smoke drill
     runs-on: ubuntu-latest
     needs: [backend, frontend, migrations, restore-drill]
     if: github.event_name == 'push'
@@ -194,5 +199,11 @@ jobs:
           context: .
           push: false
           tags: belune:ci
+          # Load into the local daemon so the drill can actually run it.
+          load: true
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Boot the production stack and assert the features are alive
+        run: BELUNE_IMAGE=belune:ci ./scripts/smoke-prod.sh
+

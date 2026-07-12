@@ -1,0 +1,38 @@
+# Overrides docker-compose.prod.yml for the smoke drill.
+#
+# The drill's whole value is that it exercises the REAL production stack, so this
+# changes as little as it possibly can: only the published ports, and only so the
+# drill can run on a developer machine (or alongside a real install) without
+# fighting whatever already holds 80/443.
+#
+# `!override` replaces the port list rather than appending to it — a plain list
+# would be merged, 80/443 would still be bound, and the drill would fail on a
+# port conflict instead of on a real regression.
+#
+# CPU limits are also relaxed. Production reserves 2 CPUs for belune, which a
+# small Docker VM (and some CI runners) simply does not have — the container then
+# fails to create at all, which would make the drill fail for a reason that has
+# nothing to do with the code. Resource ceilings are not what this drill tests.
+#
+# env_file is replaced, not appended. This is the subtle one, and the drill found
+# it on its first run: docker-compose.prod.yml hardcodes `env_file: ../.env`, so a
+# container's environment comes from the repo's own .env regardless of what
+# --env-file says — --env-file only feeds ${...} interpolation. The drill booted
+# against a developer's stale DATABASE_URL and tried to reach postgres on
+# localhost. Point the stack at the drill's env and nothing else.
+services:
+  belune:
+    ports: !override
+      - "127.0.0.1:18081:8080"
+    env_file: !override
+      - ../.env.smoke
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+
+  caddy:
+    ports: !override
+      - "127.0.0.1:18080:80"
+      - "127.0.0.1:18443:443"
+      - "127.0.0.1:12019:2019"
