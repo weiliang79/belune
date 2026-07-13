@@ -12,6 +12,8 @@ export function addDomain(
   applicationId: string,
   data: {
     hostname: string;
+    path?: string;
+    strip_path?: boolean;
     ssl_enabled?: boolean;
     container_port?: number;
     force_https?: boolean;
@@ -32,6 +34,8 @@ export function updateDomain(
   domainId: string,
   data: {
     hostname?: string;
+    path?: string;
+    strip_path?: boolean;
     container_port?: number | null;
     force_https?: boolean;
     ssl_mode?: string;

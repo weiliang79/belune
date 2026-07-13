@@ -163,17 +163,25 @@ export function DomainsTable({
 // configured. (The header's "Open URL" button is blunter and always says https.)
 function DomainLink({ domain }: { domain: DomainExpanded }) {
   const scheme = domain.ssl_mode === "off" ? "http" : "https";
+  // The path is part of the address, so it belongs in the link. Linking to the
+  // bare host on a /api domain would open the app that owns "/" — a different
+  // application entirely — which looks like the domain pointing at the wrong
+  // place.
+  const path = domain.path && domain.path !== "/" ? domain.path : "";
   return (
     <a
-      href={`${scheme}://${domain.hostname}`}
+      href={`${scheme}://${domain.hostname}${path}`}
       target="_blank"
       rel="noopener noreferrer"
       className="group inline-flex items-center gap-1.5 font-mono text-sm hover:underline"
     >
-      {domain.hostname}
+      <span>
+        {domain.hostname}
+        {path ? <span className="text-muted-foreground">{path}</span> : null}
+      </span>
       <ExternalLinkIcon
         aria-hidden="true"
-        className="text-muted-foreground size-3 opacity-0 transition-opacity group-hover:opacity-100"
+        className="text-muted-foreground size-3 shrink-0 opacity-0 transition-opacity group-hover:opacity-100"
       />
     </a>
   );

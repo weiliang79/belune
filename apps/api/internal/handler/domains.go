@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/weiliang79/belune/internal/naming"
@@ -81,6 +83,65 @@ func normalizeDomainPath(p string) string {
 	return p
 }
 
+// A path prefix is matched literally by Caddy, so it may contain only what can
+// legitimately appear in a URL path. No wildcards in particular: the route
+// builder derives "/api" and "/api/*" itself, so an operator who wrote the star
+// would end up with "/api/*/*", which matches nothing they expect.
+var domainPathRegex = regexp.MustCompile(`^/[A-Za-z0-9\-._~/]*$`)
+
+// validateDomainPath returns a human reason an already-normalised path is
+// unusable, or "" if it is fine.
+func validateDomainPath(p string) string {
+	if len(p) > 255 {
+		return "path is too long (maximum 255 characters)"
+	}
+	if !domainPathRegex.MatchString(p) {
+		return "path must start with / and may contain only letters, digits and - . _ ~ / — no wildcards or query strings"
+	}
+	if strings.Contains(p, "//") {
+		return "path must not contain an empty segment (//)"
+	}
+	return ""
+}
+
+// checkHostTLSAgreement rejects a domain whose TLS choice contradicts the other
+// paths already served on the same hostname, returning a human reason or "".
+//
+// Every path on a hostname is served by one certificate — Caddy selects it by
+// SNI, which knows nothing about paths — so "shop.com/ is automatic but
+// shop.com/api is off" is not a configuration, it is a contradiction. The
+// reconciler warns and keeps the first when it meets this, but a warning in a log
+// nobody reads is a poor substitute for refusing to create the state at all.
+//
+// excludeID skips the row being updated, which would otherwise conflict with
+// itself.
+func (h *Handler) checkHostTLSAgreement(ctx context.Context, hostname, sslMode string, certID, excludeID pgtype.UUID) string {
+	siblings, err := h.queries.ListDomainsByHostname(ctx, hostname)
+	if err != nil {
+		// Not worth failing the request over — the reconciler still guards it.
+		slog.Warn("domains: failed to check hostname TLS agreement", "hostname", hostname, "error", err)
+		return ""
+	}
+	for _, s := range siblings {
+		if excludeID.Valid && s.ID == excludeID {
+			continue
+		}
+		if s.SslMode != sslMode {
+			return fmt.Sprintf(
+				"%s is already served with TLS mode %q on path %s. Every path on one hostname shares a certificate, so they must all use the same mode.",
+				hostname, s.SslMode, s.Path,
+			)
+		}
+		if sslMode == proxy.SSLModeCustom && s.CertificateID != certID {
+			return fmt.Sprintf(
+				"%s already serves a different certificate on path %s. Every path on one hostname shares a certificate.",
+				hostname, s.Path,
+			)
+		}
+	}
+	return ""
+}
+
 func (h *Handler) ListDomains(w http.ResponseWriter, r *http.Request) {
 	applicationID := chi.URLParam(r, "applicationId")
 	var applicationUUID pgtype.UUID
@@ -105,6 +166,8 @@ func (h *Handler) ListDomains(w http.ResponseWriter, r *http.Request) {
 
 type addDomainRequest struct {
 	Hostname       string          `json:"hostname"`
+	Path           string          `json:"path,omitempty"`
+	StripPath      bool            `json:"strip_path,omitempty"`
 	SSLEnabled     bool            `json:"ssl_enabled"`
 	ContainerPort  *int32          `json:"container_port,omitempty"`
 	ForceHTTPS     *bool           `json:"force_https,omitempty"`
@@ -162,6 +225,16 @@ func (h *Handler) AddDomain(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	path := normalizeDomainPath(req.Path)
+	if reason := validateDomainPath(path); reason != "" {
+		writeError(w, http.StatusBadRequest, reason)
+		return
+	}
+	if reason := h.checkHostTLSAgreement(r.Context(), req.Hostname, sslMode, certUUID, pgtype.UUID{}); reason != "" {
+		writeError(w, http.StatusBadRequest, reason)
+		return
+	}
+
 	params := generated.CreateDomainParams{
 		ApplicationID:  applicationUUID,
 		Hostname:       req.Hostname,
@@ -171,12 +244,8 @@ func (h *Handler) AddDomain(w http.ResponseWriter, r *http.Request) {
 		SslProvider:    pgtype.Text{String: req.SSLProvider, Valid: req.SSLProvider != ""},
 		CertificateID:  certUUID,
 		AdvancedConfig: req.AdvancedConfig,
-		// The API does not accept a path yet — every domain is created at the
-		// root, which is what a host-only route already did. Wiring the request
-		// field in is the next phase; the column exists now so the route builder
-		// and reconciler can be taught about it without a second migration.
-		Path:      normalizeDomainPath(""),
-		StripPath: false,
+		Path:           path,
+		StripPath:      req.StripPath,
 	}
 	if req.ContainerPort != nil {
 		params.ContainerPort = pgtype.Int4{Int32: *req.ContainerPort, Valid: true}
@@ -184,6 +253,14 @@ func (h *Handler) AddDomain(w http.ResponseWriter, r *http.Request) {
 
 	domain, err := h.queries.CreateDomain(r.Context(), params)
 	if err != nil {
+		// (hostname, path) is unique. Adding shop.com/api twice is a mistake the
+		// operator can fix, so say what happened rather than returning a 500 that
+		// reads as "the server is broken".
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+			writeError(w, http.StatusConflict, fmt.Sprintf("%s%s is already configured", req.Hostname, strings.TrimSuffix(path, "/")))
+			return
+		}
 		writeError(w, http.StatusInternalServerError, "failed to add domain")
 		return
 	}
@@ -231,7 +308,12 @@ func (h *Handler) AddDomain(w http.ResponseWriter, r *http.Request) {
 }
 
 type updateDomainRequest struct {
-	Hostname       string          `json:"hostname"`
+	Hostname string `json:"hostname"`
+	// Pointers, so "field absent" and "field set to root" stay distinguishable. A
+	// client that does not know about paths must leave a domain's path alone, not
+	// silently move it back to the root.
+	Path           *string         `json:"path,omitempty"`
+	StripPath      *bool           `json:"strip_path,omitempty"`
 	SSLEnabled     bool            `json:"ssl_enabled"`
 	ContainerPort  *int32          `json:"container_port,omitempty"`
 	ForceHTTPS     bool            `json:"force_https"`
@@ -291,6 +373,23 @@ func (h *Handler) UpdateDomain(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	path, stripPath := oldDomain.Path, oldDomain.StripPath
+	if req.Path != nil {
+		path = normalizeDomainPath(*req.Path)
+		if reason := validateDomainPath(path); reason != "" {
+			writeError(w, http.StatusBadRequest, reason)
+			return
+		}
+	}
+	if req.StripPath != nil {
+		stripPath = *req.StripPath
+	}
+	// Excludes this row: a domain must not be found to contradict itself.
+	if reason := h.checkHostTLSAgreement(r.Context(), req.Hostname, req.SSLMode, certUUID, domainUUID); reason != "" {
+		writeError(w, http.StatusBadRequest, reason)
+		return
+	}
+
 	params := generated.UpdateDomainParams{
 		ID:             domainUUID,
 		Hostname:       req.Hostname,
@@ -300,11 +399,11 @@ func (h *Handler) UpdateDomain(w http.ResponseWriter, r *http.Request) {
 		SslProvider:    pgtype.Text{String: req.SSLProvider, Valid: req.SSLProvider != ""},
 		CertificateID:  certUUID,
 		AdvancedConfig: req.AdvancedConfig,
-		// Carried over, not defaulted. The update statement writes path
-		// unconditionally, so sending "/" here would quietly move a domain back to
-		// the root every time anyone edited its port or TLS mode.
-		Path:      oldDomain.Path,
-		StripPath: oldDomain.StripPath,
+		// Carried over unless the request says otherwise. The update statement
+		// writes path unconditionally, so defaulting here would quietly move a
+		// domain back to the root every time anyone edited its port or TLS mode.
+		Path:      path,
+		StripPath: stripPath,
 	}
 	if req.ContainerPort != nil {
 		params.ContainerPort = pgtype.Int4{Int32: *req.ContainerPort, Valid: true}

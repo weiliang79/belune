@@ -131,3 +131,10 @@ JOIN applications a ON a.id = d.application_id
 JOIN projects p ON p.id = a.project_id
 LEFT JOIN certificates c ON c.id = d.certificate_id
 ORDER BY d.hostname;
+
+-- name: ListDomainsByHostname :many
+-- Every row serving a hostname — one per path since migration 000039.
+-- Used to enforce that they agree about TLS: they share a single certificate,
+-- so "shop.com/ is automatic but shop.com/api is off" is not a configuration,
+-- it is a contradiction.
+SELECT * FROM domains WHERE hostname = $1 ORDER BY created_at ASC;

@@ -368,6 +368,10 @@ export type TLSStatus =
   | "local";
 
 export interface DomainExpanded extends Domain {
+  /** The public URL prefix this domain answers on; "/" means the whole host. */
+  path: string;
+  /** Whether the prefix is removed before the app sees the request. */
+  strip_path: boolean;
   container_port?: number | null;
   force_https: boolean;
   ssl_mode: string;

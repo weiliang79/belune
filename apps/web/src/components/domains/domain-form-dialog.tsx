@@ -132,6 +132,11 @@ function DomainForm({
   const form = useForm({
     defaultValues: {
       hostname: domain?.hostname ?? "",
+      // Empty, not "/": a pre-filled slash means the operator who types "/api"
+      // ends up with "//api". The placeholder shows the default instead, and a
+      // blank field is normalised to "/" on submit.
+      path: domain?.path && domain.path !== "/" ? domain.path : "",
+      strip_path: domain?.strip_path ?? false,
       ssl_mode: domain?.ssl_mode ?? "automatic",
       container_port: domain?.container_port?.toString() ?? "",
       force_https: domain?.force_https ?? true,
@@ -143,11 +148,20 @@ function DomainForm({
         ? parseInt(value.container_port, 10)
         : null;
 
+      // The server normalises the path (roots it, drops a trailing slash), so a
+      // blank field means the whole host rather than an error.
+      const path = value.path.trim() || "/";
+      // Stripping "/" is meaningless — there is nothing to strip — and would only
+      // travel to the server to be ignored.
+      const stripPath = path === "/" ? false : value.strip_path;
+
       const action =
         isEdit && domain
           ? updateDomain.mutateAsync({
               domainId: domain.id,
               hostname: trimmed,
+              path,
+              strip_path: stripPath,
               ssl_mode: value.ssl_mode,
               force_https: value.force_https,
               container_port: portNum,
@@ -155,6 +169,8 @@ function DomainForm({
             })
           : addDomain.mutateAsync({
               hostname: trimmed,
+              path,
+              strip_path: stripPath,
               ssl_enabled: value.ssl_mode !== "off",
               ssl_mode: value.ssl_mode,
               force_https: value.force_https,
@@ -226,6 +242,72 @@ function DomainForm({
                 </div>
               );
             }}
+          />
+          <form.Field
+            name="path"
+            validators={{
+              onChange: z
+                .string()
+                .refine(
+                  (v) => !v.trim() || /^\/?[A-Za-z0-9\-._~/]*$/.test(v.trim()),
+                  "Only letters, digits and - . _ ~ / — no wildcards",
+                )
+                .refine(
+                  (v) => !v.includes("*"),
+                  "No wildcard: /api already covers everything beneath it",
+                ),
+            }}
+            children={(field) => {
+              const error = fieldError(field.state.meta.errors);
+              return (
+                <div className="space-y-2">
+                  <Label htmlFor="path">Path</Label>
+                  <Input
+                    id="path"
+                    placeholder="/"
+                    value={field.state.value}
+                    onBlur={field.handleBlur}
+                    onChange={(e) => field.handleChange(e.target.value)}
+                  />
+                  {error ? (
+                    <p className="text-destructive text-xs">{error}</p>
+                  ) : (
+                    <p className="text-muted-foreground text-xs">
+                      The prefix this app answers on. Leave blank to serve the
+                      whole hostname, or use /api to share one hostname between
+                      several apps.
+                    </p>
+                  )}
+                </div>
+              );
+            }}
+          />
+          <form.Subscribe
+            selector={(state) => state.values.path}
+            children={(path) =>
+              path.trim() && path.trim() !== "/" ? (
+                <form.Field
+                  name="strip_path"
+                  children={(field) => (
+                    <div className="space-y-1">
+                      <label className="flex items-center gap-2 text-sm">
+                        <input
+                          type="checkbox"
+                          checked={field.state.value}
+                          onChange={(e) => field.handleChange(e.target.checked)}
+                        />
+                        Strip the prefix before forwarding
+                      </label>
+                      <p className="text-muted-foreground text-xs">
+                        The app receives /users instead of{" "}
+                        {path.trim().replace(/\/$/, "")}/users. Turn this off if
+                        the app already expects to be mounted under the prefix.
+                      </p>
+                    </div>
+                  )}
+                />
+              ) : null
+            }
           />
           <form.Field
             name="container_port"

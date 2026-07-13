@@ -354,6 +354,57 @@ func (q *Queries) ListDomainsByApplicationWithFeatures(ctx context.Context, appl
 	return items, nil
 }
 
+const listDomainsByHostname = `-- name: ListDomainsByHostname :many
+SELECT id, application_id, hostname, ssl_enabled, caddy_config_id, container_port, force_https, ssl_mode, ssl_provider, ssl_credentials_encrypted, advanced_config, verified_at, created_at, certificate_id, tls_status, tls_issuer, tls_not_after, tls_last_checked_at, tls_error, tls_advisory, path, strip_path FROM domains WHERE hostname = $1 ORDER BY created_at ASC
+`
+
+// Every row serving a hostname — one per path since migration 000039.
+// Used to enforce that they agree about TLS: they share a single certificate,
+// so "shop.com/ is automatic but shop.com/api is off" is not a configuration,
+// it is a contradiction.
+func (q *Queries) ListDomainsByHostname(ctx context.Context, hostname string) ([]Domain, error) {
+	rows, err := q.db.Query(ctx, listDomainsByHostname, hostname)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Domain{}
+	for rows.Next() {
+		var i Domain
+		if err := rows.Scan(
+			&i.ID,
+			&i.ApplicationID,
+			&i.Hostname,
+			&i.SslEnabled,
+			&i.CaddyConfigID,
+			&i.ContainerPort,
+			&i.ForceHttps,
+			&i.SslMode,
+			&i.SslProvider,
+			&i.SslCredentialsEncrypted,
+			&i.AdvancedConfig,
+			&i.VerifiedAt,
+			&i.CreatedAt,
+			&i.CertificateID,
+			&i.TlsStatus,
+			&i.TlsIssuer,
+			&i.TlsNotAfter,
+			&i.TlsLastCheckedAt,
+			&i.TlsError,
+			&i.TlsAdvisory,
+			&i.Path,
+			&i.StripPath,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listDomainsForTLSProbe = `-- name: ListDomainsForTLSProbe :many
 SELECT DISTINCT ON (hostname) id, hostname, ssl_mode, ssl_enabled, tls_status, tls_error
 FROM domains
