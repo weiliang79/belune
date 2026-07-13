@@ -43,9 +43,13 @@ export function forwardedPath(
     p = p.slice(publicPath.length) || "/";
   }
   if (internalPath) {
-    // "/app" + "/" would give "/app/", which is not what the app is asked for on
-    // its own root; "/app" + "/users" gives "/app/users", which is.
-    p = p === "/" ? internalPath : internalPath + p;
+    // Plain concatenation, with no special case for the root. Caddy's rewrite is
+    // literally `<internal>{http.request.uri}`, so a request that stripped down
+    // to "/" becomes "/gf/" — with the trailing slash — and not "/gf". An earlier
+    // version of this function "tidied" that away and the preview then disagreed
+    // with the proxy about what the app receives, which is the one thing a
+    // preview must never do.
+    p = internalPath + p;
   }
   return p || "/";
 }

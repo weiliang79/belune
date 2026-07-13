@@ -1,0 +1,80 @@
+{
+  "_comment": [
+    "The contract for path forwarding, shared by two implementations that must never disagree:",
+    "the Go route builder (internal/proxy/caddy/routes.go), which renders the Caddy handlers that",
+    "actually rewrite the request, and the TypeScript preview (lib/domain-path.ts), which tells the",
+    "operator what those handlers will do before they save.",
+    "",
+    "Nothing else keeps them in step. If the preview drifts from the builder it does not fail, it",
+    "lies — and a preview that confidently shows the wrong answer is worse than no preview at all.",
+    "",
+    "Every `expected` value below was observed against a real Caddy, proxying to an upstream that",
+    "echoes back the URI it received. They are not derived from either implementation."
+  ],
+  "cases": [
+    {
+      "name": "nothing configured — forwarded unchanged",
+      "path": "/",
+      "strip_path": false,
+      "internal_path": "",
+      "request": "/users",
+      "expected": "/users"
+    },
+    {
+      "name": "strip only — the app does not know it is behind a prefix",
+      "path": "/strip",
+      "strip_path": true,
+      "internal_path": "",
+      "request": "/strip/users",
+      "expected": "/users"
+    },
+    {
+      "name": "path without strip — the app expects to be mounted under the prefix",
+      "path": "/raw",
+      "strip_path": false,
+      "internal_path": "",
+      "request": "/raw/users",
+      "expected": "/raw/users"
+    },
+    {
+      "name": "internal path only — the app insists on its own base path (Grafana under /gf)",
+      "path": "/grafana",
+      "strip_path": false,
+      "internal_path": "/gf",
+      "request": "/grafana/users",
+      "expected": "/gf/grafana/users"
+    },
+    {
+      "name": "strip then prepend — a genuine remap (Dokploy's own documented example)",
+      "path": "/public",
+      "strip_path": true,
+      "internal_path": "/app/v2",
+      "request": "/public/api/users",
+      "expected": "/app/v2/api/users"
+    },
+    {
+      "name": "query string survives the rewrite",
+      "path": "/public",
+      "strip_path": true,
+      "internal_path": "/app/v2",
+      "request": "/public/api?page=2",
+      "expected": "/app/v2/api?page=2"
+    },
+    {
+      "name": "the app's own root, stripped, is / and not the empty string",
+      "path": "/strip",
+      "strip_path": true,
+      "internal_path": "",
+      "request": "/strip",
+      "expected": "/"
+    },
+    {
+      "name": "internal path on the app's own root keeps the trailing slash Caddy produces",
+      "path": "/mounted",
+      "strip_path": true,
+      "internal_path": "/gf",
+      "request": "/mounted",
+      "expected": "/gf/"
+    }
+  ]
+}
