@@ -121,6 +121,15 @@ type ProxyManager interface {
 	// lost when Caddy restarts, so the reconciler re-asserts them each pass.
 	SyncCertificates(ctx context.Context, certs []HostCertificate) error
 
+	// UsesInternalIssuer reports whether the proxy is *configured* to issue from
+	// its own internal CA (Caddy's local_certs) rather than from a public ACME CA.
+	//
+	// This has to be read from the proxy's configuration, not inferred from the
+	// certificate it serves: a production Caddy that has failed to get a Let's
+	// Encrypt certificate also serves an internal one, and those two situations
+	// must not look the same. One is a working dev box; the other is broken HTTPS.
+	UsesInternalIssuer(ctx context.Context) (bool, error)
+
 	// SyncAutoHTTPS declares the hostnames excluded from automatic HTTPS — skip
 	// for ssl_mode=off (no certificate at all) and skipCertificates for
 	// ssl_mode=custom (the operator supplies it) — and re-asserts the server-level

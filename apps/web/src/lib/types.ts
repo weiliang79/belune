@@ -361,7 +361,11 @@ export type TLSStatus =
   | "active"
   | "expiring"
   | "expired"
-  | "failed";
+  | "failed"
+  /** The proxy's own internal CA, when it is configured to issue that way (dev).
+   *  Not the same as pending, which is that certificate when a public CA was
+   *  expected and has not delivered. */
+  | "local";
 
 export interface DomainExpanded extends Domain {
   container_port?: number | null;

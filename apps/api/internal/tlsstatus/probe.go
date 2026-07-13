@@ -20,6 +20,11 @@ const (
 	StatusExpiring = "expiring"
 	StatusExpired  = "expired"
 	StatusFailed   = "failed"
+	// StatusLocal is a certificate from the proxy's own internal CA, when the
+	// proxy is configured to issue that way (dev). Distinct from pending, which is
+	// the same certificate seen when a *public* CA was expected and has not
+	// delivered — a permanent state in dev, a broken one in production.
+	StatusLocal = "local"
 )
 
 // SSLModeOff mirrors proxy.SSLModeOff. Duplicated rather than imported to keep
@@ -80,7 +85,11 @@ func Probe(ctx context.Context, addr, hostname string) (*x509.Certificate, error
 // ACME failure lifted from Caddy's logs, a DNS mismatch). It is what separates
 // "no certificate yet, still working on it" from "no certificate, and here is
 // why" — the distinction the whole feature exists to make.
-func Derive(sslMode string, leaf *x509.Certificate, hostname string, dialErr error, recordedErr string, now time.Time) ProbeResult {
+// internalIssuer says whether the proxy is configured to issue from its own CA
+// (see ProxyManager.UsesInternalIssuer). It is the only thing that distinguishes
+// a healthy dev box from production HTTPS that has silently failed, because both
+// serve the same certificate.
+func Derive(sslMode string, leaf *x509.Certificate, hostname string, dialErr error, recordedErr string, now time.Time, internalIssuer bool) ProbeResult {
 	if sslMode == SSLModeOff {
 		return ProbeResult{Status: StatusDisabled}
 	}
@@ -110,10 +119,23 @@ func Derive(sslMode string, leaf *x509.Certificate, hostname string, dialErr err
 		Error:    recordedErr,
 	}
 
-	// Caddy's own CA is a placeholder while ACME is still working (or failing).
-	// Reporting it as active would tell the user HTTPS is fine when no browser
-	// would trust it.
+	// A certificate from Caddy's own CA means one of two very different things,
+	// and the difference is not visible in the certificate.
+	//
+	// If the proxy is *configured* to issue internally (local_certs, i.e. dev),
+	// this is the finished state — there is no public CA coming, and pending would
+	// never resolve. Say so.
+	//
+	// Otherwise a public CA was expected and has not delivered: issuance is still
+	// working, or it has failed. Reporting that as active would tell the operator
+	// HTTPS is fine when no browser would trust the certificate, which is the exact
+	// lie this subsystem exists to prevent. It stays pending (or failed).
 	if strings.Contains(leaf.Issuer.CommonName, caddyInternalIssuer) {
+		if internalIssuer {
+			res.Status = StatusLocal
+			res.Error = ""
+			return res
+		}
 		res.Status = StatusPending
 		if recordedErr != "" {
 			res.Status = StatusFailed

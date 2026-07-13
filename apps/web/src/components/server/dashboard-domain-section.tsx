@@ -65,6 +65,8 @@ const STATUS_STYLES: Record<
   expired: { label: "Expired", variant: "destructive" },
   failed: { label: "Failed", variant: "destructive" },
   disabled: { label: "HTTPS off", variant: "outline" },
+  // Dev: Caddy issues from its own CA, so this is the finished state.
+  local: { label: "Local certificate", variant: "secondary" },
   unknown: { label: "Not set", variant: "secondary" },
 };
 

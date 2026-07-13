@@ -60,6 +60,7 @@ func (p *failingProxy) SyncCertificates(_ context.Context, _ []proxy.HostCertifi
 	return nil
 }
 func (p *failingProxy) SetDashboardRoute(_ context.Context, _, _ string) error    { return nil }
+func (p *failingProxy) UsesInternalIssuer(_ context.Context) (bool, error)        { return false, nil }
 func (p *failingProxy) ListRoutes(_ context.Context) ([]proxy.RouteConfig, error) { return nil, nil }
 
 // createFailRuntime wraps MockContainerRuntime so CreateContainer always fails.

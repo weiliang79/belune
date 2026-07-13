@@ -38,6 +38,10 @@ const STYLES: Record<
   expired: { label: "Expired", variant: "destructive" },
   failed: { label: "Failed", variant: "destructive" },
   disabled: { label: "Off", variant: "outline" },
+  // The proxy is configured to issue from its own CA (dev). A real, finished
+  // state — not a step on the way to a public certificate — but the certificate
+  // is trusted by nothing, so it is not dressed up as Active.
+  local: { label: "Local", variant: "secondary" },
   unknown: { label: "Checking…", variant: "secondary" },
 };
 

@@ -117,7 +117,7 @@ func TestDerive(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			got := Derive(tc.sslMode, tc.leaf, host, tc.dialErr, tc.recordedErr, now)
+			got := Derive(tc.sslMode, tc.leaf, host, tc.dialErr, tc.recordedErr, now, false)
 			assert.Equal(t, tc.wantStatus, got.Status)
 			if tc.wantErr != "" {
 				assert.Contains(t, got.Error, tc.wantErr)
@@ -177,9 +177,43 @@ func TestDeriveIssuerName(t *testing.T) {
 				DNSNames: []string{host},
 				NotAfter: expiry,
 			}
-			res := Derive("custom", leaf, host, nil, "", now)
+			res := Derive("custom", leaf, host, nil, "", now, false)
 			assert.Equal(t, StatusActive, res.Status)
 			assert.Equal(t, tt.wantIssuer, res.Issuer)
 		})
 	}
+}
+
+// The same certificate means two opposite things depending on how the proxy is
+// configured, and the certificate itself cannot tell them apart. This is the
+// whole reason "local" is decided from Caddy's configured issuer rather than
+// from the issuer name on the wire — a production Caddy whose ACME issuance has
+// failed serves exactly this certificate, and reporting that as a healthy local
+// setup would be the lie the pipeline exists to prevent.
+func TestDeriveInternalCertificate(t *testing.T) {
+	now := time.Date(2026, 7, 13, 12, 0, 0, 0, time.UTC)
+	host := "app.belune.local"
+	internal := leafFor("Caddy Local Authority - ECC Intermediate", []string{host}, now.Add(12*time.Hour))
+
+	t.Run("proxy issues internally: this is the finished state", func(t *testing.T) {
+		res := Derive("automatic", internal, host, nil, "", now, true)
+		assert.Equal(t, StatusLocal, res.Status)
+	})
+
+	t.Run("a public CA was expected: still pending, not local", func(t *testing.T) {
+		res := Derive("automatic", internal, host, nil, "", now, false)
+		assert.Equal(t, StatusPending, res.Status)
+	})
+
+	t.Run("a public CA was expected and failed: failed, not local", func(t *testing.T) {
+		res := Derive("automatic", internal, host, nil, "DNS problem: NXDOMAIN", now, false)
+		assert.Equal(t, StatusFailed, res.Status)
+		assert.Equal(t, "DNS problem: NXDOMAIN", res.Error)
+	})
+
+	t.Run("a real certificate is active regardless of the proxy's issuer setting", func(t *testing.T) {
+		real := leafFor("YE2", []string{host}, now.Add(80*24*time.Hour))
+		assert.Equal(t, StatusActive, Derive("automatic", real, host, nil, "", now, true).Status)
+		assert.Equal(t, StatusActive, Derive("automatic", real, host, nil, "", now, false).Status)
+	})
 }

@@ -215,3 +215,64 @@ func pemCertsEqual(a, b []tlsPEMCert) bool {
 	}
 	return true
 }
+
+// automationPath is where Caddy keeps its issuance policy. It is absent on a
+// stock/production Caddy (which uses the default public ACME issuers) and only
+// materialises when something — local_certs, in our case — configures one.
+const automationPath = "/config/apps/tls/automation"
+
+// UsesInternalIssuer reports whether Caddy is configured to issue certificates
+// from its own internal CA, which is what `local_certs` sets up in development.
+//
+// Read from the configuration, never inferred from the certificate on the wire:
+// a production Caddy whose ACME issuance has failed *also* serves an internal
+// certificate, and conflating the two would report broken public HTTPS as a
+// perfectly healthy local setup — precisely the lie the TLS status pipeline
+// exists to prevent.
+func (c *Client) UsesInternalIssuer(ctx context.Context) (used bool, err error) {
+	defer func() { metrics.RecordCaddyCall("uses_internal_issuer", err) }()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.adminURL+automationPath, nil)
+	if err != nil {
+		return false, fmt.Errorf("create request: %w", err)
+	}
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		if isTransportError(err) {
+			return false, fmt.Errorf("%w: %v", ErrCaddyUnreachable, err)
+		}
+		return false, fmt.Errorf("get tls automation: %w", err)
+	}
+	defer resp.Body.Close()
+
+	// No automation configured is the production case: Caddy falls back to its
+	// default public issuers. Caddy expresses "absent" as a 400 on the traversal
+	// or as a 200 with a null body, depending on how much of the tls app exists —
+	// the same shapes listPEMCerts has to cope with. Neither is an error.
+	if resp.StatusCode == http.StatusNotFound || resp.StatusCode == http.StatusBadRequest {
+		return false, nil
+	}
+	if resp.StatusCode >= 400 {
+		body, _ := io.ReadAll(resp.Body)
+		return false, fmt.Errorf("get tls automation: HTTP %d: %s", resp.StatusCode, string(body))
+	}
+
+	var automation struct {
+		Policies []struct {
+			Issuers []struct {
+				Module string `json:"module"`
+			} `json:"issuers"`
+		} `json:"policies"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&automation); err != nil {
+		return false, fmt.Errorf("decode tls automation: %w", err)
+	}
+	for _, p := range automation.Policies {
+		for _, iss := range p.Issuers {
+			if iss.Module == "internal" {
+				return true, nil
+			}
+		}
+	}
+	return false, nil
+}

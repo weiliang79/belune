@@ -144,8 +144,15 @@ func (h *Handler) GetDashboardTLS(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	internalIssuer := false
+	if h.proxy != nil {
+		if v, err := h.proxy.UsesInternalIssuer(r.Context()); err == nil {
+			internalIssuer = v
+		}
+	}
+
 	leaf, dialErr := tlsstatus.Probe(r.Context(), h.cfg.CaddyTLSProbeAddr, domain)
-	res := tlsstatus.Derive(sslMode, leaf, domain, dialErr, "", time.Now())
+	res := tlsstatus.Derive(sslMode, leaf, domain, dialErr, "", time.Now(), internalIssuer)
 
 	out := dashboardTLSResponse{
 		Domain:    domain,

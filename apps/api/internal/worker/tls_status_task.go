@@ -45,6 +45,17 @@ func (h *TaskHandler) HandleTLSStatusSweep(ctx context.Context) {
 // probeDomain probes one domain and persists the result, notifying on a
 // transition into a state the operator needs to act on.
 func (h *TaskHandler) probeDomain(ctx context.Context, d generated.ListDomainsForTLSProbeRow) {
+	// Whether the proxy issues from its own CA decides what an internal certificate
+	// means: the finished state on a dev box, or public HTTPS that has not worked
+	// on a real one. Best-effort — if the proxy cannot say, assume a public CA is
+	// expected, which is the conservative reading.
+	internalIssuer := false
+	if h.Proxy != nil {
+		if v, err := h.Proxy.UsesInternalIssuer(ctx); err == nil {
+			internalIssuer = v
+		}
+	}
+
 	recordedErr := d.TlsError.String
 
 	// Check DNS before the handshake: a hostname pointing somewhere else can
@@ -67,7 +78,7 @@ func (h *TaskHandler) probeDomain(ctx context.Context, d generated.ListDomainsFo
 	}
 
 	leaf, dialErr := tlsstatus.Probe(ctx, h.Config.CaddyTLSProbeAddr, d.Hostname)
-	res := tlsstatus.Derive(d.SslMode, leaf, d.Hostname, dialErr, recordedErr, time.Now())
+	res := tlsstatus.Derive(d.SslMode, leaf, d.Hostname, dialErr, recordedErr, time.Now(), internalIssuer)
 
 	// The advisory is persisted to its own column, never to tls_error. Writing it
 	// to tls_error made it indistinguishable from a real ACME failure when the

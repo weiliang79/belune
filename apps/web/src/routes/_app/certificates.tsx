@@ -66,13 +66,26 @@ function daysUntil(iso: string | null): number | null {
   );
 }
 
-function ExpiryCell({ notAfter }: { notAfter: string | null }) {
+// `quiet` suppresses the expiry warning. Caddy's internal certificates last 12
+// hours and are renewed automatically, so a local domain would sit permanently
+// on a red "0d left" — an alarm that means nothing and trains the operator to
+// ignore the one that does.
+function ExpiryCell({
+  notAfter,
+  quiet,
+}: {
+  notAfter: string | null;
+  quiet?: boolean;
+}) {
   const days = daysUntil(notAfter);
   if (days === null) {
     return <span className="text-muted-foreground">—</span>;
   }
 
   const formatted = new Date(notAfter!).toLocaleDateString();
+  if (quiet) {
+    return <span className="text-muted-foreground">{formatted}</span>;
+  }
   if (days < 0) {
     return <Badge variant="destructive">Expired {formatted}</Badge>;
   }
@@ -494,6 +507,10 @@ const TLS_STATUS_STYLES: Record<
   expired: { label: "Expired", variant: "destructive" },
   failed: { label: "Failed", variant: "destructive" },
   disabled: { label: "Off", variant: "outline" },
+  // The proxy is configured to issue from its own CA (dev). A real, finished
+  // state — not a step on the way to a public certificate — but the certificate
+  // is trusted by nothing, so it is not dressed up as Active.
+  local: { label: "Local", variant: "secondary" },
   unknown: { label: "Checking…", variant: "secondary" },
 };
 
@@ -564,7 +581,12 @@ function DomainTLSTable() {
       {
         accessorKey: "tls_not_after",
         header: "Expires",
-        cell: ({ row }) => <ExpiryCell notAfter={row.original.tls_not_after} />,
+        cell: ({ row }) => (
+          <ExpiryCell
+            notAfter={row.original.tls_not_after}
+            quiet={row.original.tls_status === "local"}
+          />
+        ),
       },
     ],
     [],
