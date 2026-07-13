@@ -79,6 +79,7 @@ func TestRealStack_ReconcilerPushesCustomCertificate(t *testing.T) {
 	// …and points a running application's domain at it in custom mode.
 	app := seedRunningApp(t, ctx, queries)
 	_, err = queries.CreateDomain(ctx, generated.CreateDomainParams{
+		Path:          "/",
 		ApplicationID: app.ID,
 		Hostname:      reconcileHost,
 		SslEnabled:    true,

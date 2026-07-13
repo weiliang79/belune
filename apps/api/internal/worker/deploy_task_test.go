@@ -206,6 +206,7 @@ func TestHandleDeployTask_CompensatesOnProxyFailure(t *testing.T) {
 
 	// Wire a domain so wireProxy enters its loop and our failing proxy fires.
 	_, err := testQueries.CreateDomain(context.Background(), generated.CreateDomainParams{
+		Path:          "/",
 		ApplicationID: app.ID,
 		Hostname:      "broken.example.com",
 		SslEnabled:    false,

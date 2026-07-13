@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"regexp"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -56,6 +57,28 @@ func validateSSLMode(mode string) string {
 		return "invalid ssl_mode: must be automatic, custom, or off"
 	}
 	return ""
+}
+
+// normalizeDomainPath puts a public path prefix into the one shape the database
+// and Caddy both expect: rooted, and without a trailing slash unless it is the
+// root itself.
+//
+// The empty string is the case that matters. `domains.path` is NOT NULL with a
+// DEFAULT of '/', but sqlc always sends the column explicitly, so an unset field
+// arrives as '' — which is not a default, it is a check-constraint violation at
+// insert time. Every caller goes through here so that cannot happen.
+func normalizeDomainPath(p string) string {
+	p = strings.TrimSpace(p)
+	if p == "" {
+		return "/"
+	}
+	if !strings.HasPrefix(p, "/") {
+		p = "/" + p
+	}
+	if p != "/" {
+		p = strings.TrimRight(p, "/")
+	}
+	return p
 }
 
 func (h *Handler) ListDomains(w http.ResponseWriter, r *http.Request) {
@@ -148,6 +171,12 @@ func (h *Handler) AddDomain(w http.ResponseWriter, r *http.Request) {
 		SslProvider:    pgtype.Text{String: req.SSLProvider, Valid: req.SSLProvider != ""},
 		CertificateID:  certUUID,
 		AdvancedConfig: req.AdvancedConfig,
+		// The API does not accept a path yet — every domain is created at the
+		// root, which is what a host-only route already did. Wiring the request
+		// field in is the next phase; the column exists now so the route builder
+		// and reconciler can be taught about it without a second migration.
+		Path:      normalizeDomainPath(""),
+		StripPath: false,
 	}
 	if req.ContainerPort != nil {
 		params.ContainerPort = pgtype.Int4{Int32: *req.ContainerPort, Valid: true}
@@ -271,6 +300,11 @@ func (h *Handler) UpdateDomain(w http.ResponseWriter, r *http.Request) {
 		SslProvider:    pgtype.Text{String: req.SSLProvider, Valid: req.SSLProvider != ""},
 		CertificateID:  certUUID,
 		AdvancedConfig: req.AdvancedConfig,
+		// Carried over, not defaulted. The update statement writes path
+		// unconditionally, so sending "/" here would quietly move a domain back to
+		// the root every time anyone edited its port or TLS mode.
+		Path:      oldDomain.Path,
+		StripPath: oldDomain.StripPath,
 	}
 	if req.ContainerPort != nil {
 		params.ContainerPort = pgtype.Int4{Int32: *req.ContainerPort, Valid: true}

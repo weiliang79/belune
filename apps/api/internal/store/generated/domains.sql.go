@@ -12,9 +12,9 @@ import (
 )
 
 const createDomain = `-- name: CreateDomain :one
-INSERT INTO domains (application_id, hostname, ssl_enabled, container_port, force_https, ssl_mode, ssl_provider, ssl_credentials_encrypted, certificate_id, advanced_config)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-RETURNING id, application_id, hostname, ssl_enabled, caddy_config_id, container_port, force_https, ssl_mode, ssl_provider, ssl_credentials_encrypted, advanced_config, verified_at, created_at, certificate_id, tls_status, tls_issuer, tls_not_after, tls_last_checked_at, tls_error, tls_advisory
+INSERT INTO domains (application_id, hostname, ssl_enabled, container_port, force_https, ssl_mode, ssl_provider, ssl_credentials_encrypted, certificate_id, advanced_config, path, strip_path)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+RETURNING id, application_id, hostname, ssl_enabled, caddy_config_id, container_port, force_https, ssl_mode, ssl_provider, ssl_credentials_encrypted, advanced_config, verified_at, created_at, certificate_id, tls_status, tls_issuer, tls_not_after, tls_last_checked_at, tls_error, tls_advisory, path, strip_path
 `
 
 type CreateDomainParams struct {
@@ -28,6 +28,8 @@ type CreateDomainParams struct {
 	SslCredentialsEncrypted []byte      `json:"ssl_credentials_encrypted"`
 	CertificateID           pgtype.UUID `json:"certificate_id"`
 	AdvancedConfig          []byte      `json:"advanced_config"`
+	Path                    string      `json:"path"`
+	StripPath               bool        `json:"strip_path"`
 }
 
 func (q *Queries) CreateDomain(ctx context.Context, arg CreateDomainParams) (Domain, error) {
@@ -42,6 +44,8 @@ func (q *Queries) CreateDomain(ctx context.Context, arg CreateDomainParams) (Dom
 		arg.SslCredentialsEncrypted,
 		arg.CertificateID,
 		arg.AdvancedConfig,
+		arg.Path,
+		arg.StripPath,
 	)
 	var i Domain
 	err := row.Scan(
@@ -65,6 +69,8 @@ func (q *Queries) CreateDomain(ctx context.Context, arg CreateDomainParams) (Dom
 		&i.TlsLastCheckedAt,
 		&i.TlsError,
 		&i.TlsAdvisory,
+		&i.Path,
+		&i.StripPath,
 	)
 	return i, err
 }
@@ -79,7 +85,7 @@ func (q *Queries) DeleteDomain(ctx context.Context, id pgtype.UUID) error {
 }
 
 const getDomain = `-- name: GetDomain :one
-SELECT id, application_id, hostname, ssl_enabled, caddy_config_id, container_port, force_https, ssl_mode, ssl_provider, ssl_credentials_encrypted, advanced_config, verified_at, created_at, certificate_id, tls_status, tls_issuer, tls_not_after, tls_last_checked_at, tls_error, tls_advisory FROM domains WHERE id = $1
+SELECT id, application_id, hostname, ssl_enabled, caddy_config_id, container_port, force_https, ssl_mode, ssl_provider, ssl_credentials_encrypted, advanced_config, verified_at, created_at, certificate_id, tls_status, tls_issuer, tls_not_after, tls_last_checked_at, tls_error, tls_advisory, path, strip_path FROM domains WHERE id = $1
 `
 
 func (q *Queries) GetDomain(ctx context.Context, id pgtype.UUID) (Domain, error) {
@@ -106,14 +112,22 @@ func (q *Queries) GetDomain(ctx context.Context, id pgtype.UUID) (Domain, error)
 		&i.TlsLastCheckedAt,
 		&i.TlsError,
 		&i.TlsAdvisory,
+		&i.Path,
+		&i.StripPath,
 	)
 	return i, err
 }
 
 const getDomainByHostname = `-- name: GetDomainByHostname :one
-SELECT id, application_id, hostname, ssl_enabled, caddy_config_id, container_port, force_https, ssl_mode, ssl_provider, ssl_credentials_encrypted, advanced_config, verified_at, created_at, certificate_id, tls_status, tls_issuer, tls_not_after, tls_last_checked_at, tls_error, tls_advisory FROM domains WHERE hostname = $1
+SELECT id, application_id, hostname, ssl_enabled, caddy_config_id, container_port, force_https, ssl_mode, ssl_provider, ssl_credentials_encrypted, advanced_config, verified_at, created_at, certificate_id, tls_status, tls_issuer, tls_not_after, tls_last_checked_at, tls_error, tls_advisory, path, strip_path FROM domains WHERE hostname = $1 ORDER BY created_at ASC LIMIT 1
 `
 
+// hostname stopped being unique in migration 000039: one host can now be split
+// across applications by path. This returns the oldest row for the host, which
+// is deterministic but path-blind — fine for the callers that only ask "is this
+// hostname known to us?" or that act on the host as a whole (TLS is per-host,
+// not per-path). It is NOT the right lookup for attributing a single request to
+// an application; that needs the URI too. See GetDomainForRequest.
 func (q *Queries) GetDomainByHostname(ctx context.Context, hostname string) (Domain, error) {
 	row := q.db.QueryRow(ctx, getDomainByHostname, hostname)
 	var i Domain
@@ -138,6 +152,60 @@ func (q *Queries) GetDomainByHostname(ctx context.Context, hostname string) (Dom
 		&i.TlsLastCheckedAt,
 		&i.TlsError,
 		&i.TlsAdvisory,
+		&i.Path,
+		&i.StripPath,
+	)
+	return i, err
+}
+
+const getDomainForRequest = `-- name: GetDomainForRequest :one
+SELECT id, application_id, hostname, ssl_enabled, caddy_config_id, container_port, force_https, ssl_mode, ssl_provider, ssl_credentials_encrypted, advanced_config, verified_at, created_at, certificate_id, tls_status, tls_issuer, tls_not_after, tls_last_checked_at, tls_error, tls_advisory, path, strip_path FROM domains
+WHERE hostname = $1
+  AND (
+    $2::text = rtrim(path, '/')
+    OR $2::text LIKE rtrim(path, '/') || '/%'
+  )
+ORDER BY length(path) DESC
+LIMIT 1
+`
+
+type GetDomainForRequestParams struct {
+	Hostname   string `json:"hostname"`
+	RequestUri string `json:"request_uri"`
+}
+
+// Resolves one request (host + URI) to the domain serving it, by longest path
+// prefix — the same first-match-wins order Caddy itself applies, so the request
+// log agrees with the proxy about which app answered.
+//
+// rtrim strips the trailing slash so '/' becomes ” and matches everything,
+// while '/api' matches '/api' exactly and '/api/...' but never '/apifoo'.
+func (q *Queries) GetDomainForRequest(ctx context.Context, arg GetDomainForRequestParams) (Domain, error) {
+	row := q.db.QueryRow(ctx, getDomainForRequest, arg.Hostname, arg.RequestUri)
+	var i Domain
+	err := row.Scan(
+		&i.ID,
+		&i.ApplicationID,
+		&i.Hostname,
+		&i.SslEnabled,
+		&i.CaddyConfigID,
+		&i.ContainerPort,
+		&i.ForceHttps,
+		&i.SslMode,
+		&i.SslProvider,
+		&i.SslCredentialsEncrypted,
+		&i.AdvancedConfig,
+		&i.VerifiedAt,
+		&i.CreatedAt,
+		&i.CertificateID,
+		&i.TlsStatus,
+		&i.TlsIssuer,
+		&i.TlsNotAfter,
+		&i.TlsLastCheckedAt,
+		&i.TlsError,
+		&i.TlsAdvisory,
+		&i.Path,
+		&i.StripPath,
 	)
 	return i, err
 }
@@ -157,7 +225,7 @@ func (q *Queries) GetDomainOwnerUserID(ctx context.Context, id pgtype.UUID) (pgt
 }
 
 const listDomainsByApplication = `-- name: ListDomainsByApplication :many
-SELECT id, application_id, hostname, ssl_enabled, caddy_config_id, container_port, force_https, ssl_mode, ssl_provider, ssl_credentials_encrypted, advanced_config, verified_at, created_at, certificate_id, tls_status, tls_issuer, tls_not_after, tls_last_checked_at, tls_error, tls_advisory FROM domains WHERE application_id = $1 ORDER BY created_at DESC
+SELECT id, application_id, hostname, ssl_enabled, caddy_config_id, container_port, force_https, ssl_mode, ssl_provider, ssl_credentials_encrypted, advanced_config, verified_at, created_at, certificate_id, tls_status, tls_issuer, tls_not_after, tls_last_checked_at, tls_error, tls_advisory, path, strip_path FROM domains WHERE application_id = $1 ORDER BY created_at DESC
 `
 
 func (q *Queries) ListDomainsByApplication(ctx context.Context, applicationID pgtype.UUID) ([]Domain, error) {
@@ -190,6 +258,8 @@ func (q *Queries) ListDomainsByApplication(ctx context.Context, applicationID pg
 			&i.TlsLastCheckedAt,
 			&i.TlsError,
 			&i.TlsAdvisory,
+			&i.Path,
+			&i.StripPath,
 		); err != nil {
 			return nil, err
 		}
@@ -202,7 +272,7 @@ func (q *Queries) ListDomainsByApplication(ctx context.Context, applicationID pg
 }
 
 const listDomainsByApplicationWithFeatures = `-- name: ListDomainsByApplicationWithFeatures :many
-SELECT d.id, d.application_id, d.hostname, d.ssl_enabled, d.caddy_config_id, d.container_port, d.force_https, d.ssl_mode, d.ssl_provider, d.ssl_credentials_encrypted, d.advanced_config, d.verified_at, d.created_at, d.certificate_id, d.tls_status, d.tls_issuer, d.tls_not_after, d.tls_last_checked_at, d.tls_error, d.tls_advisory, COALESCE(
+SELECT d.id, d.application_id, d.hostname, d.ssl_enabled, d.caddy_config_id, d.container_port, d.force_https, d.ssl_mode, d.ssl_provider, d.ssl_credentials_encrypted, d.advanced_config, d.verified_at, d.created_at, d.certificate_id, d.tls_status, d.tls_issuer, d.tls_not_after, d.tls_last_checked_at, d.tls_error, d.tls_advisory, d.path, d.strip_path, COALESCE(
     (SELECT json_agg(json_build_object(
         'id', f.id, 'feature_type', f.feature_type,
         'config', f.config, 'enabled', f.enabled
@@ -235,6 +305,8 @@ type ListDomainsByApplicationWithFeaturesRow struct {
 	TlsLastCheckedAt        pgtype.Timestamptz `json:"tls_last_checked_at"`
 	TlsError                pgtype.Text        `json:"tls_error"`
 	TlsAdvisory             pgtype.Text        `json:"tls_advisory"`
+	Path                    string             `json:"path"`
+	StripPath               bool               `json:"strip_path"`
 	RouteFeatures           interface{}        `json:"route_features"`
 }
 
@@ -268,6 +340,8 @@ func (q *Queries) ListDomainsByApplicationWithFeatures(ctx context.Context, appl
 			&i.TlsLastCheckedAt,
 			&i.TlsError,
 			&i.TlsAdvisory,
+			&i.Path,
+			&i.StripPath,
 			&i.RouteFeatures,
 		); err != nil {
 			return nil, err
@@ -449,9 +523,9 @@ const updateDomain = `-- name: UpdateDomain :one
 UPDATE domains SET
     hostname = $2, ssl_enabled = $3, container_port = $4, force_https = $5,
     ssl_mode = $6, ssl_provider = $7, ssl_credentials_encrypted = $8,
-    certificate_id = $9, advanced_config = $10
+    certificate_id = $9, advanced_config = $10, path = $11, strip_path = $12
 WHERE id = $1
-RETURNING id, application_id, hostname, ssl_enabled, caddy_config_id, container_port, force_https, ssl_mode, ssl_provider, ssl_credentials_encrypted, advanced_config, verified_at, created_at, certificate_id, tls_status, tls_issuer, tls_not_after, tls_last_checked_at, tls_error, tls_advisory
+RETURNING id, application_id, hostname, ssl_enabled, caddy_config_id, container_port, force_https, ssl_mode, ssl_provider, ssl_credentials_encrypted, advanced_config, verified_at, created_at, certificate_id, tls_status, tls_issuer, tls_not_after, tls_last_checked_at, tls_error, tls_advisory, path, strip_path
 `
 
 type UpdateDomainParams struct {
@@ -465,6 +539,8 @@ type UpdateDomainParams struct {
 	SslCredentialsEncrypted []byte      `json:"ssl_credentials_encrypted"`
 	CertificateID           pgtype.UUID `json:"certificate_id"`
 	AdvancedConfig          []byte      `json:"advanced_config"`
+	Path                    string      `json:"path"`
+	StripPath               bool        `json:"strip_path"`
 }
 
 func (q *Queries) UpdateDomain(ctx context.Context, arg UpdateDomainParams) (Domain, error) {
@@ -479,6 +555,8 @@ func (q *Queries) UpdateDomain(ctx context.Context, arg UpdateDomainParams) (Dom
 		arg.SslCredentialsEncrypted,
 		arg.CertificateID,
 		arg.AdvancedConfig,
+		arg.Path,
+		arg.StripPath,
 	)
 	var i Domain
 	err := row.Scan(
@@ -502,6 +580,8 @@ func (q *Queries) UpdateDomain(ctx context.Context, arg UpdateDomainParams) (Dom
 		&i.TlsLastCheckedAt,
 		&i.TlsError,
 		&i.TlsAdvisory,
+		&i.Path,
+		&i.StripPath,
 	)
 	return i, err
 }

@@ -72,6 +72,7 @@ func seedTLSDomain(t *testing.T, ctx context.Context, sslMode string, certID pgt
 	app, _ := seedApp(t)
 
 	domain, err := testQueries.CreateDomain(ctx, generated.CreateDomainParams{
+		Path:          "/",
 		ApplicationID: app.ID,
 		Hostname:      probeHost,
 		SslEnabled:    sslMode != proxy.SSLModeOff,

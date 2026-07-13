@@ -345,6 +345,9 @@ func (h *Handler) ensurePreviewApp(ctx context.Context, parent generated.Applica
 				SslEnabled:    true,
 				ForceHttps:    true,
 				SslMode:       "automatic",
+				// A preview gets its own hostname, so it serves the whole host.
+				// Explicit because '' would fail the rooted-path check.
+				Path: "/",
 			}); cerr != nil {
 				slog.Warn("webhook: failed to create preview domain",
 					"hostname", hostname, "application", child.Name, "error", cerr,

@@ -2,15 +2,37 @@
 SELECT * FROM domains WHERE application_id = $1 ORDER BY created_at DESC;
 
 -- name: CreateDomain :one
-INSERT INTO domains (application_id, hostname, ssl_enabled, container_port, force_https, ssl_mode, ssl_provider, ssl_credentials_encrypted, certificate_id, advanced_config)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+INSERT INTO domains (application_id, hostname, ssl_enabled, container_port, force_https, ssl_mode, ssl_provider, ssl_credentials_encrypted, certificate_id, advanced_config, path, strip_path)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
 RETURNING *;
 
 -- name: GetDomain :one
 SELECT * FROM domains WHERE id = $1;
 
 -- name: GetDomainByHostname :one
-SELECT * FROM domains WHERE hostname = $1;
+-- hostname stopped being unique in migration 000039: one host can now be split
+-- across applications by path. This returns the oldest row for the host, which
+-- is deterministic but path-blind — fine for the callers that only ask "is this
+-- hostname known to us?" or that act on the host as a whole (TLS is per-host,
+-- not per-path). It is NOT the right lookup for attributing a single request to
+-- an application; that needs the URI too. See GetDomainForRequest.
+SELECT * FROM domains WHERE hostname = $1 ORDER BY created_at ASC LIMIT 1;
+
+-- name: GetDomainForRequest :one
+-- Resolves one request (host + URI) to the domain serving it, by longest path
+-- prefix — the same first-match-wins order Caddy itself applies, so the request
+-- log agrees with the proxy about which app answered.
+--
+-- rtrim strips the trailing slash so '/' becomes '' and matches everything,
+-- while '/api' matches '/api' exactly and '/api/...' but never '/apifoo'.
+SELECT * FROM domains
+WHERE hostname = $1
+  AND (
+    sqlc.arg(request_uri)::text = rtrim(path, '/')
+    OR sqlc.arg(request_uri)::text LIKE rtrim(path, '/') || '/%'
+  )
+ORDER BY length(path) DESC
+LIMIT 1;
 
 -- name: DeleteDomain :exec
 DELETE FROM domains WHERE id = $1;
@@ -25,7 +47,7 @@ WHERE d.id = $1;
 UPDATE domains SET
     hostname = $2, ssl_enabled = $3, container_port = $4, force_https = $5,
     ssl_mode = $6, ssl_provider = $7, ssl_credentials_encrypted = $8,
-    certificate_id = $9, advanced_config = $10
+    certificate_id = $9, advanced_config = $10, path = $11, strip_path = $12
 WHERE id = $1
 RETURNING *;
 
