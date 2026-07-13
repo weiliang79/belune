@@ -1,4 +1,3 @@
-import { Badge } from "@/components/ui/badge";
 import { EXPIRY_WARNING_DAYS, daysUntil } from "@/lib/expiry";
 
 /**
@@ -30,7 +29,11 @@ export function ExpiryCell({
     return <span className="text-muted-foreground">{formatted}</span>;
   }
   if (days < 0) {
-    return <Badge variant="destructive">Expired {formatted}</Badge>;
+    return (
+      <span className="text-status-error font-semibold">
+        Expired {formatted}
+      </span>
+    );
   }
   if (days <= EXPIRY_WARNING_DAYS) {
     return (
