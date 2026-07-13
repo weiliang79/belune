@@ -28,8 +28,13 @@ jobs:
       - name: Vet
         run: go vet ./...
 
+      # -count=1 disables the test result cache. TestExpiryWarningMatchesFrontend
+      # reads a file in apps/web, which lives outside this module, so the cache
+      # does not track it — edit the frontend constant alone and a cached PASS is
+      # replayed over a test that would now fail. A guard that can be cached into
+      # silence is not a guard.
       - name: Test
-        run: go test -short ./...
+        run: go test -short -count=1 ./...
 
   migrations:
     name: Migrations (fresh DB)
