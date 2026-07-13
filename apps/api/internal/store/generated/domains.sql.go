@@ -355,9 +355,9 @@ func (q *Queries) ListDomainsByApplicationWithFeatures(ctx context.Context, appl
 }
 
 const listDomainsForTLSProbe = `-- name: ListDomainsForTLSProbe :many
-SELECT id, hostname, ssl_mode, ssl_enabled, tls_status, tls_error
+SELECT DISTINCT ON (hostname) id, hostname, ssl_mode, ssl_enabled, tls_status, tls_error
 FROM domains
-ORDER BY hostname
+ORDER BY hostname, created_at ASC
 `
 
 type ListDomainsForTLSProbeRow struct {
@@ -369,8 +369,15 @@ type ListDomainsForTLSProbeRow struct {
 	TlsError   pgtype.Text `json:"tls_error"`
 }
 
-// Every domain the probe worker checks, with the SSL mode that decides what a
+// Every *hostname* the probe worker checks, with the SSL mode that decides what a
 // healthy result even looks like.
+//
+// DISTINCT ON hostname, because TLS belongs to the host, not to the row. Since
+// migration 000039 a host can have several domains rows (one per path), and they
+// share one certificate — Caddy selects by SNI, which knows nothing about paths.
+// Probing per row would open N TLS handshakes for one certificate and, worse,
+// make N separate ACME attempts against Let's Encrypt's rate limits for a name
+// that needs exactly one.
 func (q *Queries) ListDomainsForTLSProbe(ctx context.Context) ([]ListDomainsForTLSProbeRow, error) {
 	rows, err := q.db.Query(ctx, listDomainsForTLSProbe)
 	if err != nil {
@@ -503,19 +510,24 @@ UPDATE domains SET
     tls_error = $2,
     tls_status = CASE WHEN tls_status IN ('active', 'expiring') THEN tls_status ELSE 'failed' END,
     tls_last_checked_at = NOW()
-WHERE id = $1
+WHERE hostname = $1
 `
 
 type SetDomainTLSErrorParams struct {
-	ID       pgtype.UUID `json:"id"`
+	Hostname string      `json:"hostname"`
 	TlsError pgtype.Text `json:"tls_error"`
 }
 
 // Records a failure reason without disturbing the observed certificate metadata:
 // used by the Caddy log parser and by a failed SetupTLS, both of which know why
 // TLS is broken but not what (if anything) is currently being served.
+//
+// Keyed by hostname for the same reason as UpdateDomainTLSStatus: Caddy reports a
+// certificate failure against a name, and that failure is true of every row
+// serving that name. Recording it on one row would leave a sibling path claiming
+// HTTPS is fine while the host has no usable certificate at all.
 func (q *Queries) SetDomainTLSError(ctx context.Context, arg SetDomainTLSErrorParams) error {
-	_, err := q.db.Exec(ctx, setDomainTLSError, arg.ID, arg.TlsError)
+	_, err := q.db.Exec(ctx, setDomainTLSError, arg.Hostname, arg.TlsError)
 	return err
 }
 
@@ -594,11 +606,11 @@ UPDATE domains SET
     tls_error = $5,
     tls_advisory = $6,
     tls_last_checked_at = NOW()
-WHERE id = $1
+WHERE hostname = $1
 `
 
 type UpdateDomainTLSStatusParams struct {
-	ID          pgtype.UUID        `json:"id"`
+	Hostname    string             `json:"hostname"`
 	TlsStatus   string             `json:"tls_status"`
 	TlsIssuer   pgtype.Text        `json:"tls_issuer"`
 	TlsNotAfter pgtype.Timestamptz `json:"tls_not_after"`
@@ -606,12 +618,17 @@ type UpdateDomainTLSStatusParams struct {
 	TlsAdvisory pgtype.Text        `json:"tls_advisory"`
 }
 
+// Keyed by hostname, not id: one probe of one certificate settles the TLS state
+// of every domains row sharing that host. Writing only the probed row would leave
+// its siblings frozen on 'unknown' for ever — the same live certificate, reported
+// as healthy on /api and unknown on /.
+//
 // tls_error is authoritative and decides the status; tls_advisory only explains
 // (see migration 000037). Keeping them apart is what stops a DNS suspicion being
 // read back next sweep as a real ACME failure.
 func (q *Queries) UpdateDomainTLSStatus(ctx context.Context, arg UpdateDomainTLSStatusParams) error {
 	_, err := q.db.Exec(ctx, updateDomainTLSStatus,
-		arg.ID,
+		arg.Hostname,
 		arg.TlsStatus,
 		arg.TlsIssuer,
 		arg.TlsNotAfter,

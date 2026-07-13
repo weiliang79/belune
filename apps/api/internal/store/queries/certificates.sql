@@ -25,11 +25,20 @@ ORDER BY c.name;
 SELECT hostname FROM domains WHERE certificate_id = $1 ORDER BY hostname;
 
 -- name: ListCustomCertDomains :many
--- Every domain serving an uploaded certificate, with the encrypted PEM pair.
+-- Every *hostname* serving an uploaded certificate, with the encrypted PEM pair.
 -- The reconciler renders this into Caddy's load_pem set on each pass: a restarted
 -- Caddy drops loaded certificates exactly as it drops routes.
-SELECT d.hostname, c.id AS certificate_id, c.cert_pem_encrypted, c.key_pem_encrypted
+--
+-- DISTINCT ON hostname: a host split across paths has one domains row per path,
+-- and Caddy selects a certificate by SNI, which knows nothing about paths. Left
+-- as one row per domain, the same PEM pair would be decrypted and pushed into
+-- load_pem once per path — needless crypto on every pass, and duplicate
+-- certificates for one name in Caddy's store.
+--
+-- The oldest row wins, deterministically, so a host whose rows somehow disagree
+-- about which certificate to serve does not flip between them from pass to pass.
+SELECT DISTINCT ON (d.hostname) d.hostname, c.id AS certificate_id, c.cert_pem_encrypted, c.key_pem_encrypted
 FROM domains d
 JOIN certificates c ON c.id = d.certificate_id
 WHERE d.ssl_mode = 'custom'
-ORDER BY d.hostname;
+ORDER BY d.hostname, d.created_at ASC;

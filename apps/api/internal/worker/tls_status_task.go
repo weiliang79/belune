@@ -94,8 +94,10 @@ func (h *TaskHandler) probeDomain(ctx context.Context, d generated.ListDomainsFo
 	if !res.NotAfter.IsZero() {
 		notAfter = pgtype.Timestamptz{Time: res.NotAfter, Valid: true}
 	}
+	// Keyed by hostname: this settles every row serving the name, not just the one
+	// the sweep happened to pick as its representative.
 	if err := h.Queries.UpdateDomainTLSStatus(ctx, generated.UpdateDomainTLSStatusParams{
-		ID:          d.ID,
+		Hostname:    d.Hostname,
 		TlsStatus:   res.Status,
 		TlsIssuer:   pgtype.Text{String: res.Issuer, Valid: res.Issuer != ""},
 		TlsNotAfter: notAfter,

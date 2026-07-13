@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"sort"
 	"strings"
 
 	"github.com/jackc/pgx/v5/pgtype"
@@ -173,24 +174,42 @@ func (r *Reconciler) reconcile(ctx context.Context) {
 	// would be served Caddy's internal cert in preference to the uploaded one.
 	dashboardHost, dashboardMode, dashboardCertID := r.dashboardTLS(ctx)
 
-	var skip, skipCerts []string
+	// Deduplicated by hostname. These lists are about certificates, and a
+	// certificate belongs to a name — Caddy selects it by SNI, which knows nothing
+	// about paths. A host split across three paths appears three times in
+	// `expected`, so listing it per row would hand Caddy the same hostname three
+	// times over in its automation policies.
+	//
+	// A host whose rows disagree about ssl_mode is a contradiction — one
+	// certificate cannot be both absent and uploaded — so say so rather than
+	// letting whichever row was iterated last quietly decide.
+	skip := newHostSet()
+	skipCerts := newHostSet()
+	modeByHost := make(map[string]string, len(expected))
 	for _, cfg := range expected {
+		if prev, seen := modeByHost[cfg.Hostname]; seen && prev != cfg.SSLMode {
+			slog.Warn("proxy reconciler: conflicting ssl_mode for one hostname; using the first",
+				"hostname", cfg.Hostname, "using", prev, "ignoring", cfg.SSLMode)
+			continue
+		}
+		modeByHost[cfg.Hostname] = cfg.SSLMode
+
 		switch cfg.SSLMode {
 		case SSLModeOff:
-			skip = append(skip, cfg.Hostname)
+			skip.add(cfg.Hostname)
 		case SSLModeCustom:
-			skipCerts = append(skipCerts, cfg.Hostname)
+			skipCerts.add(cfg.Hostname)
 		}
 	}
 	if dashboardHost != "" {
 		switch dashboardMode {
 		case SSLModeOff:
-			skip = append(skip, dashboardHost)
+			skip.add(dashboardHost)
 		case SSLModeCustom:
-			skipCerts = append(skipCerts, dashboardHost)
+			skipCerts.add(dashboardHost)
 		}
 	}
-	if err := r.proxy.SyncAutoHTTPS(ctx, skip, skipCerts); err != nil {
+	if err := r.proxy.SyncAutoHTTPS(ctx, skip.sorted(), skipCerts.sorted()); err != nil {
 		slog.Warn("proxy reconciler: failed to sync auto-HTTPS config", "error", err)
 		recordErr(err)
 	}
@@ -282,6 +301,30 @@ func (r *Reconciler) reconcile(ctx context.Context) {
 // Caddy, derived from all running applications and their domains in the DB.
 // buildExpected returns the routes the proxy should be serving, and the project
 // networks the proxy must be joined to in order to reach them.
+// hostSet is a deduplicated, deterministically ordered set of hostnames.
+//
+// Deterministic ordering is not cosmetic: these lists are written into Caddy's
+// config, and the reconciler compares what it wrote against what is there. A set
+// that came out in a different order each pass would look like drift for ever and
+// rewrite the server config every minute.
+type hostSet map[string]struct{}
+
+func newHostSet() hostSet { return make(hostSet) }
+
+func (s hostSet) add(host string) { s[host] = struct{}{} }
+
+func (s hostSet) sorted() []string {
+	if len(s) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(s))
+	for h := range s {
+		out = append(out, h)
+	}
+	sort.Strings(out)
+	return out
+}
+
 // routeKey identifies a route the way Caddy does now: a hostname no longer names
 // one route, only a (hostname, path) pair does.
 type routeKey struct {

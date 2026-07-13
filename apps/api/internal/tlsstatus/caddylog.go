@@ -156,16 +156,18 @@ func (r *Recorder) HandleCaddyLine(ctx context.Context, line string) {
 // is the sink for a failed SetupTLS — which used to be a slog.Warn and nothing
 // else, so the route went live and the UI showed no hint that HTTPS was broken.
 func (r *Recorder) Record(ctx context.Context, hostname, reason string) {
-	domain, err := r.queries.GetDomainByHostname(ctx, hostname)
-	if err != nil {
+	if _, err := r.queries.GetDomainByHostname(ctx, hostname); err != nil {
 		// Caddy may be serving hostnames we no longer know about; that is not an
 		// error worth surfacing.
 		slog.Debug("tls status: failure reported for an unknown domain", "hostname", hostname)
 		return
 	}
 
+	// Recorded against the hostname, so every path sharing it reports the failure.
+	// Caddy fails to get a certificate for a *name*; a sibling row still claiming
+	// HTTPS is fine would be a lie about the same certificate.
 	if err := r.queries.SetDomainTLSError(ctx, generated.SetDomainTLSErrorParams{
-		ID:       domain.ID,
+		Hostname: hostname,
 		TlsError: pgText(reason),
 	}); err != nil {
 		slog.Warn("tls status: failed to record TLS error", "hostname", hostname, "error", err)
