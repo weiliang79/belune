@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
 	"strings"
@@ -125,12 +126,25 @@ func (h *Handler) UpdateSettings(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if changingDashboard {
-		// Publish (or clear) the dashboard's own route. A failure here leaves the
-		// setting saved but the proxy unchanged; the reconciler re-applies it on its
-		// next pass, so report it rather than pretending nothing happened.
-		if err := h.proxy.SetDashboardRoute(r.Context(), domain, mode); err != nil {
-			slog.Error("failed to apply dashboard domain to proxy", "hostname", domain, "ssl_mode", mode, "error", err)
-			writeError(w, http.StatusInternalServerError, "domain saved, but the proxy could not be updated — it will retry shortly")
+		// A full reconcile, not just the route: the mode also decides the auto-HTTPS
+		// skip lists and which certificate is loaded, and those are the reconciler's
+		// to write. Setting only the route would leave a window — up to a whole
+		// reconcile interval — where the dashboard force-redirects to HTTPS while
+		// still being skipped for certificates, which a browser shows as an error.
+		//
+		// Fall back to the route alone if there is no reconciler (tests), and treat
+		// either failure as "saved, but not yet applied": the periodic pass fixes it.
+		var err error
+		if h.reconciler != nil {
+			ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+			defer cancel()
+			err = h.reconciler.ReconcileNow(ctx)
+		} else {
+			err = h.proxy.SetDashboardRoute(r.Context(), domain, mode)
+		}
+		if err != nil {
+			slog.Error("failed to apply dashboard settings to proxy", "hostname", domain, "ssl_mode", mode, "error", err)
+			writeError(w, http.StatusInternalServerError, "settings saved, but the proxy could not be updated — it will retry shortly")
 			return
 		}
 	}
