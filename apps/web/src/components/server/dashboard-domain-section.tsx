@@ -7,6 +7,7 @@ import {
   ShieldCheckIcon,
   ShieldOffIcon,
 } from "lucide-react";
+import { formatRelativeTime } from "@/lib/utils/format";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -120,7 +121,12 @@ export function DashboardDomainSection() {
   // refuses it too; catching it here just saves a round-trip.
   const missingCert = Boolean(domain.trim()) && mode === "custom" && !certID;
 
-  const { data: tls, refetch: refetchTLS } = useQuery({
+  const {
+    data: tls,
+    refetch: refetchTLS,
+    isFetching: tlsFetching,
+    dataUpdatedAt: tlsCheckedAt,
+  } = useQuery({
     queryKey: ["dashboard-tls", savedDomain, savedMode, savedCertID],
     queryFn: () => api.get<DashboardTLS>("/server/dashboard-tls"),
     // A certificate normally lands within a minute of the DNS being right, so
@@ -128,6 +134,21 @@ export function DashboardDomainSection() {
     refetchInterval: savedDomain ? 15000 : false,
     enabled: Boolean(savedDomain),
   });
+
+  // The endpoint probes the live certificate on every call, so the button really
+  // does recheck — but the probe answers in milliseconds, so the spinner would
+  // blink and vanish and the operator would reasonably conclude nothing happened.
+  // Holding it visible for a beat is the difference between "it did nothing" and
+  // "it checked".
+  const [checking, setChecking] = useState(false);
+  const recheck = () => {
+    setChecking(true);
+    void Promise.all([
+      refetchTLS(),
+      new Promise((r) => setTimeout(r, 600)),
+    ]).finally(() => setChecking(false));
+  };
+  const busy = checking || tlsFetching;
 
   const save = () => {
     const nextDomain = domain.trim();
@@ -298,11 +319,24 @@ export function DashboardDomainSection() {
           <Button
             size="icon-sm"
             variant="ghost"
-            aria-label="Recheck certificate"
-            onClick={() => void refetchTLS()}
+            aria-label={busy ? "Rechecking certificate" : "Recheck certificate"}
+            disabled={busy}
+            onClick={recheck}
           >
-            <RefreshCw className="h-3.5 w-3.5" />
+            <RefreshCw
+              aria-hidden="true"
+              className={`h-3.5 w-3.5 ${busy ? "animate-spin" : ""}`}
+            />
           </Button>
+          {/* Says when the answer is from, not merely that a check happened. A
+              status with no timestamp is indistinguishable from a stale one. */}
+          <span className="text-muted-foreground text-xs">
+            {busy
+              ? "Checking…"
+              : tlsCheckedAt
+                ? `Checked ${formatRelativeTime(new Date(tlsCheckedAt))}`
+                : null}
+          </span>
         </div>
       )}
 
