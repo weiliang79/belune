@@ -47,9 +47,12 @@ type ReconcilerStatus struct {
 	LastRunAt       time.Time `json:"last_run_at"`
 	LastDurationMs  int64     `json:"last_duration_ms"`
 	LastAdded       int       `json:"last_added"`
-	LastRemoved     int       `json:"last_removed"`
-	LastError       string    `json:"last_error,omitempty"`
-	RunCount        int64     `json:"run_count"`
+	// LastUpdated counts routes that existed but did not match the database, and
+	// had to be rewritten — drift a presence check would never have seen.
+	LastUpdated int    `json:"last_updated"`
+	LastRemoved int    `json:"last_removed"`
+	LastError   string `json:"last_error,omitempty"`
+	RunCount    int64  `json:"run_count"`
 	// TotalDrift counts every route that had to be added or removed across
 	// all runs. Stable value over time means Caddy is in sync with the DB.
 	TotalDrift int64 `json:"total_drift"`
@@ -122,7 +125,7 @@ func (r *Reconciler) reconcile(ctx context.Context) {
 	defer r.runMu.Unlock()
 
 	start := time.Now()
-	var added, removed int
+	var added, removed, updated int
 	var firstErr error
 	recordErr := func(err error) {
 		if firstErr == nil {
@@ -135,9 +138,10 @@ func (r *Reconciler) reconcile(ctx context.Context) {
 		r.status.LastRunAt = start
 		r.status.LastDurationMs = time.Since(start).Milliseconds()
 		r.status.LastAdded = added
+		r.status.LastUpdated = updated
 		r.status.LastRemoved = removed
 		r.status.RunCount++
-		r.status.TotalDrift += int64(added + removed)
+		r.status.TotalDrift += int64(added + removed + updated)
 		if firstErr != nil {
 			r.status.LastError = firstErr.Error()
 		} else {
@@ -226,16 +230,27 @@ func (r *Reconciler) reconcile(ctx context.Context) {
 		expectedSet[e.Hostname] = e
 	}
 
-	// Add routes present in DB but missing from Caddy.
+	// Make every expected route match the database — not merely exist.
+	//
+	// This used to add only the routes Caddy was missing, which quietly assumed a
+	// route with the right hostname had the right configuration. It need not: a
+	// domain update writes the database and then pushes the route, and if that push
+	// fails the handler returns 200 anyway and leaves the old route behind. The
+	// hostname is still present, so a presence check finds nothing wrong and the
+	// domain serves stale config for ever.
 	for hostname, cfg := range expectedSet {
-		if _, exists := currentSet[hostname]; !exists {
-			if err := r.proxy.AddRoute(ctx, cfg); err != nil {
-				slog.Warn("proxy reconciler: failed to restore route", "hostname", hostname, "error", err)
-				recordErr(err)
-			} else {
-				slog.Info("proxy reconciler: restored missing route", "hostname", hostname)
-				added++
-			}
+		_, existed := currentSet[hostname]
+		changed, err := r.proxy.EnsureRoute(ctx, cfg)
+		switch {
+		case err != nil:
+			slog.Warn("proxy reconciler: failed to ensure route", "hostname", hostname, "error", err)
+			recordErr(err)
+		case changed && !existed:
+			slog.Info("proxy reconciler: restored missing route", "hostname", hostname)
+			added++
+		case changed:
+			slog.Info("proxy reconciler: repaired drifted route", "hostname", hostname)
+			updated++
 		}
 	}
 

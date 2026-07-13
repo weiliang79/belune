@@ -11,6 +11,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"reflect"
 	"sort"
 	"strings"
 
@@ -132,18 +133,14 @@ func (c *Client) InitCatchAll(ctx context.Context) {
 	slog.Info("caddy catch-all route initialised", "listen", serverListen)
 }
 
-func (c *Client) AddRoute(ctx context.Context, cfg proxy.RouteConfig) (err error) {
-	defer func() { metrics.RecordCaddyCall("add_route", err) }()
-	// Remove any existing route for this hostname first to prevent duplicates.
-	// Ignore "not found" — normal on fresh routes.
-	if err := c.RemoveRoute(ctx, cfg.Hostname); err != nil && !errors.Is(err, ErrCaddyUnreachable) {
-		slog.Debug("caddy: pre-remove returned non-fatal error", "hostname", cfg.Hostname, "error", err)
-	}
-
+// buildRoute renders a route config into the exact Caddy route it should become.
+// Pulled out of AddRoute so the same construction can be compared against what
+// Caddy actually holds — see EnsureRoute.
+func buildRoute(cfg proxy.RouteConfig) (caddyRoute, error) {
 	// Build the handler chain: feature handlers first, then reverse_proxy as the terminal handler.
 	handlers, err := buildFeatureHandlers(cfg)
 	if err != nil {
-		return fmt.Errorf("build handlers: %w", err)
+		return caddyRoute{}, fmt.Errorf("build handlers: %w", err)
 	}
 
 	// Reverse proxy is always the last handler.
@@ -169,12 +166,29 @@ func (c *Client) AddRoute(ctx context.Context, cfg proxy.RouteConfig) (err error
 		}, handlers...)
 	}
 
-	route := caddyRoute{
-		ID: fmt.Sprintf("route-%s", cfg.Hostname),
+	return caddyRoute{
+		ID: routeIDFor(cfg.Hostname),
 		Match: []caddyMatch{
 			{Host: []string{cfg.Hostname}},
 		},
 		Handle: handlers,
+	}, nil
+}
+
+// routeIDFor is the @id Caddy stores a domain's route under.
+func routeIDFor(hostname string) string { return fmt.Sprintf("route-%s", hostname) }
+
+func (c *Client) AddRoute(ctx context.Context, cfg proxy.RouteConfig) (err error) {
+	defer func() { metrics.RecordCaddyCall("add_route", err) }()
+	// Remove any existing route for this hostname first to prevent duplicates.
+	// Ignore "not found" — normal on fresh routes.
+	if err := c.RemoveRoute(ctx, cfg.Hostname); err != nil && !errors.Is(err, ErrCaddyUnreachable) {
+		slog.Debug("caddy: pre-remove returned non-fatal error", "hostname", cfg.Hostname, "error", err)
+	}
+
+	route, err := buildRoute(cfg)
+	if err != nil {
+		return err
 	}
 
 	body, err := json.Marshal(route)
@@ -724,4 +738,94 @@ func targetToDial(target string) string {
 		}
 	}
 	return target
+}
+
+// EnsureRoute makes Caddy's route for cfg.Hostname match cfg, reporting whether
+// it had to change anything.
+//
+// The reconciler used to diff on hostname alone: present in Caddy meant correct.
+// It is not. UpdateDomain writes the database, then pushes the route — and if
+// that push fails (Caddy restarting, admin API blip) the handler logs it, returns
+// 200, and leaves the OLD route in place. The hostname is still there, so the
+// reconciler saw nothing wrong and the domain served stale configuration for
+// ever: the wrong port, no HTTP→HTTPS redirect, basic auth silently missing.
+//
+// Comparing the whole route is exact, because the route is a pure function of the
+// config. A no-op costs one GET; only a real difference rewrites Caddy, so this
+// does not churn a reload every pass.
+func (c *Client) EnsureRoute(ctx context.Context, cfg proxy.RouteConfig) (changed bool, err error) {
+	defer func() { metrics.RecordCaddyCall("ensure_route", err) }()
+
+	desired, err := buildRoute(cfg)
+	if err != nil {
+		return false, err
+	}
+
+	current, found, err := c.fetchRouteByID(ctx, routeIDFor(cfg.Hostname))
+	if err != nil {
+		return false, err
+	}
+	if found {
+		same, err := routeJSONEqual(current, desired)
+		if err != nil {
+			return false, err
+		}
+		if same {
+			return false, nil
+		}
+	}
+
+	if err := c.AddRoute(ctx, cfg); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+// fetchRouteByID reads one route by its @id. A missing route is not an error.
+func (c *Client) fetchRouteByID(ctx context.Context, id string) (raw json.RawMessage, found bool, err error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.adminURL+"/id/"+id, nil)
+	if err != nil {
+		return nil, false, fmt.Errorf("create request: %w", err)
+	}
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		if isTransportError(err) {
+			return nil, false, fmt.Errorf("%w: %v", ErrCaddyUnreachable, err)
+		}
+		return nil, false, fmt.Errorf("get route %s: %w", id, err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, false, fmt.Errorf("read route %s: %w", id, err)
+	}
+	// Caddy answers an unknown @id with 500 "unknown object" rather than a 404.
+	if resp.StatusCode == http.StatusNotFound || bytes.Contains(body, []byte("unknown object")) {
+		return nil, false, nil
+	}
+	if resp.StatusCode >= 400 {
+		return nil, false, fmt.Errorf("get route %s: HTTP %d: %s", id, resp.StatusCode, string(body))
+	}
+	return body, true, nil
+}
+
+// routeJSONEqual compares Caddy's stored route against the one we would write.
+// Both are normalised through a generic decode so key order and formatting — which
+// Caddy does not preserve — cannot masquerade as drift and cause a rewrite loop.
+func routeJSONEqual(current json.RawMessage, desired caddyRoute) (bool, error) {
+	desiredJSON, err := json.Marshal(desired)
+	if err != nil {
+		return false, fmt.Errorf("marshal desired route: %w", err)
+	}
+
+	var a, b any
+	if err := json.Unmarshal(current, &a); err != nil {
+		// Unreadable is not equal; rewriting it is the right answer.
+		return false, nil //nolint:nilerr // treat as drift, not as a failure
+	}
+	if err := json.Unmarshal(desiredJSON, &b); err != nil {
+		return false, fmt.Errorf("normalise desired route: %w", err)
+	}
+	return reflect.DeepEqual(a, b), nil
 }

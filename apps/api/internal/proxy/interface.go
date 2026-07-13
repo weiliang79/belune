@@ -100,6 +100,16 @@ type NetworkAttacher interface {
 // ProxyManager abstracts reverse proxy operations.
 type ProxyManager interface {
 	AddRoute(ctx context.Context, cfg RouteConfig) error
+
+	// EnsureRoute makes the proxy's route for cfg.Hostname match cfg, reporting
+	// whether anything had to change.
+	//
+	// Presence is not correctness. UpdateDomain writes the database and then pushes
+	// the route; if that push fails the handler logs it, returns 200, and the OLD
+	// route stays. Diffing on hostname alone — which the reconciler used to do —
+	// sees a route with the right name and calls it correct, so the domain serves
+	// stale configuration for ever. Compare the whole route instead.
+	EnsureRoute(ctx context.Context, cfg RouteConfig) (changed bool, err error)
 	RemoveRoute(ctx context.Context, hostname string) error
 	SetupTLS(ctx context.Context, hostname string, sslMode, certPEM, keyPEM string) error
 	ListRoutes(ctx context.Context) ([]RouteConfig, error)

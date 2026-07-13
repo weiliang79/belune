@@ -44,7 +44,11 @@ func (m *mockProxy) SyncAutoHTTPS(_ context.Context, _, _ []string) error { retu
 func (m *mockProxy) SyncCertificates(_ context.Context, _ []proxy.HostCertificate) error { return nil }
 
 func (m *mockProxy) SetDashboardRoute(_ context.Context, _, _ string) error { return nil }
-func (m *mockProxy) UsesInternalIssuer(_ context.Context) (bool, error)     { return false, nil }
+
+func (m *mockProxy) EnsureRoute(ctx context.Context, cfg proxy.RouteConfig) (bool, error) {
+	return true, m.AddRoute(ctx, cfg)
+}
+func (m *mockProxy) UsesInternalIssuer(_ context.Context) (bool, error) { return false, nil }
 
 // reconcileOnce exercises the diff logic by building expected/current sets and
 // calling AddRoute / RemoveRoute via the exported Reconciler. We test the diff

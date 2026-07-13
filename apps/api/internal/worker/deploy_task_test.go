@@ -59,7 +59,11 @@ func (p *failingProxy) SyncAutoHTTPS(_ context.Context, _, _ []string) error { r
 func (p *failingProxy) SyncCertificates(_ context.Context, _ []proxy.HostCertificate) error {
 	return nil
 }
-func (p *failingProxy) SetDashboardRoute(_ context.Context, _, _ string) error    { return nil }
+func (p *failingProxy) SetDashboardRoute(_ context.Context, _, _ string) error { return nil }
+
+func (p *failingProxy) EnsureRoute(ctx context.Context, cfg proxy.RouteConfig) (bool, error) {
+	return true, p.AddRoute(ctx, cfg)
+}
 func (p *failingProxy) UsesInternalIssuer(_ context.Context) (bool, error)        { return false, nil }
 func (p *failingProxy) ListRoutes(_ context.Context) ([]proxy.RouteConfig, error) { return nil, nil }
 
