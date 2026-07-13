@@ -115,7 +115,7 @@ func leafFor(t *testing.T, hostname string, timeout time.Duration) (*tls.Connect
 func TestRealCaddy_HTTPSFoundation(t *testing.T) {
 	c := liveClient(t)
 	ctx := context.Background()
-	t.Cleanup(func() { _ = c.RemoveRoute(ctx, autoHost) })
+	t.Cleanup(func() { _ = c.RemoveRoute(ctx, autoHost, "/") })
 
 	c.InitCatchAll(ctx)
 	require.NoError(t, c.AddRoute(ctx, routeCfg(autoHost, "automatic")))
@@ -141,7 +141,7 @@ func TestRealCaddy_HTTPSFoundation(t *testing.T) {
 func TestRealCaddy_SSLModeOffIsSkipped(t *testing.T) {
 	c := liveClient(t)
 	ctx := context.Background()
-	t.Cleanup(func() { _ = c.RemoveRoute(ctx, offHost) })
+	t.Cleanup(func() { _ = c.RemoveRoute(ctx, offHost, "/") })
 
 	c.InitCatchAll(ctx)
 	require.NoError(t, c.AddRoute(ctx, routeCfg(offHost, proxy.SSLModeOff)))
@@ -154,7 +154,7 @@ func TestRealCaddy_SSLModeOffIsSkipped(t *testing.T) {
 	_, err := leafFor(t, offHost, 3*time.Second)
 	assert.Error(t, err, "a skipped hostname must not have a certificate")
 
-	require.NoError(t, c.RemoveRoute(ctx, offHost))
+	require.NoError(t, c.RemoveRoute(ctx, offHost, "/"))
 	autoHTTPS, _ = serverConfig(t, c)["automatic_https"].(map[string]any)
 	require.NotNil(t, autoHTTPS)
 	assert.NotContains(t, autoHTTPS["skip"], offHost, "skip entry must be pruned with the route")
@@ -240,7 +240,7 @@ func TestRealCaddy_CustomCertificateIsServed(t *testing.T) {
 	c := liveClient(t)
 	ctx := context.Background()
 	t.Cleanup(func() {
-		_ = c.RemoveRoute(ctx, customHost)
+		_ = c.RemoveRoute(ctx, customHost, "/")
 		_ = c.SyncCertificates(ctx, nil)
 	})
 

@@ -91,7 +91,7 @@ func TestRealStackTLS_ProbeReportsServedCertificate(t *testing.T) {
 	ctx := context.Background()
 	t.Cleanup(func() {
 		_ = testutil.TruncateAll(ctx, testPool)
-		_ = client.RemoveRoute(ctx, probeHost)
+		_ = client.RemoveRoute(ctx, probeHost, "/")
 		_ = client.SyncCertificates(ctx, nil)
 	})
 	client.InitCatchAll(ctx)
@@ -140,7 +140,7 @@ func TestRealStackTLS_PendingWithoutCertificate(t *testing.T) {
 	ctx := context.Background()
 	t.Cleanup(func() {
 		_ = testutil.TruncateAll(ctx, testPool)
-		_ = client.RemoveRoute(ctx, probeHost)
+		_ = client.RemoveRoute(ctx, probeHost, "/")
 	})
 	client.InitCatchAll(ctx)
 

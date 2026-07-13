@@ -218,16 +218,19 @@ func (r *Reconciler) reconcile(ctx context.Context) {
 		return
 	}
 
-	// Index current routes by hostname.
-	currentSet := make(map[string]struct{}, len(current))
+	// Index current routes by host *and* path. Keying on hostname alone would
+	// collapse shop.com/ and shop.com/api into one entry, so the reconciler would
+	// see a single route where there are two: it would treat whichever it kept as
+	// covering both, and delete the other as stale on the next pass.
+	currentSet := make(map[routeKey]struct{}, len(current))
 	for _, c := range current {
-		currentSet[c.Hostname] = struct{}{}
+		currentSet[keyFor(c)] = struct{}{}
 	}
 
-	// Index expected routes by hostname.
-	expectedSet := make(map[string]RouteConfig, len(expected))
+	// Index expected routes by host + path, for the same reason.
+	expectedSet := make(map[routeKey]RouteConfig, len(expected))
 	for _, e := range expected {
-		expectedSet[e.Hostname] = e
+		expectedSet[keyFor(e)] = e
 	}
 
 	// Make every expected route match the database — not merely exist.
@@ -238,33 +241,33 @@ func (r *Reconciler) reconcile(ctx context.Context) {
 	// fails the handler returns 200 anyway and leaves the old route behind. The
 	// hostname is still present, so a presence check finds nothing wrong and the
 	// domain serves stale config for ever.
-	for hostname, cfg := range expectedSet {
-		_, existed := currentSet[hostname]
+	for key, cfg := range expectedSet {
+		_, existed := currentSet[key]
 		changed, err := r.proxy.EnsureRoute(ctx, cfg)
 		switch {
 		case err != nil:
-			slog.Warn("proxy reconciler: failed to ensure route", "hostname", hostname, "error", err)
+			slog.Warn("proxy reconciler: failed to ensure route", "hostname", key.hostname, "path", key.path, "error", err)
 			recordErr(err)
 		case changed && !existed:
-			slog.Info("proxy reconciler: restored missing route", "hostname", hostname)
+			slog.Info("proxy reconciler: restored missing route", "hostname", key.hostname, "path", key.path)
 			added++
 		case changed:
-			slog.Info("proxy reconciler: repaired drifted route", "hostname", hostname)
+			slog.Info("proxy reconciler: repaired drifted route", "hostname", key.hostname, "path", key.path)
 			updated++
 		}
 	}
 
 	// Remove routes in Caddy that no longer exist in DB.
-	for hostname := range currentSet {
-		if hostname == dashboardHost && dashboardHost != "" {
+	for key := range currentSet {
+		if key.hostname == dashboardHost && dashboardHost != "" {
 			continue // Belune's own dashboard: no domains row backs it.
 		}
-		if _, exists := expectedSet[hostname]; !exists {
-			if err := r.proxy.RemoveRoute(ctx, hostname); err != nil {
-				slog.Warn("proxy reconciler: failed to remove stale route", "hostname", hostname, "error", err)
+		if _, exists := expectedSet[key]; !exists {
+			if err := r.proxy.RemoveRoute(ctx, key.hostname, key.path); err != nil {
+				slog.Warn("proxy reconciler: failed to remove stale route", "hostname", key.hostname, "path", key.path, "error", err)
 				recordErr(err)
 			} else {
-				slog.Info("proxy reconciler: removed stale route", "hostname", hostname)
+				slog.Info("proxy reconciler: removed stale route", "hostname", key.hostname, "path", key.path)
 				removed++
 			}
 		}
@@ -279,6 +282,23 @@ func (r *Reconciler) reconcile(ctx context.Context) {
 // Caddy, derived from all running applications and their domains in the DB.
 // buildExpected returns the routes the proxy should be serving, and the project
 // networks the proxy must be joined to in order to reach them.
+// routeKey identifies a route the way Caddy does now: a hostname no longer names
+// one route, only a (hostname, path) pair does.
+type routeKey struct {
+	hostname string
+	path     string
+}
+
+// keyFor normalises the empty path to "/", so a config that predates paths and
+// one that explicitly says "root" are the same key rather than two.
+func keyFor(cfg RouteConfig) routeKey {
+	path := cfg.Path
+	if path == "" {
+		path = "/"
+	}
+	return routeKey{hostname: cfg.Hostname, path: path}
+}
+
 func (r *Reconciler) buildExpected(ctx context.Context) ([]RouteConfig, []string, error) {
 	apps, err := r.queries.ListAllApplications(ctx)
 	if err != nil {

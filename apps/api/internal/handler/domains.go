@@ -65,7 +65,7 @@ func validateSSLMode(mode string) string {
 //
 // The empty string is the case that matters. `domains.path` is NOT NULL with a
 // DEFAULT of '/', but sqlc always sends the column explicitly, so an unset field
-// arrives as '' — which is not a default, it is a check-constraint violation at
+// arrives as ” — which is not a default, it is a check-constraint violation at
 // insert time. Every caller goes through here so that cannot happen.
 func normalizeDomainPath(p string) string {
 	p = strings.TrimSpace(p)
@@ -319,8 +319,8 @@ func (h *Handler) UpdateDomain(w http.ResponseWriter, r *http.Request) {
 	// Rebuild proxy route: remove old hostname (which may equal new), then
 	// AddRoute below installs the fresh config. Failure here is logged but
 	// non-fatal — a stale route is preferable to a 500 on the update endpoint.
-	if err := h.proxy.RemoveRoute(r.Context(), oldDomain.Hostname); err != nil {
-		slog.Warn("update domain: failed to remove stale proxy route", "hostname", oldDomain.Hostname, "error", err)
+	if err := h.proxy.RemoveRoute(r.Context(), oldDomain.Hostname, oldDomain.Path); err != nil {
+		slog.Warn("update domain: failed to remove stale proxy route", "hostname", oldDomain.Hostname, "path", oldDomain.Path, "error", err)
 	}
 
 	// Resolve container name and port for the proxy route
@@ -543,11 +543,13 @@ func (h *Handler) rebuildDomainRoute(r *http.Request, domainID pgtype.UUID) {
 	appIDStr := uuidToString(domain.ApplicationID)
 	containerName := naming.ContainerName(row.ProjectSlug, row.Slug, appIDStr)
 
-	if err := h.proxy.RemoveRoute(r.Context(), domain.Hostname); err != nil {
-		slog.Warn("rebuildDomainRoute: failed to remove proxy route", "hostname", domain.Hostname, "error", err)
+	if err := h.proxy.RemoveRoute(r.Context(), domain.Hostname, domain.Path); err != nil {
+		slog.Warn("rebuildDomainRoute: failed to remove proxy route", "hostname", domain.Hostname, "path", domain.Path, "error", err)
 	}
 	if err := h.proxy.AddRoute(r.Context(), proxy.RouteConfig{
 		Hostname:       domain.Hostname,
+		Path:           domain.Path,
+		StripPath:      domain.StripPath,
 		TargetURL:      fmt.Sprintf("http://%s:%d", containerName, port),
 		TLS:            domain.SslEnabled,
 		ForceHTTPS:     domain.ForceHttps,
@@ -583,8 +585,8 @@ func (h *Handler) RemoveDomain(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Remove Caddy proxy route first — if it fails, don't delete from DB
-	if err := h.proxy.RemoveRoute(r.Context(), domain.Hostname); err != nil {
-		slog.Error("failed to remove proxy route for domain", "hostname", domain.Hostname, "error", err)
+	if err := h.proxy.RemoveRoute(r.Context(), domain.Hostname, domain.Path); err != nil {
+		slog.Error("failed to remove proxy route for domain", "hostname", domain.Hostname, "path", domain.Path, "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to remove proxy route for domain")
 		return
 	}

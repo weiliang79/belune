@@ -29,6 +29,8 @@ func BuildRouteConfig(domain generated.Domain, containerName, healthCheckPath st
 
 	return RouteConfig{
 		Hostname:        domain.Hostname,
+		Path:            domain.Path,
+		StripPath:       domain.StripPath,
 		TargetURL:       fmt.Sprintf("http://%s:%d", containerName, port),
 		TLS:             domain.SslEnabled,
 		ForceHTTPS:      domain.ForceHttps,

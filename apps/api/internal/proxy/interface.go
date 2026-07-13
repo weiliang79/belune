@@ -52,7 +52,12 @@ type RouteFeature struct {
 
 // RouteConfig describes a reverse-proxy route with optional TLS and middleware.
 type RouteConfig struct {
-	Hostname    string `json:"hostname"`
+	Hostname string `json:"hostname"`
+	// Path is the public prefix this route answers on, always rooted ("/" for a
+	// whole-host route). StripPath removes it before the upstream sees the
+	// request — an app mounted at /api usually expects /users, not /api/users.
+	Path        string `json:"path"`
+	StripPath   bool   `json:"strip_path"`
 	TargetURL   string `json:"target_url"`
 	TLS         bool   `json:"tls"`
 	ForceHTTPS  bool   `json:"force_https"`
@@ -110,7 +115,10 @@ type ProxyManager interface {
 	// sees a route with the right name and calls it correct, so the domain serves
 	// stale configuration for ever. Compare the whole route instead.
 	EnsureRoute(ctx context.Context, cfg RouteConfig) (changed bool, err error)
-	RemoveRoute(ctx context.Context, hostname string) error
+	// RemoveRoute takes the path as well as the host: a hostname no longer
+	// identifies a single route, and deleting by host alone would take out a
+	// sibling path's route along with the one asked for.
+	RemoveRoute(ctx context.Context, hostname, path string) error
 	SetupTLS(ctx context.Context, hostname string, sslMode, certPEM, keyPEM string) error
 	ListRoutes(ctx context.Context) ([]RouteConfig, error)
 

@@ -237,7 +237,7 @@ func (m *MockProxyManager) AddRoute(_ context.Context, cfg proxy.RouteConfig) er
 	return nil
 }
 
-func (m *MockProxyManager) RemoveRoute(_ context.Context, hostname string) error {
+func (m *MockProxyManager) RemoveRoute(_ context.Context, hostname, _ string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.RemovedRoutes = append(m.RemovedRoutes, hostname)

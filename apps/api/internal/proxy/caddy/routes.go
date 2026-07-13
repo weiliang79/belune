@@ -3,6 +3,7 @@ package caddy
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -12,6 +13,7 @@ import (
 	"net/http"
 	"net/url"
 	"reflect"
+	"regexp"
 	"sort"
 	"strings"
 
@@ -54,6 +56,10 @@ type caddyRoute struct {
 
 type caddyMatch struct {
 	Host []string `json:"host"`
+	// omitempty matters: a whole-host route must serialise with no path matcher
+	// at all, exactly as it did before paths existed, so upgrading does not make
+	// every existing route look drifted and rewrite it.
+	Path []string `json:"path,omitempty"`
 }
 
 // caddyHandle is a flexible map-based handler to support all Caddy handler types
@@ -143,6 +149,21 @@ func buildRoute(cfg proxy.RouteConfig) (caddyRoute, error) {
 		return caddyRoute{}, fmt.Errorf("build handlers: %w", err)
 	}
 
+	// Strip the public prefix immediately before proxying, so the app sees the
+	// path it was written for: mounted at /api, it gets /users, not /api/users.
+	//
+	// This sits after the feature handlers on purpose. Basic auth, an IP
+	// allowlist and a redirect are all written against the *public* URL — the one
+	// the operator typed and the visitor sees — so they must run while the path
+	// is still the public one. Strip first and a rule guarding /api/admin would
+	// silently stop matching.
+	if cfg.StripPath && !isRootPath(cfg.Path) {
+		handlers = append(handlers, caddyHandle{
+			"handler":           "rewrite",
+			"strip_path_prefix": cfg.Path,
+		})
+	}
+
 	// Reverse proxy is always the last handler.
 	handlers = append(handlers, newReverseProxyHandle(
 		[]caddyUpstream{{Dial: targetToDial(cfg.TargetURL)}},
@@ -167,23 +188,81 @@ func buildRoute(cfg proxy.RouteConfig) (caddyRoute, error) {
 	}
 
 	return caddyRoute{
-		ID: routeIDFor(cfg.Hostname),
+		ID: routeIDFor(cfg.Hostname, cfg.Path),
 		Match: []caddyMatch{
-			{Host: []string{cfg.Hostname}},
+			{Host: []string{cfg.Hostname}, Path: pathMatcher(cfg.Path)},
 		},
 		Handle: handlers,
 	}, nil
 }
 
+// isRootPath reports whether a path covers the whole host. The empty string is
+// included deliberately: RouteConfig values built before paths existed (and any
+// test that omits the field) mean "the whole host", and must not silently become
+// a route that matches nothing.
+func isRootPath(path string) bool { return path == "" || path == "/" }
+
+// pathMatcher is the Caddy path matcher for a prefix, or nil for a whole-host
+// route (no matcher at all — matching every path is the absence of a constraint,
+// not a constraint of "/*").
+//
+// Two entries, not one: "/api" alone matches only the exact path, and "/api/*"
+// alone does not match "/api" itself. An app mounted at /api must answer both,
+// or its own root 404s. Neither matches "/apifoo", which is the point.
+func pathMatcher(path string) []string {
+	if isRootPath(path) {
+		return nil
+	}
+	return []string{path, path + "/*"}
+}
+
 // routeIDFor is the @id Caddy stores a domain's route under.
-func routeIDFor(hostname string) string { return fmt.Sprintf("route-%s", hostname) }
+//
+// A whole-host route keeps the historical "route-<hostname>" exactly, so
+// upgrading an existing install does not orphan every route it already has.
+//
+// A path route cannot simply append the path: the id is interpolated into the
+// admin API's URL ("/id/<id>"), so a literal "/" in it reads as another path
+// segment and Caddy rejects it as a traversal. The path is therefore slugified
+// for legibility and suffixed with a short digest of the exact original, which
+// is what actually guarantees uniqueness — "/api/v2" and "/api-v2" slugify the
+// same but must never collide onto one route.
+func routeIDFor(hostname, path string) string {
+	if isRootPath(path) {
+		return fmt.Sprintf("route-%s", hostname)
+	}
+	sum := sha256.Sum256([]byte(path))
+	return fmt.Sprintf("route-%s-%s-%x", hostname, pathSlug(path), sum[:3])
+}
+
+// pathFromMatcher is the inverse of pathMatcher: it recovers the configured
+// prefix from what Caddy holds. No matcher means the whole host, i.e. "/".
+func pathFromMatcher(match []string) string {
+	if len(match) == 0 {
+		return "/"
+	}
+	// pathMatcher writes the bare prefix first and "<prefix>/*" second; take the
+	// one that is not the wildcard so a round trip is exact.
+	for _, p := range match {
+		if !strings.HasSuffix(p, "/*") {
+			return p
+		}
+	}
+	return strings.TrimSuffix(match[0], "/*")
+}
+
+var nonSlugChars = regexp.MustCompile(`[^a-zA-Z0-9]+`)
+
+func pathSlug(path string) string {
+	return strings.Trim(nonSlugChars.ReplaceAllString(path, "-"), "-")
+}
 
 func (c *Client) AddRoute(ctx context.Context, cfg proxy.RouteConfig) (err error) {
 	defer func() { metrics.RecordCaddyCall("add_route", err) }()
-	// Remove any existing route for this hostname first to prevent duplicates.
+	// Remove any existing route for this host+path first to prevent duplicates.
 	// Ignore "not found" — normal on fresh routes.
-	if err := c.RemoveRoute(ctx, cfg.Hostname); err != nil && !errors.Is(err, ErrCaddyUnreachable) {
-		slog.Debug("caddy: pre-remove returned non-fatal error", "hostname", cfg.Hostname, "error", err)
+	if err := c.RemoveRoute(ctx, cfg.Hostname, cfg.Path); err != nil && !errors.Is(err, ErrCaddyUnreachable) {
+		slog.Debug("caddy: pre-remove returned non-fatal error", "hostname", cfg.Hostname, "path", cfg.Path, "error", err)
 	}
 
 	route, err := buildRoute(cfg)
@@ -388,9 +467,12 @@ func parseAdvancedConfig(raw []byte) ([]caddyHandle, error) {
 	return handlers, nil
 }
 
-func (c *Client) RemoveRoute(ctx context.Context, hostname string) (err error) {
+func (c *Client) RemoveRoute(ctx context.Context, hostname, path string) (err error) {
 	defer func() { metrics.RecordCaddyCall("remove_route", err) }()
-	routeID := fmt.Sprintf("route-%s", hostname)
+	// routeIDFor, not a second hand-built "route-%s". The id scheme now depends on
+	// the path, and a delete that computes it differently from the write would
+	// leave the real route in place while reporting success.
+	routeID := routeIDFor(hostname, path)
 	deleteURL := fmt.Sprintf("%s/id/%s", c.adminURL, routeID)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, deleteURL, nil)
@@ -453,6 +535,11 @@ func (c *Client) ListRoutes(ctx context.Context) (result []proxy.RouteConfig, er
 		if len(route.Match) > 0 && len(route.Match[0].Host) > 0 {
 			cfg := proxy.RouteConfig{
 				Hostname: route.Match[0].Host[0],
+				// Read the path back too. The reconciler diffs what Caddy holds
+				// against what the database says; a route whose path it could not
+				// see would look like a stale whole-host route on every pass and be
+				// removed and re-added for ever.
+				Path: pathFromMatcher(route.Match[0].Path),
 			}
 			// Extract target URL from the last handler (reverse_proxy).
 			for i := len(route.Handle) - 1; i >= 0; i-- {
@@ -761,7 +848,7 @@ func (c *Client) EnsureRoute(ctx context.Context, cfg proxy.RouteConfig) (change
 		return false, err
 	}
 
-	current, found, err := c.fetchRouteByID(ctx, routeIDFor(cfg.Hostname))
+	current, found, err := c.fetchRouteByID(ctx, routeIDFor(cfg.Hostname, cfg.Path))
 	if err != nil {
 		return false, err
 	}

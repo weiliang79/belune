@@ -24,7 +24,7 @@ func (m *mockProxy) AddRoute(_ context.Context, cfg proxy.RouteConfig) error {
 	return nil
 }
 
-func (m *mockProxy) RemoveRoute(_ context.Context, hostname string) error {
+func (m *mockProxy) RemoveRoute(_ context.Context, hostname, _ string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.removed = append(m.removed, hostname)
@@ -164,7 +164,7 @@ func reconcileDiff(t *testing.T, p proxy.ProxyManager, expected, current []proxy
 	}
 	for hostname := range currentSet {
 		if _, exists := expectedSet[hostname]; !exists {
-			if err := p.RemoveRoute(ctx, hostname); err != nil {
+			if err := p.RemoveRoute(ctx, hostname, "/"); err != nil {
 				t.Errorf("RemoveRoute(%s): %v", hostname, err)
 			}
 		}

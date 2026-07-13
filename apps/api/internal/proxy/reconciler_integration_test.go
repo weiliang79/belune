@@ -55,7 +55,7 @@ func TestRealStack_ReconcilerPushesCustomCertificate(t *testing.T) {
 	client := caddy.New(adminURL)
 	require.NoError(t, client.Ping(ctx), "caddy admin API not reachable — is `task dev:infra` up?")
 	t.Cleanup(func() {
-		_ = client.RemoveRoute(ctx, reconcileHost)
+		_ = client.RemoveRoute(ctx, reconcileHost, "/")
 		_ = client.SyncCertificates(ctx, nil)
 	})
 	client.InitCatchAll(ctx)

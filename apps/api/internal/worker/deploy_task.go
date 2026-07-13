@@ -783,11 +783,13 @@ func (h *TaskHandler) wireProxy(ctx context.Context, dc *deployContext) error {
 			return fmt.Errorf("add route for %s: %w", domain.Hostname, err)
 		}
 
-		// Compensator: remove this route if a later stage fails
-		hostname := domain.Hostname
+		// Compensator: remove this route if a later stage fails. Captures the path
+		// as well as the host — the route it added is identified by both, and
+		// unwinding by host alone would take a sibling path's route down with it.
+		hostname, path := domain.Hostname, domain.Path
 		dc.compensators = append(dc.compensators, func() {
-			if err := h.Proxy.RemoveRoute(context.Background(), hostname); err != nil {
-				slog.Warn("compensator: failed to remove proxy route", "hostname", hostname, "error", err)
+			if err := h.Proxy.RemoveRoute(context.Background(), hostname, path); err != nil {
+				slog.Warn("compensator: failed to remove proxy route", "hostname", hostname, "path", path, "error", err)
 			}
 		})
 	}
