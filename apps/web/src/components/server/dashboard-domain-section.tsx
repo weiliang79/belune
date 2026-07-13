@@ -228,12 +228,25 @@ export function DashboardDomainSection() {
             onValueChange={(v) => patch({ certID: v ?? "" })}
             disabled={certificatesLoading}
           >
-            <SelectTrigger id="dashboard-certificate">
+            <SelectTrigger id="dashboard-certificate" className="w-full min-w-0">
+              {/* Name only: the default echoes the whole item — name and every
+                  subject — into the trigger, which a wildcard or Origin CA
+                  certificate overflows. Subjects stay in the dropdown. */}
               <SelectValue
                 placeholder={
                   certificatesLoading ? "Loading…" : "Select a certificate"
                 }
-              />
+              >
+                {(value: unknown) => {
+                  const cert = (certificates ?? []).find((c) => c.id === value);
+                  if (!cert) {
+                    return certificatesLoading
+                      ? "Loading…"
+                      : "Select a certificate";
+                  }
+                  return <span className="truncate">{cert.name}</span>;
+                }}
+              </SelectValue>
             </SelectTrigger>
             <SelectContent>
               {(certificates ?? []).map((cert) => (

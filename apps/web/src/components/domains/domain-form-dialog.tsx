@@ -35,6 +35,7 @@ import {
 import { useAddDomain, useUpdateDomain } from "@/lib/hooks/use-domains";
 import { useCertificates } from "@/lib/hooks/use-certificates";
 import type { DomainExpanded } from "@/lib/types";
+import { DomainFeatures } from "./domain-features";
 
 const HOSTNAME_REGEX =
   /^([a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$/;
@@ -85,7 +86,9 @@ export function DomainFormDialog({
 }: Props) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
+      {/* Capped: the shared DialogContent sets no max height, so a tall dialog (a
+          long feature list) runs off both edges with the footer unreachable. */}
+      <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-lg">
         {/* Keyed so the form re-initializes from the current domain each open. */}
         <DomainForm
           key={`${domain?.id ?? "new"}-${open}`}
@@ -182,10 +185,15 @@ function DomainForm({
       </DialogHeader>
 
       <Tabs defaultValue="hostname">
-        <TabsList className="grid w-full grid-cols-3">
+        {/* Features only exist for a domain that exists: they are attached by id,
+            so there is nothing to attach them to until it is created. */}
+        <TabsList
+          className={`grid w-full ${domain ? "grid-cols-4" : "grid-cols-3"}`}
+        >
           <TabsTrigger value="hostname">Hostname</TabsTrigger>
           <TabsTrigger value="tls">TLS</TabsTrigger>
           <TabsTrigger value="routing">Routing</TabsTrigger>
+          {domain && <TabsTrigger value="features">Features</TabsTrigger>}
         </TabsList>
 
         <TabsContent value="hostname" className="space-y-3 pt-3">
@@ -319,14 +327,33 @@ function DomainForm({
                           onValueChange={(v) => field.handleChange(v ?? "")}
                           disabled={certificatesLoading}
                         >
-                          <SelectTrigger>
+                          <SelectTrigger className="w-full min-w-0">
+                            {/* Name only. The default renders the whole item —
+                                name *and* every subject — which a real
+                                certificate (a wildcard, an Origin CA) blows the
+                                dialog wide open with. The subjects stay in the
+                                dropdown, where there is room for them. */}
                             <SelectValue
                               placeholder={
                                 certificatesLoading
                                   ? "Loading…"
                                   : "Select a certificate"
                               }
-                            />
+                            >
+                              {(value: unknown) => {
+                                const cert = certificates.find(
+                                  (c) => c.id === value,
+                                );
+                                if (!cert) {
+                                  return certificatesLoading
+                                    ? "Loading…"
+                                    : "Select a certificate";
+                                }
+                                return (
+                                  <span className="truncate">{cert.name}</span>
+                                );
+                              }}
+                            </SelectValue>
                           </SelectTrigger>
                           <SelectContent>
                             {certificates.map((cert) => (
@@ -371,11 +398,23 @@ function DomainForm({
               </label>
             )}
           />
-          <p className="text-muted-foreground text-xs">
-            Route features (custom headers, IP allowlist, redirects) are
-            configured per-domain after saving — expand the domain row.
-          </p>
+          {!domain && (
+            <p className="text-muted-foreground text-xs">
+              Route features (custom headers, IP allowlist, redirects) can be
+              added once the domain exists — reopen this dialog after saving.
+            </p>
+          )}
         </TabsContent>
+
+        {domain && (
+          <TabsContent value="features" className="space-y-3 pt-3">
+            <DomainFeatures
+              projectId={projectId}
+              applicationId={applicationId}
+              domain={domain}
+            />
+          </TabsContent>
+        )}
       </Tabs>
 
       <DialogFooter>
