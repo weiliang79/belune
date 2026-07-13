@@ -216,14 +216,18 @@ function DomainForm({
         </DialogDescription>
       </DialogHeader>
 
-      <Tabs defaultValue="hostname" className="min-w-0">
-        <TabsList className="grid w-full grid-cols-3">
-          <TabsTrigger value="hostname">Hostname</TabsTrigger>
-          <TabsTrigger value="tls">TLS</TabsTrigger>
+      {/* Two tabs, both honestly named. This tab used to be called "Hostname"
+          while holding the hostname, the path, the strip toggle, the internal
+          path and the port — the whole journey of a request from the browser to
+          the container. Meanwhile "Routing" held one checkbox that was really a
+          TLS decision. The labels were inverted. */}
+      <Tabs defaultValue="routing" className="min-w-0">
+        <TabsList className="grid w-full grid-cols-2">
           <TabsTrigger value="routing">Routing</TabsTrigger>
+          <TabsTrigger value="tls">TLS</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="hostname" className="space-y-3 pt-3">
+        <TabsContent value="routing" className="space-y-3 pt-3">
           <form.Field
             name="hostname"
             validators={{
@@ -450,6 +454,11 @@ function DomainForm({
               );
             }}
           />
+          <p className="text-muted-foreground text-xs">
+            Route features (basic auth, custom headers, IP allowlist, redirects)
+            have their own dialog — they apply immediately rather than on save.
+            Find them under the domain's actions menu.
+          </p>
         </TabsContent>
 
         <TabsContent value="tls" className="space-y-3 pt-3">
@@ -563,27 +572,42 @@ function DomainForm({
               ) : null
             }
           />
-        </TabsContent>
 
-        <TabsContent value="routing" className="space-y-3 pt-3">
-          <form.Field
-            name="force_https"
-            children={(field) => (
-              <label className="flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  checked={field.state.value}
-                  onChange={(e) => field.handleChange(e.target.checked)}
-                />
-                Force HTTPS
-              </label>
+          {/* Force HTTPS lives here, not under Routing: it is meaningless when
+              ssl_mode=off — the route builder skips the redirect entirely — so
+              offering it there let an operator tick a box that did nothing. */}
+          <form.Subscribe
+            selector={(state) => state.values.ssl_mode}
+            children={(sslMode) => (
+              <form.Field
+                name="force_https"
+                children={(field) => (
+                  <div className="space-y-1 border-t pt-3">
+                    <label className="flex items-center gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={sslMode !== "off" && field.state.value}
+                        disabled={sslMode === "off"}
+                        onChange={(e) => field.handleChange(e.target.checked)}
+                      />
+                      <span
+                        className={
+                          sslMode === "off" ? "text-muted-foreground" : undefined
+                        }
+                      >
+                        Force HTTPS
+                      </span>
+                    </label>
+                    <p className="text-muted-foreground text-xs">
+                      {sslMode === "off"
+                        ? "Unavailable while TLS is off — there is no HTTPS to redirect to."
+                        : "Redirect plain HTTP requests for this domain to HTTPS."}
+                    </p>
+                  </div>
+                )}
+              />
             )}
           />
-          <p className="text-muted-foreground text-xs">
-            Route features (basic auth, custom headers, IP allowlist, redirects)
-            have their own dialog — they apply immediately rather than on save.
-            Find them under the domain's actions menu.
-          </p>
         </TabsContent>
       </Tabs>
 
