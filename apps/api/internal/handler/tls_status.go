@@ -114,6 +114,7 @@ func timestampPtr(ts pgtype.Timestamptz) *time.Time {
 // the sweep — the operator is watching the page while Let's Encrypt works.
 type dashboardTLSResponse struct {
 	Domain      string     `json:"domain"`
+	SSLMode     string     `json:"ssl_mode"`
 	TLSStatus   string     `json:"tls_status"`
 	TLSIssuer   string     `json:"tls_issuer,omitempty"`
 	TLSNotAfter *time.Time `json:"tls_not_after"`
@@ -133,11 +134,22 @@ func (h *Handler) GetDashboardTLS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Derive on the mode the operator actually chose, not a hardcoded "automatic".
+	// An off dashboard serves no certificate by design, and probing it as though
+	// it should have one would report a healthy configuration as failed.
+	sslMode := proxy.SSLModeAutomatic
+	if s, err := h.queries.GetSetting(r.Context(), proxy.SettingDashboardSSLMode); err == nil {
+		if m := strings.TrimSpace(s.Value); proxy.ValidSSLMode(m) && m != "" {
+			sslMode = m
+		}
+	}
+
 	leaf, dialErr := tlsstatus.Probe(r.Context(), h.cfg.CaddyTLSProbeAddr, domain)
-	res := tlsstatus.Derive("automatic", leaf, domain, dialErr, "", time.Now())
+	res := tlsstatus.Derive(sslMode, leaf, domain, dialErr, "", time.Now())
 
 	out := dashboardTLSResponse{
 		Domain:    domain,
+		SSLMode:   sslMode,
 		TLSStatus: res.Status,
 		TLSIssuer: res.Issuer,
 		TLSError:  res.Error,

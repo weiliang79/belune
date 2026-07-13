@@ -211,7 +211,7 @@ func TestRealStack_ReconcilerKeepsDashboardRoute(t *testing.T) {
 	}
 	client := caddy.New(adminURL)
 	require.NoError(t, client.Ping(ctx))
-	t.Cleanup(func() { _ = client.SetDashboardRoute(ctx, "") })
+	t.Cleanup(func() { _ = client.SetDashboardRoute(ctx, "", proxy.SSLModeAutomatic) })
 	client.InitCatchAll(ctx)
 
 	const host = "panel.belune.local"

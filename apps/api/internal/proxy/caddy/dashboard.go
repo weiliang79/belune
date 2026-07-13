@@ -10,6 +10,7 @@ import (
 	"net/http"
 
 	"github.com/weiliang79/belune/internal/pkg/metrics"
+	"github.com/weiliang79/belune/internal/proxy"
 )
 
 // dashboardRouteID is the Belune dashboard's own route. It is kept separate from
@@ -30,18 +31,24 @@ const dashboardRouteID = "route-dashboard"
 // This is called on every reconcile pass, so it must be cheap and idempotent: it
 // no-ops when Caddy already has the right route, rather than rewriting the config
 // (and triggering a reload) every 30 seconds.
-func (c *Client) SetDashboardRoute(ctx context.Context, hostname string) (err error) {
+func (c *Client) SetDashboardRoute(ctx context.Context, hostname, sslMode string) (err error) {
 	defer func() { metrics.RecordCaddyCall("set_dashboard_route", err) }()
 
-	current, found, err := c.dashboardRouteHost(ctx)
+	// Off means plain HTTP, so the redirect must go too. Left in, it would bounce
+	// the operator to a port that has no certificate for this name — locking them
+	// out of the panel they just switched to HTTP on purpose.
+	forceHTTPS := sslMode != proxy.SSLModeOff
+
+	current, currentForce, found, err := c.dashboardRouteState(ctx)
 	if err != nil {
 		return err
 	}
-	if found && current == hostname {
+	if found && current == hostname && currentForce == forceHTTPS {
 		return nil // already correct
 	}
 
-	// Drop the old route: either the hostname changed, or it is being cleared.
+	// Drop the old route: the hostname changed, the mode changed, or it is being
+	// cleared.
 	if found {
 		if err := c.deleteRouteByID(ctx, dashboardRouteID); err != nil {
 			return err
@@ -52,25 +59,28 @@ func (c *Client) SetDashboardRoute(ctx context.Context, hostname string) (err er
 		return nil
 	}
 
-	route := caddyRoute{
-		ID:    dashboardRouteID,
-		Match: []caddyMatch{{Host: []string{hostname}}},
-		Handle: []caddyHandle{
-			// The dashboard is a login form; there is no reason to serve it over
-			// plain HTTP once it has a certificate.
-			{
-				"handler": "subroute",
-				"routes": []map[string]any{{
-					"match": []caddyMatcher{{"protocol": "http"}},
-					"handle": []caddyHandle{{
-						"handler":     "static_response",
-						"headers":     map[string][]string{"Location": {"{http.request.scheme}s://{http.request.host}{http.request.uri}"}},
-						"status_code": "301",
-					}},
+	handles := make([]caddyHandle, 0, 2)
+	if forceHTTPS {
+		// The dashboard is a login form; there is no reason to serve it over plain
+		// HTTP once it has a certificate.
+		handles = append(handles, caddyHandle{
+			"handler": "subroute",
+			"routes": []map[string]any{{
+				"match": []caddyMatcher{{"protocol": "http"}},
+				"handle": []caddyHandle{{
+					"handler":     "static_response",
+					"headers":     map[string][]string{"Location": {"{http.request.scheme}s://{http.request.host}{http.request.uri}"}},
+					"status_code": "301",
 				}},
-			},
-			newReverseProxyHandle([]caddyUpstream{{Dial: c.dashboardUpstream}}, ""),
-		},
+			}},
+		})
+	}
+	handles = append(handles, newReverseProxyHandle([]caddyUpstream{{Dial: c.dashboardUpstream}}, ""))
+
+	route := caddyRoute{
+		ID:     dashboardRouteID,
+		Match:  []caddyMatch{{Host: []string{hostname}}},
+		Handle: handles,
 	}
 
 	body, err := json.Marshal(route)
@@ -104,18 +114,24 @@ func (c *Client) SetDashboardRoute(ctx context.Context, hostname string) (err er
 		return fmt.Errorf("reorder catch-all: %w", err)
 	}
 
-	slog.Info("caddy: dashboard route published", "hostname", hostname, "upstream", c.dashboardUpstream)
+	slog.Info("caddy: dashboard route published",
+		"hostname", hostname, "ssl_mode", sslMode, "force_https", forceHTTPS, "upstream", c.dashboardUpstream)
 	return nil
 }
 
-// dashboardRouteHost reports the hostname the dashboard route currently serves.
-func (c *Client) dashboardRouteHost(ctx context.Context) (hostname string, found bool, err error) {
+// dashboardRouteState reports the hostname the dashboard route currently serves
+// and whether it renders the HTTP→HTTPS redirect.
+//
+// The redirect has to be read back, not just the hostname: switching the mode
+// between off and automatic changes only the handlers, and comparing hostnames
+// alone would call that "already correct" and never rewrite the route.
+func (c *Client) dashboardRouteState(ctx context.Context) (hostname string, forceHTTPS, found bool, err error) {
 	rawRoutes, err := c.fetchRawRoutes(ctx)
 	if err != nil {
 		if isTransportError(err) {
-			return "", false, fmt.Errorf("%w: %v", ErrCaddyUnreachable, err)
+			return "", false, false, fmt.Errorf("%w: %v", ErrCaddyUnreachable, err)
 		}
-		return "", false, fmt.Errorf("fetch routes: %w", err)
+		return "", false, false, fmt.Errorf("fetch routes: %w", err)
 	}
 
 	for _, r := range rawRoutes {
@@ -124,6 +140,9 @@ func (c *Client) dashboardRouteHost(ctx context.Context) (hostname string, found
 			Match []struct {
 				Host []string `json:"host"`
 			} `json:"match"`
+			Handle []struct {
+				Handler string `json:"handler"`
+			} `json:"handle"`
 		}
 		if err := json.Unmarshal(r, &probe); err != nil {
 			continue
@@ -131,12 +150,18 @@ func (c *Client) dashboardRouteHost(ctx context.Context) (hostname string, found
 		if probe.ID != dashboardRouteID {
 			continue
 		}
-		if len(probe.Match) > 0 && len(probe.Match[0].Host) > 0 {
-			return probe.Match[0].Host[0], true, nil
+		for _, h := range probe.Handle {
+			if h.Handler == "subroute" {
+				forceHTTPS = true
+				break
+			}
 		}
-		return "", true, nil
+		if len(probe.Match) > 0 && len(probe.Match[0].Host) > 0 {
+			return probe.Match[0].Host[0], forceHTTPS, true, nil
+		}
+		return "", forceHTTPS, true, nil
 	}
-	return "", false, nil
+	return "", false, false, nil
 }
 
 // deleteRouteByID removes a route by its @id, treating "already gone" as success.

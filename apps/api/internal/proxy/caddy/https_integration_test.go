@@ -318,10 +318,10 @@ func deleteJSON(ctx context.Context, c *Client, path string) error {
 func TestRealCaddy_DashboardRoute(t *testing.T) {
 	c := liveClient(t)
 	ctx := context.Background()
-	t.Cleanup(func() { _ = c.SetDashboardRoute(ctx, "") })
+	t.Cleanup(func() { _ = c.SetDashboardRoute(ctx, "", proxy.SSLModeAutomatic) })
 
 	c.InitCatchAll(ctx)
-	require.NoError(t, c.SetDashboardRoute(ctx, dashboardHost))
+	require.NoError(t, c.SetDashboardRoute(ctx, dashboardHost, proxy.SSLModeAutomatic))
 
 	// Caddy issues for it, which is the whole point.
 	state, err := leafFor(t, dashboardHost, 15*time.Second)
@@ -331,7 +331,7 @@ func TestRealCaddy_DashboardRoute(t *testing.T) {
 	// Idempotent: the reconciler re-asserts this every 30s and must not churn
 	// Caddy's config (each write is a full config reload).
 	before := routeIDs(t, c)
-	require.NoError(t, c.SetDashboardRoute(ctx, dashboardHost))
+	require.NoError(t, c.SetDashboardRoute(ctx, dashboardHost, proxy.SSLModeAutomatic))
 	assert.Equal(t, before, routeIDs(t, c), "re-applying the same hostname rewrote the route table")
 
 	// The catch-all matches everything, so it must stay last or it would shadow
@@ -340,7 +340,7 @@ func TestRealCaddy_DashboardRoute(t *testing.T) {
 	assert.Equal(t, "route-catch-all", ids[len(ids)-1], "catch-all must remain the last route")
 
 	// Clearing it falls back to the catch-all (the bare-IP install).
-	require.NoError(t, c.SetDashboardRoute(ctx, ""))
+	require.NoError(t, c.SetDashboardRoute(ctx, "", proxy.SSLModeAutomatic))
 	assert.NotContains(t, routeIDs(t, c), "route-dashboard")
 }
 

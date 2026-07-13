@@ -5,17 +5,41 @@ import (
 	"encoding/json"
 )
 
-// SettingDashboardDomain is the settings key holding the hostname the Belune
-// dashboard is served on.
-const SettingDashboardDomain = "dashboard_domain"
+// Settings keys describing how the Belune dashboard itself is served. The
+// dashboard has no row in the domains table — it is the panel, not an app — so
+// its hostname and TLS choice live in settings, and the reconciler has to apply
+// them by hand rather than through the domain sweep.
+const (
+	// SettingDashboardDomain holds the hostname the dashboard is served on.
+	SettingDashboardDomain = "dashboard_domain"
+	// SettingDashboardSSLMode holds one of the SSLMode* values below. Absent or
+	// empty means automatic, which is what every install before this setting
+	// existed was doing.
+	SettingDashboardSSLMode = "dashboard_ssl_mode"
+	// SettingDashboardCertificateID names the uploaded certificate to serve when
+	// the mode is custom. Ignored otherwise.
+	SettingDashboardCertificateID = "dashboard_certificate_id"
+)
 
 const (
 	// SSLModeOff serves plain HTTP only: no certificate is obtained for the
 	// hostname and no HTTP→HTTPS redirect is rendered.
 	SSLModeOff = "off"
+	// SSLModeAutomatic obtains a certificate from Let's Encrypt. The default.
+	SSLModeAutomatic = "automatic"
 	// SSLModeCustom serves an operator-uploaded certificate from the store.
 	SSLModeCustom = "custom"
 )
+
+// ValidSSLMode reports whether mode is one the proxy knows how to serve. Empty
+// counts as automatic, which is the historical default.
+func ValidSSLMode(mode string) bool {
+	switch mode {
+	case "", SSLModeOff, SSLModeAutomatic, SSLModeCustom:
+		return true
+	}
+	return false
+}
 
 // RouteFeature represents a middleware feature applied to a route.
 // Config is kept as raw JSON so it can be validated against a typed schema
@@ -73,7 +97,11 @@ type ProxyManager interface {
 	// catch-all. An empty hostname clears it. Idempotent — the reconciler
 	// re-asserts it every pass, because a Caddy restart drops it like everything
 	// else pushed over the admin API.
-	SetDashboardRoute(ctx context.Context, hostname string) error
+	// sslMode decides whether a certificate is obtained for the hostname and
+	// whether the route renders an HTTP→HTTPS redirect. It must: redirecting to
+	// HTTPS on an ssl_mode=off dashboard would bounce the operator to a port with
+	// no certificate and lock them out of their own panel.
+	SetDashboardRoute(ctx context.Context, hostname, sslMode string) error
 
 	// SyncCertificates makes the proxy's loaded certificates match the given set,
 	// keyed by hostname. Like routes, certificates pushed over the admin API are

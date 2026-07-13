@@ -5,6 +5,8 @@ import (
 	"errors"
 	"log/slog"
 	"strings"
+
+	"github.com/jackc/pgx/v5/pgtype"
 	"sync"
 	"time"
 
@@ -142,6 +144,12 @@ func (r *Reconciler) reconcile(ctx context.Context) {
 	// static Caddyfile, so this is what restores the :443 listener — and doing it
 	// first means a route re-added below cannot briefly trigger a doomed
 	// certificate attempt for an ssl_mode=off hostname.
+	// The dashboard has no domains row, so its TLS choice has to be folded into
+	// these lists by hand. Miss it out and the mode is decorative: an off
+	// dashboard would still have a certificate obtained for it, and a custom one
+	// would be served Caddy's internal cert in preference to the uploaded one.
+	dashboardHost, dashboardMode, dashboardCertID := r.dashboardTLS(ctx)
+
 	var skip, skipCerts []string
 	for _, cfg := range expected {
 		switch cfg.SSLMode {
@@ -151,6 +159,14 @@ func (r *Reconciler) reconcile(ctx context.Context) {
 			skipCerts = append(skipCerts, cfg.Hostname)
 		}
 	}
+	if dashboardHost != "" {
+		switch dashboardMode {
+		case SSLModeOff:
+			skip = append(skip, dashboardHost)
+		case SSLModeCustom:
+			skipCerts = append(skipCerts, dashboardHost)
+		}
+	}
 	if err := r.proxy.SyncAutoHTTPS(ctx, skip, skipCerts); err != nil {
 		slog.Warn("proxy reconciler: failed to sync auto-HTTPS config", "error", err)
 		recordErr(err)
@@ -158,7 +174,7 @@ func (r *Reconciler) reconcile(ctx context.Context) {
 
 	// Uploaded certificates are held in Caddy's memory, so a restart drops them
 	// just as it drops routes. Re-assert the whole set from the DB each pass.
-	if err := r.syncCertificates(ctx); err != nil {
+	if err := r.syncCertificates(ctx, dashboardHost, dashboardMode, dashboardCertID); err != nil {
 		slog.Warn("proxy reconciler: failed to sync certificates", "error", err)
 		recordErr(err)
 	}
@@ -167,8 +183,7 @@ func (r *Reconciler) reconcile(ctx context.Context) {
 	// it is both re-asserted here and exempted from the stale-route sweep below —
 	// otherwise the sweep would see a host-matched route with no matching domain
 	// and delete the dashboard within one interval.
-	dashboardHost := r.dashboardHost(ctx)
-	if err := r.proxy.SetDashboardRoute(ctx, dashboardHost); err != nil {
+	if err := r.proxy.SetDashboardRoute(ctx, dashboardHost, dashboardMode); err != nil {
 		slog.Warn("proxy reconciler: failed to sync dashboard route", "error", err)
 		recordErr(err)
 	}
@@ -269,14 +284,15 @@ func (r *Reconciler) buildExpected(ctx context.Context) ([]RouteConfig, error) {
 }
 
 // syncCertificates pushes the PEM pair of every ssl_mode=custom domain into the
-// proxy's in-band certificate store.
-func (r *Reconciler) syncCertificates(ctx context.Context) error {
+// proxy's in-band certificate store — plus the dashboard's own, which has no
+// domains row and so would otherwise be left with nothing to serve.
+func (r *Reconciler) syncCertificates(ctx context.Context, dashboardHost, dashboardMode, dashboardCertID string) error {
 	rows, err := r.queries.ListCustomCertDomains(ctx)
 	if err != nil {
 		return err
 	}
 
-	certs := make([]HostCertificate, 0, len(rows))
+	certs := make([]HostCertificate, 0, len(rows)+1)
 	for _, row := range rows {
 		certPEM, err := r.dec.Decrypt(row.CertPemEncrypted)
 		if err != nil {
@@ -295,16 +311,70 @@ func (r *Reconciler) syncCertificates(ctx context.Context) error {
 		})
 	}
 
+	if dashboardHost != "" && dashboardMode == SSLModeCustom && dashboardCertID != "" {
+		if cert, ok := r.dashboardCertificate(ctx, dashboardHost, dashboardCertID); ok {
+			certs = append(certs, cert)
+		}
+	}
+
 	return r.proxy.SyncCertificates(ctx, certs)
 }
 
-// dashboardHost reads the operator-configured dashboard hostname. An unset or
+// dashboardCertificate loads and decrypts the certificate the dashboard is
+// configured to serve. A missing or undecryptable certificate is a warning, not
+// a failure: the rest of the certificates must still reach Caddy.
+func (r *Reconciler) dashboardCertificate(ctx context.Context, hostname, certID string) (HostCertificate, bool) {
+	var id pgtype.UUID
+	if err := id.Scan(certID); err != nil {
+		slog.Warn("proxy reconciler: dashboard certificate id is not a uuid", "id", certID)
+		return HostCertificate{}, false
+	}
+	row, err := r.queries.GetCertificate(ctx, id)
+	if err != nil {
+		slog.Warn("proxy reconciler: dashboard certificate not found", "id", certID, "error", err)
+		return HostCertificate{}, false
+	}
+	certPEM, err := r.dec.Decrypt(row.CertPemEncrypted)
+	if err != nil {
+		slog.Warn("proxy reconciler: failed to decrypt dashboard certificate", "error", err)
+		return HostCertificate{}, false
+	}
+	keyPEM, err := r.dec.Decrypt(row.KeyPemEncrypted)
+	if err != nil {
+		slog.Warn("proxy reconciler: failed to decrypt dashboard certificate key", "error", err)
+		return HostCertificate{}, false
+	}
+	return HostCertificate{
+		Hostname: hostname,
+		CertPEM:  string(certPEM),
+		KeyPEM:   string(keyPEM),
+	}, true
+}
+
+// dashboardTLS reads how the operator wants the dashboard served. An unset or
 // unreadable setting means "no dashboard route" rather than an error: the
 // catch-all still serves the dashboard on any host over plain HTTP.
-func (r *Reconciler) dashboardHost(ctx context.Context) string {
+//
+// An absent mode is automatic, which is what every install did before the mode
+// existed — so an upgrade keeps the certificate it already has.
+func (r *Reconciler) dashboardTLS(ctx context.Context) (hostname, sslMode, certID string) {
 	setting, err := r.queries.GetSetting(ctx, SettingDashboardDomain)
 	if err != nil {
-		return ""
+		return "", "", ""
 	}
-	return strings.TrimSpace(setting.Value)
+	hostname = strings.TrimSpace(setting.Value)
+	if hostname == "" {
+		return "", "", ""
+	}
+
+	sslMode = SSLModeAutomatic
+	if s, err := r.queries.GetSetting(ctx, SettingDashboardSSLMode); err == nil {
+		if m := strings.TrimSpace(s.Value); ValidSSLMode(m) && m != "" {
+			sslMode = m
+		}
+	}
+	if s, err := r.queries.GetSetting(ctx, SettingDashboardCertificateID); err == nil {
+		certID = strings.TrimSpace(s.Value)
+	}
+	return hostname, sslMode, certID
 }

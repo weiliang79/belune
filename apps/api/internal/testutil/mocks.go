@@ -252,7 +252,7 @@ func (m *MockProxyManager) SyncCertificates(_ context.Context, _ []proxy.HostCer
 	return nil
 }
 
-func (m *MockProxyManager) SetDashboardRoute(_ context.Context, _ string) error { return nil }
+func (m *MockProxyManager) SetDashboardRoute(_ context.Context, _, _ string) error { return nil }
 func (m *MockProxyManager) ListRoutes(_ context.Context) ([]proxy.RouteConfig, error) {
 	return nil, nil
 }

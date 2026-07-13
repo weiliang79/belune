@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
+
+	"github.com/jackc/pgx/v5/pgtype"
 	"strings"
 
 	"github.com/weiliang79/belune/internal/proxy"
@@ -55,21 +57,58 @@ func (h *Handler) UpdateSettings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// The dashboard domain is not just a stored string: it decides the hostname
-	// Caddy obtains a certificate for, so it is validated before it is written and
-	// applied to the proxy afterwards.
-	dashboardDomain, changingDashboard := "", false
+	// The dashboard settings are not just stored strings: they decide the hostname
+	// Caddy obtains a certificate for, and how. Validate before writing, then
+	// apply to the proxy — a bad value here takes HTTPS down on the panel itself.
+	changingDashboard := false
 	for i, s := range req {
-		if s.Key != proxy.SettingDashboardDomain {
-			continue
+		switch s.Key {
+		case proxy.SettingDashboardDomain:
+			host := strings.TrimSpace(s.Value)
+			if host != "" && !hostnameRegex.MatchString(host) {
+				writeError(w, http.StatusBadRequest, "invalid dashboard domain: must be a hostname such as belune.example.com")
+				return
+			}
+			req[i].Value = host
+			changingDashboard = true
+
+		case proxy.SettingDashboardSSLMode:
+			mode := strings.TrimSpace(s.Value)
+			if !proxy.ValidSSLMode(mode) {
+				writeError(w, http.StatusBadRequest, "invalid TLS mode: expected automatic, custom, or off")
+				return
+			}
+			req[i].Value = mode
+			changingDashboard = true
+
+		case proxy.SettingDashboardCertificateID:
+			id := strings.TrimSpace(s.Value)
+			// A certificate that does not exist would leave the dashboard with
+			// nothing to serve on :443 — refuse it here rather than discover it in
+			// the reconciler, where the operator would never see the reason.
+			if id != "" {
+				var uid pgtype.UUID
+				if err := uid.Scan(id); err != nil {
+					writeError(w, http.StatusBadRequest, "invalid certificate id")
+					return
+				}
+				if _, err := h.queries.GetCertificate(r.Context(), uid); err != nil {
+					writeError(w, http.StatusBadRequest, "the selected certificate no longer exists")
+					return
+				}
+			}
+			req[i].Value = id
+			changingDashboard = true
 		}
-		host := strings.TrimSpace(s.Value)
-		if host != "" && !hostnameRegex.MatchString(host) {
-			writeError(w, http.StatusBadRequest, "invalid dashboard domain: must be a hostname such as belune.example.com")
-			return
-		}
-		req[i].Value = host
-		dashboardDomain, changingDashboard = host, true
+	}
+
+	// The three dashboard settings only make sense together, and a request may
+	// carry any subset of them — so resolve what the combination *will* be and
+	// judge that, rather than each field in isolation.
+	domain, mode, certID := h.effectiveDashboardTLS(r, req)
+	if changingDashboard && domain != "" && mode == proxy.SSLModeCustom && certID == "" {
+		writeError(w, http.StatusBadRequest, "choose a certificate to serve, or switch the TLS mode to automatic")
+		return
 	}
 
 	for _, s := range req {
@@ -89,8 +128,8 @@ func (h *Handler) UpdateSettings(w http.ResponseWriter, r *http.Request) {
 		// Publish (or clear) the dashboard's own route. A failure here leaves the
 		// setting saved but the proxy unchanged; the reconciler re-applies it on its
 		// next pass, so report it rather than pretending nothing happened.
-		if err := h.proxy.SetDashboardRoute(r.Context(), dashboardDomain); err != nil {
-			slog.Error("failed to apply dashboard domain to proxy", "hostname", dashboardDomain, "error", err)
+		if err := h.proxy.SetDashboardRoute(r.Context(), domain, mode); err != nil {
+			slog.Error("failed to apply dashboard domain to proxy", "hostname", domain, "ssl_mode", mode, "error", err)
 			writeError(w, http.StatusInternalServerError, "domain saved, but the proxy could not be updated — it will retry shortly")
 			return
 		}
@@ -99,4 +138,39 @@ func (h *Handler) UpdateSettings(w http.ResponseWriter, r *http.Request) {
 	h.audit(r, "update_settings", "settings", "", nil)
 
 	writeJSON(w, http.StatusOK, map[string]string{"status": "updated"})
+}
+
+// effectiveDashboardTLS resolves what the dashboard's TLS settings will be once
+// this request is written: the stored values, with anything in the request
+// overriding them. A PATCH-shaped API that only ever sees a subset of the keys
+// cannot otherwise tell whether "mode = custom" is about to be left without a
+// certificate.
+func (h *Handler) effectiveDashboardTLS(r *http.Request, req []settingResponse) (domain, mode, certID string) {
+	read := func(key string) string {
+		if s, err := h.queries.GetSetting(r.Context(), key); err == nil {
+			return strings.TrimSpace(s.Value)
+		}
+		return ""
+	}
+	domain = read(proxy.SettingDashboardDomain)
+	mode = read(proxy.SettingDashboardSSLMode)
+	certID = read(proxy.SettingDashboardCertificateID)
+
+	for _, s := range req {
+		switch s.Key {
+		case proxy.SettingDashboardDomain:
+			domain = s.Value
+		case proxy.SettingDashboardSSLMode:
+			mode = s.Value
+		case proxy.SettingDashboardCertificateID:
+			certID = s.Value
+		}
+	}
+
+	// Absent means automatic: that is what every install did before the mode
+	// existed, so an upgrade keeps serving the certificate it already has.
+	if mode == "" {
+		mode = proxy.SSLModeAutomatic
+	}
+	return domain, mode, certID
 }
