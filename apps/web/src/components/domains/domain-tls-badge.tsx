@@ -79,11 +79,13 @@ export function DomainTLSBadge({
           <button type="button" aria-label={`TLS status: ${style.label}`} />
         }
       >
+        {/* No "TLS:" prefix — the badge's only home is a column already headed
+            TLS, and repeating it in every cell is noise. */}
         <Badge
           variant={style.variant}
           className={`${style.className ?? ""} cursor-pointer`}
         >
-          TLS: {style.label}
+          {style.label}
         </Badge>
       </PopoverTrigger>
       <PopoverContent className="w-80 space-y-3 text-sm">
