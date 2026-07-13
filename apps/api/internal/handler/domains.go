@@ -104,6 +104,39 @@ func validateDomainPath(p string) string {
 	return ""
 }
 
+// normalizeInternalPath shapes the prefix prepended before the request reaches
+// the app. Empty means "prepend nothing", which is what every domain did before
+// this existed — so unlike the public path, empty is legitimate here and must NOT
+// become "/": prepending a bare "/" would rewrite "/users" into "//users".
+func normalizeInternalPath(p string) string {
+	p = strings.TrimSpace(p)
+	if p == "" || p == "/" {
+		return ""
+	}
+	if !strings.HasPrefix(p, "/") {
+		p = "/" + p
+	}
+	return strings.TrimRight(p, "/")
+}
+
+// validateInternalPath returns a human reason an already-normalised internal path
+// is unusable, or "".
+func validateInternalPath(p string) string {
+	if p == "" {
+		return ""
+	}
+	if len(p) > 255 {
+		return "internal path is too long (maximum 255 characters)"
+	}
+	if !domainPathRegex.MatchString(p) {
+		return "internal path must start with / and may contain only letters, digits and - . _ ~ / — no wildcards or query strings"
+	}
+	if strings.Contains(p, "//") {
+		return "internal path must not contain an empty segment (//)"
+	}
+	return ""
+}
+
 // checkHostTLSAgreement rejects a domain whose TLS choice contradicts the other
 // paths already served on the same hostname, returning a human reason or "".
 //
@@ -168,6 +201,7 @@ type addDomainRequest struct {
 	Hostname       string          `json:"hostname"`
 	Path           string          `json:"path,omitempty"`
 	StripPath      bool            `json:"strip_path,omitempty"`
+	InternalPath   string          `json:"internal_path,omitempty"`
 	SSLEnabled     bool            `json:"ssl_enabled"`
 	ContainerPort  *int32          `json:"container_port,omitempty"`
 	ForceHTTPS     *bool           `json:"force_https,omitempty"`
@@ -230,6 +264,11 @@ func (h *Handler) AddDomain(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, reason)
 		return
 	}
+	internalPath := normalizeInternalPath(req.InternalPath)
+	if reason := validateInternalPath(internalPath); reason != "" {
+		writeError(w, http.StatusBadRequest, reason)
+		return
+	}
 	if reason := h.checkHostTLSAgreement(r.Context(), req.Hostname, sslMode, certUUID, pgtype.UUID{}); reason != "" {
 		writeError(w, http.StatusBadRequest, reason)
 		return
@@ -246,6 +285,7 @@ func (h *Handler) AddDomain(w http.ResponseWriter, r *http.Request) {
 		AdvancedConfig: req.AdvancedConfig,
 		Path:           path,
 		StripPath:      req.StripPath,
+		InternalPath:   internalPath,
 	}
 	if req.ContainerPort != nil {
 		params.ContainerPort = pgtype.Int4{Int32: *req.ContainerPort, Valid: true}
@@ -314,6 +354,7 @@ type updateDomainRequest struct {
 	// silently move it back to the root.
 	Path           *string         `json:"path,omitempty"`
 	StripPath      *bool           `json:"strip_path,omitempty"`
+	InternalPath   *string         `json:"internal_path,omitempty"`
 	SSLEnabled     bool            `json:"ssl_enabled"`
 	ContainerPort  *int32          `json:"container_port,omitempty"`
 	ForceHTTPS     bool            `json:"force_https"`
@@ -374,6 +415,7 @@ func (h *Handler) UpdateDomain(w http.ResponseWriter, r *http.Request) {
 	}
 
 	path, stripPath := oldDomain.Path, oldDomain.StripPath
+	internalPath := oldDomain.InternalPath
 	if req.Path != nil {
 		path = normalizeDomainPath(*req.Path)
 		if reason := validateDomainPath(path); reason != "" {
@@ -383,6 +425,13 @@ func (h *Handler) UpdateDomain(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.StripPath != nil {
 		stripPath = *req.StripPath
+	}
+	if req.InternalPath != nil {
+		internalPath = normalizeInternalPath(*req.InternalPath)
+		if reason := validateInternalPath(internalPath); reason != "" {
+			writeError(w, http.StatusBadRequest, reason)
+			return
+		}
 	}
 	// Excludes this row: a domain must not be found to contradict itself.
 	if reason := h.checkHostTLSAgreement(r.Context(), req.Hostname, req.SSLMode, certUUID, domainUUID); reason != "" {
@@ -402,8 +451,9 @@ func (h *Handler) UpdateDomain(w http.ResponseWriter, r *http.Request) {
 		// Carried over unless the request says otherwise. The update statement
 		// writes path unconditionally, so defaulting here would quietly move a
 		// domain back to the root every time anyone edited its port or TLS mode.
-		Path:      path,
-		StripPath: stripPath,
+		Path:         path,
+		StripPath:    stripPath,
+		InternalPath: internalPath,
 	}
 	if req.ContainerPort != nil {
 		params.ContainerPort = pgtype.Int4{Int32: *req.ContainerPort, Valid: true}

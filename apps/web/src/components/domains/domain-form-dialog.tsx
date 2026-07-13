@@ -2,6 +2,12 @@ import { useForm } from "@tanstack/react-form";
 import { z } from "zod";
 import { toast } from "sonner";
 import {
+  forwardedPath,
+  normalizeInternalPath,
+  normalizePublicPath,
+  samplePublicRequest,
+} from "@/lib/domain-path";
+import {
   GlobeIcon,
   KeyRoundIcon,
   Loader2,
@@ -137,6 +143,7 @@ function DomainForm({
       // blank field is normalised to "/" on submit.
       path: domain?.path && domain.path !== "/" ? domain.path : "",
       strip_path: domain?.strip_path ?? false,
+      internal_path: domain?.internal_path ?? "",
       ssl_mode: domain?.ssl_mode ?? "automatic",
       container_port: domain?.container_port?.toString() ?? "",
       force_https: domain?.force_https ?? true,
@@ -154,6 +161,9 @@ function DomainForm({
       // Stripping "/" is meaningless — there is nothing to strip — and would only
       // travel to the server to be ignored.
       const stripPath = path === "/" ? false : value.strip_path;
+      // Empty is meaningful here: it means prepend nothing. Unlike the public
+      // path, it must not be coerced to "/", which would prepend a bare slash.
+      const internalPath = normalizeInternalPath(value.internal_path);
 
       const action =
         isEdit && domain
@@ -162,6 +172,7 @@ function DomainForm({
               hostname: trimmed,
               path,
               strip_path: stripPath,
+              internal_path: internalPath,
               ssl_mode: value.ssl_mode,
               force_https: value.force_https,
               container_port: portNum,
@@ -171,6 +182,7 @@ function DomainForm({
               hostname: trimmed,
               path,
               strip_path: stripPath,
+              internal_path: internalPath,
               ssl_enabled: value.ssl_mode !== "off",
               ssl_mode: value.ssl_mode,
               force_https: value.force_https,
@@ -289,25 +301,113 @@ function DomainForm({
                 <form.Field
                   name="strip_path"
                   children={(field) => (
-                    <div className="space-y-1">
-                      <label className="flex items-center gap-2 text-sm">
-                        <input
-                          type="checkbox"
-                          checked={field.state.value}
-                          onChange={(e) => field.handleChange(e.target.checked)}
-                        />
-                        Strip the prefix before forwarding
-                      </label>
-                      <p className="text-muted-foreground text-xs">
-                        The app receives /users instead of{" "}
-                        {path.trim().replace(/\/$/, "")}/users. Turn this off if
-                        the app already expects to be mounted under the prefix.
-                      </p>
-                    </div>
+                    <label className="flex items-center gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={field.state.value}
+                        onChange={(e) => field.handleChange(e.target.checked)}
+                      />
+                      Strip the prefix before forwarding
+                    </label>
                   )}
                 />
               ) : null
             }
+          />
+          <form.Field
+            name="internal_path"
+            validators={{
+              onChange: z
+                .string()
+                .refine(
+                  (v) => !v.trim() || /^\/?[A-Za-z0-9\-._~/]*$/.test(v.trim()),
+                  "Only letters, digits and - . _ ~ / — no wildcards",
+                ),
+            }}
+            children={(field) => {
+              const error = fieldError(field.state.meta.errors);
+              return (
+                <div className="space-y-2">
+                  <Label htmlFor="internal_path">Internal path</Label>
+                  <Input
+                    id="internal_path"
+                    placeholder="(none)"
+                    value={field.state.value}
+                    onBlur={field.handleBlur}
+                    onChange={(e) => field.handleChange(e.target.value)}
+                  />
+                  {error ? (
+                    <p className="text-destructive text-xs">{error}</p>
+                  ) : (
+                    <p className="text-muted-foreground text-xs">
+                      Prepended before the request reaches the app. Only needed
+                      when the app insists on serving under a base path of its
+                      own — Grafana under /grafana. Leave blank otherwise.
+                    </p>
+                  )}
+                </div>
+              );
+            }}
+          />
+          {/* The three fields above are each simple and jointly incomprehensible:
+              you can reason about "strip /api" or "prepend /app" alone, but not
+              about what a request looks like by the time it lands. So show it. */}
+          <form.Subscribe
+            selector={(state) => ({
+              hostname: state.values.hostname,
+              path: state.values.path,
+              strip: state.values.strip_path,
+              internal: state.values.internal_path,
+            })}
+            children={({ hostname, path, strip, internal }) => {
+              const publicPath = normalizePublicPath(path);
+              const internalPath = normalizeInternalPath(internal);
+              const stripPath = publicPath === "/" ? false : strip;
+              const request = samplePublicRequest(publicPath);
+              const arrives = forwardedPath(
+                request,
+                publicPath,
+                stripPath,
+                internalPath,
+              );
+              const host = hostname.trim() || "your-domain.com";
+
+              return (
+                <div className="bg-muted/40 space-y-2 rounded-md border p-3">
+                  <p className="text-xs font-medium">For example</p>
+                  <dl className="space-y-1.5 text-xs">
+                    <div className="flex gap-2">
+                      <dt className="text-muted-foreground w-32 shrink-0">
+                        Visitor requests
+                      </dt>
+                      <dd className="min-w-0 font-mono break-all">
+                        {host}
+                        <span className="text-foreground">{request}</span>
+                      </dd>
+                    </div>
+                    <div className="flex gap-2">
+                      <dt className="text-muted-foreground w-32 shrink-0">
+                        Your app receives
+                      </dt>
+                      <dd className="text-foreground min-w-0 font-mono break-all">
+                        {arrives}
+                      </dd>
+                    </div>
+                  </dl>
+                  {stripPath || internalPath ? (
+                    <p className="text-muted-foreground text-xs">
+                      {stripPath ? `${publicPath} removed` : null}
+                      {stripPath && internalPath ? ", then " : null}
+                      {internalPath ? `${internalPath} prepended` : null}
+                    </p>
+                  ) : (
+                    <p className="text-muted-foreground text-xs">
+                      Forwarded unchanged.
+                    </p>
+                  )}
+                </div>
+              );
+            }}
           />
           <form.Field
             name="container_port"

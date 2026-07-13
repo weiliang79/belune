@@ -56,9 +56,15 @@ type RouteConfig struct {
 	// Path is the public prefix this route answers on, always rooted ("/" for a
 	// whole-host route). StripPath removes it before the upstream sees the
 	// request — an app mounted at /api usually expects /users, not /api/users.
-	Path        string `json:"path"`
-	StripPath   bool   `json:"strip_path"`
-	TargetURL   string `json:"target_url"`
+	//
+	// InternalPath is prepended after the strip, for an app that insists on a base
+	// path of its own (Grafana under /grafana). Empty prepends nothing. The two
+	// compose in that order, which is the only order that makes sense: take off
+	// what the public URL carries, then add what the app demands.
+	Path         string `json:"path"`
+	StripPath    bool   `json:"strip_path"`
+	InternalPath string `json:"internal_path"`
+	TargetURL    string `json:"target_url"`
 	TLS         bool   `json:"tls"`
 	ForceHTTPS  bool   `json:"force_https"`
 	SSLMode     string `json:"ssl_mode"`     // automatic, custom, off (dns_challenge is withdrawn)

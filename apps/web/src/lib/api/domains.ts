@@ -14,6 +14,7 @@ export function addDomain(
     hostname: string;
     path?: string;
     strip_path?: boolean;
+    internal_path?: string;
     ssl_enabled?: boolean;
     container_port?: number;
     force_https?: boolean;
@@ -36,6 +37,7 @@ export function updateDomain(
     hostname?: string;
     path?: string;
     strip_path?: boolean;
+    internal_path?: string;
     container_port?: number | null;
     force_https?: boolean;
     ssl_mode?: string;

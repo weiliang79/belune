@@ -164,6 +164,20 @@ func buildRoute(cfg proxy.RouteConfig) (caddyRoute, error) {
 		})
 	}
 
+	// Then prepend the internal prefix, for an app that serves everything under a
+	// base path of its own. Strip first, prepend second — the composed result is
+	// what the container receives.
+	//
+	// {http.request.uri} rather than {http.request.uri.path}: it carries the query
+	// string too, and rewriting to the bare path would silently drop ?page=2 from
+	// every request the app ever sees.
+	if cfg.InternalPath != "" {
+		handlers = append(handlers, caddyHandle{
+			"handler": "rewrite",
+			"uri":     cfg.InternalPath + "{http.request.uri}",
+		})
+	}
+
 	// Reverse proxy is always the last handler.
 	handlers = append(handlers, newReverseProxyHandle(
 		[]caddyUpstream{{Dial: targetToDial(cfg.TargetURL)}},

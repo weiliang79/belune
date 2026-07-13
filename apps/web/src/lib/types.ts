@@ -372,6 +372,8 @@ export interface DomainExpanded extends Domain {
   path: string;
   /** Whether the prefix is removed before the app sees the request. */
   strip_path: boolean;
+  /** Prefix prepended after the strip, for an app that insists on a base path. */
+  internal_path: string;
   container_port?: number | null;
   force_https: boolean;
   ssl_mode: string;

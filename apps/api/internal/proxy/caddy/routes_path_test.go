@@ -146,3 +146,62 @@ func TestPathMatcherRoundTrip(t *testing.T) {
 		assert.Equal(t, path, got, "round trip must be exact for %q", path)
 	}
 }
+
+// Strip then prepend, in that order. The composed result is what the container
+// receives, and getting the order backwards would prepend to a path that still
+// carries the public prefix.
+func TestBuildRoute_StripThenInternalPath(t *testing.T) {
+	route, err := buildRoute(proxy.RouteConfig{
+		Hostname:     "shop.com",
+		Path:         "/public",
+		StripPath:    true,
+		InternalPath: "/app/v2",
+		TargetURL:    "http://api:8080",
+	})
+	require.NoError(t, err)
+
+	var order []string
+	for _, h := range route.Handle {
+		order = append(order, h["handler"].(string))
+	}
+	require.Equal(t, []string{"rewrite", "rewrite", "reverse_proxy"}, order)
+
+	assert.Equal(t, "/public", route.Handle[0]["strip_path_prefix"])
+	// {http.request.uri}, not {http.request.uri.path}: the former carries the
+	// query string, and rewriting to the bare path would drop ?page=2 from every
+	// request the app ever sees.
+	assert.Equal(t, "/app/v2{http.request.uri}", route.Handle[1]["uri"])
+}
+
+// The internal path stands alone: an app that insists on serving under /grafana
+// while the operator publishes it at the root of a host.
+func TestBuildRoute_InternalPathWithoutStrip(t *testing.T) {
+	route, err := buildRoute(proxy.RouteConfig{
+		Hostname:     "metrics.example.com",
+		Path:         "/",
+		InternalPath: "/grafana",
+		TargetURL:    "http://grafana:3000",
+	})
+	require.NoError(t, err)
+
+	var order []string
+	for _, h := range route.Handle {
+		order = append(order, h["handler"].(string))
+	}
+	require.Equal(t, []string{"rewrite", "reverse_proxy"}, order)
+	assert.Equal(t, "/grafana{http.request.uri}", route.Handle[0]["uri"])
+}
+
+// Empty means prepend nothing, and must not emit a rewrite at all — an empty
+// prefix would rewrite every request to itself and cost a handler for nothing.
+func TestBuildRoute_NoInternalPathEmitsNoRewrite(t *testing.T) {
+	route, err := buildRoute(proxy.RouteConfig{
+		Hostname:  "a.com",
+		Path:      "/",
+		TargetURL: "http://a:80",
+	})
+	require.NoError(t, err)
+	for _, h := range route.Handle {
+		assert.NotEqual(t, "rewrite", h["handler"])
+	}
+}

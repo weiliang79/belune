@@ -274,6 +274,7 @@ type Domain struct {
 	TlsAdvisory             pgtype.Text        `json:"tls_advisory"`
 	Path                    string             `json:"path"`
 	StripPath               bool               `json:"strip_path"`
+	InternalPath            string             `json:"internal_path"`
 }
 
 type DomainRouteFeature struct {
