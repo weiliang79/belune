@@ -84,6 +84,19 @@ type Decryptor interface {
 	Decrypt(ciphertext []byte) ([]byte, error)
 }
 
+// NetworkAttacher joins the proxy container to a project's Docker network.
+//
+// Apps live on per-project networks and are dialled by container name, so Caddy
+// can only reach them if it has joined that network. The deploy worker does this
+// when an app is deployed — but a container that is *recreated* (any compose up,
+// an upgrade, a config change) loses every network it joined at runtime, and
+// nothing put them back. Every app domain then answered 502 until each app was
+// redeployed by hand. The reconciler re-asserts routes and certificates after a
+// Caddy restart for exactly this reason; the networks belong with them.
+type NetworkAttacher interface {
+	ConnectContainerToNetwork(ctx context.Context, containerName, networkName string) error
+}
+
 // ProxyManager abstracts reverse proxy operations.
 type ProxyManager interface {
 	AddRoute(ctx context.Context, cfg RouteConfig) error

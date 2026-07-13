@@ -24,6 +24,12 @@ type Reconciler struct {
 	dec      Decryptor
 	interval time.Duration
 
+	// net re-joins the proxy container to each project's network. Optional: nil
+	// when the proxy is not a container we manage (Caddy on the host), in which
+	// case the attachment is somebody else's problem.
+	net            NetworkAttacher
+	proxyContainer string
+
 	// runMu serialises whole reconcile passes so a manual ReconcileNow can't
 	// overlap the periodic tick (reconcile is diff-based/idempotent but issues
 	// concurrent Caddy add/remove calls otherwise).
@@ -59,6 +65,14 @@ func NewReconciler(queries *generated.Queries, proxy ProxyManager, dec Decryptor
 		interval: interval,
 		status:   ReconcilerStatus{IntervalSeconds: int(interval / time.Second)},
 	}
+}
+
+// WithNetworkAttacher tells the reconciler to keep the proxy container joined to
+// every project network it needs, naming the proxy container to attach.
+func (r *Reconciler) WithNetworkAttacher(net NetworkAttacher, proxyContainer string) *Reconciler {
+	r.net = net
+	r.proxyContainer = proxyContainer
+	return r
 }
 
 // Status returns a snapshot of the reconciler's latest run state.
@@ -132,12 +146,17 @@ func (r *Reconciler) reconcile(ctx context.Context) {
 		r.mu.Unlock()
 	}()
 
-	expected, err := r.buildExpected(ctx)
+	expected, networks, err := r.buildExpected(ctx)
 	if err != nil {
 		slog.Warn("proxy reconciler: failed to build expected routes", "error", err)
 		recordErr(err)
 		return
 	}
+
+	// Before the routes: a route pointing at a container the proxy cannot resolve
+	// is a 502, and a recreated proxy container has lost every project network it
+	// ever joined.
+	r.ensureNetworks(ctx, networks)
 
 	// Re-assert the server-level config (HTTPS listener, auto-HTTPS policy, skip
 	// list) before touching routes. A restarted Caddy comes back up with only its
@@ -243,13 +262,16 @@ func (r *Reconciler) reconcile(ctx context.Context) {
 
 // buildExpected returns the full set of RouteConfigs that should exist in
 // Caddy, derived from all running applications and their domains in the DB.
-func (r *Reconciler) buildExpected(ctx context.Context) ([]RouteConfig, error) {
+// buildExpected returns the routes the proxy should be serving, and the project
+// networks the proxy must be joined to in order to reach them.
+func (r *Reconciler) buildExpected(ctx context.Context) ([]RouteConfig, []string, error) {
 	apps, err := r.queries.ListAllApplications(ctx)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	var configs []RouteConfig
+	networks := make(map[string]struct{})
 	for _, app := range apps {
 		if app.Status != status.ApplicationRunning {
 			continue
@@ -277,10 +299,37 @@ func (r *Reconciler) buildExpected(ctx context.Context) ([]RouteConfig, error) {
 				continue
 			}
 			configs = append(configs, cfg)
+			// Only apps that actually have a domain need the proxy on their network.
+			networks[naming.ProjectNetworkName(row.ProjectSlug)] = struct{}{}
 		}
 	}
 
-	return configs, nil
+	names := make([]string, 0, len(networks))
+	for n := range networks {
+		names = append(names, n)
+	}
+	return configs, names, nil
+}
+
+// ensureNetworks re-joins the proxy container to every project network it needs.
+//
+// The deploy worker does this when an app is deployed, and that was the only
+// place it happened — so a proxy container that got *recreated* (any compose up,
+// an upgrade) came back with none of them, and every app domain answered 502
+// until each app was redeployed. Docker treats an existing attachment as a
+// no-op, so this is cheap to re-assert on every pass.
+func (r *Reconciler) ensureNetworks(ctx context.Context, networks []string) {
+	if r.net == nil || r.proxyContainer == "" {
+		return
+	}
+	for _, network := range networks {
+		if err := r.net.ConnectContainerToNetwork(ctx, r.proxyContainer, network); err != nil {
+			// The proxy may legitimately live outside Docker, so this is a warning,
+			// not a failed pass.
+			slog.Warn("proxy reconciler: failed to attach proxy to project network",
+				"proxy", r.proxyContainer, "network", network, "error", err)
+		}
+	}
 }
 
 // syncCertificates pushes the PEM pair of every ssl_mode=custom domain into the

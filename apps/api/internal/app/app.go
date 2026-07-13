@@ -168,7 +168,12 @@ func New(cfg *config.Config) (*App, error) {
 
 	caddyClient.SetDashboardUpstream(cfg.DashboardUpstream)
 	caddyClient.InitCatchAll(context.Background())
-	reconciler := proxy.NewReconciler(queries, caddyClient, cfg.Keyring, 30*time.Second)
+	// The reconciler also keeps Caddy joined to each project's network. Without
+	// it, a recreated Caddy container (any compose up, any upgrade) comes back
+	// having lost every network the deploy worker put it on, and every app domain
+	// answers 502 until the app is redeployed.
+	reconciler := proxy.NewReconciler(queries, caddyClient, cfg.Keyring, 30*time.Second).
+		WithNetworkAttacher(dockerClient, cfg.CaddyContainerName)
 
 	if err := caddyClient.ConfigureAccessLogs(context.Background()); err != nil {
 		slog.Warn("failed to configure Caddy access logs", "error", err)
