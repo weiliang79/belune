@@ -29,6 +29,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipPositioner,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { Trash2Icon } from "lucide-react";
 import type { DomainExpanded, RouteFeature } from "@/lib/types";
 
 const FEATURE_TYPES = [
@@ -224,14 +231,26 @@ function FeatureRow({
           {configStr}
         </span>
       </div>
-      <Button
-        size="sm"
-        variant="ghost"
-        className="text-destructive h-6 shrink-0 px-2 text-xs"
-        onClick={onDelete}
-      >
-        Remove
-      </Button>
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <Button
+              size="icon-sm"
+              variant="ghost"
+              // aria-label, not just the tooltip: an icon-only button is unnamed
+              // to a screen reader, and the tooltip text is not a substitute.
+              aria-label="Remove feature"
+              className="text-destructive hover:bg-destructive/10 hover:text-destructive shrink-0"
+              onClick={onDelete}
+            />
+          }
+        >
+          <Trash2Icon className="h-4 w-4" />
+        </TooltipTrigger>
+        <TooltipPositioner>
+          <TooltipContent>Remove Feature</TooltipContent>
+        </TooltipPositioner>
+      </Tooltip>
     </div>
   );
 }
