@@ -4,7 +4,7 @@ import { useDomains } from "@/lib/hooks/use-domains";
 import { Button } from "@/components/ui/button";
 import { DomainFormDialog } from "@/components/domains/domain-form-dialog";
 import { DomainFeaturesDialog } from "@/components/domains/domain-features";
-import { DomainRow } from "@/components/domains/domain-row";
+import { DomainsTable } from "@/components/domains/domains-table";
 import { DomainEmptyState } from "@/components/domains/domain-empty-state";
 import { DomainListSkeleton } from "@/components/domains/domain-list-skeleton";
 import type { DomainExpanded } from "@/lib/types";
@@ -54,18 +54,14 @@ function DomainsPage() {
       ) : !domains || domains.length === 0 ? (
         <DomainEmptyState onAdd={openAdd} />
       ) : (
-        <div className="space-y-3">
-          {domains.map((domain) => (
-            <DomainRow
-              key={domain.id}
-              projectId={projectId}
-              applicationId={applicationId}
-              domain={domain}
-              onEdit={() => openEdit(domain)}
-              onEditFeatures={() => setFeaturesFor(domain)}
-            />
-          ))}
-        </div>
+        <DomainsTable
+          projectId={projectId}
+          applicationId={applicationId}
+          domains={domains}
+          isLoading={isLoading}
+          onEdit={openEdit}
+          onEditFeatures={setFeaturesFor}
+        />
       )}
 
       <DomainFormDialog
