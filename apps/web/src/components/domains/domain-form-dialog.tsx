@@ -88,7 +88,12 @@ export function DomainFormDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       {/* Capped: the shared DialogContent sets no max height, so a tall dialog (a
           long feature list) runs off both edges with the footer unreachable. */}
-      <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-lg">
+      {/* grid-cols-[minmax(0,1fr)]: DialogContent is a grid, and its implicit
+          column is `auto` — i.e. max-content — so a child with one long
+          unbreakable string (a bcrypt hash) makes the *column* that wide and no
+          amount of min-w-0 or truncate on the child can stop it. Pinning the
+          column to minmax(0,1fr) is what lets the children shrink at all. */}
+      <DialogContent className="max-h-[calc(100dvh-2rem)] grid-cols-[minmax(0,1fr)] overflow-y-auto sm:max-w-lg">
         {/* Keyed so the form re-initializes from the current domain each open. */}
         <DomainForm
           key={`${domain?.id ?? "new"}-${open}`}
@@ -184,7 +189,7 @@ function DomainForm({
         </DialogDescription>
       </DialogHeader>
 
-      <Tabs defaultValue="hostname">
+      <Tabs defaultValue="hostname" className="min-w-0">
         {/* Features only exist for a domain that exists: they are attached by id,
             so there is nothing to attach them to until it is created. */}
         <TabsList
@@ -407,7 +412,7 @@ function DomainForm({
         </TabsContent>
 
         {domain && (
-          <TabsContent value="features" className="space-y-3 pt-3">
+          <TabsContent value="features" className="min-w-0 space-y-3 pt-3">
             <DomainFeatures
               projectId={projectId}
               applicationId={applicationId}

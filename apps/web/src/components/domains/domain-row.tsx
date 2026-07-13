@@ -47,7 +47,7 @@ export function DomainRow({ projectId, applicationId, domain, onEdit }: Props) {
       .catch(() => toast.error("Failed to copy"));
   };
 
-  const featureCount = domain.features?.length ?? 0;
+  const featureCount = domain.route_features?.length ?? 0;
 
   return (
     <Card>

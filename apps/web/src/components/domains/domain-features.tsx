@@ -18,6 +18,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
+  useDomains,
   useUpsertRouteFeature,
   useDeleteRouteFeature,
 } from "@/lib/hooks/use-domains";
@@ -47,6 +48,17 @@ export function DomainFeatures({
   applicationId: string;
   domain: DomainExpanded;
 }) {
+  // Read the features from the query, not from the `domain` prop.
+  //
+  // The prop is a snapshot taken when Edit was clicked and it never updates: the
+  // page holds the domain in useState, so adding a feature invalidated the query,
+  // refetched the list, and left this dialog still rendering the object from
+  // before — reporting "No route features configured" for a feature that had in
+  // fact been created, saved, and pushed to Caddy. The mutations below already
+  // invalidate this query, so reading from it makes the list live.
+  const { data: domains } = useDomains(projectId, applicationId);
+  const live = domains?.find((d) => d.id === domain.id) ?? domain;
+
   const upsertFeature = useUpsertRouteFeature(projectId, applicationId);
   const deleteFeature = useDeleteRouteFeature(projectId, applicationId);
   const [newFeatureType, setNewFeatureType] = useState("");
@@ -81,10 +93,10 @@ export function DomainFeatures({
     );
   };
 
-  const features = domain.features ?? [];
+  const features = live.route_features ?? [];
 
   return (
-    <div className="space-y-3">
+    <div className="min-w-0 space-y-3">
       {features.length > 0 ? (
         <div className="space-y-2">
           {features.map((feature) => (
@@ -190,17 +202,22 @@ function FeatureRow({
 }) {
   const configStr = JSON.stringify(feature.config);
   return (
-    <div className="flex items-center justify-between gap-2 rounded border p-2 text-sm">
-      <div className="flex min-w-0 items-center gap-2">
+    // min-w-0 the whole way down, or truncate does nothing: a flex item defaults
+    // to min-width:auto and refuses to shrink below its content, so one long
+    // unbreakable string (a bcrypt hash is exactly that) widens the row, the tab,
+    // and the dialog with it.
+    <div className="flex w-full min-w-0 items-center justify-between gap-2 rounded border p-2 text-sm">
+      <div className="flex min-w-0 flex-1 items-center gap-2">
         <input
           type="checkbox"
+          className="shrink-0"
           checked={feature.enabled}
           onChange={(e) => onToggle(e.target.checked)}
         />
         <Badge variant="outline" className="shrink-0">
           {feature.feature_type}
         </Badge>
-        <span className="text-muted-foreground truncate font-mono text-xs">
+        <span className="text-muted-foreground min-w-0 flex-1 truncate font-mono text-xs">
           {configStr}
         </span>
       </div>

@@ -374,7 +374,11 @@ export interface DomainExpanded extends Domain {
   ssl_provider?: string | null;
   certificate_id?: string | null;
   advanced_config?: unknown;
-  features?: RouteFeature[];
+  /** The API names this `route_features` (the SQL alias is returned verbatim).
+   *  It was declared here as `features`, so every read was silently undefined:
+   *  the domain row never showed its feature count and the features list always
+   *  said "none configured" — for features that existed and were live in Caddy. */
+  route_features?: RouteFeature[];
   tls_status?: TLSStatus;
   tls_issuer?: string | null;
   tls_not_after?: string | null;
