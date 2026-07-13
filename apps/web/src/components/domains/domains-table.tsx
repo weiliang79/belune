@@ -104,17 +104,7 @@ export function DomainsTable({
       {
         accessorKey: "force_https",
         header: "HTTPS",
-        // "Not Forced" spelt out rather than an em dash. The dash reads as "no
-        // data" everywhere else in this table, and here it is a setting with a
-        // definite value — one worth being able to scan a column for.
-        cell: ({ row }) =>
-          row.original.force_https ? (
-            <Badge variant="light">Forced</Badge>
-          ) : (
-            <Badge variant="outline" className="text-muted-foreground">
-              Not Forced
-            </Badge>
-          ),
+        cell: ({ row }) => <ForceHTTPSCell domain={row.original} />,
       },
       {
         accessorKey: "tls_not_after",
@@ -197,6 +187,22 @@ const FEATURES_SHOWN = 2;
 function featureLabel(f: RouteFeature): string {
   const label = FEATURE_LABELS[f.feature_type] ?? f.feature_type;
   return f.enabled ? label : `${label} · off`;
+}
+
+// Two settings decide this column, and only reading both gives the truth.
+// force_https controls the redirect; ssl_mode controls whether there is an HTTPS
+// listener for the name at all. Calling an ssl_mode=off domain "Optional" would
+// promise HTTPS-if-you-want-it on a domain that cannot serve it, so that case
+// says plainly that HTTP is all there is.
+function ForceHTTPSCell({ domain }: { domain: DomainExpanded }) {
+  if (domain.force_https) {
+    return <Badge variant="light">Forced</Badge>;
+  }
+  return (
+    <Badge variant="outline" className="text-muted-foreground">
+      {domain.ssl_mode === "off" ? "HTTP only" : "Optional"}
+    </Badge>
+  );
 }
 
 function FeatureCell({ features }: { features?: RouteFeature[] }) {
