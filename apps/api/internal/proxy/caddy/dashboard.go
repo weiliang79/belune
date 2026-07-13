@@ -111,7 +111,7 @@ func (c *Client) SetDashboardRoute(ctx context.Context, hostname, sslMode string
 
 	// The catch-all matches everything, so it must stay last or it would shadow
 	// the dashboard route we just added.
-	if err := c.moveCatchAllToEnd(ctx); err != nil {
+	if err := c.reorderRoutes(ctx); err != nil {
 		return fmt.Errorf("reorder catch-all: %w", err)
 	}
 

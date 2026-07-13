@@ -296,7 +296,8 @@ func (c *Client) AddRoute(ctx context.Context, cfg proxy.RouteConfig) (err error
 		}
 	}
 
-	// Append the domain route (order doesn't matter here; moveCatchAllToEnd fixes it).
+	// Append the domain route; reorderRoutes below puts the array back in
+	// first-match-wins order, so where it lands right now does not matter.
 	appendURL := fmt.Sprintf("%s/config/apps/http/servers/srv0/routes", c.adminURL)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, appendURL, bytes.NewReader(body))
 	if err != nil {
@@ -318,8 +319,9 @@ func (c *Client) AddRoute(ctx context.Context, cfg proxy.RouteConfig) (err error
 		return fmt.Errorf("caddy add route: HTTP %d: %s", resp.StatusCode, string(respBody))
 	}
 
-	// Ensure the catch-all stays last so it doesn't shadow this new domain route.
-	if err := c.moveCatchAllToEnd(ctx); err != nil {
+	// Re-sort: the catch-all must stay last, and a path route must sit ahead of
+	// the whole-host route for the same name or it would never be reached.
+	if err := c.reorderRoutes(ctx); err != nil {
 		return fmt.Errorf("reorder catch-all: %w", err)
 	}
 
@@ -562,11 +564,20 @@ func (c *Client) ListRoutes(ctx context.Context) (result []proxy.RouteConfig, er
 	return result, nil
 }
 
-// moveCatchAllToEnd rewrites srv0.routes so the catch-all (if any) is the
-// last entry. Uses a single PATCH on the routes array so that two concurrent
-// AddRoute callers cannot observe an interleaved state where the catch-all
-// has been deleted but not yet re-appended.
-func (c *Client) moveCatchAllToEnd(ctx context.Context) error {
+// reorderRoutes rewrites srv0.routes into the order Caddy must see them in:
+// most specific path first, then the catch-all last. Uses a single PATCH on the
+// routes array so that two concurrent AddRoute callers cannot observe an
+// interleaved state where a route has been deleted but not yet re-appended.
+//
+// Caddy is first-match-wins on an ordered array. Routes used to be appended in
+// whatever order they were created and that was harmless, because every route
+// matched a whole host and hosts are disjoint — no two could ever both match a
+// request. Paths break that: shop.com/ and shop.com/api both match a request for
+// shop.com/api/users, and the one Caddy reaches first wins outright. Created in
+// the wrong order — and creation order is just whatever the operator did first —
+// the root route silently swallows every request meant for the API, which looks
+// exactly like the API app being broken.
+func (c *Client) reorderRoutes(ctx context.Context) error {
 	rawRoutes, err := c.fetchRawRoutes(ctx)
 	if err != nil {
 		if isTransportError(err) {
@@ -589,6 +600,8 @@ func (c *Client) moveCatchAllToEnd(ctx context.Context) error {
 		domainRoutes = append(domainRoutes, r)
 	}
 
+	sortRoutesBySpecificity(domainRoutes)
+
 	// Synthesise a catch-all if none exists yet (fresh server).
 	if len(catchAll) == 0 {
 		catchAll, err = json.Marshal(caddyRoute{
@@ -602,6 +615,51 @@ func (c *Client) moveCatchAllToEnd(ctx context.Context) error {
 	newRoutes := append(domainRoutes, catchAll)
 
 	return c.patchRoutes(ctx, newRoutes)
+}
+
+// sortRoutesBySpecificity orders routes longest-path-first, so /api/v2 is
+// consulted before /api and both before the whole-host route for the same name.
+//
+// The ordering is total and deterministic — depth, then path, then host — not
+// merely "sorted enough". Two routes that compare equal would be left in
+// fetch order, which Caddy does not promise to be stable, so the config would
+// churn between passes and every reconcile would look like drift.
+func sortRoutesBySpecificity(routes []json.RawMessage) {
+	type key struct {
+		depth int
+		path  string
+		host  string
+	}
+	keyOf := func(raw json.RawMessage) key {
+		var probe struct {
+			Match []caddyMatch `json:"match"`
+		}
+		if err := json.Unmarshal(raw, &probe); err != nil || len(probe.Match) == 0 {
+			return key{}
+		}
+		var host string
+		if len(probe.Match[0].Host) > 0 {
+			host = probe.Match[0].Host[0]
+		}
+		path := pathFromMatcher(probe.Match[0].Path)
+		// Segment count, not string length: "/ab" must not outrank "/a/b".
+		depth := 0
+		if !isRootPath(path) {
+			depth = strings.Count(strings.Trim(path, "/"), "/") + 1
+		}
+		return key{depth: depth, path: path, host: host}
+	}
+
+	sort.SliceStable(routes, func(i, j int) bool {
+		a, b := keyOf(routes[i]), keyOf(routes[j])
+		if a.depth != b.depth {
+			return a.depth > b.depth // deeper prefix wins
+		}
+		if a.path != b.path {
+			return a.path < b.path
+		}
+		return a.host < b.host
+	})
 }
 
 // patchRoutes replaces the srv0 routes array atomically via a single PATCH.
