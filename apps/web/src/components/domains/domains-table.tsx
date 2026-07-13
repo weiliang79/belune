@@ -3,6 +3,7 @@ import { toast } from "sonner";
 import type { ColumnDef } from "@tanstack/react-table";
 import {
   CopyIcon,
+  ExternalLinkIcon,
   MoreHorizontal,
   PencilIcon,
   SlidersHorizontalIcon,
@@ -74,9 +75,7 @@ export function DomainsTable({
       {
         accessorKey: "hostname",
         header: "Domain",
-        cell: ({ row }) => (
-          <span className="font-mono text-sm">{row.original.hostname}</span>
-        ),
+        cell: ({ row }) => <DomainLink domain={row.original} />,
       },
       {
         accessorKey: "tls_status",
@@ -143,6 +142,28 @@ export function DomainsTable({
       getRowId={(d) => d.id}
       emptyMessage="No domains configured yet."
     />
+  );
+}
+
+// The scheme follows the domain's own TLS mode rather than assuming https. An
+// ssl_mode=off domain has no HTTPS listener for that name, so linking to https
+// would hand the user a connection error on a domain that is working exactly as
+// configured. (The header's "Open URL" button is blunter and always says https.)
+function DomainLink({ domain }: { domain: DomainExpanded }) {
+  const scheme = domain.ssl_mode === "off" ? "http" : "https";
+  return (
+    <a
+      href={`${scheme}://${domain.hostname}`}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="group inline-flex items-center gap-1.5 font-mono text-sm hover:underline"
+    >
+      {domain.hostname}
+      <ExternalLinkIcon
+        aria-hidden="true"
+        className="text-muted-foreground size-3 opacity-0 transition-opacity group-hover:opacity-100"
+      />
+    </a>
   );
 }
 

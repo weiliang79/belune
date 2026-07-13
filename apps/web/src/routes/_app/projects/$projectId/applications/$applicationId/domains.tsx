@@ -2,6 +2,13 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { useDomains } from "@/lib/hooks/use-domains";
 import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { DomainFormDialog } from "@/components/domains/domain-form-dialog";
 import { DomainFeaturesDialog } from "@/components/domains/domain-features";
 import { DomainsTable } from "@/components/domains/domains-table";
@@ -39,30 +46,37 @@ function DomainsPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-lg font-semibold">Domains</h2>
-          <p className="text-muted-foreground text-sm">
-            Configure hostnames, TLS, and routing for this application.
-          </p>
-        </div>
-        <Button onClick={openAdd}>Add Domain</Button>
-      </div>
-
-      {isLoading ? (
-        <DomainListSkeleton />
-      ) : !domains || domains.length === 0 ? (
-        <DomainEmptyState onAdd={openAdd} />
-      ) : (
-        <DomainsTable
-          projectId={projectId}
-          applicationId={applicationId}
-          domains={domains}
-          isLoading={isLoading}
-          onEdit={openEdit}
-          onEditFeatures={setFeaturesFor}
-        />
-      )}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle>Domains</CardTitle>
+              <CardDescription>
+                Configure hostnames, TLS, and routing for this application.
+              </CardDescription>
+            </div>
+            <Button size="sm" variant="outline" onClick={openAdd}>
+              Add Domain
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {isLoading ? (
+            <DomainListSkeleton />
+          ) : !domains || domains.length === 0 ? (
+            <DomainEmptyState onAdd={openAdd} />
+          ) : (
+            <DomainsTable
+              projectId={projectId}
+              applicationId={applicationId}
+              domains={domains}
+              isLoading={isLoading}
+              onEdit={openEdit}
+              onEditFeatures={setFeaturesFor}
+            />
+          )}
+        </CardContent>
+      </Card>
 
       <DomainFormDialog
         projectId={projectId}
