@@ -104,11 +104,16 @@ export function DomainsTable({
       {
         accessorKey: "force_https",
         header: "HTTPS",
+        // "Not Forced" spelt out rather than an em dash. The dash reads as "no
+        // data" everywhere else in this table, and here it is a setting with a
+        // definite value — one worth being able to scan a column for.
         cell: ({ row }) =>
           row.original.force_https ? (
-            <Badge variant="outline">Forced</Badge>
+            <Badge variant="light">Forced</Badge>
           ) : (
-            <span className="text-muted-foreground">—</span>
+            <Badge variant="outline" className="text-muted-foreground">
+              Not Forced
+            </Badge>
           ),
       },
       {
