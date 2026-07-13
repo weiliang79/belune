@@ -22,6 +22,13 @@ import {
   useUpsertRouteFeature,
   useDeleteRouteFeature,
 } from "@/lib/hooks/use-domains";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import type { DomainExpanded, RouteFeature } from "@/lib/types";
 
 const FEATURE_TYPES = [
@@ -182,10 +189,6 @@ export function DomainFeatures({
         >
           Add feature
         </Button>
-        <p className="text-muted-foreground text-xs">
-          Features apply as soon as you add or toggle them — they are not part of
-          Save Changes.
-        </p>
       </div>
     </div>
   );
@@ -230,5 +233,54 @@ function FeatureRow({
         Remove
       </Button>
     </div>
+  );
+}
+
+/**
+ * Route features in their own dialog, not a tab on the edit form.
+ *
+ * They do not belong to that form: every change here is an immediate upsert or
+ * delete against its own endpoint, so sitting beside a "Save Changes" button
+ * they read as though they save with it — and they do not. Their own dialog says
+ * what is true.
+ */
+export function DomainFeaturesDialog({
+  projectId,
+  applicationId,
+  domain,
+  open,
+  onOpenChange,
+}: {
+  projectId: string;
+  applicationId: string;
+  domain?: DomainExpanded;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      {/* grid-cols-[minmax(0,1fr)]: DialogContent is a grid whose implicit column
+          is max-content, so one long unbreakable string (a bcrypt hash) would
+          widen the column itself and no min-w-0/truncate on the children could
+          shrink it. */}
+      <DialogContent className="max-h-[calc(100dvh-2rem)] grid-cols-[minmax(0,1fr)] overflow-y-auto sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Route Features</DialogTitle>
+          <DialogDescription>
+            Middleware Caddy applies to{" "}
+            <span className="font-mono">{domain?.hostname}</span>. Changes take
+            effect immediately.
+          </DialogDescription>
+        </DialogHeader>
+        {domain && (
+          <DomainFeatures
+            key={domain.id}
+            projectId={projectId}
+            applicationId={applicationId}
+            domain={domain}
+          />
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }

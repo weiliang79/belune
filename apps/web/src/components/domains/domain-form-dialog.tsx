@@ -35,7 +35,6 @@ import {
 import { useAddDomain, useUpdateDomain } from "@/lib/hooks/use-domains";
 import { useCertificates } from "@/lib/hooks/use-certificates";
 import type { DomainExpanded } from "@/lib/types";
-import { DomainFeatures } from "./domain-features";
 
 const HOSTNAME_REGEX =
   /^([a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$/;
@@ -190,15 +189,10 @@ function DomainForm({
       </DialogHeader>
 
       <Tabs defaultValue="hostname" className="min-w-0">
-        {/* Features only exist for a domain that exists: they are attached by id,
-            so there is nothing to attach them to until it is created. */}
-        <TabsList
-          className={`grid w-full ${domain ? "grid-cols-4" : "grid-cols-3"}`}
-        >
+        <TabsList className="grid w-full grid-cols-3">
           <TabsTrigger value="hostname">Hostname</TabsTrigger>
           <TabsTrigger value="tls">TLS</TabsTrigger>
           <TabsTrigger value="routing">Routing</TabsTrigger>
-          {domain && <TabsTrigger value="features">Features</TabsTrigger>}
         </TabsList>
 
         <TabsContent value="hostname" className="space-y-3 pt-3">
@@ -403,23 +397,12 @@ function DomainForm({
               </label>
             )}
           />
-          {!domain && (
-            <p className="text-muted-foreground text-xs">
-              Route features (custom headers, IP allowlist, redirects) can be
-              added once the domain exists — reopen this dialog after saving.
-            </p>
-          )}
+          <p className="text-muted-foreground text-xs">
+            Route features (basic auth, custom headers, IP allowlist, redirects)
+            have their own dialog — they apply immediately rather than on save.
+            Find them under the domain's actions menu.
+          </p>
         </TabsContent>
-
-        {domain && (
-          <TabsContent value="features" className="min-w-0 space-y-3 pt-3">
-            <DomainFeatures
-              projectId={projectId}
-              applicationId={applicationId}
-              domain={domain}
-            />
-          </TabsContent>
-        )}
       </Tabs>
 
       <DialogFooter>

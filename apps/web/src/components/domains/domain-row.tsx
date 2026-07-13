@@ -3,6 +3,7 @@ import {
   CopyIcon,
   MoreHorizontal,
   PencilIcon,
+  SlidersHorizontalIcon,
   Trash2Icon,
 } from "lucide-react";
 import { Card, CardHeader } from "@/components/ui/card";
@@ -35,9 +36,16 @@ interface Props {
   applicationId: string;
   domain: DomainExpanded;
   onEdit: () => void;
+  onEditFeatures: () => void;
 }
 
-export function DomainRow({ projectId, applicationId, domain, onEdit }: Props) {
+export function DomainRow({
+  projectId,
+  applicationId,
+  domain,
+  onEdit,
+  onEditFeatures,
+}: Props) {
   const removeDomain = useRemoveDomain(projectId, applicationId);
 
   const handleCopyHostname = () => {
@@ -86,6 +94,10 @@ export function DomainRow({ projectId, applicationId, domain, onEdit }: Props) {
                   <DropdownMenuItem onClick={onEdit}>
                     <PencilIcon aria-hidden="true" />
                     Edit
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={onEditFeatures}>
+                    <SlidersHorizontalIcon aria-hidden="true" />
+                    Route features
                   </DropdownMenuItem>
                   <DropdownMenuItem onClick={handleCopyHostname}>
                     <CopyIcon aria-hidden="true" />
