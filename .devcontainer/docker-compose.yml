@@ -25,6 +25,10 @@ services:
       DATABASE_URL: postgres://belune:belune@postgres:5432/belune?sslmode=disable
       REDIS_URL: redis://redis:6379
       CADDY_ADMIN_URL: http://caddy:2019
+      # In the devcontainer the API is a container on Caddy's network, so Caddy
+      # reaches it by service name — not host.docker.internal, which is what the
+      # host-dev .env uses.
+      DASHBOARD_UPSTREAM: api:8080
       BUILDKIT_HOST: tcp://buildkit:1234
       TMPDIR: /var/tmp/belune-builds
       PORT: "8080"

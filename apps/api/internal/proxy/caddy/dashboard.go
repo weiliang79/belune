@@ -39,11 +39,12 @@ func (c *Client) SetDashboardRoute(ctx context.Context, hostname, sslMode string
 	// out of the panel they just switched to HTTP on purpose.
 	forceHTTPS := sslMode != proxy.SSLModeOff
 
-	current, currentForce, found, err := c.dashboardRouteState(ctx)
+	current, currentForce, currentUpstream, found, err := c.dashboardRouteState(ctx)
 	if err != nil {
 		return err
 	}
-	if found && current == hostname && currentForce == forceHTTPS {
+	if found && current == hostname && currentForce == forceHTTPS &&
+		currentUpstream == c.dashboardUpstream {
 		return nil // already correct
 	}
 
@@ -119,19 +120,21 @@ func (c *Client) SetDashboardRoute(ctx context.Context, hostname, sslMode string
 	return nil
 }
 
-// dashboardRouteState reports the hostname the dashboard route currently serves
-// and whether it renders the HTTP→HTTPS redirect.
+// dashboardRouteState reports what the dashboard route currently is: the hostname
+// it serves, whether it renders the HTTP→HTTPS redirect, and where it dials.
 //
-// The redirect has to be read back, not just the hostname: switching the mode
-// between off and automatic changes only the handlers, and comparing hostnames
-// alone would call that "already correct" and never rewrite the route.
-func (c *Client) dashboardRouteState(ctx context.Context) (hostname string, forceHTTPS, found bool, err error) {
+// All three are read back, not just the hostname. Switching the mode between off
+// and automatic changes only the handlers, and changing DASHBOARD_UPSTREAM changes
+// only the dial address — comparing hostnames alone would call either "already
+// correct" and never rewrite the route, leaving the dashboard on plain HTTP or
+// pointed at an upstream that no longer exists.
+func (c *Client) dashboardRouteState(ctx context.Context) (hostname string, forceHTTPS bool, upstream string, found bool, err error) {
 	rawRoutes, err := c.fetchRawRoutes(ctx)
 	if err != nil {
 		if isTransportError(err) {
-			return "", false, false, fmt.Errorf("%w: %v", ErrCaddyUnreachable, err)
+			return "", false, "", false, fmt.Errorf("%w: %v", ErrCaddyUnreachable, err)
 		}
-		return "", false, false, fmt.Errorf("fetch routes: %w", err)
+		return "", false, "", false, fmt.Errorf("fetch routes: %w", err)
 	}
 
 	for _, r := range rawRoutes {
@@ -141,7 +144,10 @@ func (c *Client) dashboardRouteState(ctx context.Context) (hostname string, forc
 				Host []string `json:"host"`
 			} `json:"match"`
 			Handle []struct {
-				Handler string `json:"handler"`
+				Handler   string `json:"handler"`
+				Upstreams []struct {
+					Dial string `json:"dial"`
+				} `json:"upstreams"`
 			} `json:"handle"`
 		}
 		if err := json.Unmarshal(r, &probe); err != nil {
@@ -151,17 +157,21 @@ func (c *Client) dashboardRouteState(ctx context.Context) (hostname string, forc
 			continue
 		}
 		for _, h := range probe.Handle {
-			if h.Handler == "subroute" {
+			switch h.Handler {
+			case "subroute":
 				forceHTTPS = true
-				break
+			case "reverse_proxy":
+				if len(h.Upstreams) > 0 {
+					upstream = h.Upstreams[0].Dial
+				}
 			}
 		}
 		if len(probe.Match) > 0 && len(probe.Match[0].Host) > 0 {
-			return probe.Match[0].Host[0], forceHTTPS, true, nil
+			return probe.Match[0].Host[0], forceHTTPS, upstream, true, nil
 		}
-		return "", forceHTTPS, true, nil
+		return "", forceHTTPS, upstream, true, nil
 	}
-	return "", false, false, nil
+	return "", false, "", false, nil
 }
 
 // deleteRouteByID removes a route by its @id, treating "already gone" as success.
