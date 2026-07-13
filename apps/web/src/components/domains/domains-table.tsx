@@ -30,6 +30,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { ExpiryCell } from "@/components/certificates/expiry-cell";
 import { useRemoveDomain } from "@/lib/hooks/use-domains";
 import type { DomainExpanded, RouteFeature } from "@/lib/types";
 import { DomainTLSBadge } from "./domain-tls-badge";
@@ -78,6 +79,18 @@ export function DomainsTable({
         cell: ({ row }) => <DomainLink domain={row.original} />,
       },
       {
+        accessorKey: "container_port",
+        header: "Port",
+        cell: ({ row }) =>
+          row.original.container_port ? (
+            <span className="font-mono text-xs">
+              {row.original.container_port}
+            </span>
+          ) : (
+            <span className="text-muted-foreground">Default</span>
+          ),
+      },
+      {
         accessorKey: "tls_status",
         header: "TLS",
         cell: ({ row }) => (
@@ -99,16 +112,18 @@ export function DomainsTable({
           ),
       },
       {
-        accessorKey: "container_port",
-        header: "Port",
-        cell: ({ row }) =>
-          row.original.container_port ? (
-            <span className="font-mono text-xs">
-              {row.original.container_port}
-            </span>
-          ) : (
-            <span className="text-muted-foreground">Default</span>
-          ),
+        accessorKey: "tls_not_after",
+        header: "Expires",
+        // Quiet for a local domain: Caddy's internal certificate lives 12 hours
+        // and renews itself, so the usual "0d left" warning would be a standing
+        // false alarm. Same component as the Certificates page, so the amber
+        // "14d left" means the same thing in both places.
+        cell: ({ row }) => (
+          <ExpiryCell
+            notAfter={row.original.tls_not_after}
+            quiet={row.original.tls_status === "local"}
+          />
+        ),
       },
       {
         accessorKey: "route_features",
@@ -116,7 +131,9 @@ export function DomainsTable({
         // The names, not a count. "1 feature" tells you something is configured
         // but not what — and "what" is the entire question when you are checking
         // whether the admin subdomain is the one behind basic auth.
-        cell: ({ row }) => <FeatureCell features={row.original.route_features} />,
+        cell: ({ row }) => (
+          <FeatureCell features={row.original.route_features} />
+        ),
       },
       buildActionColumnDef<DomainExpanded>({
         meta: { headerClassName: "text-right", className: "text-right" },
@@ -167,27 +184,51 @@ function DomainLink({ domain }: { domain: DomainExpanded }) {
   );
 }
 
+// How many feature badges a row shows before collapsing the rest into a count.
+// Five features on one domain would otherwise wrap the cell and drag every
+// other row's height with it.
+const FEATURES_SHOWN = 2;
+
+function featureLabel(f: RouteFeature): string {
+  const label = FEATURE_LABELS[f.feature_type] ?? f.feature_type;
+  return f.enabled ? label : `${label} · off`;
+}
+
 function FeatureCell({ features }: { features?: RouteFeature[] }) {
   const list = features ?? [];
   if (list.length === 0) {
     return <span className="text-muted-foreground">—</span>;
   }
+
+  const shown = list.slice(0, FEATURES_SHOWN);
+  const hidden = list.slice(FEATURES_SHOWN);
+
   return (
-    <div className="flex flex-wrap gap-1">
-      {list.map((f) => {
-        const label = FEATURE_LABELS[f.feature_type] ?? f.feature_type;
+    <div className="flex flex-wrap items-center gap-1">
+      {shown.map((f) =>
         // A disabled feature is the dangerous case: basic auth that is present
         // but switched off looks, at a glance, exactly like basic auth. Say so.
-        return f.enabled ? (
+        f.enabled ? (
           <Badge key={f.id} variant="light">
-            {label}
+            {featureLabel(f)}
           </Badge>
         ) : (
           <Badge key={f.id} variant="outline" className="text-muted-foreground">
-            {label} · off
+            {featureLabel(f)}
           </Badge>
-        );
-      })}
+        ),
+      )}
+      {hidden.length > 0 && (
+        // Name the hidden ones on hover. A bare "+2 more" tells you that you are
+        // being kept from something without telling you what, which is the worst
+        // of both — one of those two could be a disabled basic auth.
+        <span
+          className="text-muted-foreground text-xs"
+          title={hidden.map(featureLabel).join(", ")}
+        >
+          +{hidden.length} more
+        </span>
+      )}
     </div>
   );
 }

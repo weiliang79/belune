@@ -13,6 +13,8 @@ import {
   useDomainTLSStatus,
 } from "@/lib/hooks/use-certificates";
 import type { Certificate, DomainTLSStatus } from "@/lib/api/certificates";
+import { ExpiryCell } from "@/components/certificates/expiry-cell";
+import { EXPIRY_WARNING_DAYS, daysUntil } from "@/lib/expiry";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page-header";
@@ -52,52 +54,10 @@ export const Route = createFileRoute("/_app/certificates")({
 });
 
 // EXPIRY_WARNING_DAYS mirrors the threshold the backend will notify on.
-const EXPIRY_WARNING_DAYS = 14;
-
 // How many subject badges a row shows before deferring to the detail panel.
 // Enough to identify the certificate at a glance; few enough that a 40-SAN cert
 // cannot turn one row into half a page.
 const SUBJECTS_SHOWN = 3;
-
-function daysUntil(iso: string | null): number | null {
-  if (!iso) return null;
-  return Math.floor(
-    (new Date(iso).getTime() - Date.now()) / (1000 * 60 * 60 * 24),
-  );
-}
-
-// `quiet` suppresses the expiry warning. Caddy's internal certificates last 12
-// hours and are renewed automatically, so a local domain would sit permanently
-// on a red "0d left" — an alarm that means nothing and trains the operator to
-// ignore the one that does.
-function ExpiryCell({
-  notAfter,
-  quiet,
-}: {
-  notAfter: string | null;
-  quiet?: boolean;
-}) {
-  const days = daysUntil(notAfter);
-  if (days === null) {
-    return <span className="text-muted-foreground">—</span>;
-  }
-
-  const formatted = new Date(notAfter!).toLocaleDateString();
-  if (quiet) {
-    return <span className="text-muted-foreground">{formatted}</span>;
-  }
-  if (days < 0) {
-    return <Badge variant="destructive">Expired {formatted}</Badge>;
-  }
-  if (days <= EXPIRY_WARNING_DAYS) {
-    return (
-      <span className="text-status-building">
-        {formatted} · {days}d left
-      </span>
-    );
-  }
-  return <span>{formatted}</span>;
-}
 
 // The API guards these endpoints with RequireRole("admin"), and the Domain TLS
 // query is deliberately unscoped — it returns every domain on the instance, not
