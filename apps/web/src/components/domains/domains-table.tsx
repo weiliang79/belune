@@ -308,7 +308,14 @@ function DomainActions({
         </DropdownMenu>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete {domain.hostname}?</AlertDialogTitle>
+            {/* The path belongs in the title. A hostname no longer identifies one
+                domain: shop.com/ and shop.com/api are different rows serving
+                different applications, and a confirmation that names only the host
+                cannot tell the operator which of them is about to be deleted. */}
+            <AlertDialogTitle>
+              Delete {domain.hostname}
+              {domain.path && domain.path !== "/" ? domain.path : ""}?
+            </AlertDialogTitle>
             <AlertDialogDescription>
               This will delete the domain and all its route features.
             </AlertDialogDescription>
