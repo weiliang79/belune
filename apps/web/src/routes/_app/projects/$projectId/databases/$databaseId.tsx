@@ -517,7 +517,12 @@ function ExternalAccessCard({ db }: { db: Database }) {
   const localPort = db.internal_port;
   const sshHost = ext?.ssh_host || "<server-host>";
   const sshUser = ext?.ssh_user || "<user>";
-  const sshCmd = `ssh -L ${localPort}:127.0.0.1:${ext?.host_port ?? ""} ${sshUser}@${sshHost}`;
+  const hostsUnset = !ext?.ssh_host || !ext?.ssh_user;
+  // -N: forward the port and nothing else. Without it the command also opens a
+  // login shell, which invites the reading that you are "in" the server and
+  // leaves people unsure how to end the tunnel. With it, the session is the
+  // tunnel: Ctrl-C closes it, and that is obvious.
+  const sshCmd = `ssh -N -L ${localPort}:127.0.0.1:${ext?.host_port ?? ""} ${sshUser}@${sshHost}`;
   const connStr = localConnectionString(db, localPort);
 
   return (
@@ -597,11 +602,56 @@ function ExternalAccessCard({ db }: { db: Database }) {
             )}
 
             <p className="text-text-faint text-xs">
-              GUI clients (TablePlus, DBeaver, DataGrip) can use their built-in
-              SSH-tunnel option instead of running the command above. Once
-              connected, point the client at{" "}
-              <span className="font-mono">localhost:{localPort}</span>.
+              Add <span className="font-mono">-i /path/to/key</span> if the key
+              is not in your SSH agent or config. The tunnel lasts as long as
+              the command runs — press{" "}
+              <span className="font-mono">Ctrl-C</span> to close it.
+              {hostsUnset ? (
+                <>
+                  {" "}
+                  Set <span className="font-mono">SERVER_SSH_HOST</span> and{" "}
+                  <span className="font-mono">SERVER_SSH_USER</span> to fill the
+                  placeholders in automatically.
+                </>
+              ) : null}
             </p>
+
+            {/* The two ways to connect need different numbers in different boxes,
+                and conflating them is what makes this confusing: whether the
+                client should be pointed at the local end of the tunnel or the
+                server end depends entirely on who opens the tunnel. */}
+            <div className="space-y-2 border-t pt-3">
+              <p className="text-muted-foreground text-xs">
+                In a GUI client (DBeaver, TablePlus, DataGrip)
+              </p>
+              <dl className="text-text-faint space-y-1 text-xs">
+                <div className="flex gap-2">
+                  <dt className="w-40 shrink-0">Running the command above</dt>
+                  <dd className="font-mono">
+                    connect to localhost:{localPort}
+                  </dd>
+                </div>
+                <div className="flex gap-2">
+                  <dt className="w-40 shrink-0">
+                    Using the client&apos;s own SSH tunnel
+                  </dt>
+                  <dd className="min-w-0">
+                    <span className="font-mono">
+                      SSH: {sshUser}@{sshHost}
+                    </span>
+                    <br />
+                    <span className="font-mono">
+                      Database host: 127.0.0.1, port {ext?.host_port}
+                    </span>
+                    <br />
+                    <span>
+                      the host and port are how the database looks{" "}
+                      <em>from the server</em>, not from your machine
+                    </span>
+                  </dd>
+                </div>
+              </dl>
+            </div>
           </div>
         )}
       </CardContent>
