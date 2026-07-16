@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import type { ColumnDef } from "@tanstack/react-table";
 import { DataTable, DataTableSearch } from "@/components/ui/data-table";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useDockerNetworks } from "@/lib/hooks/use-docker";
 import { formatDateTimeShort } from "@/lib/utils/format";
@@ -27,13 +28,17 @@ export function DockerNetworksTab({ enabled }: { enabled: boolean }) {
       {
         accessorKey: "driver",
         header: "Driver",
-        cell: ({ row }) => <span className="text-sm">{row.original.driver}</span>,
+        cell: ({ row }) => (
+          <span className="text-sm">{row.original.driver}</span>
+        ),
       },
       {
         accessorKey: "scope",
         header: "Scope",
         cell: ({ row }) => (
-          <span className="text-muted-foreground text-sm">{row.original.scope}</span>
+          <span className="text-muted-foreground text-sm">
+            {row.original.scope}
+          </span>
         ),
       },
       {
@@ -80,30 +85,34 @@ export function DockerNetworksTab({ enabled }: { enabled: boolean }) {
   );
 
   return (
-    <div className="space-y-3">
-      <DataTableSearch
-        value={search}
-        onChange={setSearch}
-        placeholder="Search by name or driver…"
-        className="max-w-xs"
-      />
-      <DataTable
-        columns={columns}
-        data={data ?? []}
-        isLoading={isPending}
-        getRowId={(n) => n.id}
-        enableSorting
-        globalFilter={search}
-        onGlobalFilterChange={setSearch}
-        pagination={{ mode: "client", pageSize: 10 }}
-        renderDetailPanel={({ row }) => (
-          <NetworkContainers containers={row.original.containers} />
-        )}
-        emptyMessage={
-          search.trim() ? "No networks match your search." : "No networks on this host."
-        }
-      />
-    </div>
+    <Card>
+      <CardContent className="space-y-3">
+        <DataTableSearch
+          value={search}
+          onChange={setSearch}
+          placeholder="Search by name or driver…"
+          className="max-w-xs"
+        />
+        <DataTable
+          columns={columns}
+          data={data ?? []}
+          isLoading={isPending}
+          getRowId={(n) => n.id}
+          enableSorting
+          globalFilter={search}
+          onGlobalFilterChange={setSearch}
+          pagination={{ mode: "client", pageSize: 10 }}
+          renderDetailPanel={({ row }) => (
+            <NetworkContainers containers={row.original.containers} />
+          )}
+          emptyMessage={
+            search.trim()
+              ? "No networks match your search."
+              : "No networks on this host."
+          }
+        />
+      </CardContent>
+    </Card>
   );
 }
 
@@ -122,13 +131,18 @@ function NetworkContainers({
   }
   return (
     <div className="space-y-1.5 py-1">
-      <p className="text-text-faint text-xs font-medium uppercase tracking-wider">
+      <p className="text-text-faint text-xs font-medium tracking-wider uppercase">
         Connected containers
       </p>
       {list.map((c) => (
-        <div key={c.id} className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-sm">
+        <div
+          key={c.id}
+          className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-sm"
+        >
           <span className="font-medium">{c.name || "—"}</span>
-          <span className="text-text-faint font-mono text-xs">{shortId(c.id)}</span>
+          <span className="text-text-faint font-mono text-xs">
+            {shortId(c.id)}
+          </span>
           {c.ipv4_address && (
             <span className="text-muted-foreground font-mono text-xs">
               {c.ipv4_address}

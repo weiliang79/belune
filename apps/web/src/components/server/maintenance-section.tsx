@@ -36,6 +36,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Separator } from "@/components/ui/separator";
+import { Switch } from "@/components/ui/switch";
 import { useDockerOverview } from "@/lib/hooks/use-docker";
 import {
   useClearPendingQueue,
@@ -611,25 +612,12 @@ function DailyCleanupToggle() {
           } as object)}
         />
       </div>
-      <button
-        type="button"
-        role="switch"
-        aria-checked={enabled}
+      <Switch
         aria-label="Daily automatic cleanup"
+        checked={enabled}
         disabled={updateSettings.isPending}
-        onClick={handleToggle}
-        className={cn(
-          "focus-visible:ring-ring relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus-visible:ring-2 focus-visible:outline-none disabled:opacity-50",
-          enabled ? "bg-primary" : "bg-input",
-        )}
-      >
-        <span
-          className={cn(
-            "bg-background pointer-events-none inline-block h-4 w-4 rounded-full shadow-lg transition-transform",
-            enabled ? "translate-x-4" : "translate-x-0",
-          )}
-        />
-      </button>
+        onCheckedChange={handleToggle}
+      />
     </div>
   );
 }

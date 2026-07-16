@@ -1,9 +1,4 @@
-import {
-  createFileRoute,
-  Link,
-  Outlet,
-  useRouterState,
-} from "@tanstack/react-router";
+import { createFileRoute, Outlet } from "@tanstack/react-router";
 import {
   useApplication,
   useDeployApplication,
@@ -35,8 +30,21 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { AppWindowIcon, ExternalLinkIcon } from "lucide-react";
-import { cn } from "@/lib/utils";
+import {
+  AppWindowIcon,
+  ExternalLinkIcon,
+  LayoutDashboard,
+  SlidersHorizontal,
+  Globe,
+  Rocket,
+  GitBranch,
+  ScrollText,
+  Activity,
+  SquareTerminal,
+  HardDrive,
+  Settings,
+} from "lucide-react";
+import { PageTabLinks, type PageTabLink } from "@/components/ui/page-tabs";
 import { formatUptime } from "@/lib/utils/format";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useBreadcrumbLabel } from "@/lib/hooks/use-breadcrumb";
@@ -78,8 +86,6 @@ function ApplicationLayout() {
   const restart = useRestartApplication(projectId, applicationId);
   const reload = useReloadApplication(projectId, applicationId);
   const rebuild = useRebuildApplication(projectId, applicationId);
-  const routerState = useRouterState();
-  const currentPath = routerState.location.pathname;
 
   useBreadcrumbLabel(projectId, project?.name);
   useBreadcrumbLabel(applicationId, application?.name);
@@ -114,23 +120,24 @@ function ApplicationLayout() {
       d.status === "building" ||
       d.status === "deploying",
   );
-  const tabs: { to: string; label: string; exact?: boolean; live?: boolean }[] =
-    [
-      { to: basePath, label: "Overview", exact: true },
-      { to: `${basePath}/env`, label: "Env Vars" },
-      { to: `${basePath}/domains`, label: "Domains" },
-      {
-        to: `${basePath}/deployments`,
-        label: "Deployments",
-        live: isDeploying,
-      },
-      { to: `${basePath}/previews`, label: "Previews" },
-      { to: `${basePath}/logs`, label: "Logs" },
-      { to: `${basePath}/metrics`, label: "Metrics" },
-      { to: `${basePath}/terminal`, label: "Terminal" },
-      { to: `${basePath}/mounts`, label: "Mounts" },
-      { to: `${basePath}/settings`, label: "Settings" },
-    ];
+  const tabs: PageTabLink[] = [
+    { to: basePath, label: "Overview", exact: true, icon: LayoutDashboard },
+    { to: `${basePath}/env`, label: "Env Vars", icon: SlidersHorizontal },
+    { to: `${basePath}/domains`, label: "Domains", icon: Globe },
+    {
+      to: `${basePath}/deployments`,
+      label: "Deployments",
+      icon: Rocket,
+      live: isDeploying,
+      liveLabel: "Deployment in progress",
+    },
+    { to: `${basePath}/previews`, label: "Previews", icon: GitBranch },
+    { to: `${basePath}/logs`, label: "Logs", icon: ScrollText },
+    { to: `${basePath}/metrics`, label: "Metrics", icon: Activity },
+    { to: `${basePath}/terminal`, label: "Terminal", icon: SquareTerminal },
+    { to: `${basePath}/mounts`, label: "Mounts", icon: HardDrive },
+    { to: `${basePath}/settings`, label: "Settings", icon: Settings },
+  ];
 
   return (
     <div className="space-y-6">
@@ -173,6 +180,7 @@ function ApplicationLayout() {
             <Button
               size="sm"
               variant="outline"
+              nativeButton={false}
               render={
                 <a
                   href={`https://${primaryDomain}`}
@@ -312,40 +320,7 @@ function ApplicationLayout() {
         </div>
       </div>
 
-      <nav
-        aria-label="Application navigation"
-        className="flex gap-1 overflow-x-auto border-b"
-      >
-        {tabs.map((tab) => {
-          const isActive = tab.exact
-            ? currentPath === tab.to
-            : currentPath.startsWith(tab.to);
-          return (
-            <Link
-              key={tab.to}
-              to={tab.to}
-              aria-current={isActive ? "page" : undefined}
-              className={cn(
-                "flex items-center gap-1.5 border-b-2 px-3 py-2 text-sm font-medium whitespace-nowrap transition-colors",
-                isActive
-                  ? "border-primary text-foreground"
-                  : "text-muted-foreground hover:text-foreground border-transparent",
-              )}
-            >
-              {tab.label}
-              {tab.live && (
-                <span
-                  aria-label="Deployment in progress"
-                  className="relative flex size-2"
-                >
-                  <span className="bg-status-ready absolute inline-flex size-full animate-ping rounded-full opacity-75" />
-                  <span className="bg-status-ready relative inline-flex size-2 rounded-full" />
-                </span>
-              )}
-            </Link>
-          );
-        })}
-      </nav>
+      <PageTabLinks ariaLabel="Application navigation" items={tabs} />
 
       <AppMetricsContext value={appMetrics}>
         <Outlet />

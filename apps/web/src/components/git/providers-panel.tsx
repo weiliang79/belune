@@ -5,7 +5,13 @@ import {
   useGitProviderConfigs,
   useDeleteGitProviderConfig,
 } from "@/lib/hooks/use-git-providers";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -36,8 +42,13 @@ export function ProvidersPanel() {
   return (
     <div className="space-y-6">
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
-          <CardTitle>Configured Providers</CardTitle>
+        <CardHeader className="flex flex-row items-start justify-between">
+          <div className="space-y-1">
+            <CardTitle>Configured Providers</CardTitle>
+            <CardDescription>
+              Provider apps that let users connect their git accounts.
+            </CardDescription>
+          </div>
           <Button size="sm" onClick={() => setDialogOpen(true)}>
             <Plus className="mr-1 h-4 w-4" /> Add provider
           </Button>

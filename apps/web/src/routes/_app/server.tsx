@@ -1,13 +1,17 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import {
+  Archive,
   CalendarIcon,
   ClockIcon,
   CpuIcon,
   HardDriveIcon,
+  LayoutDashboard,
   MemoryStickIcon,
   ServerIcon,
+  Settings,
 } from "lucide-react";
 import { RouteError } from "@/lib/components/route-error";
+import { PageTabs, type PageTab } from "@/components/ui/page-tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { LiveIndicator } from "@/components/ui/live-indicator";
@@ -51,6 +55,12 @@ import { formatDateTimeShort } from "@/lib/utils/format";
 
 type ServerTab = "metric" | "configuration" | "backups";
 type HostMetricsView = "overview" | "detail";
+
+const SERVER_TABS: PageTab<ServerTab>[] = [
+  { value: "metric", label: "Overview", icon: LayoutDashboard },
+  { value: "backups", label: "Backups", icon: Archive },
+  { value: "configuration", label: "Configuration", icon: Settings },
+];
 type CustomRange = { from: string; to: string };
 
 export const Route = createFileRoute("/_app/server")({
@@ -290,29 +300,12 @@ function ServerSettingsPage() {
         description="Platform health, resources, and maintenance."
       />
 
-      <nav className="flex gap-1 border-b">
-        {(
-          [
-            { value: "metric", label: "Overview" },
-            { value: "backups", label: "Backups" },
-            { value: "configuration", label: "Configuration" },
-          ] as const
-        ).map((t) => (
-          <button
-            key={t.value}
-            type="button"
-            onClick={() => setTab(t.value)}
-            className={cn(
-              "border-b-2 px-4 py-2 text-sm font-medium transition-colors",
-              activeTab === t.value
-                ? "border-primary text-foreground"
-                : "text-muted-foreground hover:text-foreground border-transparent",
-            )}
-          >
-            {t.label}
-          </button>
-        ))}
-      </nav>
+      <PageTabs
+        ariaLabel="Server views"
+        items={SERVER_TABS}
+        value={activeTab}
+        onValueChange={setTab}
+      />
 
       {activeTab === "backups" ? (
         <SystemBackupsPanel />

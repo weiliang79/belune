@@ -30,7 +30,7 @@ import {
 } from "@/components/ui/select";
 import { DataTable } from "@/components/ui/data-table";
 import { PageHeader } from "@/components/ui/page-header";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { TimeRangeTabs } from "@/components/ui/time-range-tabs";
 import { timeRangeToDates, type TimeRange } from "@/lib/utils/time-range";
 import { formatDateTime, formatDuration } from "@/lib/utils/format";
@@ -225,8 +225,7 @@ const deploymentColumns: ColumnDef<GlobalDeployment>[] = [
     cell: ({ row: { original: d } }) => {
       const ms =
         d.finished_at && d.started_at
-          ? new Date(d.finished_at).getTime() -
-            new Date(d.started_at).getTime()
+          ? new Date(d.finished_at).getTime() - new Date(d.started_at).getTime()
           : null;
       return ms != null ? (
         formatDuration(ms)
@@ -331,9 +330,6 @@ function GlobalDeploymentsPage() {
       <Deploy7dStrip />
 
       <Card>
-        <CardHeader>
-          <CardTitle>Recent deployments</CardTitle>
-        </CardHeader>
         <CardContent className="space-y-4">
           <DeploymentFilters filters={filters} onChange={handleFilterChange} />
           <DataTable

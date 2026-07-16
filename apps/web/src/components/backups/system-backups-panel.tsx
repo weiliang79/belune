@@ -6,7 +6,13 @@ import {
   useTriggerBackup,
   useTestBackupRemote,
 } from "@/lib/hooks/use-backups";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { BlobLogViewer } from "@/components/logs/blob-log-viewer";
 import { StatusPill } from "@/components/ui/status-pill";
@@ -110,9 +116,9 @@ export function SystemBackupsPanel() {
           <div className="flex items-center justify-between">
             <div>
               <CardTitle>System Backup</CardTitle>
-              <p className="text-muted-foreground text-sm">
+              <CardDescription>
                 Platform database and configuration (control-plane) backups.
-              </p>
+              </CardDescription>
             </div>
             <div className="flex items-center gap-2">
               {status && (
@@ -339,9 +345,9 @@ function RemoteStorageCard({
         <div className="flex items-center justify-between gap-2">
           <div>
             <CardTitle>Remote storage</CardTitle>
-            <p className="text-muted-foreground text-sm">
+            <CardDescription>
               Off-host destination for control-plane backups.
-            </p>
+            </CardDescription>
           </div>
           {remote && (
             <Button

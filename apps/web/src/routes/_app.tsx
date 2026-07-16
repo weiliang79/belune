@@ -6,10 +6,10 @@ import { useAuthStore } from "@/lib/stores/auth";
 import { useWebSocketStatus } from "@/lib/hooks/use-websocket";
 
 export const Route = createFileRoute("/_app")({
-  beforeLoad: () => {
+  beforeLoad: ({ location }) => {
     const { isAuthenticated } = useAuthStore.getState();
     if (!isAuthenticated) {
-      throw redirect({ to: "/login" });
+      throw redirect({ to: "/login", search: { redirect: location.href } });
     }
   },
   component: AppLayout,

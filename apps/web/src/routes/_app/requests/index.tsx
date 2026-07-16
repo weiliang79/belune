@@ -15,7 +15,10 @@ import {
   TriangleAlertIcon,
 } from "lucide-react";
 import type { ColumnDef } from "@tanstack/react-table";
-import { useRequestLogs, useRequestSummary } from "@/lib/hooks/use-request-logs";
+import {
+  useRequestLogs,
+  useRequestSummary,
+} from "@/lib/hooks/use-request-logs";
 import { useChannel } from "@/lib/hooks/use-websocket";
 import { useProjects } from "@/lib/hooks/use-projects";
 import { Input } from "@/components/ui/input";
@@ -27,7 +30,7 @@ import {
   SelectItem,
 } from "@/components/ui/select";
 import { DataTable } from "@/components/ui/data-table";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { StatusBar, type StatusSegment } from "@/components/ui/status-bar";
 import { Sparkline } from "@/components/ui/sparkline";
 import { StatCard, MetricCard } from "@/lib/components/stats/stat-card";
@@ -396,9 +399,6 @@ function GlobalRequestsPage() {
       {summary && <RequestSummaryCards summary={summary} />}
 
       <Card>
-        <CardHeader>
-          <CardTitle>Request logs</CardTitle>
-        </CardHeader>
         <CardContent className="space-y-4">
           <RequestFilters filters={filters} onChange={handleFilterChange} />
           <DataTable

@@ -1,13 +1,13 @@
 import {
   createFileRoute,
-  Link,
   Outlet,
   useRouterState,
 } from "@tanstack/react-router";
+import { LayoutDashboard, Archive, SlidersHorizontal, Settings } from "lucide-react";
 import { useProject } from "@/lib/hooks/use-projects";
 import { useApplications } from "@/lib/hooks/use-applications";
 import { useDatabases } from "@/lib/hooks/use-databases";
-import { cn } from "@/lib/utils";
+import { PageTabLinks, type PageTabLink } from "@/components/ui/page-tabs";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useBreadcrumbLabel } from "@/lib/hooks/use-breadcrumb";
 import { ProjectHeader } from "@/components/projects/project-header";
@@ -54,11 +54,11 @@ function ProjectLayout() {
     return <Outlet />;
   }
 
-  const tabs = [
-    { to: `/projects/${projectId}`, label: "Overview" },
-    { to: `/projects/${projectId}/backups`, label: "Backups" },
-    { to: `/projects/${projectId}/env`, label: "Env Vars" },
-    { to: `/projects/${projectId}/settings`, label: "Settings" },
+  const tabs: PageTabLink[] = [
+    { to: `/projects/${projectId}`, label: "Overview", exact: true, icon: LayoutDashboard },
+    { to: `/projects/${projectId}/backups`, label: "Backups", icon: Archive },
+    { to: `/projects/${projectId}/env`, label: "Env Vars", icon: SlidersHorizontal },
+    { to: `/projects/${projectId}/settings`, label: "Settings", icon: Settings },
   ];
 
   return (
@@ -69,30 +69,7 @@ function ProjectLayout() {
         databases={databases}
       />
 
-      <nav className="flex gap-1 border-b">
-        {tabs.map((tab) => {
-          const isActive =
-            tab.to === `/projects/${projectId}`
-              ? !currentPath.startsWith(`/projects/${projectId}/settings`) &&
-                !currentPath.startsWith(`/projects/${projectId}/env`) &&
-                !currentPath.startsWith(`/projects/${projectId}/backups`)
-              : currentPath.startsWith(tab.to);
-          return (
-            <Link
-              key={tab.to}
-              to={tab.to}
-              className={cn(
-                "border-b-2 px-4 py-2 text-sm font-medium transition-colors",
-                isActive
-                  ? "border-primary text-foreground"
-                  : "text-muted-foreground hover:text-foreground border-transparent",
-              )}
-            >
-              {tab.label}
-            </Link>
-          );
-        })}
-      </nav>
+      <PageTabLinks ariaLabel="Project navigation" items={tabs} />
 
       <Outlet />
     </div>

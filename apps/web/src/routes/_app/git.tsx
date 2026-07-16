@@ -1,15 +1,20 @@
 import { useEffect } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { toast } from "sonner";
-import { GitBranchIcon } from "lucide-react";
+import { GitBranchIcon, Link2, KeyRound } from "lucide-react";
 import { RouteError } from "@/lib/components/route-error";
 import { useAuthStore } from "@/lib/stores/auth";
-import { cn } from "@/lib/utils";
 import { PageHeader } from "@/components/ui/page-header";
+import { PageTabs, type PageTab } from "@/components/ui/page-tabs";
 import { ConnectionsPanel } from "@/components/git/connections-panel";
 import { ProvidersPanel } from "@/components/git/providers-panel";
 
 type GitTab = "connections" | "providers";
+
+const GIT_TABS: PageTab<GitTab>[] = [
+  { value: "connections", label: "Connections", icon: Link2 },
+  { value: "providers", label: "Providers", icon: KeyRound },
+];
 
 export const Route = createFileRoute("/_app/git")({
   component: GitPage,
@@ -70,26 +75,13 @@ function GitPage() {
 
       {isAdmin ? (
         <>
-          <nav className="flex gap-1 border-b">
-            {(["connections", "providers"] as const).map((t) => (
-              <button
-                key={t}
-                type="button"
-                onClick={() => setTab(t)}
-                className={cn(
-                  "border-b-2 px-4 py-2 text-sm font-medium capitalize transition-colors",
-                  activeTab === t
-                    ? "border-primary text-foreground"
-                    : "text-muted-foreground hover:text-foreground border-transparent",
-                )}
-              >
-                {t}
-              </button>
-            ))}
-          </nav>
-          <div className="pt-4">
-            {activeTab === "providers" ? <ProvidersPanel /> : <ConnectionsPanel />}
-          </div>
+          <PageTabs
+            ariaLabel="Git views"
+            items={GIT_TABS}
+            value={activeTab}
+            onValueChange={setTab}
+          />
+          {activeTab === "providers" ? <ProvidersPanel /> : <ConnectionsPanel />}
         </>
       ) : (
         <ConnectionsPanel />

@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import type { ColumnDef } from "@tanstack/react-table";
 import { Link } from "@tanstack/react-router";
 import { DataTable, DataTableSearch } from "@/components/ui/data-table";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useDockerVolumes } from "@/lib/hooks/use-docker";
 import { formatDateTimeShort } from "@/lib/utils/format";
@@ -37,7 +38,9 @@ export function DockerVolumesTab({ enabled }: { enabled: boolean }) {
         accessorKey: "name",
         header: "Name",
         cell: ({ row }) => (
-          <span className="font-mono text-xs break-all">{row.original.name}</span>
+          <span className="font-mono text-xs break-all">
+            {row.original.name}
+          </span>
         ),
       },
       {
@@ -76,7 +79,10 @@ export function DockerVolumesTab({ enabled }: { enabled: boolean }) {
             return (
               <Link
                 to="/projects/$projectId/applications/$applicationId"
-                params={{ projectId: owner.project_id, applicationId: owner.id }}
+                params={{
+                  projectId: owner.project_id,
+                  applicationId: owner.id,
+                }}
                 className="text-primary text-sm hover:underline"
               >
                 {owner.name}
@@ -119,26 +125,30 @@ export function DockerVolumesTab({ enabled }: { enabled: boolean }) {
   );
 
   return (
-    <div className="space-y-3">
-      <DataTableSearch
-        value={search}
-        onChange={setSearch}
-        placeholder="Search by name or driver…"
-        className="max-w-xs"
-      />
-      <DataTable
-        columns={columns}
-        data={data ?? []}
-        isLoading={isPending}
-        getRowId={(v) => v.name}
-        enableSorting
-        globalFilter={search}
-        onGlobalFilterChange={setSearch}
-        pagination={{ mode: "client", pageSize: 10 }}
-        emptyMessage={
-          search.trim() ? "No volumes match your search." : "No volumes on this host."
-        }
-      />
-    </div>
+    <Card>
+      <CardContent className="space-y-3">
+        <DataTableSearch
+          value={search}
+          onChange={setSearch}
+          placeholder="Search by name or driver…"
+          className="max-w-xs"
+        />
+        <DataTable
+          columns={columns}
+          data={data ?? []}
+          isLoading={isPending}
+          getRowId={(v) => v.name}
+          enableSorting
+          globalFilter={search}
+          onGlobalFilterChange={setSearch}
+          pagination={{ mode: "client", pageSize: 10 }}
+          emptyMessage={
+            search.trim()
+              ? "No volumes match your search."
+              : "No volumes on this host."
+          }
+        />
+      </CardContent>
+    </Card>
   );
 }

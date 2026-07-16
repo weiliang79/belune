@@ -4,7 +4,13 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { useUpdateWebhook } from "@/lib/hooks/use-applications";
 import { CopyButton } from "@/lib/components/copy-button";
 import type { Application } from "@/lib/types";
@@ -55,12 +61,12 @@ export function WebhookSection({
     <Card>
       <CardHeader>
         <CardTitle>Webhook (Auto-Deploy)</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <p className="text-muted-foreground text-sm mb-4">
+        <CardDescription>
           Configure a webhook secret to enable push-to-deploy. Add this URL as a
           webhook in your GitHub or GitLab repository:
-        </p>
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
         <div className="bg-muted flex items-center justify-between rounded-md px-3 py-2 mb-4">
           <code className="text-sm font-mono break-all">
             {window.location.origin}/api/webhooks/push

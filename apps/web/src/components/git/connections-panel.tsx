@@ -6,7 +6,13 @@ import {
   useDeleteGitIntegration,
 } from "@/lib/hooks/use-git-integrations";
 import { toast } from "sonner";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -47,6 +53,9 @@ export function ConnectionsPanel() {
       <Card>
         <CardHeader>
           <CardTitle>Connect an account</CardTitle>
+          <CardDescription>
+            Link a git account to browse and deploy its repositories.
+          </CardDescription>
         </CardHeader>
         <CardContent>
           {!available || available.length === 0 ? (

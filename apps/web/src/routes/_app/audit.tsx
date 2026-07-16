@@ -15,7 +15,7 @@ import { useAuditLogs, useAuditActions } from "@/lib/hooks/use-audit-logs";
 import { useUsers } from "@/lib/hooks/use-users";
 import { auditExportUrl } from "@/lib/api/audit-logs";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { DataTable } from "@/components/ui/data-table";
 import { PageHeader } from "@/components/ui/page-header";
@@ -160,77 +160,82 @@ function AuditLogPage() {
         }
       />
 
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="relative min-w-0 flex-1 sm:max-w-xs">
-          <SearchIcon
-            aria-hidden="true"
-            className="text-text-faint pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2"
-          />
-          <Input
-            value={filters.search}
-            onChange={(e) => setFilters((p) => ({ ...p, search: e.target.value }))}
-            placeholder="Search actor, resource, action…"
-            aria-label="Search audit log"
-            className="pl-9"
-          />
-        </div>
-
-        <Select
-          value={filters.action}
-          onValueChange={(v) => update({ action: v ?? "" })}
-        >
-          <SelectTrigger className="w-44 capitalize">
-            <SelectValue placeholder="All actions" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="" icon={<ListFilterIcon />} className="capitalize">
-              All actions
-            </SelectItem>
-            {actions?.map((a) => (
-              <SelectItem
-                key={a}
-                value={a}
-                icon={<ActivityIcon />}
-                className="capitalize"
-              >
-                {actionLabel(a)}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-
-        <Select
-          value={filters.actorId}
-          onValueChange={(v) => update({ actorId: v ?? "" })}
-        >
-          <SelectTrigger className="w-44">
-            <SelectValue placeholder="All Actors" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="" icon={<UsersIcon />}>
-              All Actors
-            </SelectItem>
-            {users?.map((u) => (
-              <SelectItem key={u.id} value={u.id} icon={<UserIcon />}>
-                {u.email}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-
       <Card>
-        <CardHeader>
-          <CardTitle>Events</CardTitle>
-        </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="relative min-w-0 flex-1 sm:max-w-xs">
+              <SearchIcon
+                aria-hidden="true"
+                className="text-text-faint pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2"
+              />
+              <Input
+                value={filters.search}
+                onChange={(e) =>
+                  setFilters((p) => ({ ...p, search: e.target.value }))
+                }
+                placeholder="Search actor, resource, action…"
+                aria-label="Search audit log"
+                className="pl-9"
+              />
+            </div>
+
+            <Select
+              value={filters.action}
+              onValueChange={(v) => update({ action: v ?? "" })}
+            >
+              <SelectTrigger className="w-44 capitalize">
+                <SelectValue placeholder="All actions" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem
+                  value=""
+                  icon={<ListFilterIcon />}
+                  className="capitalize"
+                >
+                  All actions
+                </SelectItem>
+                {actions?.map((a) => (
+                  <SelectItem
+                    key={a}
+                    value={a}
+                    icon={<ActivityIcon />}
+                    className="capitalize"
+                  >
+                    {actionLabel(a)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            <Select
+              value={filters.actorId}
+              onValueChange={(v) => update({ actorId: v ?? "" })}
+            >
+              <SelectTrigger className="w-44">
+                <SelectValue placeholder="All Actors" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="" icon={<UsersIcon />}>
+                  All Actors
+                </SelectItem>
+                {users?.map((u) => (
+                  <SelectItem key={u.id} value={u.id} icon={<UserIcon />}>
+                    {u.email}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
           <DataTable
             columns={auditColumns}
             data={data?.items ?? []}
             isLoading={isLoading}
             getRowId={(log) => log.id}
             globalFilter={filters.search}
-            onGlobalFilterChange={(v) => setFilters((p) => ({ ...p, search: v }))}
+            onGlobalFilterChange={(v) =>
+              setFilters((p) => ({ ...p, search: v }))
+            }
             emptyMessage={
               filters.search.trim()
                 ? "No entries match your search."

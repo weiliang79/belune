@@ -19,7 +19,9 @@
   --bg: #fafafa;
   --bg-subtle: #f4f4f5;
   --surface-card: #ffffff;
-  --card-hover: #ffffff;
+  /* Slightly off-white so card hover is perceptible in light mode (was #ffffff,
+     identical to --surface-card, which made hover a no-op). */
+  --card-hover: #f6f6f7;
   --elev: #f4f4f5;
 
   /* Borders (light) */
@@ -99,7 +101,11 @@
   --sidebar-foreground: var(--text-muted);
   --sidebar-primary: var(--brand);
   --sidebar-primary-foreground: var(--brand-fg);
-  --sidebar-accent: var(--elev);
+  /* Active nav item. In light mode the rail (--bg-subtle) and --elev are the
+     same #f4f4f5, so reusing --elev here left the selection invisible; use a
+     deeper gray that reads as highlighted against the rail. Dark mode pins
+     --elev below to keep its existing look. */
+  --sidebar-accent: #e4e4e7;
   --sidebar-accent-foreground: var(--text);
   --sidebar-border: var(--border-subtle);
   --sidebar-ring: var(--brand);
@@ -141,6 +147,10 @@
 
   --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px -12px rgba(0, 0, 0, 0.6);
   --shadow-lg: 0 24px 60px -20px rgba(0, 0, 0, 0.75), 0 2px 8px rgba(0, 0, 0, 0.5);
+
+  /* Active nav item — dark rail (--sidebar=#0c0c0e) already contrasts with
+     --elev, so keep the elevated surface here (the :root override is light-only). */
+  --sidebar-accent: var(--elev);
 }
 
 /* ── Emerald accent variant (violet → emerald) ── */

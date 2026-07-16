@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import type { ColumnDef } from "@tanstack/react-table";
 import { Link } from "@tanstack/react-router";
 import { DataTable, DataTableSearch } from "@/components/ui/data-table";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useDockerContainers } from "@/lib/hooks/use-docker";
 import { formatDateTimeShort } from "@/lib/utils/format";
@@ -39,14 +40,19 @@ export function DockerContainersTab({ enabled }: { enabled: boolean }) {
         accessorKey: "image",
         header: "Image",
         cell: ({ row }) => (
-          <span className="font-mono text-xs break-all">{row.original.image}</span>
+          <span className="font-mono text-xs break-all">
+            {row.original.image}
+          </span>
         ),
       },
       {
         accessorKey: "status",
         header: "State",
         cell: ({ row }) => (
-          <Badge variant={stateVariant(row.original.status)} className="capitalize">
+          <Badge
+            variant={stateVariant(row.original.status)}
+            className="capitalize"
+          >
             {row.original.status || "unknown"}
           </Badge>
         ),
@@ -56,7 +62,8 @@ export function DockerContainersTab({ enabled }: { enabled: boolean }) {
         header: "Ports",
         cell: ({ row }) => {
           const ports = Object.entries(row.original.ports ?? {});
-          if (ports.length === 0) return <span className="text-text-faint">—</span>;
+          if (ports.length === 0)
+            return <span className="text-text-faint">—</span>;
           return (
             <span className="font-mono text-xs">
               {ports.map(([host, ctr]) => `${host}→${ctr}`).join(", ")}
@@ -114,26 +121,30 @@ export function DockerContainersTab({ enabled }: { enabled: boolean }) {
   );
 
   return (
-    <div className="space-y-3">
-      <DataTableSearch
-        value={search}
-        onChange={setSearch}
-        placeholder="Search by name, image, or state…"
-        className="max-w-xs"
-      />
-      <DataTable
-        columns={columns}
-        data={data ?? []}
-        isLoading={isPending}
-        getRowId={(c) => c.id}
-        enableSorting
-        globalFilter={search}
-        onGlobalFilterChange={setSearch}
-        pagination={{ mode: "client", pageSize: 10 }}
-        emptyMessage={
-          search.trim() ? "No containers match your search." : "No containers on this host."
-        }
-      />
-    </div>
+    <Card>
+      <CardContent className="space-y-3">
+        <DataTableSearch
+          value={search}
+          onChange={setSearch}
+          placeholder="Search by name, image, or state…"
+          className="max-w-xs"
+        />
+        <DataTable
+          columns={columns}
+          data={data ?? []}
+          isLoading={isPending}
+          getRowId={(c) => c.id}
+          enableSorting
+          globalFilter={search}
+          onGlobalFilterChange={setSearch}
+          pagination={{ mode: "client", pageSize: 10 }}
+          emptyMessage={
+            search.trim()
+              ? "No containers match your search."
+              : "No containers on this host."
+          }
+        />
+      </CardContent>
+    </Card>
   );
 }

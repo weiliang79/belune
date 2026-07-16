@@ -1,9 +1,10 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { SiDocker } from "@icons-pack/react-simple-icons";
+import { LayoutDashboard, Box, Layers, HardDrive, Network } from "lucide-react";
 import { RouteError } from "@/lib/components/route-error";
 import { PageHeader } from "@/components/ui/page-header";
+import { PageTabs, type PageTab } from "@/components/ui/page-tabs";
 import { useAuthStore } from "@/lib/stores/auth";
-import { cn } from "@/lib/utils";
 import { DockerOverviewTab } from "@/components/docker/overview-tab";
 import { DockerContainersTab } from "@/components/docker/containers-tab";
 import { DockerImagesTab } from "@/components/docker/images-tab";
@@ -12,12 +13,12 @@ import { DockerNetworksTab } from "@/components/docker/networks-tab";
 
 type DockerTab = "overview" | "containers" | "images" | "volumes" | "networks";
 
-const TABS: { value: DockerTab; label: string }[] = [
-  { value: "overview", label: "Overview" },
-  { value: "containers", label: "Containers" },
-  { value: "images", label: "Images" },
-  { value: "volumes", label: "Volumes" },
-  { value: "networks", label: "Networks" },
+const TABS: PageTab<DockerTab>[] = [
+  { value: "overview", label: "Overview", icon: LayoutDashboard },
+  { value: "containers", label: "Containers", icon: Box },
+  { value: "images", label: "Images", icon: Layers },
+  { value: "volumes", label: "Volumes", icon: HardDrive },
+  { value: "networks", label: "Networks", icon: Network },
 ];
 
 function isTab(v: unknown): v is Exclude<DockerTab, "overview"> {
@@ -55,23 +56,12 @@ function DockerPage() {
         </p>
       ) : (
         <>
-          <nav className="flex gap-1 overflow-x-auto border-b">
-            {TABS.map((t) => (
-              <button
-                key={t.value}
-                type="button"
-                onClick={() => setTab(t.value)}
-                className={cn(
-                  "border-b-2 px-4 py-2 text-sm font-medium whitespace-nowrap transition-colors",
-                  activeTab === t.value
-                    ? "border-primary text-foreground"
-                    : "text-muted-foreground hover:text-foreground border-transparent",
-                )}
-              >
-                {t.label}
-              </button>
-            ))}
-          </nav>
+          <PageTabs
+            ariaLabel="Docker views"
+            items={TABS}
+            value={activeTab}
+            onValueChange={setTab}
+          />
 
           {activeTab === "overview" && (
             <DockerOverviewTab enabled={activeTab === "overview"} />

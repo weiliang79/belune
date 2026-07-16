@@ -56,8 +56,13 @@ import {
   TriangleAlert as AlertTriangleIcon,
   DatabaseBackup as DatabaseBackupIcon,
   Plus,
+  LayoutDashboard,
+  ScrollText,
+  Archive,
+  Wrench,
 } from "lucide-react";
 import { IconAction } from "@/components/ui/icon-action";
+import { PageTabs, type PageTab } from "@/components/ui/page-tabs";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useBreadcrumbLabel } from "@/lib/hooks/use-breadcrumb";
 import { StatusBadge } from "@/lib/components/status-badge";
@@ -87,6 +92,13 @@ function dbUpgradable(db: Database): boolean {
 }
 
 type DbTab = "overview" | "logs" | "backups" | "advanced";
+
+const DB_TABS: PageTab<DbTab>[] = [
+  { value: "overview", label: "Overview", icon: LayoutDashboard },
+  { value: "logs", label: "Logs", icon: ScrollText },
+  { value: "backups", label: "Backups", icon: Archive },
+  { value: "advanced", label: "Advanced", icon: Wrench },
+];
 
 export const Route = createFileRoute(
   "/_app/projects/$projectId/databases/$databaseId",
@@ -298,30 +310,12 @@ function DatabaseDetailPage() {
         </Card>
       )}
 
-      <nav className="flex gap-1 border-b">
-        {(
-          [
-            { value: "overview", label: "Overview" },
-            { value: "logs", label: "Logs" },
-            { value: "backups", label: "Backups" },
-            { value: "advanced", label: "Advanced" },
-          ] as const
-        ).map((t) => (
-          <button
-            key={t.value}
-            type="button"
-            onClick={() => setTab(t.value)}
-            className={cn(
-              "border-b-2 px-4 py-2 text-sm font-medium transition-colors",
-              activeTab === t.value
-                ? "border-primary text-foreground"
-                : "text-muted-foreground hover:text-foreground border-transparent",
-            )}
-          >
-            {t.label}
-          </button>
-        ))}
-      </nav>
+      <PageTabs
+        ariaLabel="Database views"
+        items={DB_TABS}
+        value={activeTab}
+        onValueChange={setTab}
+      />
 
       {activeTab === "overview" && (
         <div className="space-y-6">

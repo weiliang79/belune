@@ -53,6 +53,14 @@ const projectColumns: ColumnDef<Project>[] = [
   },
 ];
 
+const SERVICE_ERROR_STATES = new Set([
+  "failed",
+  "error",
+  "crashed",
+  "unhealthy",
+  "exited",
+]);
+
 /** Compact running/total badge for a project's services (apps + databases). */
 function ProjectServicesBadge({ projectId }: { projectId: string }) {
   const { data: applications } = useApplications(projectId);
@@ -63,14 +71,25 @@ function ProjectServicesBadge({ projectId }: { projectId: string }) {
   const services = [...applications, ...databases];
   const total = services.length;
   const running = services.filter((s) => s.status === "running").length;
+  const errored = services.filter((s) =>
+    SERVICE_ERROR_STATES.has(s.status.toLowerCase()),
+  ).length;
 
   if (total === 0) {
     return (
       <span className="text-text-faint text-xs font-medium">No services</span>
     );
   }
+  // All stopped is a deliberate state, not a failure — only go red when a
+  // service is actually errored; otherwise stopped reads neutral.
   const status =
-    running === total ? "running" : running === 0 ? "error" : "building";
+    running === total
+      ? "running"
+      : errored > 0
+        ? "error"
+        : running === 0
+          ? "stopped"
+          : "building";
   return (
     <StatusPill
       status={status}

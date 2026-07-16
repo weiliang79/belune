@@ -1,6 +1,12 @@
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -31,12 +37,12 @@ export function BuildCacheSection({ projectId, applicationId }: Props) {
     <Card>
       <CardHeader>
         <CardTitle>Build Cache</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <p className="text-muted-foreground text-sm">
+        <CardDescription>
           Persistent layer cache reused across builds. Clearing forces the next
           build to start from scratch.
-        </p>
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
         <div className="grid grid-cols-3 gap-4 text-sm">
           <div>
             <div className="text-muted-foreground">Build layers</div>

@@ -5,7 +5,13 @@ import { TriangleAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   SegmentedControl,
@@ -70,6 +76,10 @@ export function ApplicationSettingsForm({
     <Card>
       <CardHeader>
         <CardTitle>Application Settings</CardTitle>
+        <CardDescription>
+          Build and runtime configuration for this application. Changes take
+          effect on the next deploy.
+        </CardDescription>
       </CardHeader>
       <CardContent>
         <form

@@ -8,6 +8,8 @@ import { useAuthStore } from "@/lib/stores/auth";
 import { useAccentSync } from "@/lib/stores/accent";
 import { ApiError } from "@/lib/api/client";
 import { RootErrorBoundary, NotFoundPage } from "@/lib/components/status-pages";
+import { ProgressProvider } from "@bprogress/react";
+import { RouteProgress } from "@/lib/components/route-progress";
 
 export const Route = createRootRoute({
   errorComponent: RootErrorBoundary,
@@ -38,8 +40,12 @@ export const Route = createRootRoute({
       useAuthStore.getState().setUser(user);
     } catch (e) {
       if (e instanceof ApiError && e.status === 401) {
-        throw redirect({ to: "/login" });
+        throw redirect({ to: "/login", search: { redirect: location.href } });
       }
+      // Don't swallow non-401 failures (429, 5xx, network). Proceeding would
+      // render a half-authed shell that _app then bounces to /login, hiding the
+      // real error; surface it through the root error boundary instead.
+      throw e;
     }
   },
   component: RootLayout,
@@ -54,14 +60,21 @@ function RootLayout() {
       enableSystem
       disableTransitionOnChange
     >
-      <Outlet />
-      <Toaster />
-      {import.meta.env.DEV && (
-        <>
-          <TanStackRouterDevtools position="bottom-right" />
-          <ReactQueryDevtools buttonPosition="bottom-left" />
-        </>
-      )}
+      <ProgressProvider
+        color="var(--brand)"
+        height="2px"
+        options={{ showSpinner: false }}
+      >
+        <RouteProgress />
+        <Outlet />
+        <Toaster />
+        {import.meta.env.DEV && (
+          <>
+            <TanStackRouterDevtools position="bottom-right" />
+            <ReactQueryDevtools buttonPosition="bottom-left" />
+          </>
+        )}
+      </ProgressProvider>
     </ThemeProvider>
   );
 }

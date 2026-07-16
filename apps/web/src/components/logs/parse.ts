@@ -10,11 +10,25 @@ export interface LogEntry {
   recordedAt?: string | null;
 }
 
-// Shape of one NDJSON log entry written by the backend (internal/pkg/joblog).
+// Shape of one NDJSON log entry. joblog (build/backup/restore) writes `ts` as an
+// ISO string; Caddy writes it as a numeric epoch-seconds float (e.g. 1699564800.1).
 interface RawEntry {
-  ts?: string;
+  ts?: string | number;
   level?: string;
   msg?: string;
+}
+
+// Normalize a raw `ts` to an ISO string. A bare number is epoch seconds, which
+// `new Date()` would otherwise read as milliseconds and render as 1970. Anything
+// past ~2001 in real milliseconds is ≥ 1e12, so treat smaller numbers as seconds.
+function normalizeTs(ts: string | number | undefined): string | null {
+  if (ts == null) return null;
+  if (typeof ts === "number") {
+    const ms = ts < 1e12 ? ts * 1000 : ts;
+    const d = new Date(ms);
+    return Number.isNaN(d.getTime()) ? null : d.toISOString();
+  }
+  return ts;
 }
 
 // Parses an NDJSON log blob (build / backup / restore logs) — one JSON object
@@ -40,7 +54,7 @@ function parseLine(line: string, id: string): LogEntry {
         id,
         level: normalizeLevel(obj.level ?? "info"),
         message: obj.msg,
-        recordedAt: obj.ts ?? null,
+        recordedAt: normalizeTs(obj.ts),
       };
     }
   } catch {

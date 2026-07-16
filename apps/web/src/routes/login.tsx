@@ -4,6 +4,7 @@ import { z } from "zod";
 import { login, getMe } from "@/lib/api/auth";
 import { ApiError } from "@/lib/api/client";
 import { useAuthStore } from "@/lib/stores/auth";
+import { safeRedirectPath } from "@/lib/utils/redirect";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -13,10 +14,17 @@ import { useState } from "react";
 
 export const Route = createFileRoute("/login")({
   component: LoginPage,
+  validateSearch: (
+    search: Record<string, unknown>,
+  ): { redirect?: string } => {
+    const redirect = safeRedirectPath(search.redirect);
+    return redirect ? { redirect } : {};
+  },
 });
 
 function LoginPage() {
   const navigate = useNavigate();
+  const { redirect } = Route.useSearch();
   const setUser = useAuthStore((s) => s.setUser);
   const [error, setError] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -29,7 +37,9 @@ function LoginPage() {
         await login(value.email, value.password);
         const user = await getMe();
         setUser(user);
-        navigate({ to: "/dashboard" });
+        // Return the user to wherever they were headed (validated same-origin
+        // path); default to Projects. The dead /dashboard hop is gone.
+        navigate({ to: (redirect ?? "/projects") as never });
       } catch (e) {
         if (e instanceof ApiError && e.status === 429 && e.retryAfter) {
           const mins = Math.ceil(e.retryAfter / 60);

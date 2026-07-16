@@ -17,7 +17,13 @@ import {
 } from "@/lib/hooks/use-volume-backups";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { IconAction } from "@/components/ui/icon-action";
 import {
@@ -73,10 +79,10 @@ export function VolumeBackupConfigsSection({ projectId, applicationId }: Props) 
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <CardTitle>Backups</CardTitle>
-            <p className="text-muted-foreground mt-1 text-sm">
+            <CardDescription className="mt-1">
               Snapshot a volume to a project destination, on a schedule or on
               demand. A volume can back up to multiple destinations.
-            </p>
+            </CardDescription>
           </div>
           <Button
             size="sm"
