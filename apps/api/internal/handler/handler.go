@@ -34,6 +34,9 @@ type QueueInspector interface {
 	GetQueueInfo(queue string) (*asynq.QueueInfo, error)
 	DeleteAllArchivedTasks(queue string) (int, error)
 	DeleteAllRetryTasks(queue string) (int, error)
+	// DeleteAllPendingTasks removes queued-but-not-started tasks. It never
+	// touches active (running) tasks, so an in-flight deploy survives.
+	DeleteAllPendingTasks(queue string) (int, error)
 	// DeleteTask removes a single task by id. It fails for an active (running)
 	// task, which lets callers distinguish a genuinely in-progress task from a
 	// stale one (pending/retry/archived) holding a unique TaskID.

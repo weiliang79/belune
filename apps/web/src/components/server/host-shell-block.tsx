@@ -1,0 +1,319 @@
+import { useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
+import { TerminalIcon } from "lucide-react";
+import { Terminal } from "xterm";
+import { FitAddon } from "@xterm/addon-fit";
+import "xterm/css/xterm.css";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { useSettings, useUpdateSettings } from "@/lib/hooks/use-settings";
+import { createHostShellSession } from "@/lib/api/maintenance";
+import { cn } from "@/lib/utils";
+
+function wsUrl(sessionId: string) {
+  const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
+  return `${proto}//${window.location.host}/api/ws/terminal/${sessionId}`;
+}
+
+export function HostShellBlock() {
+  const { data: settings } = useSettings();
+  const updateSettings = useUpdateSettings();
+  const enabled =
+    settings?.find((s) => s.key === "host_shell_enabled")?.value === "true";
+
+  const [confirmEnable, setConfirmEnable] = useState(false);
+  const [passwordOpen, setPasswordOpen] = useState(false);
+  const [password, setPassword] = useState("");
+  const [opening, setOpening] = useState(false);
+  const [sessionId, setSessionId] = useState<string | null>(null);
+
+  const setEnabled = (next: boolean) => {
+    toast.promise(
+      updateSettings.mutateAsync([
+        { key: "host_shell_enabled", value: next ? "true" : "false" },
+      ]),
+      {
+        loading: "Saving…",
+        success: `Host shell ${next ? "enabled" : "disabled"}`,
+        error: (err) => err.message,
+      },
+    );
+  };
+
+  const handleToggle = () => {
+    if (enabled) setEnabled(false);
+    else setConfirmEnable(true);
+  };
+
+  const openShell = async () => {
+    if (!password) return;
+    setOpening(true);
+    try {
+      const res = await createHostShellSession(password);
+      setSessionId(res.session_id);
+      setPasswordOpen(false);
+      setPassword("");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to open host shell");
+    } finally {
+      setOpening(false);
+    }
+  };
+
+  return (
+    <>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <TerminalIcon className="text-text-muted size-4" />
+            <p className="text-sm font-medium">Host Shell</p>
+            {enabled && (
+              <span className="text-status-error text-xs">root access</span>
+            )}
+          </div>
+          <p className="text-muted-foreground mt-1 text-xs">
+            Opens a root shell on the host machine in the browser. Off by default;
+            each session re-asks for your password and is written to the audit log.
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          {enabled && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setPasswordOpen(true)}
+            >
+              Open host shell
+            </Button>
+          )}
+          <button
+            type="button"
+            role="switch"
+            aria-checked={enabled}
+            aria-label="Enable host shell"
+            disabled={updateSettings.isPending}
+            onClick={handleToggle}
+            className={cn(
+              "focus-visible:ring-ring relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus-visible:ring-2 focus-visible:outline-none disabled:opacity-50",
+              enabled ? "bg-primary" : "bg-input",
+            )}
+          >
+            <span
+              className={cn(
+                "bg-background pointer-events-none inline-block h-4 w-4 rounded-full shadow-lg transition-transform",
+                enabled ? "translate-x-4" : "translate-x-0",
+              )}
+            />
+          </button>
+        </div>
+      </div>
+
+      {/* Enable confirmation — this is a serious capability. */}
+      <AlertDialog open={confirmEnable} onOpenChange={setConfirmEnable}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Enable host shell?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This lets any admin open a full <strong>root shell on the host</strong>{" "}
+              through the dashboard. Opening a session still requires re-entering
+              your password, and every session is audited — but the capability is a
+              large increase in blast radius. Only enable it if you understand that.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={() => setEnabled(true)}>
+              Enable
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Step-up password prompt. */}
+      <Dialog
+        open={passwordOpen}
+        onOpenChange={(open) => {
+          if (!open) {
+            setPasswordOpen(false);
+            setPassword("");
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Confirm your password</DialogTitle>
+            <DialogDescription>
+              Re-enter your Belune password to open a root shell on the host.
+            </DialogDescription>
+          </DialogHeader>
+          <Input
+            type="password"
+            autoFocus
+            value={password}
+            placeholder="Password"
+            onChange={(e) => setPassword(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") openShell();
+            }}
+          />
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setPasswordOpen(false);
+                setPassword("");
+              }}
+            >
+              Cancel
+            </Button>
+            <Button onClick={openShell} disabled={opening || !password}>
+              {opening ? "Opening…" : "Open shell"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* The live terminal. */}
+      <Dialog
+        open={sessionId !== null}
+        onOpenChange={(open) => !open && setSessionId(null)}
+      >
+        <DialogContent className="sm:max-w-5xl">
+          <DialogHeader>
+            <DialogTitle>Host shell — root@host</DialogTitle>
+          </DialogHeader>
+          {sessionId && <HostShellTerminal sessionId={sessionId} />}
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
+function HostShellTerminal({ sessionId }: { sessionId: string }) {
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+
+    // The session is single-use: the server tears it down (and removes the host
+    // helper) the moment its WebSocket closes. React StrictMode double-invokes
+    // effects in dev, so connecting synchronously would open a session, have the
+    // throwaway cleanup close it, then leave the real pass reconnecting to a dead
+    // session. Defer the connect and cancel it if we unmount first, so exactly one
+    // connection is ever made.
+    let cancelled = false;
+    let ws: WebSocket | null = null;
+    let term: Terminal | null = null;
+    let ro: ResizeObserver | null = null;
+
+    const timer = setTimeout(() => {
+      if (cancelled) return;
+
+      const t = new Terminal({
+        cursorBlink: true,
+        fontFamily: "monospace",
+        fontSize: 13,
+        theme: {
+          background: "#09090b",
+          foreground: "#e4e4e7",
+          cursor: "#a1a1aa",
+          selectionBackground: "#3f3f46",
+        },
+      });
+      term = t;
+      const fit = new FitAddon();
+      t.loadAddon(fit);
+      t.open(el);
+      fit.fit();
+
+      const socket = new WebSocket(wsUrl(sessionId));
+      ws = socket;
+
+      const sendResize = () => {
+        const dims = fit.proposeDimensions();
+        if (dims && socket.readyState === WebSocket.OPEN) {
+          socket.send(
+            JSON.stringify({ type: "resize", cols: dims.cols, rows: dims.rows }),
+          );
+        }
+      };
+
+      socket.onopen = () => {
+        t.focus();
+        sendResize();
+      };
+      socket.onmessage = (event) => {
+        try {
+          const msg = JSON.parse(event.data as string) as {
+            type: string;
+            data?: string;
+            message?: string;
+          };
+          if (msg.type === "output" && msg.data) {
+            t.write(atob(msg.data));
+          } else if (msg.type === "closed") {
+            t.writeln("\r\n\x1b[33m[Session ended]\x1b[0m");
+          } else if (msg.type === "error") {
+            t.writeln(`\r\n\x1b[31m[${msg.message ?? "Error"}]\x1b[0m`);
+          }
+        } catch {
+          // ignore parse errors
+        }
+      };
+      socket.onclose = (ev) => {
+        if (ev.code !== 1000) {
+          t.writeln("\r\n\x1b[31m[Connection closed]\x1b[0m");
+        }
+      };
+
+      t.onData((data) => {
+        if (socket.readyState === WebSocket.OPEN) {
+          socket.send(JSON.stringify({ type: "input", data: btoa(data) }));
+        }
+      });
+
+      const observer = new ResizeObserver(() => {
+        fit.fit();
+        sendResize();
+      });
+      ro = observer;
+      observer.observe(el);
+    }, 0);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+      ro?.disconnect();
+      ws?.close();
+      term?.dispose();
+    };
+  }, [sessionId]);
+
+  return (
+    <div
+      ref={containerRef}
+      role="application"
+      aria-label="Host shell terminal"
+      className="h-[60vh] overflow-hidden rounded border border-zinc-800 bg-zinc-950"
+    />
+  );
+}

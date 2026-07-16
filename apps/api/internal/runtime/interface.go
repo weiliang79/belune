@@ -74,6 +74,9 @@ type ContainerRuntime interface {
 	StartContainer(ctx context.Context, id string) error
 	StopContainer(ctx context.Context, id string) error
 	RemoveContainer(ctx context.Context, id string) error
+	// RestartContainer restarts a container in place, giving it `timeout` seconds
+	// to stop gracefully before it is killed.
+	RestartContainer(ctx context.Context, id string, timeout int) error
 	// UpdateContainerResources applies CPU (cores) / memory (bytes) limits to a
 	// running container without recreating it. Zero means unlimited.
 	UpdateContainerResources(ctx context.Context, id string, cpuCores float64, memoryBytes int64) error
@@ -81,6 +84,11 @@ type ContainerRuntime interface {
 	// ContainerLogsSince streams logs from a container starting at the given time.
 	// Pass time.Now() to receive only new log lines (no backlog).
 	ContainerLogsSince(ctx context.Context, id string, since time.Time) (io.ReadCloser, error)
+	// ContainerLogsTail returns at most the last `tail` lines of a container's
+	// logs and does not follow. Bounded on purpose: the platform log viewer must
+	// not read the whole (up to hundreds of MB) json-file history to show recent
+	// lines. The stream is stdcopy-multiplexed for non-TTY containers.
+	ContainerLogsTail(ctx context.Context, id string, tail int) (io.ReadCloser, error)
 	ListContainers(ctx context.Context) ([]ContainerInfo, error)
 	// ListAllContainers lists every container on the host (running and stopped),
 	// including ones not managed by the platform. Read-only; powers the admin
@@ -152,6 +160,11 @@ type ContainerRuntime interface {
 	// cmd is the command to run (e.g. ["sh"] or ["bash"]).
 	// Returns a TerminalExecSession with an exec ID (for resize) and a combined RWC.
 	ContainerExecTTY(ctx context.Context, containerName string, cmd []string) (*TerminalExecSession, error)
+	// HostShellSession launches a privileged helper container in the host's PID
+	// namespace and execs a root shell into the host via nsenter, using `image`
+	// (which must contain nsenter). The returned session's RWC.Close() removes the
+	// helper. Grants host root — callers must gate it hard.
+	HostShellSession(ctx context.Context, image string) (*TerminalExecSession, error)
 	// ContainerExecResize resizes the PTY for the given exec session.
 	ContainerExecResize(ctx context.Context, execID string, rows, cols uint) error
 	// ContainerExec runs a command in the named container without a TTY and

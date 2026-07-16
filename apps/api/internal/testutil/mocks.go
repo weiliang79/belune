@@ -18,6 +18,8 @@ type MockContainerRuntime struct {
 	mu              sync.Mutex
 	StopCalls       []string
 	RemoveCalls     []string
+	RestartCalls    []string
+	RestartErr      error
 	StartCalls      []string
 	CreateCalls     []runtime.ContainerConfig
 	PullCalls       []string // image tags passed to PullImage
@@ -73,6 +75,13 @@ func (m *MockContainerRuntime) RemoveContainer(_ context.Context, id string) err
 	return nil
 }
 
+func (m *MockContainerRuntime) RestartContainer(_ context.Context, id string, _ int) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.RestartCalls = append(m.RestartCalls, id)
+	return m.RestartErr
+}
+
 func (m *MockContainerRuntime) UpdateContainerResources(_ context.Context, _ string, _ float64, _ int64) error {
 	return nil
 }
@@ -82,6 +91,10 @@ func (m *MockContainerRuntime) ContainerLogs(_ context.Context, _ string, _ bool
 }
 
 func (m *MockContainerRuntime) ContainerLogsSince(_ context.Context, _ string, _ time.Time) (io.ReadCloser, error) {
+	return io.NopCloser(strings.NewReader("")), nil
+}
+
+func (m *MockContainerRuntime) ContainerLogsTail(_ context.Context, _ string, _ int) (io.ReadCloser, error) {
 	return io.NopCloser(strings.NewReader("")), nil
 }
 
@@ -205,9 +218,20 @@ func (m *MockContainerRuntime) ContainerExecTTY(_ context.Context, _ string, _ [
 	return nil, nil
 }
 
+func (m *MockContainerRuntime) HostShellSession(_ context.Context, _ string) (*runtime.TerminalExecSession, error) {
+	return &runtime.TerminalExecSession{ExecID: "mock-host-exec", RWC: nopRWC{}}, nil
+}
+
 func (m *MockContainerRuntime) ContainerExecResize(_ context.Context, _ string, _, _ uint) error {
 	return nil
 }
+
+// nopRWC is a no-op ReadWriteCloser for terminal-session mocks.
+type nopRWC struct{}
+
+func (nopRWC) Read([]byte) (int, error)    { return 0, io.EOF }
+func (nopRWC) Write(p []byte) (int, error) { return len(p), nil }
+func (nopRWC) Close() error                { return nil }
 
 func (m *MockContainerRuntime) ContainerExec(ctx context.Context, container string, cmd []string, stdin io.Reader, stdout, stderr io.Writer) (int, error) {
 	if m.ExecFunc != nil {
@@ -290,8 +314,10 @@ type MockQueueInspector struct {
 	Info                map[string]*asynq.QueueInfo // per-queue info; missing → zero-value
 	ArchivedByQ         map[string]int              // counts returned by DeleteAllArchivedTasks
 	RetryByQ            map[string]int              // counts returned by DeleteAllRetryTasks
+	PendingByQ          map[string]int              // counts returned by DeleteAllPendingTasks
 	DeleteArchivedCalls []string
 	DeleteRetryCalls    []string
+	DeletePendingCalls  []string
 	DeleteTaskCalls     []string // "queue/id" for each DeleteTask call
 	DeleteTaskErr       error    // if set, DeleteTask returns it (simulates active task)
 }
@@ -317,6 +343,13 @@ func (m *MockQueueInspector) DeleteAllRetryTasks(queue string) (int, error) {
 	defer m.mu.Unlock()
 	m.DeleteRetryCalls = append(m.DeleteRetryCalls, queue)
 	return m.RetryByQ[queue], nil
+}
+
+func (m *MockQueueInspector) DeleteAllPendingTasks(queue string) (int, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.DeletePendingCalls = append(m.DeletePendingCalls, queue)
+	return m.PendingByQ[queue], nil
 }
 
 func (m *MockQueueInspector) DeleteTask(queue, id string) error {

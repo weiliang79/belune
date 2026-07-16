@@ -1,6 +1,7 @@
 package worker
 
 import (
+	"context"
 	"net"
 	"sync"
 	"testing"
@@ -8,15 +9,16 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/weiliang79/belune/internal/config"
+	"github.com/weiliang79/belune/internal/pkg/netutil"
 )
 
 func TestIsPublicIP(t *testing.T) {
 	// A private or loopback autodetect must disable the DNS precheck rather than
 	// flag every domain as misconfigured.
-	assert.False(t, isPublicIP(net.ParseIP("192.168.1.10")))
-	assert.False(t, isPublicIP(net.ParseIP("10.0.0.5")))
-	assert.False(t, isPublicIP(net.ParseIP("127.0.0.1")))
-	assert.True(t, isPublicIP(net.ParseIP("203.0.113.7")))
+	assert.False(t, netutil.IsPublicIP(net.ParseIP("192.168.1.10")))
+	assert.False(t, netutil.IsPublicIP(net.ParseIP("10.0.0.5")))
+	assert.False(t, netutil.IsPublicIP(net.ParseIP("127.0.0.1")))
+	assert.True(t, netutil.IsPublicIP(net.ParseIP("203.0.113.7")))
 }
 
 // An unsubstituted placeholder in BELUNE_PUBLIC_IP (the install block ships
@@ -47,7 +49,7 @@ func TestPublicIPRejectsNonIPConfig(t *testing.T) {
 			publicIPOnce.Do(func() {})
 
 			h := &TaskHandler{Config: &config.Config{PublicIP: tt.configured}}
-			assert.Equal(t, tt.want, h.publicIP())
+			assert.Equal(t, tt.want, h.publicIP(context.Background()))
 		})
 	}
 }

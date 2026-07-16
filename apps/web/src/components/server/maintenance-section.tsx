@@ -2,13 +2,23 @@ import { useState } from "react";
 import { toast } from "sonner";
 import {
   ChevronDownIcon,
+  FileTextIcon,
   HardDriveIcon,
   HelpCircleIcon,
   RouteIcon,
   ListChecksIcon,
+  PowerIcon,
   RefreshCwIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { BlobLogViewer } from "@/components/logs/blob-log-viewer";
+import { HostShellBlock } from "@/components/server/host-shell-block";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -28,14 +38,21 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { useDockerOverview } from "@/lib/hooks/use-docker";
 import {
+  useClearPendingQueue,
   useClearQueue,
+  usePlatformLogs,
   useQueueStatus,
   useReconcileProxy,
   useReconcilerStatus,
+  useRestartService,
   useRunCleanup,
 } from "@/lib/hooks/use-maintenance";
 import { useSettings, useUpdateSettings } from "@/lib/hooks/use-settings";
-import type { CleanupAction } from "@/lib/api/maintenance";
+import type {
+  CleanupAction,
+  PlatformService,
+  RestartableService,
+} from "@/lib/api/maintenance";
 import { formatBytes, formatRelativeTime } from "@/lib/utils/format";
 import { cn } from "@/lib/utils";
 
@@ -73,7 +90,7 @@ export function MaintenanceSection() {
           <div className="min-w-0">
             <div className="flex items-center gap-2">
               <HardDriveIcon className="text-text-muted size-4" />
-              <p className="text-sm font-medium">Disk cleanup</p>
+              <p className="text-sm font-medium">Disk Cleanup</p>
               <span className="text-status-ready text-sm">
                 {formatBytes(reclaimable)} reclaimable
               </span>
@@ -169,12 +186,27 @@ export function MaintenanceSection() {
 
         <Separator />
 
-        {/* ---- Job queue ---- */}
+        {/* ---- Platform Logs ---- */}
+        <PlatformLogsBlock />
+
+        <Separator />
+
+        {/* ---- Job Queue ---- */}
         <QueueBlock />
 
         <Separator />
 
-        {/* ---- Daily automatic cleanup ---- */}
+        {/* ---- Services ---- */}
+        <ServicesBlock />
+
+        <Separator />
+
+        {/* ---- Host Shell ---- */}
+        <HostShellBlock />
+
+        <Separator />
+
+        {/* ---- Daily Automatic Cleanup ---- */}
         <DailyCleanupToggle />
       </div>
 
@@ -259,12 +291,185 @@ function ProxyBlock() {
   );
 }
 
+const RESTARTABLE: {
+  key: RestartableService;
+  label: string;
+  warning: string;
+}[] = [
+  {
+    key: "caddy",
+    label: "Caddy",
+    warning:
+      "Restarting the proxy briefly drops connections on ports 80 and 443 while it comes back up.",
+  },
+  {
+    key: "redis",
+    label: "Redis",
+    warning:
+      "Redis is the job broker. Restarting it while a deploy is queued will drop any queued (not-yet-running) jobs.",
+  },
+];
+
+function ServicesBlock() {
+  const restart = useRestartService();
+  const [pending, setPending] = useState<(typeof RESTARTABLE)[number] | null>(
+    null,
+  );
+
+  const doRestart = (svc: (typeof RESTARTABLE)[number]) => {
+    setPending(null);
+    toast.promise(restart.mutateAsync(svc.key), {
+      loading: `Restarting ${svc.label}…`,
+      success: `${svc.label} restarted`,
+      error: (err) => err.message,
+    });
+  };
+
+  return (
+    <>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <PowerIcon className="text-text-muted size-4" />
+            <p className="text-sm font-medium">Services</p>
+          </div>
+          <p className="text-muted-foreground mt-1 text-xs">
+            Restart a platform service in place when it wedges. Postgres and
+            Belune are intentionally not restartable from here.
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          {RESTARTABLE.map((svc) => (
+            <Button
+              key={svc.key}
+              size="sm"
+              variant="outline"
+              disabled={restart.isPending}
+              onClick={() => setPending(svc)}
+            >
+              Restart {svc.label}
+            </Button>
+          ))}
+        </div>
+      </div>
+
+      <AlertDialog
+        open={pending !== null}
+        onOpenChange={(open) => !open && setPending(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Restart {pending?.label}?</AlertDialogTitle>
+            <AlertDialogDescription>{pending?.warning}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={() => pending && doRestart(pending)}>
+              Restart
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
+  );
+}
+
+const PLATFORM_SERVICES: { key: PlatformService; label: string }[] = [
+  { key: "belune", label: "Belune" },
+  { key: "caddy", label: "Caddy" },
+  { key: "redis", label: "Redis" },
+  { key: "postgres", label: "Postgres" },
+  { key: "buildkit", label: "BuildKit" },
+];
+
+function PlatformLogsBlock() {
+  const [selected, setSelected] = useState<PlatformService | null>(null);
+  const { data, isFetching, isError, error, refetch } =
+    usePlatformLogs(selected);
+
+  const label =
+    PLATFORM_SERVICES.find((s) => s.key === selected)?.label ?? "";
+
+  return (
+    <>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <FileTextIcon className="text-text-muted size-4" />
+            <p className="text-sm font-medium">Platform Logs</p>
+          </div>
+          <p className="text-muted-foreground mt-1 text-xs">
+            Read the last {platformLogTail.toLocaleString()} lines from a platform
+            service, without SSH.
+          </p>
+        </div>
+        <DropdownMenu>
+          <DropdownMenuTrigger render={<Button size="sm" variant="outline" />}>
+            View logs
+            <ChevronDownIcon aria-hidden="true" className="size-4" />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            {PLATFORM_SERVICES.map((s) => (
+              <DropdownMenuItem key={s.key} onClick={() => setSelected(s.key)}>
+                {s.label}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+
+      <Dialog
+        open={selected !== null}
+        onOpenChange={(open) => !open && setSelected(null)}
+      >
+        <DialogContent className="sm:max-w-5xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              {label} logs
+              <Button
+                size="sm"
+                variant="ghost"
+                disabled={isFetching}
+                onClick={() => refetch()}
+              >
+                <RefreshCwIcon
+                  aria-hidden="true"
+                  className={cn("size-4", isFetching && "animate-spin")}
+                />
+                Refresh
+              </Button>
+            </DialogTitle>
+          </DialogHeader>
+          {isError ? (
+            <p className="text-status-error text-sm">
+              {(error as Error)?.message ?? "Failed to load logs."}
+            </p>
+          ) : (
+            <BlobLogViewer
+              blob={data?.content ?? ""}
+              running={isFetching}
+              follow
+              heightClass="h-[60vh]"
+              emptyMessage="No recent log output."
+            />
+          )}
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
+const platformLogTail = 1000;
+
 function QueueBlock() {
   const { data: status } = useQueueStatus();
   const clear = useClearQueue();
+  const clearPending = useClearPendingQueue();
   const [confirm, setConfirm] = useState(false);
+  const [confirmPending, setConfirmPending] = useState(false);
 
   const stuck = status?.total_stuck ?? 0;
+  const pending = (status?.queues ?? []).reduce((n, q) => n + q.pending, 0);
 
   const handleClear = () => {
     setConfirm(false);
@@ -275,13 +480,23 @@ function QueueBlock() {
     });
   };
 
+  const handleClearPending = () => {
+    setConfirmPending(false);
+    toast.promise(clearPending.mutateAsync(), {
+      loading: "Cancelling queued jobs…",
+      success: (r) =>
+        `Cancelled ${r.cleared} queued job${r.cleared === 1 ? "" : "s"}`,
+      error: (err) => err.message,
+    });
+  };
+
   return (
     <>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
             <ListChecksIcon className="text-text-muted size-4" />
-            <p className="text-sm font-medium">Job queue</p>
+            <p className="text-sm font-medium">Job Queue</p>
             <span
               className={cn(
                 "text-xs",
@@ -290,20 +505,38 @@ function QueueBlock() {
             >
               {stuck} stuck
             </span>
+            <span
+              className={cn(
+                "text-xs",
+                pending > 0 ? "text-status-building" : "text-text-faint",
+              )}
+            >
+              · {pending} queued
+            </span>
           </div>
           <p className="text-muted-foreground mt-1 text-xs">
-            Clear failed (dead-letter) and retrying jobs. Pending and in-flight
-            jobs are never touched.
+            Clear stuck (failed/retrying) jobs, or cancel the queued backlog.
+            In-flight jobs are never touched.
           </p>
         </div>
-        <Button
-          size="sm"
-          variant="outline"
-          disabled={clear.isPending || stuck === 0}
-          onClick={() => setConfirm(true)}
-        >
-          Clear stuck jobs
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={clearPending.isPending || pending === 0}
+            onClick={() => setConfirmPending(true)}
+          >
+            Cancel queued jobs
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={clear.isPending || stuck === 0}
+            onClick={() => setConfirm(true)}
+          >
+            Clear stuck jobs
+          </Button>
+        </div>
       </div>
 
       <AlertDialog open={confirm} onOpenChange={setConfirm}>
@@ -318,6 +551,24 @@ function QueueBlock() {
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction onClick={handleClear}>Clear</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={confirmPending} onOpenChange={setConfirmPending}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Cancel {pending} queued jobs?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Removes pending (not-yet-started) tasks from all queues. A job that
+              is already running is not affected.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Keep them</AlertDialogCancel>
+            <AlertDialogAction onClick={handleClearPending}>
+              Cancel jobs
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
@@ -350,7 +601,7 @@ function DailyCleanupToggle() {
   return (
     <div className="flex items-center justify-between gap-3">
       <div className="flex items-center gap-1.5">
-        <p className="text-sm font-medium">Daily automatic cleanup</p>
+        <p className="text-sm font-medium">Daily Automatic Cleanup</p>
         <HelpCircleIcon
           className="text-text-faint size-3.5"
           aria-hidden="true"

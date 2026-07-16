@@ -72,3 +72,24 @@ func (h *Handler) ClearQueue(w http.ResponseWriter, r *http.Request) {
 	h.audit(r, "clear_job_queue", "queue", "", map[string]any{"cleared": cleared})
 	writeJSON(w, http.StatusOK, map[string]int{"cleared": cleared})
 }
+
+// ClearPendingQueue deletes pending (queued-but-not-started) tasks across all
+// queues. Active (in-flight) tasks are never touched, so a running deploy
+// survives. This is the "cancel the backlog" action, distinct from ClearQueue's
+// "remove stuck jobs". POST /api/maintenance/queue/clear-pending (admin only)
+func (h *Handler) ClearPendingQueue(w http.ResponseWriter, r *http.Request) {
+	if h.inspector == nil {
+		writeError(w, http.StatusServiceUnavailable, "queue inspector unavailable")
+		return
+	}
+	cleared := 0
+	for _, q := range maintenanceQueues {
+		if n, err := h.inspector.DeleteAllPendingTasks(q); err == nil {
+			cleared += n
+		} else {
+			slog.Warn("clear pending queue: delete pending tasks failed", "queue", q, "error", err)
+		}
+	}
+	h.audit(r, "clear_pending_queue", "queue", "", map[string]any{"cleared": cleared})
+	writeJSON(w, http.StatusOK, map[string]int{"cleared": cleared})
+}

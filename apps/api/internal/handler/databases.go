@@ -376,11 +376,20 @@ func (h *Handler) GetDatabase(w http.ResponseWriter, r *http.Request) {
 	// with its own spinner. resp.Volume stays nil.
 
 	// External-access (SSH tunnel) state — enabled when a loopback host port is
-	// bound. SSH host/user come from config and are presentation-only hints.
+	// bound. SSH host/user are presentation-only hints. When SERVER_SSH_HOST is
+	// unset, fall back to the resolved server IP so the tunnel command shows a real
+	// address instead of a "<server-host>" placeholder (SSH usually lands on the
+	// same box; an operator with a separate bastion sets SERVER_SSH_HOST).
+	sshHost := h.cfg.ServerSSHHost
+	if sshHost == "" {
+		if ip, _ := h.effectiveServerIP(r.Context()); ip != "" {
+			sshHost = ip
+		}
+	}
 	resp.ExternalAccess = &externalAccessInfo{
 		Enabled:  db.HostPort.Valid,
 		HostPort: db.HostPort.Int32,
-		SSHHost:  h.cfg.ServerSSHHost,
+		SSHHost:  sshHost,
 		SSHUser:  h.cfg.ServerSSHUser,
 	}
 

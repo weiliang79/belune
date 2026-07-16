@@ -215,6 +215,8 @@ export const queryKeys = {
   invitations: ["invitations"] as const,
   proxyReconciler: ["proxy", "reconciler"] as const,
   maintenanceQueue: ["maintenance", "queue"] as const,
+  maintenancePlatformLogs: ["maintenance", "platform-logs"] as const,
+  maintenanceServerIP: ["maintenance", "server-ip"] as const,
   docker: {
     overview: ["docker", "overview"] as const,
     containers: ["docker", "containers"] as const,

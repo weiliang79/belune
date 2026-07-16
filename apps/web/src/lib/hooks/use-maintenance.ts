@@ -1,7 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "./query-keys";
 import * as maintenanceApi from "@/lib/api/maintenance";
-import type { CleanupAction } from "@/lib/api/maintenance";
+import type {
+  CleanupAction,
+  PlatformService,
+  RestartableService,
+} from "@/lib/api/maintenance";
 
 export function useReconcilerStatus() {
   return useQuery({
@@ -32,6 +36,41 @@ export function useClearQueue() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: maintenanceApi.clearQueue,
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: queryKeys.maintenanceQueue }),
+  });
+}
+
+export function useServerIP() {
+  return useQuery({
+    queryKey: queryKeys.maintenanceServerIP,
+    queryFn: maintenanceApi.getServerIP,
+    staleTime: 60_000,
+    refetchOnWindowFocus: false,
+  });
+}
+
+export function useRestartService() {
+  return useMutation({
+    mutationFn: (service: RestartableService) =>
+      maintenanceApi.restartService(service),
+  });
+}
+
+export function usePlatformLogs(service: PlatformService | null) {
+  return useQuery({
+    queryKey: [...queryKeys.maintenancePlatformLogs, service],
+    queryFn: () => maintenanceApi.getPlatformLogs(service as PlatformService),
+    enabled: service !== null,
+    refetchOnWindowFocus: false,
+    staleTime: 0,
+  });
+}
+
+export function useClearPendingQueue() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: maintenanceApi.clearPendingQueue,
     onSuccess: () =>
       qc.invalidateQueries({ queryKey: queryKeys.maintenanceQueue }),
   });

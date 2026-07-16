@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"strconv"
 	"strings"
 	"time"
 
@@ -129,6 +130,14 @@ func (c *Client) RemoveContainer(ctx context.Context, id string) (err error) {
 	return c.cli.ContainerRemove(ctx, id, container.RemoveOptions{Force: true})
 }
 
+// RestartContainer restarts a container in place (stop, then start the same
+// container). Docker gives it up to `timeout` seconds to stop gracefully before
+// killing it.
+func (c *Client) RestartContainer(ctx context.Context, id string, timeout int) (err error) {
+	defer func() { metrics.RecordDockerOp("restart_container", err) }()
+	return c.cli.ContainerRestart(ctx, id, container.StopOptions{Timeout: &timeout})
+}
+
 // UpdateContainerResources applies new CPU/memory limits to a running container
 // live (no recreate), using the same conversion as create time. A zero value
 // means unlimited for that dimension.
@@ -151,6 +160,19 @@ func (c *Client) ContainerLogs(ctx context.Context, id string, follow bool) (io.
 		ShowStderr: true,
 		Follow:     follow,
 		Timestamps: true,
+	})
+}
+
+func (c *Client) ContainerLogsTail(ctx context.Context, id string, tail int) (io.ReadCloser, error) {
+	tailStr := "all"
+	if tail > 0 {
+		tailStr = strconv.Itoa(tail)
+	}
+	return c.cli.ContainerLogs(ctx, id, container.LogsOptions{
+		ShowStdout: true,
+		ShowStderr: true,
+		Follow:     false,
+		Tail:       tailStr,
 	})
 }
 

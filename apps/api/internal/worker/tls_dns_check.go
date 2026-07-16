@@ -9,6 +9,9 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/weiliang79/belune/internal/config"
+	"github.com/weiliang79/belune/internal/pkg/netutil"
 )
 
 // DNS precheck.
@@ -41,7 +44,7 @@ const dnsCheckTimeout = 3 * time.Second
 // own public IP is unknown. Deliberately conservative: a false "your DNS is wrong"
 // is worse than staying quiet.
 func (h *TaskHandler) checkDNS(ctx context.Context, hostname string) (msg string, fatal bool) {
-	public := h.publicIP()
+	public := h.publicIP(ctx)
 	if public == "" {
 		return "", false // no baseline to compare against — skip the check
 	}
@@ -81,10 +84,46 @@ var (
 	configuredIPWarnOnce sync.Once
 )
 
-// publicIP returns the configured public IP, falling back to the local address
-// the kernel would use for outbound traffic. That fallback is right for a plain
-// VPS and wrong behind NAT, which is exactly why BELUNE_PUBLIC_IP exists.
-func (h *TaskHandler) publicIP() string {
+// settingIP memoises the DB-backed public_ip override for a short window so the
+// per-minute sweep does not hit the settings table once per domain. 30s is short
+// enough that an operator's edit takes effect almost immediately.
+var (
+	settingIPMu   sync.Mutex
+	settingIPVal  string
+	settingIPTime time.Time
+)
+
+// settingPublicIP returns the operator-set public_ip override, or "" when unset
+// or unavailable (tests without a DB, a query error). Validation happens on
+// write in the settings handler, so a stored value is already a valid IP.
+func (h *TaskHandler) settingPublicIP(ctx context.Context) string {
+	if h.Queries == nil {
+		return ""
+	}
+	settingIPMu.Lock()
+	defer settingIPMu.Unlock()
+	if !settingIPTime.IsZero() && time.Since(settingIPTime) < 30*time.Second {
+		return settingIPVal
+	}
+	val := ""
+	if s, err := h.Queries.GetSetting(ctx, config.SettingPublicIP); err == nil {
+		val = strings.TrimSpace(s.Value)
+	}
+	settingIPVal = val
+	settingIPTime = time.Now()
+	return val
+}
+
+// publicIP returns the address a user's DNS must point at, most-specific first:
+// the DB public_ip override, then the BELUNE_PUBLIC_IP env baseline, then the
+// local address the kernel would use for outbound traffic. The autodetect
+// fallback is right for a plain VPS and wrong behind NAT, which is why the
+// override and the env var exist.
+func (h *TaskHandler) publicIP(ctx context.Context) string {
+	// The operator's explicit choice wins — it was validated as an IP on write.
+	if override := h.settingPublicIP(ctx); override != "" {
+		return override
+	}
 	if h.Config != nil && h.Config.PublicIP != "" {
 		// Validate rather than trust: an unsubstituted placeholder (BELUNE_PUBLIC_IP=VPS_IP)
 		// would otherwise become the baseline, match nothing, and report every
@@ -99,33 +138,13 @@ func (h *TaskHandler) publicIP() string {
 		})
 	}
 	publicIPOnce.Do(func() {
-		// No packets are sent: connecting a UDP socket only fixes the route, and
-		// the local address it picks is the one we would egress from.
-		conn, err := net.Dial("udp", "1.1.1.1:80")
-		if err != nil {
-			slog.Debug("tls dns check: could not autodetect public IP", "error", err)
-			return
+		// Autodetect the egress IP once per process. Empty means behind NAT or on a
+		// dev box — stay quiet and let the operator set the IP explicitly rather
+		// than flag every domain as misconfigured against a private baseline.
+		publicIPValue = netutil.DetectEgressIP()
+		if publicIPValue == "" {
+			slog.Debug("tls dns check: could not autodetect a public IP; set BELUNE_PUBLIC_IP or the Server IP setting to enable the DNS precheck")
 		}
-		defer conn.Close()
-		addr, ok := conn.LocalAddr().(*net.UDPAddr)
-		if !ok {
-			return
-		}
-		// A private or loopback address means we are behind NAT or on a dev box.
-		// Comparing a public DNS record against it would flag every domain as
-		// misconfigured, so stay quiet and let the operator set BELUNE_PUBLIC_IP.
-		if !isPublicIP(addr.IP) {
-			slog.Debug("tls dns check: autodetected a non-public address; set BELUNE_PUBLIC_IP to enable the DNS precheck",
-				"detected", addr.IP.String())
-			return
-		}
-		publicIPValue = addr.IP.String()
 	})
 	return publicIPValue
-}
-
-// isPublicIP reports whether ip is globally routable — i.e. something a user's
-// DNS record could legitimately point at.
-func isPublicIP(ip net.IP) bool {
-	return ip.IsGlobalUnicast() && !ip.IsPrivate() && !ip.IsLoopback() && !ip.IsLinkLocalUnicast()
 }

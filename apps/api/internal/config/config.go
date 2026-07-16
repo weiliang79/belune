@@ -9,6 +9,13 @@ import (
 	"github.com/weiliang79/belune/internal/pkg/crypto"
 )
 
+// SettingPublicIP is the settings-table key that overrides the BELUNE_PUBLIC_IP
+// env baseline at runtime, so the operator can fix the advertised server IP from
+// the dashboard without a restart. Empty/unset falls back to the env, then to
+// autodetection. Shared by the settings handler (validates + writes) and the TLS
+// DNS check (reads).
+const SettingPublicIP = "public_ip"
+
 type Config struct {
 	Port               int
 	DatabaseURL        string

@@ -44,6 +44,7 @@ import type { HostMetricPoint, SettingEntry } from "@/lib/types";
 import { UPlotAreaChart } from "@/components/ui/uplot-area-chart";
 import { SystemBackupsPanel } from "@/components/backups/system-backups-panel";
 import { MaintenanceSection } from "@/components/server/maintenance-section";
+import { useServerIP } from "@/lib/hooks/use-maintenance";
 import { DashboardDomainSection } from "@/components/server/dashboard-domain-section";
 import { cn } from "@/lib/utils";
 import { formatDateTimeShort } from "@/lib/utils/format";
@@ -245,6 +246,30 @@ function ServerSettingsPage() {
     );
   };
 
+  // Server IP: an override for the address domains must point at (the DNS/TLS
+  // precheck baseline). Blank falls back to autodetect; the detected value is
+  // shown as the placeholder so an empty field still tells the operator the IP.
+  const { data: serverIP } = useServerIP();
+  const currentServerIp =
+    settings?.find((s) => s.key === "public_ip")?.value ?? "";
+  const [serverIpDraft, setServerIpDraft] = useState<string | null>(null);
+  const serverIpValue = serverIpDraft ?? currentServerIp;
+
+  const handleSaveServerIp = () => {
+    toast.promise(
+      updateSettings
+        .mutateAsync([{ key: "public_ip", value: serverIpValue.trim() }])
+        .then(() => setServerIpDraft(null)),
+      {
+        loading: "Saving...",
+        success: serverIpValue.trim()
+          ? "Server IP saved"
+          : "Server IP cleared (auto-detect)",
+        error: (err) => (err as Error).message,
+      },
+    );
+  };
+
   // In a custom window, format x-axis labels with date+time when the span exceeds
   // a day; otherwise time-only keeps short windows readable.
   const chartRange = useMemo(() => {
@@ -319,6 +344,32 @@ function ServerSettingsPage() {
               <p className="text-muted-foreground text-xs">
                 Shown in the sidebar and used as the default GitHub App name when
                 connecting a provider.
+              </p>
+
+              <Label htmlFor="server-ip" className="pt-2">
+                Server IP
+              </Label>
+              <div className="flex max-w-md items-center gap-2">
+                <Input
+                  id="server-ip"
+                  value={serverIpValue}
+                  onChange={(e) => setServerIpDraft(e.target.value)}
+                  placeholder={serverIP?.effective || "Auto-detect"}
+                />
+                <Button
+                  onClick={handleSaveServerIp}
+                  disabled={
+                    updateSettings.isPending ||
+                    serverIpValue.trim() === currentServerIp.trim()
+                  }
+                >
+                  Save
+                </Button>
+              </div>
+              <p className="text-muted-foreground text-xs">
+                The public address domains must point at for a certificate. Leave
+                blank to auto-detect; set it explicitly when the box is behind
+                NAT.
               </p>
 
               <div className="border-t pt-4">

@@ -83,6 +83,42 @@ func TestQueueStatusAndClear(t *testing.T) {
 	assert.Len(t, env.Inspector.DeleteRetryCalls, 3)
 }
 
+func TestClearPendingQueue(t *testing.T) {
+	resetDB(t)
+	adminToken := env.SetupAdmin(t, "admin@test.com", "password123")
+
+	env.Inspector.PendingByQ = map[string]int{"critical": 4, "default": 1}
+	env.Inspector.DeletePendingCalls = nil
+	env.Inspector.DeleteArchivedCalls = nil
+	env.Inspector.DeleteRetryCalls = nil
+
+	resp := env.DoRequest(t, "POST", "/api/maintenance/queue/clear-pending", nil, testutil.AuthHeader(adminToken))
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	cleared := testutil.ReadJSON(t, resp)
+
+	// Deletes pending across all three queues; returns the total.
+	assert.EqualValues(t, 5, cleared["cleared"]) // 4 + 1
+	assert.Len(t, env.Inspector.DeletePendingCalls, 3)
+	// Active/retry/archived are never touched by clear-pending.
+	assert.Empty(t, env.Inspector.DeleteArchivedCalls)
+	assert.Empty(t, env.Inspector.DeleteRetryCalls)
+}
+
+func TestRestartService_Allowlist(t *testing.T) {
+	resetDB(t)
+	adminToken := env.SetupAdmin(t, "admin@test.com", "password123")
+
+	// Only caddy and redis are restartable. Everything else is refused before any
+	// Docker call — belune (self-restart), postgres (data risk), buildkit, junk.
+	for _, svc := range []string{"belune", "postgres", "buildkit", "nonsense", ""} {
+		env.Runtime.RestartCalls = nil
+		resp := env.DoRequest(t, "POST", "/api/maintenance/restart?service="+svc, nil, testutil.AuthHeader(adminToken))
+		assert.Equal(t, http.StatusBadRequest, resp.StatusCode, "service=%q", svc)
+		resp.Body.Close()
+		assert.Empty(t, env.Runtime.RestartCalls, "no restart attempted for %q", svc)
+	}
+}
+
 func TestMaintenance_NonAdminForbidden(t *testing.T) {
 	resetDB(t)
 	adminToken := env.SetupAdmin(t, "admin@test.com", "password123")
@@ -95,6 +131,10 @@ func TestMaintenance_NonAdminForbidden(t *testing.T) {
 		{"POST", "/api/proxy/reconcile"},
 		{"GET", "/api/maintenance/queue"},
 		{"POST", "/api/maintenance/queue/clear"},
+		{"POST", "/api/maintenance/queue/clear-pending"},
+		{"GET", "/api/maintenance/logs?service=caddy"},
+		{"GET", "/api/maintenance/server-ip"},
+		{"POST", "/api/maintenance/restart?service=caddy"},
 	} {
 		resp := env.DoRequest(t, tc.method, tc.path, nil, testutil.AuthHeader(memberToken))
 		assert.Equal(t, http.StatusForbidden, resp.StatusCode, "%s %s", tc.method, tc.path)

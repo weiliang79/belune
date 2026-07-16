@@ -4,12 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
+	"net"
 	"net/http"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
 	"strings"
 
+	"github.com/weiliang79/belune/internal/config"
 	"github.com/weiliang79/belune/internal/proxy"
 	"github.com/weiliang79/belune/internal/store/generated"
 )
@@ -100,6 +102,17 @@ func (h *Handler) UpdateSettings(w http.ResponseWriter, r *http.Request) {
 			}
 			req[i].Value = id
 			changingDashboard = true
+
+		case config.SettingPublicIP:
+			// Blank clears the override (fall back to env/autodetect). A non-blank
+			// value must parse as an IP — a garbage baseline is worse than none, as
+			// it would mark every domain as pointing at "not this server".
+			ip := strings.TrimSpace(s.Value)
+			if ip != "" && net.ParseIP(ip) == nil {
+				writeError(w, http.StatusBadRequest, "invalid server IP: must be an IPv4 or IPv6 address")
+				return
+			}
+			req[i].Value = ip
 		}
 	}
 
