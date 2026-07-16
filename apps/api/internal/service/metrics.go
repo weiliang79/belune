@@ -23,7 +23,12 @@ type HostMetricPoint struct {
 	MemoryTotal int64   `json:"memory_total"`
 	DiskUsed    int64   `json:"disk_used"`
 	DiskTotal   int64   `json:"disk_total"`
-	RecordedAt  string  `json:"recorded_at"`
+	// Swap is reported separately from RAM and never summed with it: a sum reads
+	// healthiest exactly when the box is thrashing. SwapTotal is 0 on hosts with
+	// no swap configured.
+	SwapUsed   int64  `json:"swap_used"`
+	SwapTotal  int64  `json:"swap_total"`
+	RecordedAt string `json:"recorded_at"`
 }
 
 type MetricsService struct {
@@ -59,6 +64,14 @@ func CollectHostStats(ctx context.Context) HostMetricPoint {
 		slog.Warn("failed to collect host memory", "error", err)
 	}
 
+	swapInfo, err := mem.SwapMemoryWithContext(ctx)
+	if err == nil {
+		point.SwapUsed = int64(swapInfo.Used)
+		point.SwapTotal = int64(swapInfo.Total)
+	} else {
+		slog.Warn("failed to collect host swap", "error", err)
+	}
+
 	diskInfo, err := disk.UsageWithContext(ctx, "/")
 	if err == nil {
 		point.DiskUsed = int64(diskInfo.Used)
@@ -79,6 +92,8 @@ func (s *MetricsService) PersistHostMetric(ctx context.Context, point HostMetric
 		MemoryTotal: point.MemoryTotal,
 		DiskUsed:    point.DiskUsed,
 		DiskTotal:   point.DiskTotal,
+		SwapUsed:    point.SwapUsed,
+		SwapTotal:   point.SwapTotal,
 		RecordedAt:  pgtype.Timestamptz{Time: recordedAt, Valid: true},
 	}); err != nil {
 		slog.Error("failed to insert host metric", "error", err)

@@ -330,6 +330,8 @@ type HostMetric struct {
 	DiskUsed    int64              `json:"disk_used"`
 	DiskTotal   int64              `json:"disk_total"`
 	RecordedAt  pgtype.Timestamptz `json:"recorded_at"`
+	SwapUsed    int64              `json:"swap_used"`
+	SwapTotal   int64              `json:"swap_total"`
 }
 
 type Invitation struct {

@@ -185,6 +185,10 @@ export interface HostMetricPoint {
   memory_total: number | null;
   disk_used: number | null;
   disk_total: number | null;
+  // Swap is shown as its own series, never summed with RAM. swap_total is 0 on
+  // hosts with no swap configured.
+  swap_used: number | null;
+  swap_total: number | null;
   recorded_at: string;
 }
 

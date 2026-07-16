@@ -99,6 +99,9 @@ function loadStatus(percent: number) {
 const CPU_COLOR = "hsl(221, 83%, 53%)";
 const MEM_COLOR = "hsl(262, 83%, 58%)";
 const DISK_COLOR = "hsl(142, 71%, 45%)";
+// Swap is deliberately a warm, distinct hue from RAM's violet — the two are read
+// as separate resources, never summed.
+const SWAP_COLOR = "hsl(28, 90%, 55%)";
 
 // Live host-metrics window: the chart shows the most recent 10 minutes.
 const TEN_MIN_MS = 10 * 60 * 1000;
@@ -196,6 +199,8 @@ function ServerSettingsPage() {
           memory_total: null,
           disk_used: null,
           disk_total: null,
+          swap_used: null,
+          swap_total: null,
         },
       );
     }
@@ -431,6 +436,11 @@ function ServerSettingsPage() {
                       label="Memory"
                       icon={<MemoryStickIcon className="size-3.5" />}
                       value={formatBytes(latest.memory_used)}
+                      subline={
+                        latest.swap_total
+                          ? `Swap ${formatBytes(latest.swap_used)}`
+                          : "No swap"
+                      }
                       percent={pct(latest.memory_used, latest.memory_total)}
                       values={liveMetrics.map((p) => p.memory_used)}
                       color={MEM_COLOR}
@@ -470,6 +480,20 @@ function ServerSettingsPage() {
                       Math.max(...detailMetrics.map((m) => m.memory_total ?? 0)),
                     ]}
                   />
+                  {detailMetrics.some((m) => (m.swap_total ?? 0) > 0) && (
+                    <HostChart
+                      title="Swap Usage"
+                      data={detailMetrics}
+                      dataKey="swap_used"
+                      range={chartRange}
+                      color={SWAP_COLOR}
+                      formatter={(v: number) => formatBytes(v)}
+                      domain={[
+                        0,
+                        Math.max(...detailMetrics.map((m) => m.swap_total ?? 0)),
+                      ]}
+                    />
+                  )}
                   <HostChart
                     title="Disk Usage"
                     data={detailMetrics}
@@ -755,6 +779,7 @@ function HostMetricCard({
   label,
   icon,
   value,
+  subline,
   percent,
   values,
   color,
@@ -762,6 +787,9 @@ function HostMetricCard({
   label: string;
   icon?: ReactNode;
   value: string;
+  // Optional second line under the headline — e.g. swap under RAM. Kept subdued
+  // precisely so it reads as secondary, never summed into the headline number.
+  subline?: ReactNode;
   percent: number;
   values: (number | null)[];
   color: string;
@@ -778,6 +806,9 @@ function HostMetricCard({
       }
     >
       <p className="mt-1 font-mono text-2xl font-semibold">{value}</p>
+      {subline && (
+        <p className="text-text-faint mt-0.5 font-mono text-xs">{subline}</p>
+      )}
       <Sparkline className="mt-2" height={36} values={values} color={color} />
     </MetricCard>
   );
