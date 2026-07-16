@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
@@ -368,12 +369,11 @@ func (h *Handler) GetDatabase(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Read-only managed-volume info (best-effort). Name matches the provision
-	// convention; size comes from the runtime's disk-usage view.
-	volName := db.Slug + "-vol"
-	if size, err := h.runtime.VolumeSize(r.Context(), volName); err == nil {
-		resp.Volume = &volumeInfo{Name: volName, SizeBytes: size}
-	}
+	// Volume size is deliberately NOT fetched here. VolumeSize funnels into
+	// Docker's `system df -v`, which stats every volume on the host — instant on a
+	// quiet box, tens of seconds on a busy one — and made this whole page hang on
+	// its loading skeleton. The frontend fetches it lazily from GetDatabaseVolume
+	// with its own spinner. resp.Volume stays nil.
 
 	// External-access (SSH tunnel) state — enabled when a loopback host port is
 	// bound. SSH host/user come from config and are presentation-only hints.
@@ -382,6 +382,49 @@ func (h *Handler) GetDatabase(w http.ResponseWriter, r *http.Request) {
 		HostPort: db.HostPort.Int32,
 		SSHHost:  h.cfg.ServerSSHHost,
 		SSHUser:  h.cfg.ServerSSHUser,
+	}
+
+	writeJSON(w, http.StatusOK, resp)
+}
+
+type databaseVolumeResponse struct {
+	Name string `json:"name"`
+	// SizeBytes is null when the size could not be computed in time (a busy host)
+	// — the client shows the name and a soft "unavailable" rather than hanging.
+	SizeBytes *int64 `json:"size_bytes"`
+}
+
+// GetDatabaseVolume returns the managed volume's name and on-disk size. Split out
+// of GetDatabase because the size query (`docker system df -v`) can take tens of
+// seconds on a busy host; here it has its own request, spinner, and timeout.
+// GET /api/projects/{projectId}/databases/{databaseId}/volume
+func (h *Handler) GetDatabaseVolume(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "databaseId")
+	var uuid pgtype.UUID
+	if err := uuid.Scan(id); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid database id")
+		return
+	}
+	if !h.canAccessDatabase(r, uuid) {
+		writeError(w, http.StatusForbidden, "access denied")
+		return
+	}
+
+	db, err := h.queries.GetDatabase(r.Context(), uuid)
+	if err != nil {
+		writeError(w, http.StatusNotFound, "database not found")
+		return
+	}
+
+	resp := databaseVolumeResponse{Name: db.Slug + "-vol"}
+
+	// Bound the host-wide disk scan so a thrashing box returns "unavailable"
+	// instead of holding the request open. The error is intentionally swallowed:
+	// a missing size is a soft state, not a failure.
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	defer cancel()
+	if size, err := h.runtime.VolumeSize(ctx, resp.Name); err == nil {
+		resp.SizeBytes = &size
 	}
 
 	writeJSON(w, http.StatusOK, resp)

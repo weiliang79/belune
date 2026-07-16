@@ -345,6 +345,7 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService,
 			r.Get("/api/projects/{projectId}/databases", h.ListDatabases)
 			r.Post("/api/projects/{projectId}/databases", h.CreateDatabase)
 			r.Get("/api/projects/{projectId}/databases/{databaseId}", h.GetDatabase)
+			r.Get("/api/projects/{projectId}/databases/{databaseId}/volume", h.GetDatabaseVolume)
 			r.Put("/api/projects/{projectId}/databases/{databaseId}", h.UpdateDatabase)
 			r.Post("/api/projects/{projectId}/databases/{databaseId}/external-access", h.SetDatabaseExternalAccess)
 			r.Post("/api/projects/{projectId}/databases/{databaseId}/stop", h.StopDatabase)

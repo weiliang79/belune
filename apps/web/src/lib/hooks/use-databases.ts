@@ -36,6 +36,18 @@ export function useDatabase(projectId: string, databaseId: string) {
   });
 }
 
+// useDatabaseVolume lazily fetches the managed volume's name and size. Split from
+// useDatabase because the size query can take tens of seconds on a busy host, so
+// it must not block the detail page from rendering.
+export function useDatabaseVolume(projectId: string, databaseId: string) {
+  return useQuery({
+    queryKey: queryKeys.databases.volume(projectId, databaseId),
+    queryFn: () => databasesApi.getDatabaseVolume(projectId, databaseId),
+    staleTime: 30_000,
+    refetchOnWindowFocus: false,
+  });
+}
+
 export function useCreateDatabase(projectId: string) {
   const qc = useQueryClient();
   return useMutation({

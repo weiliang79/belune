@@ -35,6 +35,7 @@ import {
 import { toast } from "sonner";
 import {
   useDatabase,
+  useDatabaseVolume,
   useDeleteDatabase,
   useUpdateDatabase,
   useSetDatabaseExternalAccess,
@@ -669,6 +670,10 @@ const MB = 1024 * 1024;
 function AdvancedCard({ db }: { db: Database }) {
   const update = useUpdateDatabase(db.project_id, db.id);
   const upgrade = useUpgradeDatabase(db.project_id, db.id);
+  const { data: volume, isLoading: volumeLoading } = useDatabaseVolume(
+    db.project_id,
+    db.id,
+  );
   const [cpu, setCpu] = useState(String(db.cpu_limit ?? 0));
   const [memMb, setMemMb] = useState(
     String(db.memory_limit ? Math.round(db.memory_limit / MB) : 0),
@@ -833,13 +838,24 @@ function AdvancedCard({ db }: { db: Database }) {
             <p className="text-text-faint text-xs">Managed automatically.</p>
           </div>
           <div className="text-right">
-            {db.volume ? (
+            {volume ? (
               <>
-                <p className="font-mono text-xs">{db.volume.name}</p>
-                <p className="text-text-faint text-xs">
-                  {formatBytes(db.volume.size_bytes)}
+                <p className="font-mono text-xs">{volume.name}</p>
+                <p className="text-text-faint flex items-center justify-end gap-1 text-xs">
+                  {volume.size_bytes != null ? (
+                    formatBytes(volume.size_bytes)
+                  ) : (
+                    <span title="The size scan timed out on a busy host.">
+                      size unavailable
+                    </span>
+                  )}
                 </p>
               </>
+            ) : volumeLoading ? (
+              <p className="text-text-faint flex items-center justify-end gap-1 text-xs">
+                <Loader2 className="size-3 animate-spin" aria-hidden="true" />
+                Calculating…
+              </p>
             ) : (
               <p className="text-text-faint text-xs">—</p>
             )}

@@ -9,6 +9,12 @@ export function getDatabase(projectId: string, databaseId: string) {
   return api.get<Database>(`/projects/${projectId}/databases/${databaseId}`);
 }
 
+export function getDatabaseVolume(projectId: string, databaseId: string) {
+  return api.get<{ name: string; size_bytes: number | null }>(
+    `/projects/${projectId}/databases/${databaseId}/volume`,
+  );
+}
+
 export function createDatabase(
   projectId: string,
   data: {
