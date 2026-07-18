@@ -20,7 +20,7 @@
       "volumes": [
         { "name": "data", "mount_path": "/data" }
       ],
-      "health_check_path": "/api/healthz"
+      "health_check": { "path": "/api/healthz" }
     }
   ],
   "notes": "Finish the install wizard on first visit. The default SQLite database is stored on the `data` volume — no separate database needed.\n"

@@ -114,6 +114,15 @@ func TestValidateFailures(t *testing.T) {
 			m.Databases = []Database{{Name: "db", Engine: "postgres"}}
 			m.Services[0].Env = map[string]string{"X": "{{db.db.schema}}"}
 		}, "db field must be"},
+		{"health path not absolute", func(m *Manifest) {
+			m.Services[0].HealthCheck = &HealthCheck{Path: "healthz"}
+		}, "health_check.path must start with /"},
+		{"health timeout out of range", func(m *Manifest) {
+			m.Services[0].HealthCheck = &HealthCheck{Path: "/", TimeoutSeconds: 99999}
+		}, "health_check.timeout_seconds"},
+		{"health bad status", func(m *Manifest) {
+			m.Services[0].HealthCheck = &HealthCheck{Path: "/", ExpectStatus: 42}
+		}, "health_check.expect_status"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -142,6 +151,7 @@ func TestValidatePassesForValid(t *testing.T) {
 		"MAIL":   "{{input.admin_email}}",
 	}
 	m.Services[0].DependsOn = []string{"db"}
+	m.Services[0].HealthCheck = &HealthCheck{Path: "/healthz", TimeoutSeconds: 300, ExpectStatus: 200}
 	if err := Validate(m); err != nil {
 		t.Fatalf("expected valid, got: %v", err)
 	}

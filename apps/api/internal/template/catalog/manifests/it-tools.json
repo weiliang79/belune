@@ -14,7 +14,7 @@
       "name": "it-tools",
       "image": "corentinth/it-tools:latest",
       "port": 80,
-      "health_check_path": "/"
+      "health_check": { "path": "/" }
     }
   ],
   "notes": "Stateless — nothing to configure or back up. Bookmark the URL and go.\n"

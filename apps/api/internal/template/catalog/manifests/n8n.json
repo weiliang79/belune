@@ -31,7 +31,7 @@
       "volumes": [
         { "name": "data", "mount_path": "/home/node/.n8n" }
       ],
-      "health_check_path": "/healthz"
+      "health_check": { "path": "/healthz" }
     }
   ],
   "notes": "Create your owner account on first visit. Credentials are encrypted with the generated `N8N_ENCRYPTION_KEY` — keep it if you ever migrate.\n"

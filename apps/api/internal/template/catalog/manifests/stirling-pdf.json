@@ -17,7 +17,7 @@
       "volumes": [
         { "name": "data", "mount_path": "/usr/share/tessdata" }
       ],
-      "health_check_path": "/"
+      "health_check": { "path": "/" }
     }
   ],
   "notes": "All processing happens on your server — uploaded files are not sent anywhere else.\n"

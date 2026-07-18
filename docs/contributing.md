@@ -45,12 +45,28 @@ good first contribution — no Go or React changes required.
    databases support the `postgres`, `mysql`, `redis`, and `mongo` engines
    (the `other` engine is not yet available from templates).
 
-3. **Validate.** `go test ./internal/template/...` runs the schema and
+3. **Configure the health check** (optional but recommended). Each service takes
+   a `health_check` block that Belune probes after deploy — a pass marks the app
+   healthy, a fail rolls the deploy back:
+
+   ```jsonc
+   "health_check": {
+     "path": "/healthz",       // probed on the service `port`; must start with /
+     "timeout_seconds": 300,   // optional; retry window before failing (default 120)
+     "expect_status": 200      // optional; require this exact status (default: any 2xx)
+   }
+   ```
+
+   Omit the whole block to skip health checking. Raise `timeout_seconds` for apps
+   that run migrations on first boot (Metabase, for example). Set `expect_status`
+   only when a healthy root legitimately returns a non-2xx code.
+
+4. **Validate.** `go test ./internal/template/...` runs the schema and
    referential checks (undeclared placeholder references, `depends_on` cycles,
    duplicate names, etc.) over every manifest in the catalog. CI runs the same
    test, so a malformed manifest fails the build.
 
-4. **Smoke-test it yourself.** Before opening the PR, deploy the template on a
+5. **Smoke-test it yourself.** Before opening the PR, deploy the template on a
    dev stack end to end: instantiate it, confirm the app reaches its UI and works,
    confirm any managed database provisions, and confirm deleting the project
    cleans everything up. Note the image tag and health-check path you verified in

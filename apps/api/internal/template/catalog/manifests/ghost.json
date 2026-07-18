@@ -39,7 +39,7 @@
       "volumes": [
         { "name": "content", "mount_path": "/var/lib/ghost/content" }
       ],
-      "health_check_path": "/ghost/api/admin/site/",
+      "health_check": { "path": "/ghost/api/admin/site/" },
       "depends_on": ["db"]
     }
   ],

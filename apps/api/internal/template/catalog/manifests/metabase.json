@@ -25,7 +25,7 @@
         "MB_DB_USER": "{{db.appdb.user}}",
         "MB_DB_PASS": "{{db.appdb.password}}"
       },
-      "health_check_path": "/api/health",
+      "health_check": { "path": "/api/health", "timeout_seconds": 300 },
       "depends_on": ["appdb"]
     }
   ],

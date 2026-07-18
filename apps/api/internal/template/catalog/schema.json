@@ -60,7 +60,7 @@
         "properties": {
           "name": { "type": "string", "pattern": "^[a-z0-9]([a-z0-9-]*[a-z0-9])?$" },
           "image": { "type": "string", "description": "Image ref with tag; Belune pins the digest at deploy." },
-          "port": { "type": "integer", "minimum": 1, "maximum": 65535, "description": "Container port the domain routes to." },
+          "port": { "type": "integer", "minimum": 1, "maximum": 65535, "description": "Port the container listens on. Used both for domain routing and for the health-check probe." },
           "env": { "type": "object", "additionalProperties": { "type": "string" } },
           "volumes": {
             "type": "array",
@@ -74,7 +74,17 @@
               }
             }
           },
-          "health_check_path": { "type": "string" },
+          "health_check": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["path"],
+            "description": "Post-deploy HTTP probe. Omit the whole object to skip health checking.",
+            "properties": {
+              "path": { "type": "string", "pattern": "^/", "description": "Path probed on the service port, e.g. / or /healthz." },
+              "timeout_seconds": { "type": "integer", "minimum": 0, "maximum": 3600, "description": "How long to retry before failing the deploy. 0 or omitted uses the platform default (120s)." },
+              "expect_status": { "type": "integer", "minimum": 100, "maximum": 599, "description": "Pass only on this exact HTTP status; omit to accept any 2xx." }
+            }
+          },
           "depends_on": { "type": "array", "items": { "type": "string" }, "description": "Service or database names to provision/deploy first." }
         }
       }

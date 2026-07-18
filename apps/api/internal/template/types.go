@@ -69,15 +69,29 @@ type Volume struct {
 // Service is a prebuilt-image application. The domain (when the user supplies a
 // hostname) routes to the first service that declares a port.
 type Service struct {
-	Name            string            `json:"name" yaml:"name"`
-	Image           string            `json:"image" yaml:"image"`
-	Port            int32             `json:"port,omitempty" yaml:"port,omitempty"`
-	Env             map[string]string `json:"env,omitempty" yaml:"env,omitempty"`
-	Volumes         []Volume          `json:"volumes,omitempty" yaml:"volumes,omitempty"`
-	HealthCheckPath string            `json:"health_check_path,omitempty" yaml:"health_check_path,omitempty"`
+	Name        string            `json:"name" yaml:"name"`
+	Image       string            `json:"image" yaml:"image"`
+	Port        int32             `json:"port,omitempty" yaml:"port,omitempty"`
+	Env         map[string]string `json:"env,omitempty" yaml:"env,omitempty"`
+	Volumes     []Volume          `json:"volumes,omitempty" yaml:"volumes,omitempty"`
+	HealthCheck *HealthCheck      `json:"health_check,omitempty" yaml:"health_check,omitempty"`
 	// DependsOn lists database or service names that must be provisioned/deployed
 	// first. It only affects ordering.
 	DependsOn []string `json:"depends_on,omitempty" yaml:"depends_on,omitempty"`
+}
+
+// HealthCheck configures the post-deploy HTTP probe for a service. Omit it to
+// skip health checking entirely. The probe GETs Path on the service's port and
+// retries until it passes or TimeoutSeconds elapses.
+type HealthCheck struct {
+	// Path is the HTTP path probed on the service port, e.g. "/" or "/healthz".
+	Path string `json:"path" yaml:"path"`
+	// TimeoutSeconds bounds how long Belune retries before failing the deploy.
+	// 0 uses the platform default.
+	TimeoutSeconds int32 `json:"timeout_seconds,omitempty" yaml:"timeout_seconds,omitempty"`
+	// ExpectStatus, when non-zero, makes the probe pass only on this exact HTTP
+	// status (for apps whose healthy root is a redirect/401/etc). 0 accepts any 2xx.
+	ExpectStatus int32 `json:"expect_status,omitempty" yaml:"expect_status,omitempty"`
 }
 
 // validEngines is the set of managed-database engines a template may request.

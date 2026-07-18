@@ -128,3 +128,8 @@ WHERE id = $1;
 -- name: SetApplicationContainerPort :exec
 UPDATE applications SET container_port = $2, updated_at = NOW()
 WHERE id = $1;
+
+-- name: SetApplicationHealthTuning :exec
+UPDATE applications
+SET health_check_timeout_seconds = $2, health_check_expect_status = $3, updated_at = NOW()
+WHERE id = $1;

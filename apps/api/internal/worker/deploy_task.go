@@ -253,11 +253,13 @@ func (h *TaskHandler) loadApplication(ctx context.Context, dc *deployContext) er
 		BuilderImage: appRow.BuilderImage, CustomBuildpacks: appRow.CustomBuildpacks,
 		Status:   appRow.Status,
 		CpuLimit: appRow.CpuLimit, MemoryLimit: appRow.MemoryLimit,
-		GitCredentialsEncrypted: appRow.GitCredentialsEncrypted,
-		HealthCheckPath:         appRow.HealthCheckPath,
-		ReadonlyRootfs:          appRow.ReadonlyRootfs,
-		ContainerCaps:           appRow.ContainerCaps,
-		ContainerPort:           appRow.ContainerPort,
+		GitCredentialsEncrypted:   appRow.GitCredentialsEncrypted,
+		HealthCheckPath:           appRow.HealthCheckPath,
+		HealthCheckTimeoutSeconds: appRow.HealthCheckTimeoutSeconds,
+		HealthCheckExpectStatus:   appRow.HealthCheckExpectStatus,
+		ReadonlyRootfs:            appRow.ReadonlyRootfs,
+		ContainerCaps:             appRow.ContainerCaps,
+		ContainerPort:             appRow.ContainerPort,
 	}
 	dc.containerName = naming.ContainerName(appRow.ProjectSlug, appRow.Slug, dc.payload.ApplicationID)
 
@@ -786,10 +788,19 @@ func (h *TaskHandler) verifyHealth(ctx context.Context, dc *deployContext) error
 		domains = fetched
 	}
 
-	healthURL := fmt.Sprintf("http://%s:%d%s", dc.containerName, resolveContainerPort(dc.app, domains), dc.app.HealthCheckPath.String)
-	slog.Info("verifying container health", "url", healthURL, "timeout", healthVerifyTimeout)
+	timeout := healthVerifyTimeout
+	if dc.app.HealthCheckTimeoutSeconds.Valid && dc.app.HealthCheckTimeoutSeconds.Int32 > 0 {
+		timeout = time.Duration(dc.app.HealthCheckTimeoutSeconds.Int32) * time.Second
+	}
+	var expectStatus int
+	if dc.app.HealthCheckExpectStatus.Valid {
+		expectStatus = int(dc.app.HealthCheckExpectStatus.Int32)
+	}
 
-	if err := pollHealthCheck(ctx, healthURL, healthVerifyTimeout); err != nil {
+	healthURL := fmt.Sprintf("http://%s:%d%s", dc.containerName, resolveContainerPort(dc.app, domains), dc.app.HealthCheckPath.String)
+	slog.Info("verifying container health", "url", healthURL, "timeout", timeout, "expect_status", expectStatus)
+
+	if err := pollHealthCheck(ctx, healthURL, timeout, expectStatus); err != nil {
 		h.recordHealth(ctx, dc.deploymentID, healthStatusFailing, err.Error())
 		return err
 	}
@@ -1062,7 +1073,15 @@ func resolveContainerPort(app generated.Application, domains []generated.Domain)
 }
 
 // pollHealthCheck repeatedly GETs url until a 2xx response is received or deadline expires.
-func pollHealthCheck(ctx context.Context, url string, timeout time.Duration) error {
+// pollHealthCheck GETs url until it passes or timeout elapses. When expectStatus
+// is non-zero the probe passes only on that exact status; otherwise any 2xx passes.
+func pollHealthCheck(ctx context.Context, url string, timeout time.Duration, expectStatus int) error {
+	pass := func(code int) bool {
+		if expectStatus != 0 {
+			return code == expectStatus
+		}
+		return code >= 200 && code < 300
+	}
 	deadline := time.Now().Add(timeout)
 	client := &http.Client{Timeout: 5 * time.Second}
 	for time.Now().Before(deadline) {
@@ -1073,7 +1092,7 @@ func pollHealthCheck(ctx context.Context, url string, timeout time.Duration) err
 		resp, err := client.Do(req)
 		if err == nil {
 			resp.Body.Close()
-			if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+			if pass(resp.StatusCode) {
 				return nil
 			}
 		}
@@ -1083,5 +1102,9 @@ func pollHealthCheck(ctx context.Context, url string, timeout time.Duration) err
 		case <-time.After(2 * time.Second):
 		}
 	}
-	return fmt.Errorf("health check at %s did not return 2xx within %s", url, timeout)
+	want := "2xx"
+	if expectStatus != 0 {
+		want = strconv.Itoa(expectStatus)
+	}
+	return fmt.Errorf("health check at %s did not return %s within %s", url, want, timeout)
 }

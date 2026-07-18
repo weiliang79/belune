@@ -256,7 +256,7 @@ func (h *Handler) InstantiateTemplate(w http.ResponseWriter, r *http.Request) {
 			Type:            "image",
 			SourceImage:     svc.Image,
 			BuildType:       "image",
-			HealthCheckPath: svc.HealthCheckPath,
+			HealthCheckPath: templateHealthPath(svc),
 		})
 		if err != nil {
 			rollback()
@@ -283,6 +283,17 @@ func (h *Handler) InstantiateTemplate(w http.ResponseWriter, r *http.Request) {
 				ContainerPort: pgtype.Int4{Int32: svc.Port, Valid: true},
 			}); err != nil {
 				slog.Warn("template: failed to set container port", "application_id", uuidToString(app.ID), "error", err)
+			}
+		}
+		// Optional health-check tuning (timeout / expected status). NULL keeps the
+		// platform defaults; verifyHealth reads these back at deploy time.
+		if hc := svc.HealthCheck; hc != nil && (hc.TimeoutSeconds > 0 || hc.ExpectStatus != 0) {
+			if err := h.queries.SetApplicationHealthTuning(ctx, generated.SetApplicationHealthTuningParams{
+				ID:                        app.ID,
+				HealthCheckTimeoutSeconds: pgtype.Int4{Int32: hc.TimeoutSeconds, Valid: hc.TimeoutSeconds > 0},
+				HealthCheckExpectStatus:   pgtype.Int4{Int32: hc.ExpectStatus, Valid: hc.ExpectStatus != 0},
+			}); err != nil {
+				slog.Warn("template: failed to set health tuning", "application_id", uuidToString(app.ID), "error", err)
 			}
 		}
 		appIDByService[svc.Name] = app.ID
@@ -580,6 +591,15 @@ func firstRoutableService(m *template.Manifest) *template.Service {
 		}
 	}
 	return nil
+}
+
+// templateHealthPath returns the service's health-check path, or "" when the
+// manifest omits the health_check block (which disables the post-deploy probe).
+func templateHealthPath(svc template.Service) string {
+	if svc.HealthCheck == nil {
+		return ""
+	}
+	return svc.HealthCheck.Path
 }
 
 // templateDBConn builds the connection fields for a managed database whose

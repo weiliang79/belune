@@ -25,7 +25,7 @@ func (q *Queries) CountApplications(ctx context.Context) (int64, error) {
 const createApplication = `-- name: CreateApplication :one
 INSERT INTO applications (project_id, name, slug, type, source_repo, source_image, dockerfile_path, build_type, cpu_limit, memory_limit, webhook_secret, git_credentials_encrypted, health_check_path, git_integration_id)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
-RETURNING id, project_id, name, slug, type, source_repo, source_image, dockerfile_path, build_type, build_type_override, builder_image, custom_buildpacks, cpu_limit, memory_limit, webhook_secret, auto_deploy_branch, status, git_credentials_encrypted, health_check_path, created_at, updated_at, parent_application_id, branch, preview_branch_pattern, preview_domain_template, last_activity_at, git_integration_id, source_kind, source_ref, readonly_rootfs, container_caps, container_port
+RETURNING id, project_id, name, slug, type, source_repo, source_image, dockerfile_path, build_type, build_type_override, builder_image, custom_buildpacks, cpu_limit, memory_limit, webhook_secret, auto_deploy_branch, status, git_credentials_encrypted, health_check_path, created_at, updated_at, parent_application_id, branch, preview_branch_pattern, preview_domain_template, last_activity_at, git_integration_id, source_kind, source_ref, readonly_rootfs, container_caps, container_port, health_check_timeout_seconds, health_check_expect_status
 `
 
 type CreateApplicationParams struct {
@@ -96,6 +96,8 @@ func (q *Queries) CreateApplication(ctx context.Context, arg CreateApplicationPa
 		&i.ReadonlyRootfs,
 		&i.ContainerCaps,
 		&i.ContainerPort,
+		&i.HealthCheckTimeoutSeconds,
+		&i.HealthCheckExpectStatus,
 	)
 	return i, err
 }
@@ -108,7 +110,7 @@ INSERT INTO applications (
     git_integration_id, parent_application_id, branch
 )
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
-RETURNING id, project_id, name, slug, type, source_repo, source_image, dockerfile_path, build_type, build_type_override, builder_image, custom_buildpacks, cpu_limit, memory_limit, webhook_secret, auto_deploy_branch, status, git_credentials_encrypted, health_check_path, created_at, updated_at, parent_application_id, branch, preview_branch_pattern, preview_domain_template, last_activity_at, git_integration_id, source_kind, source_ref, readonly_rootfs, container_caps, container_port
+RETURNING id, project_id, name, slug, type, source_repo, source_image, dockerfile_path, build_type, build_type_override, builder_image, custom_buildpacks, cpu_limit, memory_limit, webhook_secret, auto_deploy_branch, status, git_credentials_encrypted, health_check_path, created_at, updated_at, parent_application_id, branch, preview_branch_pattern, preview_domain_template, last_activity_at, git_integration_id, source_kind, source_ref, readonly_rootfs, container_caps, container_port, health_check_timeout_seconds, health_check_expect_status
 `
 
 type CreatePreviewApplicationParams struct {
@@ -181,6 +183,8 @@ func (q *Queries) CreatePreviewApplication(ctx context.Context, arg CreatePrevie
 		&i.ReadonlyRootfs,
 		&i.ContainerCaps,
 		&i.ContainerPort,
+		&i.HealthCheckTimeoutSeconds,
+		&i.HealthCheckExpectStatus,
 	)
 	return i, err
 }
@@ -195,7 +199,7 @@ func (q *Queries) DeleteApplication(ctx context.Context, id pgtype.UUID) error {
 }
 
 const getApplication = `-- name: GetApplication :one
-SELECT id, project_id, name, slug, type, source_repo, source_image, dockerfile_path, build_type, build_type_override, builder_image, custom_buildpacks, cpu_limit, memory_limit, webhook_secret, auto_deploy_branch, status, git_credentials_encrypted, health_check_path, created_at, updated_at, parent_application_id, branch, preview_branch_pattern, preview_domain_template, last_activity_at, git_integration_id, source_kind, source_ref, readonly_rootfs, container_caps, container_port FROM applications WHERE id = $1
+SELECT id, project_id, name, slug, type, source_repo, source_image, dockerfile_path, build_type, build_type_override, builder_image, custom_buildpacks, cpu_limit, memory_limit, webhook_secret, auto_deploy_branch, status, git_credentials_encrypted, health_check_path, created_at, updated_at, parent_application_id, branch, preview_branch_pattern, preview_domain_template, last_activity_at, git_integration_id, source_kind, source_ref, readonly_rootfs, container_caps, container_port, health_check_timeout_seconds, health_check_expect_status FROM applications WHERE id = $1
 `
 
 func (q *Queries) GetApplication(ctx context.Context, id pgtype.UUID) (Application, error) {
@@ -234,6 +238,8 @@ func (q *Queries) GetApplication(ctx context.Context, id pgtype.UUID) (Applicati
 		&i.ReadonlyRootfs,
 		&i.ContainerCaps,
 		&i.ContainerPort,
+		&i.HealthCheckTimeoutSeconds,
+		&i.HealthCheckExpectStatus,
 	)
 	return i, err
 }
@@ -252,46 +258,48 @@ func (q *Queries) GetApplicationOwnerUserID(ctx context.Context, id pgtype.UUID)
 }
 
 const getApplicationWithProjectSlug = `-- name: GetApplicationWithProjectSlug :one
-SELECT a.id, a.project_id, a.name, a.slug, a.type, a.source_repo, a.source_image, a.dockerfile_path, a.build_type, a.build_type_override, a.builder_image, a.custom_buildpacks, a.cpu_limit, a.memory_limit, a.webhook_secret, a.auto_deploy_branch, a.status, a.git_credentials_encrypted, a.health_check_path, a.created_at, a.updated_at, a.parent_application_id, a.branch, a.preview_branch_pattern, a.preview_domain_template, a.last_activity_at, a.git_integration_id, a.source_kind, a.source_ref, a.readonly_rootfs, a.container_caps, a.container_port, p.slug as project_slug
+SELECT a.id, a.project_id, a.name, a.slug, a.type, a.source_repo, a.source_image, a.dockerfile_path, a.build_type, a.build_type_override, a.builder_image, a.custom_buildpacks, a.cpu_limit, a.memory_limit, a.webhook_secret, a.auto_deploy_branch, a.status, a.git_credentials_encrypted, a.health_check_path, a.created_at, a.updated_at, a.parent_application_id, a.branch, a.preview_branch_pattern, a.preview_domain_template, a.last_activity_at, a.git_integration_id, a.source_kind, a.source_ref, a.readonly_rootfs, a.container_caps, a.container_port, a.health_check_timeout_seconds, a.health_check_expect_status, p.slug as project_slug
 FROM applications a
 JOIN projects p ON p.id = a.project_id
 WHERE a.id = $1
 `
 
 type GetApplicationWithProjectSlugRow struct {
-	ID                      pgtype.UUID        `json:"id"`
-	ProjectID               pgtype.UUID        `json:"project_id"`
-	Name                    string             `json:"name"`
-	Slug                    string             `json:"slug"`
-	Type                    string             `json:"type"`
-	SourceRepo              pgtype.Text        `json:"source_repo"`
-	SourceImage             pgtype.Text        `json:"source_image"`
-	DockerfilePath          pgtype.Text        `json:"dockerfile_path"`
-	BuildType               string             `json:"build_type"`
-	BuildTypeOverride       pgtype.Text        `json:"build_type_override"`
-	BuilderImage            pgtype.Text        `json:"builder_image"`
-	CustomBuildpacks        []byte             `json:"custom_buildpacks"`
-	CpuLimit                float64            `json:"cpu_limit"`
-	MemoryLimit             int64              `json:"memory_limit"`
-	WebhookSecret           pgtype.Text        `json:"webhook_secret"`
-	AutoDeployBranch        pgtype.Text        `json:"auto_deploy_branch"`
-	Status                  string             `json:"status"`
-	GitCredentialsEncrypted []byte             `json:"git_credentials_encrypted"`
-	HealthCheckPath         pgtype.Text        `json:"health_check_path"`
-	CreatedAt               pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt               pgtype.Timestamptz `json:"updated_at"`
-	ParentApplicationID     pgtype.UUID        `json:"parent_application_id"`
-	Branch                  pgtype.Text        `json:"branch"`
-	PreviewBranchPattern    pgtype.Text        `json:"preview_branch_pattern"`
-	PreviewDomainTemplate   pgtype.Text        `json:"preview_domain_template"`
-	LastActivityAt          pgtype.Timestamptz `json:"last_activity_at"`
-	GitIntegrationID        pgtype.UUID        `json:"git_integration_id"`
-	SourceKind              pgtype.Text        `json:"source_kind"`
-	SourceRef               pgtype.Text        `json:"source_ref"`
-	ReadonlyRootfs          bool               `json:"readonly_rootfs"`
-	ContainerCaps           string             `json:"container_caps"`
-	ContainerPort           pgtype.Int4        `json:"container_port"`
-	ProjectSlug             string             `json:"project_slug"`
+	ID                        pgtype.UUID        `json:"id"`
+	ProjectID                 pgtype.UUID        `json:"project_id"`
+	Name                      string             `json:"name"`
+	Slug                      string             `json:"slug"`
+	Type                      string             `json:"type"`
+	SourceRepo                pgtype.Text        `json:"source_repo"`
+	SourceImage               pgtype.Text        `json:"source_image"`
+	DockerfilePath            pgtype.Text        `json:"dockerfile_path"`
+	BuildType                 string             `json:"build_type"`
+	BuildTypeOverride         pgtype.Text        `json:"build_type_override"`
+	BuilderImage              pgtype.Text        `json:"builder_image"`
+	CustomBuildpacks          []byte             `json:"custom_buildpacks"`
+	CpuLimit                  float64            `json:"cpu_limit"`
+	MemoryLimit               int64              `json:"memory_limit"`
+	WebhookSecret             pgtype.Text        `json:"webhook_secret"`
+	AutoDeployBranch          pgtype.Text        `json:"auto_deploy_branch"`
+	Status                    string             `json:"status"`
+	GitCredentialsEncrypted   []byte             `json:"git_credentials_encrypted"`
+	HealthCheckPath           pgtype.Text        `json:"health_check_path"`
+	CreatedAt                 pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt                 pgtype.Timestamptz `json:"updated_at"`
+	ParentApplicationID       pgtype.UUID        `json:"parent_application_id"`
+	Branch                    pgtype.Text        `json:"branch"`
+	PreviewBranchPattern      pgtype.Text        `json:"preview_branch_pattern"`
+	PreviewDomainTemplate     pgtype.Text        `json:"preview_domain_template"`
+	LastActivityAt            pgtype.Timestamptz `json:"last_activity_at"`
+	GitIntegrationID          pgtype.UUID        `json:"git_integration_id"`
+	SourceKind                pgtype.Text        `json:"source_kind"`
+	SourceRef                 pgtype.Text        `json:"source_ref"`
+	ReadonlyRootfs            bool               `json:"readonly_rootfs"`
+	ContainerCaps             string             `json:"container_caps"`
+	ContainerPort             pgtype.Int4        `json:"container_port"`
+	HealthCheckTimeoutSeconds pgtype.Int4        `json:"health_check_timeout_seconds"`
+	HealthCheckExpectStatus   pgtype.Int4        `json:"health_check_expect_status"`
+	ProjectSlug               string             `json:"project_slug"`
 }
 
 func (q *Queries) GetApplicationWithProjectSlug(ctx context.Context, id pgtype.UUID) (GetApplicationWithProjectSlugRow, error) {
@@ -330,6 +338,8 @@ func (q *Queries) GetApplicationWithProjectSlug(ctx context.Context, id pgtype.U
 		&i.ReadonlyRootfs,
 		&i.ContainerCaps,
 		&i.ContainerPort,
+		&i.HealthCheckTimeoutSeconds,
+		&i.HealthCheckExpectStatus,
 		&i.ProjectSlug,
 	)
 	return i, err
@@ -366,7 +376,7 @@ func (q *Queries) GetDeploymentOwnerInfo(ctx context.Context, id pgtype.UUID) (G
 }
 
 const getPreviewByParentBranch = `-- name: GetPreviewByParentBranch :one
-SELECT id, project_id, name, slug, type, source_repo, source_image, dockerfile_path, build_type, build_type_override, builder_image, custom_buildpacks, cpu_limit, memory_limit, webhook_secret, auto_deploy_branch, status, git_credentials_encrypted, health_check_path, created_at, updated_at, parent_application_id, branch, preview_branch_pattern, preview_domain_template, last_activity_at, git_integration_id, source_kind, source_ref, readonly_rootfs, container_caps, container_port FROM applications
+SELECT id, project_id, name, slug, type, source_repo, source_image, dockerfile_path, build_type, build_type_override, builder_image, custom_buildpacks, cpu_limit, memory_limit, webhook_secret, auto_deploy_branch, status, git_credentials_encrypted, health_check_path, created_at, updated_at, parent_application_id, branch, preview_branch_pattern, preview_domain_template, last_activity_at, git_integration_id, source_kind, source_ref, readonly_rootfs, container_caps, container_port, health_check_timeout_seconds, health_check_expect_status FROM applications
 WHERE parent_application_id = $1 AND branch = $2
 `
 
@@ -411,6 +421,8 @@ func (q *Queries) GetPreviewByParentBranch(ctx context.Context, arg GetPreviewBy
 		&i.ReadonlyRootfs,
 		&i.ContainerCaps,
 		&i.ContainerPort,
+		&i.HealthCheckTimeoutSeconds,
+		&i.HealthCheckExpectStatus,
 	)
 	return i, err
 }
@@ -442,7 +454,7 @@ func (q *Queries) GetProjectOwnerInfo(ctx context.Context, id pgtype.UUID) (GetP
 }
 
 const listAllApplications = `-- name: ListAllApplications :many
-SELECT id, project_id, name, slug, type, source_repo, source_image, dockerfile_path, build_type, build_type_override, builder_image, custom_buildpacks, cpu_limit, memory_limit, webhook_secret, auto_deploy_branch, status, git_credentials_encrypted, health_check_path, created_at, updated_at, parent_application_id, branch, preview_branch_pattern, preview_domain_template, last_activity_at, git_integration_id, source_kind, source_ref, readonly_rootfs, container_caps, container_port FROM applications
+SELECT id, project_id, name, slug, type, source_repo, source_image, dockerfile_path, build_type, build_type_override, builder_image, custom_buildpacks, cpu_limit, memory_limit, webhook_secret, auto_deploy_branch, status, git_credentials_encrypted, health_check_path, created_at, updated_at, parent_application_id, branch, preview_branch_pattern, preview_domain_template, last_activity_at, git_integration_id, source_kind, source_ref, readonly_rootfs, container_caps, container_port, health_check_timeout_seconds, health_check_expect_status FROM applications
 `
 
 func (q *Queries) ListAllApplications(ctx context.Context) ([]Application, error) {
@@ -487,6 +499,8 @@ func (q *Queries) ListAllApplications(ctx context.Context) ([]Application, error
 			&i.ReadonlyRootfs,
 			&i.ContainerCaps,
 			&i.ContainerPort,
+			&i.HealthCheckTimeoutSeconds,
+			&i.HealthCheckExpectStatus,
 		); err != nil {
 			return nil, err
 		}
@@ -499,45 +513,47 @@ func (q *Queries) ListAllApplications(ctx context.Context) ([]Application, error
 }
 
 const listAllApplicationsWithProjectSlug = `-- name: ListAllApplicationsWithProjectSlug :many
-SELECT a.id, a.project_id, a.name, a.slug, a.type, a.source_repo, a.source_image, a.dockerfile_path, a.build_type, a.build_type_override, a.builder_image, a.custom_buildpacks, a.cpu_limit, a.memory_limit, a.webhook_secret, a.auto_deploy_branch, a.status, a.git_credentials_encrypted, a.health_check_path, a.created_at, a.updated_at, a.parent_application_id, a.branch, a.preview_branch_pattern, a.preview_domain_template, a.last_activity_at, a.git_integration_id, a.source_kind, a.source_ref, a.readonly_rootfs, a.container_caps, a.container_port, p.slug as project_slug
+SELECT a.id, a.project_id, a.name, a.slug, a.type, a.source_repo, a.source_image, a.dockerfile_path, a.build_type, a.build_type_override, a.builder_image, a.custom_buildpacks, a.cpu_limit, a.memory_limit, a.webhook_secret, a.auto_deploy_branch, a.status, a.git_credentials_encrypted, a.health_check_path, a.created_at, a.updated_at, a.parent_application_id, a.branch, a.preview_branch_pattern, a.preview_domain_template, a.last_activity_at, a.git_integration_id, a.source_kind, a.source_ref, a.readonly_rootfs, a.container_caps, a.container_port, a.health_check_timeout_seconds, a.health_check_expect_status, p.slug as project_slug
 FROM applications a
 JOIN projects p ON p.id = a.project_id
 `
 
 type ListAllApplicationsWithProjectSlugRow struct {
-	ID                      pgtype.UUID        `json:"id"`
-	ProjectID               pgtype.UUID        `json:"project_id"`
-	Name                    string             `json:"name"`
-	Slug                    string             `json:"slug"`
-	Type                    string             `json:"type"`
-	SourceRepo              pgtype.Text        `json:"source_repo"`
-	SourceImage             pgtype.Text        `json:"source_image"`
-	DockerfilePath          pgtype.Text        `json:"dockerfile_path"`
-	BuildType               string             `json:"build_type"`
-	BuildTypeOverride       pgtype.Text        `json:"build_type_override"`
-	BuilderImage            pgtype.Text        `json:"builder_image"`
-	CustomBuildpacks        []byte             `json:"custom_buildpacks"`
-	CpuLimit                float64            `json:"cpu_limit"`
-	MemoryLimit             int64              `json:"memory_limit"`
-	WebhookSecret           pgtype.Text        `json:"webhook_secret"`
-	AutoDeployBranch        pgtype.Text        `json:"auto_deploy_branch"`
-	Status                  string             `json:"status"`
-	GitCredentialsEncrypted []byte             `json:"git_credentials_encrypted"`
-	HealthCheckPath         pgtype.Text        `json:"health_check_path"`
-	CreatedAt               pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt               pgtype.Timestamptz `json:"updated_at"`
-	ParentApplicationID     pgtype.UUID        `json:"parent_application_id"`
-	Branch                  pgtype.Text        `json:"branch"`
-	PreviewBranchPattern    pgtype.Text        `json:"preview_branch_pattern"`
-	PreviewDomainTemplate   pgtype.Text        `json:"preview_domain_template"`
-	LastActivityAt          pgtype.Timestamptz `json:"last_activity_at"`
-	GitIntegrationID        pgtype.UUID        `json:"git_integration_id"`
-	SourceKind              pgtype.Text        `json:"source_kind"`
-	SourceRef               pgtype.Text        `json:"source_ref"`
-	ReadonlyRootfs          bool               `json:"readonly_rootfs"`
-	ContainerCaps           string             `json:"container_caps"`
-	ContainerPort           pgtype.Int4        `json:"container_port"`
-	ProjectSlug             string             `json:"project_slug"`
+	ID                        pgtype.UUID        `json:"id"`
+	ProjectID                 pgtype.UUID        `json:"project_id"`
+	Name                      string             `json:"name"`
+	Slug                      string             `json:"slug"`
+	Type                      string             `json:"type"`
+	SourceRepo                pgtype.Text        `json:"source_repo"`
+	SourceImage               pgtype.Text        `json:"source_image"`
+	DockerfilePath            pgtype.Text        `json:"dockerfile_path"`
+	BuildType                 string             `json:"build_type"`
+	BuildTypeOverride         pgtype.Text        `json:"build_type_override"`
+	BuilderImage              pgtype.Text        `json:"builder_image"`
+	CustomBuildpacks          []byte             `json:"custom_buildpacks"`
+	CpuLimit                  float64            `json:"cpu_limit"`
+	MemoryLimit               int64              `json:"memory_limit"`
+	WebhookSecret             pgtype.Text        `json:"webhook_secret"`
+	AutoDeployBranch          pgtype.Text        `json:"auto_deploy_branch"`
+	Status                    string             `json:"status"`
+	GitCredentialsEncrypted   []byte             `json:"git_credentials_encrypted"`
+	HealthCheckPath           pgtype.Text        `json:"health_check_path"`
+	CreatedAt                 pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt                 pgtype.Timestamptz `json:"updated_at"`
+	ParentApplicationID       pgtype.UUID        `json:"parent_application_id"`
+	Branch                    pgtype.Text        `json:"branch"`
+	PreviewBranchPattern      pgtype.Text        `json:"preview_branch_pattern"`
+	PreviewDomainTemplate     pgtype.Text        `json:"preview_domain_template"`
+	LastActivityAt            pgtype.Timestamptz `json:"last_activity_at"`
+	GitIntegrationID          pgtype.UUID        `json:"git_integration_id"`
+	SourceKind                pgtype.Text        `json:"source_kind"`
+	SourceRef                 pgtype.Text        `json:"source_ref"`
+	ReadonlyRootfs            bool               `json:"readonly_rootfs"`
+	ContainerCaps             string             `json:"container_caps"`
+	ContainerPort             pgtype.Int4        `json:"container_port"`
+	HealthCheckTimeoutSeconds pgtype.Int4        `json:"health_check_timeout_seconds"`
+	HealthCheckExpectStatus   pgtype.Int4        `json:"health_check_expect_status"`
+	ProjectSlug               string             `json:"project_slug"`
 }
 
 func (q *Queries) ListAllApplicationsWithProjectSlug(ctx context.Context) ([]ListAllApplicationsWithProjectSlugRow, error) {
@@ -582,6 +598,8 @@ func (q *Queries) ListAllApplicationsWithProjectSlug(ctx context.Context) ([]Lis
 			&i.ReadonlyRootfs,
 			&i.ContainerCaps,
 			&i.ContainerPort,
+			&i.HealthCheckTimeoutSeconds,
+			&i.HealthCheckExpectStatus,
 			&i.ProjectSlug,
 		); err != nil {
 			return nil, err
@@ -595,7 +613,7 @@ func (q *Queries) ListAllApplicationsWithProjectSlug(ctx context.Context) ([]Lis
 }
 
 const listApplicationsByProject = `-- name: ListApplicationsByProject :many
-SELECT id, project_id, name, slug, type, source_repo, source_image, dockerfile_path, build_type, build_type_override, builder_image, custom_buildpacks, cpu_limit, memory_limit, webhook_secret, auto_deploy_branch, status, git_credentials_encrypted, health_check_path, created_at, updated_at, parent_application_id, branch, preview_branch_pattern, preview_domain_template, last_activity_at, git_integration_id, source_kind, source_ref, readonly_rootfs, container_caps, container_port FROM applications
+SELECT id, project_id, name, slug, type, source_repo, source_image, dockerfile_path, build_type, build_type_override, builder_image, custom_buildpacks, cpu_limit, memory_limit, webhook_secret, auto_deploy_branch, status, git_credentials_encrypted, health_check_path, created_at, updated_at, parent_application_id, branch, preview_branch_pattern, preview_domain_template, last_activity_at, git_integration_id, source_kind, source_ref, readonly_rootfs, container_caps, container_port, health_check_timeout_seconds, health_check_expect_status FROM applications
 WHERE project_id = $1 AND parent_application_id IS NULL
 ORDER BY created_at DESC
 `
@@ -642,6 +660,8 @@ func (q *Queries) ListApplicationsByProject(ctx context.Context, projectID pgtyp
 			&i.ReadonlyRootfs,
 			&i.ContainerCaps,
 			&i.ContainerPort,
+			&i.HealthCheckTimeoutSeconds,
+			&i.HealthCheckExpectStatus,
 		); err != nil {
 			return nil, err
 		}
@@ -654,7 +674,7 @@ func (q *Queries) ListApplicationsByProject(ctx context.Context, projectID pgtyp
 }
 
 const listApplicationsBySourceRepo = `-- name: ListApplicationsBySourceRepo :many
-SELECT id, project_id, name, slug, type, source_repo, source_image, dockerfile_path, build_type, build_type_override, builder_image, custom_buildpacks, cpu_limit, memory_limit, webhook_secret, auto_deploy_branch, status, git_credentials_encrypted, health_check_path, created_at, updated_at, parent_application_id, branch, preview_branch_pattern, preview_domain_template, last_activity_at, git_integration_id, source_kind, source_ref, readonly_rootfs, container_caps, container_port FROM applications WHERE source_repo = $1 AND webhook_secret IS NOT NULL
+SELECT id, project_id, name, slug, type, source_repo, source_image, dockerfile_path, build_type, build_type_override, builder_image, custom_buildpacks, cpu_limit, memory_limit, webhook_secret, auto_deploy_branch, status, git_credentials_encrypted, health_check_path, created_at, updated_at, parent_application_id, branch, preview_branch_pattern, preview_domain_template, last_activity_at, git_integration_id, source_kind, source_ref, readonly_rootfs, container_caps, container_port, health_check_timeout_seconds, health_check_expect_status FROM applications WHERE source_repo = $1 AND webhook_secret IS NOT NULL
 `
 
 func (q *Queries) ListApplicationsBySourceRepo(ctx context.Context, sourceRepo pgtype.Text) ([]Application, error) {
@@ -699,6 +719,8 @@ func (q *Queries) ListApplicationsBySourceRepo(ctx context.Context, sourceRepo p
 			&i.ReadonlyRootfs,
 			&i.ContainerCaps,
 			&i.ContainerPort,
+			&i.HealthCheckTimeoutSeconds,
+			&i.HealthCheckExpectStatus,
 		); err != nil {
 			return nil, err
 		}
@@ -711,7 +733,7 @@ func (q *Queries) ListApplicationsBySourceRepo(ctx context.Context, sourceRepo p
 }
 
 const listPreviewsByParent = `-- name: ListPreviewsByParent :many
-SELECT id, project_id, name, slug, type, source_repo, source_image, dockerfile_path, build_type, build_type_override, builder_image, custom_buildpacks, cpu_limit, memory_limit, webhook_secret, auto_deploy_branch, status, git_credentials_encrypted, health_check_path, created_at, updated_at, parent_application_id, branch, preview_branch_pattern, preview_domain_template, last_activity_at, git_integration_id, source_kind, source_ref, readonly_rootfs, container_caps, container_port FROM applications
+SELECT id, project_id, name, slug, type, source_repo, source_image, dockerfile_path, build_type, build_type_override, builder_image, custom_buildpacks, cpu_limit, memory_limit, webhook_secret, auto_deploy_branch, status, git_credentials_encrypted, health_check_path, created_at, updated_at, parent_application_id, branch, preview_branch_pattern, preview_domain_template, last_activity_at, git_integration_id, source_kind, source_ref, readonly_rootfs, container_caps, container_port, health_check_timeout_seconds, health_check_expect_status FROM applications
 WHERE parent_application_id = $1
 ORDER BY last_activity_at DESC
 `
@@ -758,6 +780,8 @@ func (q *Queries) ListPreviewsByParent(ctx context.Context, parentApplicationID 
 			&i.ReadonlyRootfs,
 			&i.ContainerCaps,
 			&i.ContainerPort,
+			&i.HealthCheckTimeoutSeconds,
+			&i.HealthCheckExpectStatus,
 		); err != nil {
 			return nil, err
 		}
@@ -770,7 +794,7 @@ func (q *Queries) ListPreviewsByParent(ctx context.Context, parentApplicationID 
 }
 
 const listStalePreviews = `-- name: ListStalePreviews :many
-SELECT id, project_id, name, slug, type, source_repo, source_image, dockerfile_path, build_type, build_type_override, builder_image, custom_buildpacks, cpu_limit, memory_limit, webhook_secret, auto_deploy_branch, status, git_credentials_encrypted, health_check_path, created_at, updated_at, parent_application_id, branch, preview_branch_pattern, preview_domain_template, last_activity_at, git_integration_id, source_kind, source_ref, readonly_rootfs, container_caps, container_port FROM applications
+SELECT id, project_id, name, slug, type, source_repo, source_image, dockerfile_path, build_type, build_type_override, builder_image, custom_buildpacks, cpu_limit, memory_limit, webhook_secret, auto_deploy_branch, status, git_credentials_encrypted, health_check_path, created_at, updated_at, parent_application_id, branch, preview_branch_pattern, preview_domain_template, last_activity_at, git_integration_id, source_kind, source_ref, readonly_rootfs, container_caps, container_port, health_check_timeout_seconds, health_check_expect_status FROM applications
 WHERE parent_application_id IS NOT NULL
   AND last_activity_at < $1
 `
@@ -817,6 +841,8 @@ func (q *Queries) ListStalePreviews(ctx context.Context, lastActivityAt pgtype.T
 			&i.ReadonlyRootfs,
 			&i.ContainerCaps,
 			&i.ContainerPort,
+			&i.HealthCheckTimeoutSeconds,
+			&i.HealthCheckExpectStatus,
 		); err != nil {
 			return nil, err
 		}
@@ -829,7 +855,7 @@ func (q *Queries) ListStalePreviews(ctx context.Context, lastActivityAt pgtype.T
 }
 
 const listStalePreviewsWithProjectSlug = `-- name: ListStalePreviewsWithProjectSlug :many
-SELECT a.id, a.project_id, a.name, a.slug, a.type, a.source_repo, a.source_image, a.dockerfile_path, a.build_type, a.build_type_override, a.builder_image, a.custom_buildpacks, a.cpu_limit, a.memory_limit, a.webhook_secret, a.auto_deploy_branch, a.status, a.git_credentials_encrypted, a.health_check_path, a.created_at, a.updated_at, a.parent_application_id, a.branch, a.preview_branch_pattern, a.preview_domain_template, a.last_activity_at, a.git_integration_id, a.source_kind, a.source_ref, a.readonly_rootfs, a.container_caps, a.container_port, p.slug as project_slug
+SELECT a.id, a.project_id, a.name, a.slug, a.type, a.source_repo, a.source_image, a.dockerfile_path, a.build_type, a.build_type_override, a.builder_image, a.custom_buildpacks, a.cpu_limit, a.memory_limit, a.webhook_secret, a.auto_deploy_branch, a.status, a.git_credentials_encrypted, a.health_check_path, a.created_at, a.updated_at, a.parent_application_id, a.branch, a.preview_branch_pattern, a.preview_domain_template, a.last_activity_at, a.git_integration_id, a.source_kind, a.source_ref, a.readonly_rootfs, a.container_caps, a.container_port, a.health_check_timeout_seconds, a.health_check_expect_status, p.slug as project_slug
 FROM applications a
 JOIN projects p ON p.id = a.project_id
 WHERE a.parent_application_id IS NOT NULL
@@ -837,39 +863,41 @@ WHERE a.parent_application_id IS NOT NULL
 `
 
 type ListStalePreviewsWithProjectSlugRow struct {
-	ID                      pgtype.UUID        `json:"id"`
-	ProjectID               pgtype.UUID        `json:"project_id"`
-	Name                    string             `json:"name"`
-	Slug                    string             `json:"slug"`
-	Type                    string             `json:"type"`
-	SourceRepo              pgtype.Text        `json:"source_repo"`
-	SourceImage             pgtype.Text        `json:"source_image"`
-	DockerfilePath          pgtype.Text        `json:"dockerfile_path"`
-	BuildType               string             `json:"build_type"`
-	BuildTypeOverride       pgtype.Text        `json:"build_type_override"`
-	BuilderImage            pgtype.Text        `json:"builder_image"`
-	CustomBuildpacks        []byte             `json:"custom_buildpacks"`
-	CpuLimit                float64            `json:"cpu_limit"`
-	MemoryLimit             int64              `json:"memory_limit"`
-	WebhookSecret           pgtype.Text        `json:"webhook_secret"`
-	AutoDeployBranch        pgtype.Text        `json:"auto_deploy_branch"`
-	Status                  string             `json:"status"`
-	GitCredentialsEncrypted []byte             `json:"git_credentials_encrypted"`
-	HealthCheckPath         pgtype.Text        `json:"health_check_path"`
-	CreatedAt               pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt               pgtype.Timestamptz `json:"updated_at"`
-	ParentApplicationID     pgtype.UUID        `json:"parent_application_id"`
-	Branch                  pgtype.Text        `json:"branch"`
-	PreviewBranchPattern    pgtype.Text        `json:"preview_branch_pattern"`
-	PreviewDomainTemplate   pgtype.Text        `json:"preview_domain_template"`
-	LastActivityAt          pgtype.Timestamptz `json:"last_activity_at"`
-	GitIntegrationID        pgtype.UUID        `json:"git_integration_id"`
-	SourceKind              pgtype.Text        `json:"source_kind"`
-	SourceRef               pgtype.Text        `json:"source_ref"`
-	ReadonlyRootfs          bool               `json:"readonly_rootfs"`
-	ContainerCaps           string             `json:"container_caps"`
-	ContainerPort           pgtype.Int4        `json:"container_port"`
-	ProjectSlug             string             `json:"project_slug"`
+	ID                        pgtype.UUID        `json:"id"`
+	ProjectID                 pgtype.UUID        `json:"project_id"`
+	Name                      string             `json:"name"`
+	Slug                      string             `json:"slug"`
+	Type                      string             `json:"type"`
+	SourceRepo                pgtype.Text        `json:"source_repo"`
+	SourceImage               pgtype.Text        `json:"source_image"`
+	DockerfilePath            pgtype.Text        `json:"dockerfile_path"`
+	BuildType                 string             `json:"build_type"`
+	BuildTypeOverride         pgtype.Text        `json:"build_type_override"`
+	BuilderImage              pgtype.Text        `json:"builder_image"`
+	CustomBuildpacks          []byte             `json:"custom_buildpacks"`
+	CpuLimit                  float64            `json:"cpu_limit"`
+	MemoryLimit               int64              `json:"memory_limit"`
+	WebhookSecret             pgtype.Text        `json:"webhook_secret"`
+	AutoDeployBranch          pgtype.Text        `json:"auto_deploy_branch"`
+	Status                    string             `json:"status"`
+	GitCredentialsEncrypted   []byte             `json:"git_credentials_encrypted"`
+	HealthCheckPath           pgtype.Text        `json:"health_check_path"`
+	CreatedAt                 pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt                 pgtype.Timestamptz `json:"updated_at"`
+	ParentApplicationID       pgtype.UUID        `json:"parent_application_id"`
+	Branch                    pgtype.Text        `json:"branch"`
+	PreviewBranchPattern      pgtype.Text        `json:"preview_branch_pattern"`
+	PreviewDomainTemplate     pgtype.Text        `json:"preview_domain_template"`
+	LastActivityAt            pgtype.Timestamptz `json:"last_activity_at"`
+	GitIntegrationID          pgtype.UUID        `json:"git_integration_id"`
+	SourceKind                pgtype.Text        `json:"source_kind"`
+	SourceRef                 pgtype.Text        `json:"source_ref"`
+	ReadonlyRootfs            bool               `json:"readonly_rootfs"`
+	ContainerCaps             string             `json:"container_caps"`
+	ContainerPort             pgtype.Int4        `json:"container_port"`
+	HealthCheckTimeoutSeconds pgtype.Int4        `json:"health_check_timeout_seconds"`
+	HealthCheckExpectStatus   pgtype.Int4        `json:"health_check_expect_status"`
+	ProjectSlug               string             `json:"project_slug"`
 }
 
 func (q *Queries) ListStalePreviewsWithProjectSlug(ctx context.Context, lastActivityAt pgtype.Timestamptz) ([]ListStalePreviewsWithProjectSlugRow, error) {
@@ -914,6 +942,8 @@ func (q *Queries) ListStalePreviewsWithProjectSlug(ctx context.Context, lastActi
 			&i.ReadonlyRootfs,
 			&i.ContainerCaps,
 			&i.ContainerPort,
+			&i.HealthCheckTimeoutSeconds,
+			&i.HealthCheckExpectStatus,
 			&i.ProjectSlug,
 		); err != nil {
 			return nil, err
@@ -941,6 +971,23 @@ func (q *Queries) SetApplicationContainerPort(ctx context.Context, arg SetApplic
 	return err
 }
 
+const setApplicationHealthTuning = `-- name: SetApplicationHealthTuning :exec
+UPDATE applications
+SET health_check_timeout_seconds = $2, health_check_expect_status = $3, updated_at = NOW()
+WHERE id = $1
+`
+
+type SetApplicationHealthTuningParams struct {
+	ID                        pgtype.UUID `json:"id"`
+	HealthCheckTimeoutSeconds pgtype.Int4 `json:"health_check_timeout_seconds"`
+	HealthCheckExpectStatus   pgtype.Int4 `json:"health_check_expect_status"`
+}
+
+func (q *Queries) SetApplicationHealthTuning(ctx context.Context, arg SetApplicationHealthTuningParams) error {
+	_, err := q.db.Exec(ctx, setApplicationHealthTuning, arg.ID, arg.HealthCheckTimeoutSeconds, arg.HealthCheckExpectStatus)
+	return err
+}
+
 const touchApplicationActivity = `-- name: TouchApplicationActivity :exec
 UPDATE applications SET last_activity_at = NOW()
 WHERE id = $1
@@ -958,7 +1005,7 @@ UPDATE applications SET
     status = $9, cpu_limit = $10, memory_limit = $11, git_credentials_encrypted = $12,
     health_check_path = $13, git_integration_id = $14, updated_at = NOW()
 WHERE id = $1
-RETURNING id, project_id, name, slug, type, source_repo, source_image, dockerfile_path, build_type, build_type_override, builder_image, custom_buildpacks, cpu_limit, memory_limit, webhook_secret, auto_deploy_branch, status, git_credentials_encrypted, health_check_path, created_at, updated_at, parent_application_id, branch, preview_branch_pattern, preview_domain_template, last_activity_at, git_integration_id, source_kind, source_ref, readonly_rootfs, container_caps, container_port
+RETURNING id, project_id, name, slug, type, source_repo, source_image, dockerfile_path, build_type, build_type_override, builder_image, custom_buildpacks, cpu_limit, memory_limit, webhook_secret, auto_deploy_branch, status, git_credentials_encrypted, health_check_path, created_at, updated_at, parent_application_id, branch, preview_branch_pattern, preview_domain_template, last_activity_at, git_integration_id, source_kind, source_ref, readonly_rootfs, container_caps, container_port, health_check_timeout_seconds, health_check_expect_status
 `
 
 type UpdateApplicationParams struct {
@@ -1029,6 +1076,8 @@ func (q *Queries) UpdateApplication(ctx context.Context, arg UpdateApplicationPa
 		&i.ReadonlyRootfs,
 		&i.ContainerCaps,
 		&i.ContainerPort,
+		&i.HealthCheckTimeoutSeconds,
+		&i.HealthCheckExpectStatus,
 	)
 	return i, err
 }
@@ -1039,7 +1088,7 @@ UPDATE applications SET
     preview_domain_template = $3,
     updated_at = NOW()
 WHERE id = $1
-RETURNING id, project_id, name, slug, type, source_repo, source_image, dockerfile_path, build_type, build_type_override, builder_image, custom_buildpacks, cpu_limit, memory_limit, webhook_secret, auto_deploy_branch, status, git_credentials_encrypted, health_check_path, created_at, updated_at, parent_application_id, branch, preview_branch_pattern, preview_domain_template, last_activity_at, git_integration_id, source_kind, source_ref, readonly_rootfs, container_caps, container_port
+RETURNING id, project_id, name, slug, type, source_repo, source_image, dockerfile_path, build_type, build_type_override, builder_image, custom_buildpacks, cpu_limit, memory_limit, webhook_secret, auto_deploy_branch, status, git_credentials_encrypted, health_check_path, created_at, updated_at, parent_application_id, branch, preview_branch_pattern, preview_domain_template, last_activity_at, git_integration_id, source_kind, source_ref, readonly_rootfs, container_caps, container_port, health_check_timeout_seconds, health_check_expect_status
 `
 
 type UpdateApplicationPreviewConfigParams struct {
@@ -1084,6 +1133,8 @@ func (q *Queries) UpdateApplicationPreviewConfig(ctx context.Context, arg Update
 		&i.ReadonlyRootfs,
 		&i.ContainerCaps,
 		&i.ContainerPort,
+		&i.HealthCheckTimeoutSeconds,
+		&i.HealthCheckExpectStatus,
 	)
 	return i, err
 }
@@ -1137,7 +1188,7 @@ func (q *Queries) UpdateApplicationSource(ctx context.Context, arg UpdateApplica
 const updateApplicationStatus = `-- name: UpdateApplicationStatus :one
 UPDATE applications SET status = $2, updated_at = NOW()
 WHERE id = $1
-RETURNING id, project_id, name, slug, type, source_repo, source_image, dockerfile_path, build_type, build_type_override, builder_image, custom_buildpacks, cpu_limit, memory_limit, webhook_secret, auto_deploy_branch, status, git_credentials_encrypted, health_check_path, created_at, updated_at, parent_application_id, branch, preview_branch_pattern, preview_domain_template, last_activity_at, git_integration_id, source_kind, source_ref, readonly_rootfs, container_caps, container_port
+RETURNING id, project_id, name, slug, type, source_repo, source_image, dockerfile_path, build_type, build_type_override, builder_image, custom_buildpacks, cpu_limit, memory_limit, webhook_secret, auto_deploy_branch, status, git_credentials_encrypted, health_check_path, created_at, updated_at, parent_application_id, branch, preview_branch_pattern, preview_domain_template, last_activity_at, git_integration_id, source_kind, source_ref, readonly_rootfs, container_caps, container_port, health_check_timeout_seconds, health_check_expect_status
 `
 
 type UpdateApplicationStatusParams struct {
@@ -1181,13 +1232,15 @@ func (q *Queries) UpdateApplicationStatus(ctx context.Context, arg UpdateApplica
 		&i.ReadonlyRootfs,
 		&i.ContainerCaps,
 		&i.ContainerPort,
+		&i.HealthCheckTimeoutSeconds,
+		&i.HealthCheckExpectStatus,
 	)
 	return i, err
 }
 
 const updateApplicationWebhook = `-- name: UpdateApplicationWebhook :one
 UPDATE applications SET webhook_secret = $2, auto_deploy_branch = $3, updated_at = NOW()
-WHERE id = $1 RETURNING id, project_id, name, slug, type, source_repo, source_image, dockerfile_path, build_type, build_type_override, builder_image, custom_buildpacks, cpu_limit, memory_limit, webhook_secret, auto_deploy_branch, status, git_credentials_encrypted, health_check_path, created_at, updated_at, parent_application_id, branch, preview_branch_pattern, preview_domain_template, last_activity_at, git_integration_id, source_kind, source_ref, readonly_rootfs, container_caps, container_port
+WHERE id = $1 RETURNING id, project_id, name, slug, type, source_repo, source_image, dockerfile_path, build_type, build_type_override, builder_image, custom_buildpacks, cpu_limit, memory_limit, webhook_secret, auto_deploy_branch, status, git_credentials_encrypted, health_check_path, created_at, updated_at, parent_application_id, branch, preview_branch_pattern, preview_domain_template, last_activity_at, git_integration_id, source_kind, source_ref, readonly_rootfs, container_caps, container_port, health_check_timeout_seconds, health_check_expect_status
 `
 
 type UpdateApplicationWebhookParams struct {
@@ -1232,6 +1285,8 @@ func (q *Queries) UpdateApplicationWebhook(ctx context.Context, arg UpdateApplic
 		&i.ReadonlyRootfs,
 		&i.ContainerCaps,
 		&i.ContainerPort,
+		&i.HealthCheckTimeoutSeconds,
+		&i.HealthCheckExpectStatus,
 	)
 	return i, err
 }

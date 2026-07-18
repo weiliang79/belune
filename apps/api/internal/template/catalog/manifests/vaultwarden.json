@@ -20,7 +20,7 @@
       "volumes": [
         { "name": "data", "mount_path": "/data" }
       ],
-      "health_check_path": "/alive"
+      "health_check": { "path": "/alive" }
     }
   ],
   "notes": "Create your admin account by registering the first user, then set `SIGNUPS_ALLOWED=false` in the app's env vars to lock down new sign-ups.\n"

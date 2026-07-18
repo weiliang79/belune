@@ -14,7 +14,7 @@
       "name": "excalidraw",
       "image": "excalidraw/excalidraw:latest",
       "port": 80,
-      "health_check_path": "/"
+      "health_check": { "path": "/" }
     }
   ],
   "notes": "Excalidraw stores drawings in your browser's local storage — there is no server-side database to back up.\n"

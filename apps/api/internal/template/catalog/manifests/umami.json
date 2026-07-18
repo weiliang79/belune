@@ -21,7 +21,7 @@
         "DATABASE_URL": "{{db.db.url}}",
         "APP_SECRET": "{{secret 32}}"
       },
-      "health_check_path": "/api/heartbeat",
+      "health_check": { "path": "/api/heartbeat" },
       "depends_on": ["db"]
     }
   ],

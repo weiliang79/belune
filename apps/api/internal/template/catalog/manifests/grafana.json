@@ -21,7 +21,7 @@
       "volumes": [
         { "name": "data", "mount_path": "/var/lib/grafana" }
       ],
-      "health_check_path": "/api/health"
+      "health_check": { "path": "/api/health" }
     }
   ],
   "notes": "Log in as **admin** with the generated password (reveal it under the app's env vars, `GF_SECURITY_ADMIN_PASSWORD`), then change it in your profile.\n"

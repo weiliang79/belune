@@ -97,6 +97,18 @@ func Validate(m *Manifest) error {
 			anyPort = true
 		}
 
+		if hc := svc.HealthCheck; hc != nil {
+			if !strings.HasPrefix(hc.Path, "/") {
+				add("services[%d] (%s): health_check.path must start with /", i, svc.Name)
+			}
+			if hc.TimeoutSeconds < 0 || hc.TimeoutSeconds > 3600 {
+				add("services[%d] (%s): health_check.timeout_seconds must be between 0 and 3600", i, svc.Name)
+			}
+			if hc.ExpectStatus != 0 && (hc.ExpectStatus < 100 || hc.ExpectStatus > 599) {
+				add("services[%d] (%s): health_check.expect_status must be a valid HTTP status (100-599)", i, svc.Name)
+			}
+		}
+
 		// Volumes: unique name + absolute, unique mount path per service.
 		volNames := map[string]bool{}
 		mountPaths := map[string]bool{}

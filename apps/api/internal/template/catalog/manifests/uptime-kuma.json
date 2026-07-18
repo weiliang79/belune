@@ -17,7 +17,7 @@
       "volumes": [
         { "name": "data", "mount_path": "/app/data" }
       ],
-      "health_check_path": "/"
+      "health_check": { "path": "/" }
     }
   ],
   "notes": "First visit creates the admin account — do it before sharing the URL.\n"
