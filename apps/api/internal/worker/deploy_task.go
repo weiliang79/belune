@@ -1084,6 +1084,15 @@ func pollHealthCheck(ctx context.Context, url string, timeout time.Duration, exp
 	}
 	deadline := time.Now().Add(timeout)
 	client := &http.Client{Timeout: 5 * time.Second}
+	// By default the client follows redirects and we accept the final 2xx (so an
+	// app that 302s its root to a setup page still passes). But when the author
+	// pins an exact 3xx status, following it would mean the redirect code is never
+	// observed — so stop at the first response in that case.
+	if expectStatus >= 300 && expectStatus < 400 {
+		client.CheckRedirect = func(*http.Request, []*http.Request) error {
+			return http.ErrUseLastResponse
+		}
+	}
 	for time.Now().Before(deadline) {
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 		if err != nil {

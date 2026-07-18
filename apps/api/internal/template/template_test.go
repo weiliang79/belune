@@ -1,6 +1,7 @@
 package template
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -207,6 +208,30 @@ func TestResolveSecretLengthAndUniqueness(t *testing.T) {
 	parts := strings.Split(pair, "|")
 	if len(parts) == 2 && parts[0] == parts[1] {
 		t.Error("secrets within one string should differ")
+	}
+	// A long secret exercises the rejection-sampling refill path and must still
+	// contain only alphabet characters at the exact requested length.
+	long, err := Resolve("{{secret 512}}", ResolveContext{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(long) != 512 {
+		t.Errorf("long secret length = %d, want 512", len(long))
+	}
+	if strings.Trim(long, secretAlphabet) != "" {
+		t.Error("secret contains characters outside the alphabet")
+	}
+}
+
+func TestParseSecretLengthBounds(t *testing.T) {
+	if _, err := parsePlaceholder("secret 0"); err == nil {
+		t.Error("expected error for zero-length secret")
+	}
+	if _, err := parsePlaceholder(fmt.Sprintf("secret %d", maxSecretLen+1)); err == nil {
+		t.Error("expected error for over-cap secret length")
+	}
+	if _, err := parsePlaceholder(fmt.Sprintf("secret %d", maxSecretLen)); err != nil {
+		t.Errorf("secret at the cap should parse, got: %v", err)
 	}
 }
 

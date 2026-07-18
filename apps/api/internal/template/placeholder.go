@@ -13,6 +13,10 @@ import (
 // placeholders don't merge.
 var placeholderRe = regexp.MustCompile(`\{\{\s*([^{}]+?)\s*\}\}`)
 
+// maxSecretLen caps {{secret N}} so a malformed manifest can't request a
+// pathologically large allocation. Well beyond any real secret length.
+const maxSecretLen = 4096
+
 // placeholderKind enumerates the closed set of placeholder forms.
 type placeholderKind int
 
@@ -59,6 +63,9 @@ func parsePlaceholder(inner string) (placeholder, error) {
 		n, err := strconv.Atoi(fields[1])
 		if err != nil || n <= 0 {
 			return placeholder{}, fmt.Errorf("secret length must be a positive integer, got %q", fields[1])
+		}
+		if n > maxSecretLen {
+			return placeholder{}, fmt.Errorf("secret length must be at most %d, got %d", maxSecretLen, n)
 		}
 		return placeholder{kind: kindSecret, secretLen: n}, nil
 	}

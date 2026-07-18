@@ -33,16 +33,32 @@ type ResolveContext struct {
 // secretAlphabet is URL-safe and shell-safe: no quoting hazards in env values.
 const secretAlphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
 
-// generateSecret returns a cryptographically random string of n characters.
+// generateSecret returns a cryptographically random string of n characters drawn
+// uniformly from secretAlphabet. It uses rejection sampling so no character is
+// favoured — a plain byte%len(alphabet) would bias the first 256%len characters.
 func generateSecret(n int) (string, error) {
-	buf := make([]byte, n)
-	if _, err := rand.Read(buf); err != nil {
-		return "", fmt.Errorf("generate secret: %w", err)
+	// Bytes at or above the largest whole multiple of the alphabet size are
+	// rejected; the rest map to a uniform character.
+	const maxByte = 256 - (256 % len(secretAlphabet))
+	out := make([]byte, n)
+	buf := make([]byte, n+n/4+8) // read a little extra to reduce refills
+	filled := 0
+	for filled < n {
+		if _, err := rand.Read(buf); err != nil {
+			return "", fmt.Errorf("generate secret: %w", err)
+		}
+		for _, b := range buf {
+			if int(b) >= maxByte {
+				continue // reject to avoid modulo bias
+			}
+			out[filled] = secretAlphabet[int(b)%len(secretAlphabet)]
+			filled++
+			if filled == n {
+				break
+			}
+		}
 	}
-	for i, b := range buf {
-		buf[i] = secretAlphabet[int(b)%len(secretAlphabet)]
-	}
-	return string(buf), nil
+	return string(out), nil
 }
 
 // Resolve substitutes every placeholder in s using ctx. Each {{secret N}} yields

@@ -220,7 +220,9 @@ func (h *Handler) InstantiateTemplate(w http.ResponseWriter, r *http.Request) {
 	dbConns := make(map[string]template.DBConn, len(m.Databases))
 	var databaseIDs []string
 	for _, db := range m.Databases {
-		created, creds, err := h.createDatabaseRecord(ctx, project, createDatabaseRequest{
+		// Note: dbRow (not "created") — the outer `created` flag that rollback
+		// depends on must not be shadowed here.
+		dbRow, creds, err := h.createDatabaseRecord(ctx, project, createDatabaseRequest{
 			Name:    db.Name,
 			Type:    db.Engine,
 			Version: db.Version,
@@ -231,9 +233,9 @@ func (h *Handler) InstantiateTemplate(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusInternalServerError, "failed to create database")
 			return
 		}
-		h.stampSource(ctx, "database", created.ID, ref)
-		dbConns[db.Name] = templateDBConn(db.Engine, created.Slug, creds)
-		databaseIDs = append(databaseIDs, uuidToString(created.ID))
+		h.stampSource(ctx, "database", dbRow.ID, ref)
+		dbConns[db.Name] = templateDBConn(db.Engine, dbRow.Slug, creds)
+		databaseIDs = append(databaseIDs, uuidToString(dbRow.ID))
 	}
 
 	resolveCtx := template.ResolveContext{
