@@ -7,5 +7,5 @@
  */
 export const BRAND = {
   name: "Belune",
-  version: "v0.0.31-alpha",
+  version: "v0.0.32-alpha",
 } as const;
