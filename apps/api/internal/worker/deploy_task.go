@@ -257,6 +257,7 @@ func (h *TaskHandler) loadApplication(ctx context.Context, dc *deployContext) er
 		HealthCheckPath:         appRow.HealthCheckPath,
 		ReadonlyRootfs:          appRow.ReadonlyRootfs,
 		ContainerCaps:           appRow.ContainerCaps,
+		ContainerPort:           appRow.ContainerPort,
 	}
 	dc.containerName = naming.ContainerName(appRow.ProjectSlug, appRow.Slug, dc.payload.ApplicationID)
 
@@ -785,7 +786,7 @@ func (h *TaskHandler) verifyHealth(ctx context.Context, dc *deployContext) error
 		domains = fetched
 	}
 
-	healthURL := fmt.Sprintf("http://%s:%d%s", dc.containerName, resolveContainerPort(domains), dc.app.HealthCheckPath.String)
+	healthURL := fmt.Sprintf("http://%s:%d%s", dc.containerName, resolveContainerPort(dc.app, domains), dc.app.HealthCheckPath.String)
 	slog.Info("verifying container health", "url", healthURL, "timeout", healthVerifyTimeout)
 
 	if err := pollHealthCheck(ctx, healthURL, healthVerifyTimeout); err != nil {
@@ -1044,8 +1045,14 @@ func parseUUID(s string) (pgtype.UUID, error) {
 	return u, nil
 }
 
-// resolveContainerPort returns the container port from the first domain that has one, or 8080.
-func resolveContainerPort(domains []generated.Domain) int32 {
+// resolveContainerPort returns the port the app's container listens on. The
+// application's own container_port wins when set (image apps, notably templates
+// deployed without a domain); otherwise it falls back to the first domain that
+// declares one, then to 8080.
+func resolveContainerPort(app generated.Application, domains []generated.Domain) int32 {
+	if app.ContainerPort.Valid && app.ContainerPort.Int32 > 0 {
+		return app.ContainerPort.Int32
+	}
 	for _, d := range domains {
 		if d.ContainerPort.Valid {
 			return d.ContainerPort.Int32

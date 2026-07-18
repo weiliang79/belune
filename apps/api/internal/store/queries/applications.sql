@@ -124,3 +124,7 @@ WHERE id = $1;
 -- name: UpdateApplicationRuntime :exec
 UPDATE applications SET readonly_rootfs = $2, container_caps = $3, updated_at = NOW()
 WHERE id = $1;
+
+-- name: SetApplicationContainerPort :exec
+UPDATE applications SET container_port = $2, updated_at = NOW()
+WHERE id = $1;

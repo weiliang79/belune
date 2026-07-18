@@ -275,6 +275,16 @@ func (h *Handler) InstantiateTemplate(w http.ResponseWriter, r *http.Request) {
 		}); err != nil {
 			slog.Warn("template: failed to set standard runtime profile", "application_id", uuidToString(app.ID), "error", err)
 		}
+		// Record the container's listening port so the deploy path can health-check
+		// and proxy it even when the app has no domain (resolveContainerPort).
+		if svc.Port > 0 {
+			if err := h.queries.SetApplicationContainerPort(ctx, generated.SetApplicationContainerPortParams{
+				ID:            app.ID,
+				ContainerPort: pgtype.Int4{Int32: svc.Port, Valid: true},
+			}); err != nil {
+				slog.Warn("template: failed to set container port", "application_id", uuidToString(app.ID), "error", err)
+			}
+		}
 		appIDByService[svc.Name] = app.ID
 
 		// Resolved env vars.

@@ -49,6 +49,7 @@ type Application struct {
 	SourceRef               pgtype.Text        `json:"source_ref"`
 	ReadonlyRootfs          bool               `json:"readonly_rootfs"`
 	ContainerCaps           string             `json:"container_caps"`
+	ContainerPort           pgtype.Int4        `json:"container_port"`
 }
 
 type ApplicationFileMount struct {
