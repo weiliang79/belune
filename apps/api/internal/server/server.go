@@ -91,7 +91,7 @@ func (s *Server) setupRouter() chi.Router {
 				"default-src 'self'; "+
 					"script-src 'self'; "+
 					"style-src 'self' 'unsafe-inline'; "+
-					"img-src 'self' data:; "+
+					"img-src 'self' data: https:; "+
 					"connect-src 'self' ws: wss:; "+
 					"font-src 'self'; "+
 					"object-src 'none'; "+
