@@ -45,6 +45,17 @@ export function updateApplication(
   return api.put<Application>(`/projects/${projectId}/applications/${applicationId}`, data);
 }
 
+export function updateApplicationRuntime(
+  projectId: string,
+  applicationId: string,
+  data: { readonly_rootfs: boolean; container_caps: "minimal" | "standard" },
+) {
+  return api.put<{ readonly_rootfs: boolean; container_caps: string }>(
+    `/projects/${projectId}/applications/${applicationId}/runtime`,
+    data,
+  );
+}
+
 export function deleteApplication(projectId: string, applicationId: string) {
   return api.delete<void>(`/projects/${projectId}/applications/${applicationId}`);
 }

@@ -1,0 +1,24 @@
+{
+  "schema": 1,
+  "id": "stirling-pdf",
+  "name": "Stirling PDF",
+  "description": "Locally-hosted web toolkit for splitting, merging, and editing PDFs.",
+  "category": "productivity",
+  "logo_url": "https://raw.githubusercontent.com/Stirling-Tools/Stirling-PDF/main/docs/stirling.png",
+  "website": "https://stirlingpdf.com",
+  "version": "latest",
+  "docs_url": "https://docs.stirlingpdf.com/",
+  "tags": ["pdf", "documents", "tools"],
+  "services": [
+    {
+      "name": "stirling-pdf",
+      "image": "stirlingtools/stirling-pdf:latest",
+      "port": 8080,
+      "volumes": [
+        { "name": "data", "mount_path": "/usr/share/tessdata" }
+      ],
+      "health_check_path": "/"
+    }
+  ],
+  "notes": "All processing happens on your server — uploaded files are not sent anywhere else.\n"
+}

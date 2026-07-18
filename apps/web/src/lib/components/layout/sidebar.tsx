@@ -2,6 +2,7 @@ import { Link, useRouterState } from "@tanstack/react-router";
 import { useState, type ComponentType } from "react";
 import {
   Folder,
+  LayoutTemplate,
   Rocket,
   Activity,
   User,
@@ -36,6 +37,7 @@ interface NavItem {
 
 const HOME_NAV: NavItem[] = [
   { to: "/projects", label: "Projects", Icon: Folder },
+  { to: "/templates", label: "Templates", Icon: LayoutTemplate },
   { to: "/deployments", label: "Deployments", Icon: Rocket },
   { to: "/requests", label: "Requests", Icon: Activity, admin: true },
 ];

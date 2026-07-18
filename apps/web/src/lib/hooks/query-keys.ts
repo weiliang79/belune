@@ -7,6 +7,10 @@ export const queryKeys = {
     all: ["projects"] as const,
     detail: (id: string) => ["projects", id] as const,
   },
+  templates: {
+    all: ["templates"] as const,
+    detail: (id: string) => ["templates", id] as const,
+  },
   applications: {
     all: (projectId: string) =>
       ["projects", projectId, "applications"] as const,

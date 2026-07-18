@@ -66,6 +66,7 @@ import { PageTabs, type PageTab } from "@/components/ui/page-tabs";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useBreadcrumbLabel } from "@/lib/hooks/use-breadcrumb";
 import { StatusBadge } from "@/lib/components/status-badge";
+import { ProvenanceNote } from "@/lib/components/provenance-note";
 import { CopyButton } from "@/lib/components/copy-button";
 import { formatBytes } from "@/lib/utils/format";
 import { cn } from "@/lib/utils";
@@ -190,8 +191,9 @@ function DatabaseDetailPage() {
               </Badge>
               <StatusBadge status={db.status} />
             </div>
-            <p className="text-text-faint truncate font-mono text-sm">
-              {db.slug}
+            <p className="text-text-faint flex flex-wrap items-center gap-x-2 truncate text-sm">
+              <span className="truncate font-mono">{db.slug}</span>
+              <ProvenanceNote sourceKind={db.source_kind} sourceRef={db.source_ref} />
             </p>
           </div>
         </div>

@@ -21,4 +21,5 @@ const (
 	TypeRestoreVolume       = "restore:volume"
 	TypeTLSStatusSweep      = "tls:status_sweep"
 	TypeTLSProbe            = "tls:probe"
+	TypeTemplateFinalize    = "template:finalize"
 )

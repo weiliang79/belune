@@ -1,0 +1,21 @@
+{
+  "schema": 1,
+  "id": "it-tools",
+  "name": "IT-Tools",
+  "description": "A handy collection of developer and IT tools in one web app.",
+  "category": "developer",
+  "logo_url": "https://raw.githubusercontent.com/CorentinTh/it-tools/main/public/logo.svg",
+  "website": "https://it-tools.tech",
+  "version": "latest",
+  "docs_url": "https://github.com/CorentinTh/it-tools",
+  "tags": ["tools", "developer", "utilities"],
+  "services": [
+    {
+      "name": "it-tools",
+      "image": "corentinth/it-tools:latest",
+      "port": 80,
+      "health_check_path": "/"
+    }
+  ],
+  "notes": "Stateless — nothing to configure or back up. Bookmark the URL and go.\n"
+}

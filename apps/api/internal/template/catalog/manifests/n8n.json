@@ -1,0 +1,38 @@
+{
+  "schema": 1,
+  "id": "n8n",
+  "name": "n8n",
+  "description": "Workflow automation tool — connect apps and build automations visually.",
+  "category": "automation",
+  "logo_url": "https://raw.githubusercontent.com/n8n-io/n8n/master/assets/n8n-logo.png",
+  "website": "https://n8n.io",
+  "version": "stable",
+  "docs_url": "https://docs.n8n.io/",
+  "tags": ["automation", "workflows", "no-code"],
+  "inputs": [
+    {
+      "key": "timezone",
+      "label": "Timezone",
+      "description": "IANA timezone for schedules (e.g. Europe/Berlin).",
+      "default": "UTC"
+    }
+  ],
+  "services": [
+    {
+      "name": "n8n",
+      "image": "n8nio/n8n:stable",
+      "port": 5678,
+      "env": {
+        "N8N_HOST": "{{domain.host}}",
+        "WEBHOOK_URL": "{{domain.url}}",
+        "GENERIC_TIMEZONE": "{{input.timezone}}",
+        "N8N_ENCRYPTION_KEY": "{{secret 32}}"
+      },
+      "volumes": [
+        { "name": "data", "mount_path": "/home/node/.n8n" }
+      ],
+      "health_check_path": "/healthz"
+    }
+  ],
+  "notes": "Create your owner account on first visit. Credentials are encrypted with the generated `N8N_ENCRYPTION_KEY` — keep it if you ever migrate.\n"
+}

@@ -45,6 +45,10 @@ type Application struct {
 	PreviewDomainTemplate   pgtype.Text        `json:"preview_domain_template"`
 	LastActivityAt          pgtype.Timestamptz `json:"last_activity_at"`
 	GitIntegrationID        pgtype.UUID        `json:"git_integration_id"`
+	SourceKind              pgtype.Text        `json:"source_kind"`
+	SourceRef               pgtype.Text        `json:"source_ref"`
+	ReadonlyRootfs          bool               `json:"readonly_rootfs"`
+	ContainerCaps           string             `json:"container_caps"`
 }
 
 type ApplicationFileMount struct {
@@ -189,6 +193,8 @@ type Database struct {
 	BackupCommand        pgtype.Text        `json:"backup_command"`
 	RestoreCommand       pgtype.Text        `json:"restore_command"`
 	ImageDigest          pgtype.Text        `json:"image_digest"`
+	SourceKind           pgtype.Text        `json:"source_kind"`
+	SourceRef            pgtype.Text        `json:"source_ref"`
 }
 
 type DatabaseBackup struct {

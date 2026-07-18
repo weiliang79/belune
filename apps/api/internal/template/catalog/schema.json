@@ -1,0 +1,84 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://belune.dev/schemas/app-template.json",
+  "title": "Belune App Template Manifest",
+  "description": "Declarative catalog entry that instantiates native Belune objects. The Go validator in internal/template is authoritative; this schema exists for editor autocomplete and contributor reference.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "id", "name", "description", "category", "services"],
+  "properties": {
+    "schema": { "const": 1, "description": "Manifest schema version." },
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9]([a-z0-9-]*[a-z0-9])?$",
+      "description": "Unique catalog id (slug)."
+    },
+    "name": { "type": "string", "description": "Display name." },
+    "description": { "type": "string", "description": "One-line catalog description." },
+    "category": { "type": "string", "description": "Grouping used for filter chips (e.g. monitoring, analytics, cms)." },
+    "logo_url": { "type": "string", "description": "Author-provided logo URL; frontend falls back to a lucide icon when absent." },
+    "website": { "type": "string", "description": "Upstream project website." },
+    "version": { "type": "string", "description": "Human-facing display version (e.g. \"5\"); author-maintained, decoupled from image tags." },
+    "docs_url": { "type": "string", "description": "Setup/usage documentation URL." },
+    "tags": { "type": "array", "items": { "type": "string" } },
+    "inputs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["key", "label"],
+        "properties": {
+          "key": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9_]*$", "description": "Referenced as {{input.KEY}}." },
+          "label": { "type": "string" },
+          "description": { "type": "string" },
+          "required": { "type": "boolean" },
+          "validation": { "type": "string", "enum": ["", "email", "url"] },
+          "default": { "type": "string" }
+        }
+      }
+    },
+    "databases": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "engine"],
+        "properties": {
+          "name": { "type": "string", "pattern": "^[a-z0-9]([a-z0-9-]*[a-z0-9])?$", "description": "Referenced as {{db.NAME.field}}." },
+          "engine": { "type": "string", "enum": ["postgres", "mysql", "redis", "mongo", "other"] },
+          "version": { "type": "string" }
+        }
+      }
+    },
+    "services": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "image"],
+        "properties": {
+          "name": { "type": "string", "pattern": "^[a-z0-9]([a-z0-9-]*[a-z0-9])?$" },
+          "image": { "type": "string", "description": "Image ref with tag; Belune pins the digest at deploy." },
+          "port": { "type": "integer", "minimum": 1, "maximum": 65535, "description": "Container port the domain routes to." },
+          "env": { "type": "object", "additionalProperties": { "type": "string" } },
+          "volumes": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["name", "mount_path"],
+              "properties": {
+                "name": { "type": "string", "pattern": "^[a-z0-9]([a-z0-9-]*[a-z0-9])?$" },
+                "mount_path": { "type": "string", "pattern": "^/" }
+              }
+            }
+          },
+          "health_check_path": { "type": "string" },
+          "depends_on": { "type": "array", "items": { "type": "string" }, "description": "Service or database names to provision/deploy first." }
+        }
+      }
+    },
+    "notes": { "type": "string", "description": "Markdown shown on completion; placeholders are resolved." }
+  }
+}

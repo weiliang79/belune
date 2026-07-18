@@ -1,0 +1,27 @@
+{
+  "schema": 1,
+  "id": "vaultwarden",
+  "name": "Vaultwarden",
+  "description": "Lightweight Bitwarden-compatible password manager server.",
+  "category": "security",
+  "logo_url": "https://raw.githubusercontent.com/dani-garcia/vaultwarden/main/resources/vaultwarden-icon-white.svg",
+  "website": "https://github.com/dani-garcia/vaultwarden",
+  "version": "latest",
+  "docs_url": "https://github.com/dani-garcia/vaultwarden/wiki",
+  "tags": ["passwords", "security", "bitwarden"],
+  "services": [
+    {
+      "name": "vaultwarden",
+      "image": "vaultwarden/server:latest",
+      "port": 80,
+      "env": {
+        "SIGNUPS_ALLOWED": "true"
+      },
+      "volumes": [
+        { "name": "data", "mount_path": "/data" }
+      ],
+      "health_check_path": "/alive"
+    }
+  ],
+  "notes": "Create your admin account by registering the first user, then set `SIGNUPS_ALLOWED=false` in the app's env vars to lock down new sign-ups.\n"
+}

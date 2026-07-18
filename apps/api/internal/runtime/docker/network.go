@@ -3,6 +3,7 @@ package docker
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"strings"
 
 	networktypes "github.com/docker/docker/api/types/network"
@@ -37,8 +38,31 @@ func (c *Client) CreateNetwork(ctx context.Context, name string) (err error) {
 	return nil
 }
 
-func (c *Client) RemoveNetwork(ctx context.Context, name string) error {
-	return c.cli.NetworkRemove(ctx, name)
+// RemoveNetwork tears down a project network. Caddy and the control-plane
+// container are bridged into project networks and stay running, so a plain
+// NetworkRemove fails with "network has active endpoints". This force-disconnects
+// every remaining endpoint first (app/DB containers should already be removed by
+// the caller; this covers Caddy, the API, and any stragglers), then removes the
+// network. Idempotent: a missing network is treated as success.
+func (c *Client) RemoveNetwork(ctx context.Context, name string) (err error) {
+	defer func() { metrics.RecordDockerOp("remove_network", err) }()
+
+	if inspect, insErr := c.cli.NetworkInspect(ctx, name, networktypes.InspectOptions{}); insErr == nil {
+		for id := range inspect.Containers {
+			if dErr := c.cli.NetworkDisconnect(ctx, name, id, true); dErr != nil {
+				slog.Warn("could not disconnect endpoint before network removal",
+					"network", name, "container", id, "error", dErr)
+			}
+		}
+	}
+
+	if err = c.cli.NetworkRemove(ctx, name); err != nil {
+		if strings.Contains(err.Error(), "not found") {
+			return nil
+		}
+		return fmt.Errorf("remove network %s: %w", name, err)
+	}
+	return nil
 }
 
 // ListNetworks lists all networks on the host for the read-only admin inspect

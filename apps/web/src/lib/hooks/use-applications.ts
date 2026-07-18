@@ -57,6 +57,23 @@ export function useUpdateApplication(projectId: string, applicationId: string) {
   });
 }
 
+export function useUpdateApplicationRuntime(
+  projectId: string,
+  applicationId: string,
+) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: Parameters<typeof applicationsApi.updateApplicationRuntime>[2]) =>
+      applicationsApi.updateApplicationRuntime(projectId, applicationId, data),
+    onSuccess: () => {
+      qc.invalidateQueries({
+        queryKey: queryKeys.applications.detail(projectId, applicationId),
+      });
+    },
+    onError: (error) => toast.error(error.message),
+  });
+}
+
 export function useDeleteApplication(projectId: string) {
   const qc = useQueryClient();
   return useMutation({

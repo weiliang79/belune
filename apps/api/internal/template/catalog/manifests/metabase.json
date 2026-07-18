@@ -1,0 +1,33 @@
+{
+  "schema": 1,
+  "id": "metabase",
+  "name": "Metabase",
+  "description": "Business-intelligence and dashboards on top of your own databases.",
+  "category": "analytics",
+  "logo_url": "https://raw.githubusercontent.com/metabase/metabase/master/resources/frontend_client/app/assets/img/favicon.ico",
+  "website": "https://www.metabase.com",
+  "version": "latest",
+  "docs_url": "https://www.metabase.com/docs/latest/",
+  "tags": ["analytics", "dashboards", "bi"],
+  "databases": [
+    { "name": "appdb", "engine": "postgres", "version": "16" }
+  ],
+  "services": [
+    {
+      "name": "metabase",
+      "image": "metabase/metabase:latest",
+      "port": 3000,
+      "env": {
+        "MB_DB_TYPE": "postgres",
+        "MB_DB_HOST": "{{db.appdb.host}}",
+        "MB_DB_PORT": "{{db.appdb.port}}",
+        "MB_DB_DBNAME": "{{db.appdb.database}}",
+        "MB_DB_USER": "{{db.appdb.user}}",
+        "MB_DB_PASS": "{{db.appdb.password}}"
+      },
+      "health_check_path": "/api/health",
+      "depends_on": ["appdb"]
+    }
+  ],
+  "notes": "First launch takes a minute while Metabase initialises its application database. Create your admin account once the setup screen loads.\n"
+}

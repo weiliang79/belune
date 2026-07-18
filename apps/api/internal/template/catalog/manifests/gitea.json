@@ -1,0 +1,27 @@
+{
+  "schema": 1,
+  "id": "gitea",
+  "name": "Gitea",
+  "description": "Lightweight self-hosted Git service with issues, PRs, and CI.",
+  "category": "developer",
+  "logo_url": "https://raw.githubusercontent.com/go-gitea/gitea/main/public/assets/img/logo.svg",
+  "website": "https://gitea.io",
+  "version": "1",
+  "docs_url": "https://docs.gitea.com/",
+  "tags": ["git", "vcs", "developer"],
+  "services": [
+    {
+      "name": "gitea",
+      "image": "gitea/gitea:1",
+      "port": 3000,
+      "env": {
+        "GITEA__server__ROOT_URL": "{{domain.url}}"
+      },
+      "volumes": [
+        { "name": "data", "mount_path": "/data" }
+      ],
+      "health_check_path": "/api/healthz"
+    }
+  ],
+  "notes": "Finish the install wizard on first visit. The default SQLite database is stored on the `data` volume — no separate database needed.\n"
+}

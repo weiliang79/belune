@@ -157,6 +157,27 @@ func (h *Handler) CreateDatabase(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	db, _, err := h.createDatabaseRecord(r.Context(), project, req)
+	if err != nil {
+		slog.Error("failed to create database", "error", err)
+		writeError(w, http.StatusInternalServerError, "failed to create database")
+		return
+	}
+
+	h.audit(r, "create_database", "database", uuidToString(db.ID), map[string]any{"name": req.Name, "type": req.Type})
+
+	writeJSON(w, http.StatusAccepted, db)
+}
+
+// createDatabaseRecord builds credentials, inserts the database row with its
+// finalized slug, and enqueues provisioning. It is the shared core of the
+// CreateDatabase HTTP handler and the template instantiation engine: the caller
+// is responsible for authz, request validation, and applying type defaults. It
+// returns the created row and the plaintext credentials map (the latter lets the
+// template engine resolve {{db.*}} placeholders without a decrypt round-trip).
+func (h *Handler) createDatabaseRecord(ctx context.Context, project generated.Project, req createDatabaseRequest) (generated.Database, map[string]string, error) {
+	isOther := req.Type == "other"
+
 	baseSlug := naming.Slugify(req.Name)
 	if req.Slug != "" {
 		baseSlug = naming.Slugify(req.Slug)
@@ -174,8 +195,7 @@ func (h *Handler) CreateDatabase(w http.ResponseWriter, r *http.Request) {
 		// Generate random password
 		passwordBytes := make([]byte, 16)
 		if _, err := rand.Read(passwordBytes); err != nil {
-			writeError(w, http.StatusInternalServerError, "failed to generate credentials")
-			return
+			return generated.Database{}, nil, fmt.Errorf("generate credentials: %w", err)
 		}
 		password := hex.EncodeToString(passwordBytes)
 
@@ -206,8 +226,7 @@ func (h *Handler) CreateDatabase(w http.ResponseWriter, r *http.Request) {
 			} else {
 				rootPasswordBytes := make([]byte, 16)
 				if _, err := rand.Read(rootPasswordBytes); err != nil {
-					writeError(w, http.StatusInternalServerError, "failed to generate root password")
-					return
+					return generated.Database{}, nil, fmt.Errorf("generate root password: %w", err)
 				}
 				rootPassword = hex.EncodeToString(rootPasswordBytes)
 			}
@@ -225,14 +244,12 @@ func (h *Handler) CreateDatabase(w http.ResponseWriter, r *http.Request) {
 
 	credsJSON, err := json.Marshal(creds)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to marshal credentials")
-		return
+		return generated.Database{}, nil, fmt.Errorf("marshal credentials: %w", err)
 	}
 
 	encrypted, err := h.cfg.Keyring.Encrypt(credsJSON)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to encrypt credentials")
-		return
+		return generated.Database{}, nil, fmt.Errorf("encrypt credentials: %w", err)
 	}
 
 	// "other"-type provisioning columns (NULL/none for known engines).
@@ -254,10 +271,10 @@ func (h *Handler) CreateDatabase(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var db generated.Database
-	if err := store.WithTx(r.Context(), h.db, func(q *generated.Queries) error {
+	if err := store.WithTx(ctx, h.db, func(q *generated.Queries) error {
 		var err error
-		db, err = q.CreateDatabase(r.Context(), generated.CreateDatabaseParams{
-			ProjectID:            projectUUID,
+		db, err = q.CreateDatabase(ctx, generated.CreateDatabaseParams{
+			ProjectID:            project.ID,
 			Type:                 req.Type,
 			Name:                 req.Name,
 			Slug:                 baseSlug,
@@ -280,7 +297,7 @@ func (h *Handler) CreateDatabase(w http.ResponseWriter, r *http.Request) {
 		dbIDStr := fmt.Sprintf("%x-%x-%x-%x-%x",
 			db.ID.Bytes[0:4], db.ID.Bytes[4:6], db.ID.Bytes[6:8], db.ID.Bytes[8:10], db.ID.Bytes[10:16])
 		finalSlug := fmt.Sprintf("%s-%s-%s", project.Slug, baseSlug, dbIDStr[:8])
-		if err := q.UpdateDatabaseSlug(r.Context(), generated.UpdateDatabaseSlugParams{
+		if err := q.UpdateDatabaseSlug(ctx, generated.UpdateDatabaseSlugParams{
 			ID:   db.ID,
 			Slug: finalSlug,
 		}); err != nil {
@@ -289,9 +306,7 @@ func (h *Handler) CreateDatabase(w http.ResponseWriter, r *http.Request) {
 		db.Slug = finalSlug
 		return nil
 	}); err != nil {
-		slog.Error("failed to create database", "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to create database")
-		return
+		return generated.Database{}, nil, err
 	}
 
 	// Enqueue provision task
@@ -299,19 +314,14 @@ func (h *Handler) CreateDatabase(w http.ResponseWriter, r *http.Request) {
 		db.ID.Bytes[0:4], db.ID.Bytes[4:6], db.ID.Bytes[6:8], db.ID.Bytes[8:10], db.ID.Bytes[10:16])
 	payload, err := json.Marshal(provisionDBPayload{DatabaseID: dbIDStr})
 	if err != nil {
-		slog.Error("failed to marshal provision_db payload", "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to create provision task")
-		return
+		return generated.Database{}, nil, fmt.Errorf("marshal provision payload: %w", err)
 	}
 	task := asynq.NewTask("provision_db", payload)
 	if _, err := h.asynq.Enqueue(task, asynq.Queue("critical")); err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to enqueue provision task")
-		return
+		return generated.Database{}, nil, fmt.Errorf("enqueue provision task: %w", err)
 	}
 
-	h.audit(r, "create_database", "database", uuidToString(db.ID), map[string]any{"name": req.Name, "type": req.Type})
-
-	writeJSON(w, http.StatusAccepted, db)
+	return db, creds, nil
 }
 
 func (h *Handler) ListDatabases(w http.ResponseWriter, r *http.Request) {

@@ -255,6 +255,8 @@ func (h *TaskHandler) loadApplication(ctx context.Context, dc *deployContext) er
 		CpuLimit: appRow.CpuLimit, MemoryLimit: appRow.MemoryLimit,
 		GitCredentialsEncrypted: appRow.GitCredentialsEncrypted,
 		HealthCheckPath:         appRow.HealthCheckPath,
+		ReadonlyRootfs:          appRow.ReadonlyRootfs,
+		ContainerCaps:           appRow.ContainerCaps,
 	}
 	dc.containerName = naming.ContainerName(appRow.ProjectSlug, appRow.Slug, dc.payload.ApplicationID)
 
@@ -324,6 +326,16 @@ func (h *TaskHandler) ensureNetworks(ctx context.Context, dc *deployContext) {
 			slog.Warn("could not attach caddy to project network", "caddy", name, "network", projectNetwork, "error", err)
 		}
 	}
+	// Attach the control-plane container too, so the post-deploy health probe
+	// (verifyHealth) can reach the app container by name on its project network.
+	// App-to-app isolation is unaffected — only the trusted control plane bridges
+	// in, which it must to health-check. Idempotent; warn (not fail) when the API
+	// runs outside Docker.
+	if name := h.Config.APIContainerName; name != "" {
+		if err := h.Runtime.ConnectContainerToNetwork(ctx, name, projectNetwork); err != nil {
+			slog.Warn("could not attach control-plane container to project network", "api", name, "network", projectNetwork, "error", err)
+		}
+	}
 }
 
 // prepareImage resolves the image to deploy: rollback, image-pull, or git-build path.
@@ -337,12 +349,34 @@ func (h *TaskHandler) prepareImage(ctx context.Context, dc *deployContext) error
 
 	switch dc.app.Type {
 	case "image":
-		h.updateDeploymentStatus(ctx, dc.deploymentID, status.DeploymentPending, status.DeploymentDeploying)
 		dc.imageName = dc.app.SourceImage.String
+		// Image apps have no build, but the pull is the only interesting step, so
+		// stream it to the same build-logs channel the UI already renders (git
+		// builds use it too). Mark the deployment "building" during the pull so the
+		// frontend subscribes and shows the live/persisted log instead of a blank
+		// panel.
+		h.updateDeploymentStatus(ctx, dc.deploymentID, status.DeploymentPending, status.DeploymentBuilding)
+		pub := buildlog.NewPublisher(h.RedisClient, dc.payload.DeploymentID)
+		sink := buildlog.NewLogSink(pub, ctx)
+		out := sink.Writer("stdout")
+		persistPullLog := func() {
+			sink.Flush()
+			pub.Close(ctx)
+			if b := sink.NDJSON(); b != "" {
+				h.Queries.UpdateDeploymentBuildLogs(ctx, generated.UpdateDeploymentBuildLogsParams{
+					ID:        dc.deploymentID,
+					BuildLogs: pgtype.Text{String: b, Valid: true},
+				})
+			}
+		}
+
+		fmt.Fprintf(out, "Pulling image %s\n", dc.imageName)
 		slog.Info("pulling image", "image", dc.imageName)
 		pullCtx, pullCancel := context.WithTimeout(ctx, time.Duration(h.Config.ImagePullTimeoutMinutes)*time.Minute)
-		defer pullCancel()
 		if err := h.Runtime.PullImage(pullCtx, dc.imageName); err != nil {
+			pullCancel()
+			fmt.Fprintf(out, "Failed to pull image: %v\n", err)
+			persistPullLog()
 			return fmt.Errorf("pull image: %w", err)
 		}
 		// Pin to the resolved digest so a later Reload/rollback recreates the
@@ -351,9 +385,13 @@ func (h *TaskHandler) prepareImage(ctx context.Context, dc *deployContext) error
 		if digest, derr := h.Runtime.ResolveImageDigest(pullCtx, dc.imageName); derr != nil {
 			slog.Warn("could not resolve image digest; using tag", "image", dc.imageName, "error", derr)
 		} else if digest != "" {
+			fmt.Fprintf(out, "Pinned to digest %s\n", digest)
 			slog.Info("pinned image to digest", "image", dc.imageName, "digest", digest)
 			dc.imageName = digest
 		}
+		pullCancel()
+		fmt.Fprintln(out, "Image ready; starting container")
+		persistPullLog()
 
 	case "git":
 		if err := h.buildFromGit(ctx, dc); err != nil {
@@ -617,6 +655,21 @@ func (h *TaskHandler) createAndStart(ctx context.Context, dc *deployContext) err
 		return fmt.Errorf("write file mounts: %w", err)
 	}
 
+	// Runtime profile (v0.0.32, migration 000043). "Hardened" (read-only rootfs +
+	// all caps dropped + tmpfs /tmp,/run) is the default for untrusted code — the
+	// operator's own git builds and manually-added images. "Standard" (writable
+	// rootfs + Docker's default capability set, no extra tmpfs) is the default for
+	// curated template apps, whose stock images run a root entrypoint that chowns
+	// and drops privileges. no-new-privileges stays on in both.
+	var capDrop []string
+	var tmpfs map[string]string
+	if dc.app.ContainerCaps != "standard" {
+		capDrop = []string{"ALL"}
+	}
+	if dc.app.ReadonlyRootfs {
+		tmpfs = map[string]string{"/tmp": "", "/run": ""}
+	}
+
 	containerID, err := h.Runtime.CreateContainer(ctx, runtime.ContainerConfig{
 		Name:            dc.containerName,
 		Image:           dc.imageName,
@@ -633,18 +686,13 @@ func (h *TaskHandler) createAndStart(ctx context.Context, dc *deployContext) err
 		Volumes: volumes,
 		// Read-only file/config mounts materialised above.
 		ReadOnlyBinds: fileBinds,
-		// Security hardening (v0.0.9-alpha Phase 2): drop all capabilities,
-		// disallow privilege escalation, and run with a read-only rootfs +
-		// tmpfs for the conventional writable paths. Apps that need more
-		// can request specific capabilities back via CapAdd in a future
-		// per-app config; default-deny is safer for the average user.
-		CapDrop:        []string{"ALL"},
+		// Security hardening (v0.0.9-alpha Phase 2, made per-app in v0.0.32): the
+		// capability and rootfs posture come from the app's runtime profile
+		// computed above; no-new-privileges is always on.
+		CapDrop:        capDrop,
 		SecurityOpt:    []string{"no-new-privileges"},
-		ReadonlyRootfs: true,
-		Tmpfs: map[string]string{
-			"/tmp": "",
-			"/run": "",
-		},
+		ReadonlyRootfs: dc.app.ReadonlyRootfs,
+		Tmpfs:          tmpfs,
 	})
 	if err != nil {
 		return fmt.Errorf("create container: %w", err)

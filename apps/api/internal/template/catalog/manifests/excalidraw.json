@@ -1,0 +1,21 @@
+{
+  "schema": 1,
+  "id": "excalidraw",
+  "name": "Excalidraw",
+  "description": "Virtual whiteboard for sketching hand-drawn-style diagrams.",
+  "category": "productivity",
+  "logo_url": "https://raw.githubusercontent.com/excalidraw/excalidraw/master/public/apple-touch-icon.png",
+  "website": "https://excalidraw.com",
+  "version": "latest",
+  "docs_url": "https://docs.excalidraw.com/",
+  "tags": ["whiteboard", "diagrams", "drawing"],
+  "services": [
+    {
+      "name": "excalidraw",
+      "image": "excalidraw/excalidraw:latest",
+      "port": 80,
+      "health_check_path": "/"
+    }
+  ],
+  "notes": "Excalidraw stores drawings in your browser's local storage — there is no server-side database to back up.\n"
+}

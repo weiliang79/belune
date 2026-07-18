@@ -183,6 +183,11 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService,
 			r.Get("/api/git/integrations/{integrationId}/branches", h.ListIntegrationBranches)
 			r.Delete("/api/git/integrations/{integrationId}", h.DeleteGitIntegration)
 
+			// App templates (catalog + one-click instantiation)
+			r.Get("/api/templates", h.ListTemplates)
+			r.Get("/api/templates/{templateId}", h.GetTemplate)
+			r.Post("/api/templates/{templateId}/instantiate", h.InstantiateTemplate)
+
 			// Projects
 			r.Get("/api/projects", h.ListProjects)
 			r.Post("/api/projects", h.CreateProject)
@@ -199,6 +204,7 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService,
 			r.Post("/api/projects/{projectId}/applications", h.CreateApplication)
 			r.Get("/api/projects/{projectId}/applications/{applicationId}", h.GetApplication)
 			r.Put("/api/projects/{projectId}/applications/{applicationId}", h.UpdateApplication)
+			r.Put("/api/projects/{projectId}/applications/{applicationId}/runtime", h.UpdateApplicationRuntime)
 			r.Delete("/api/projects/{projectId}/applications/{applicationId}", h.DeleteApplication)
 			r.Put("/api/projects/{projectId}/applications/{applicationId}/webhook", h.UpdateApplicationWebhook)
 			r.Post("/api/projects/{projectId}/applications/{applicationId}/deploy", h.DeployApplication)

@@ -130,6 +130,7 @@ func (w *Worker) Start() error {
 		w.handler.HandleTLSStatusSweep(ctx)
 		return nil
 	})
+	mux.HandleFunc(TypeTemplateFinalize, w.handler.HandleTemplateFinalizeTask)
 	mux.HandleFunc(TypeTLSProbe, func(ctx context.Context, t *asynq.Task) error {
 		return w.handler.HandleTLSProbeTask(ctx, t.Payload())
 	})

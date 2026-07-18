@@ -49,6 +49,7 @@ import { formatUptime } from "@/lib/utils/format";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useBreadcrumbLabel } from "@/lib/hooks/use-breadcrumb";
 import { StatusBadge } from "@/lib/components/status-badge";
+import { ProvenanceNote } from "@/lib/components/provenance-note";
 import { AppMetricsContext } from "@/lib/contexts/app-metrics-context";
 import { RouteError } from "@/lib/components/route-error";
 
@@ -161,17 +162,10 @@ function ApplicationLayout() {
             </div>
             <div className="text-text-faint flex flex-wrap items-center gap-x-2 gap-y-0.5 text-sm">
               <span className="truncate font-mono">{application.slug}</span>
-              {primaryDomain && (
-                <a
-                  href={`https://${primaryDomain}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-text-muted hover:text-foreground inline-flex items-center gap-1 font-mono"
-                >
-                  <ExternalLinkIcon aria-hidden="true" className="size-3" />
-                  {primaryDomain}
-                </a>
-              )}
+              <ProvenanceNote
+                sourceKind={application.source_kind}
+                sourceRef={application.source_ref}
+              />
             </div>
           </div>
         </div>

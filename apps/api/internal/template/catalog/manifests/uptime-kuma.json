@@ -1,0 +1,24 @@
+{
+  "schema": 1,
+  "id": "uptime-kuma",
+  "name": "Uptime Kuma",
+  "description": "Self-hosted uptime monitoring with status pages and alerts.",
+  "category": "monitoring",
+  "logo_url": "https://raw.githubusercontent.com/louislam/uptime-kuma/master/public/icon.svg",
+  "website": "https://uptime.kuma.pet",
+  "version": "2",
+  "docs_url": "https://github.com/louislam/uptime-kuma/wiki",
+  "tags": ["monitoring", "status-page"],
+  "services": [
+    {
+      "name": "uptime-kuma",
+      "image": "louislam/uptime-kuma:2",
+      "port": 3001,
+      "volumes": [
+        { "name": "data", "mount_path": "/app/data" }
+      ],
+      "health_check_path": "/"
+    }
+  ],
+  "notes": "First visit creates the admin account — do it before sharing the URL.\n"
+}

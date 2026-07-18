@@ -21,11 +21,18 @@ export function RouteProgress() {
   });
 
   useEffect(() => {
-    if (isNavigating) {
-      start(0, 150);
-    } else {
+    if (!isNavigating) return;
+    // Delay the bar so instant/cached navigations don't flash it. We manage the
+    // delay with our own timer (rather than start()'s built-in delay arg) so the
+    // cleanup can cancel a still-pending start. Otherwise a navigation that
+    // finishes inside the delay window — common on a fresh page load / refresh,
+    // where the initial route often resolves in under 150ms — fires the delayed
+    // start AFTER we've already called stop(), leaving the bar stuck at the top.
+    const timer = setTimeout(() => start(), 150);
+    return () => {
+      clearTimeout(timer);
       stop();
-    }
+    };
   }, [isNavigating, start, stop]);
 
   return null;

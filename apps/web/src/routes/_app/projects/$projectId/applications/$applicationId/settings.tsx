@@ -8,6 +8,7 @@ import { Separator } from "@/components/ui/separator";
 import { ApplicationSettingsForm } from "@/components/applications/application-settings-form";
 import { WebhookSection } from "@/components/applications/webhook-section";
 import { BuildCacheSection } from "@/components/applications/build-cache-section";
+import { RuntimeSection } from "@/components/applications/runtime-section";
 import { DeleteApplicationDialog } from "@/components/applications/delete-application-dialog";
 
 export const Route = createFileRoute(
@@ -69,6 +70,14 @@ function ApplicationSettingsPage() {
           />
         </>
       )}
+
+      <Separator />
+
+      <RuntimeSection
+        projectId={projectId}
+        applicationId={applicationId}
+        application={application}
+      />
 
       <Separator />
 

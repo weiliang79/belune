@@ -116,3 +116,11 @@ SELECT u.id AS user_id, u.email, u.first_name, p.name AS project_name
 FROM projects p
 JOIN users u ON u.id = p.user_id
 WHERE p.id = $1;
+
+-- name: UpdateApplicationSource :exec
+UPDATE applications SET source_kind = $2, source_ref = $3, updated_at = NOW()
+WHERE id = $1;
+
+-- name: UpdateApplicationRuntime :exec
+UPDATE applications SET readonly_rootfs = $2, container_caps = $3, updated_at = NOW()
+WHERE id = $1;

@@ -16,6 +16,7 @@ import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
 import { Route as AcceptInviteRouteImport } from './routes/accept-invite'
 import { Route as AppRouteImport } from './routes/_app'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AppTemplatesRouteImport } from './routes/_app/templates'
 import { Route as AppTeamRouteImport } from './routes/_app/team'
 import { Route as AppServerRouteImport } from './routes/_app/server'
 import { Route as AppQuotasRouteImport } from './routes/_app/quotas'
@@ -80,6 +81,11 @@ const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
+} as any)
+const AppTemplatesRoute = AppTemplatesRouteImport.update({
+  id: '/templates',
+  path: '/templates',
+  getParentRoute: () => AppRoute,
 } as any)
 const AppTeamRoute = AppTeamRouteImport.update({
   id: '/team',
@@ -263,6 +269,7 @@ export interface FileRoutesByFullPath {
   '/quotas': typeof AppQuotasRoute
   '/server': typeof AppServerRoute
   '/team': typeof AppTeamRoute
+  '/templates': typeof AppTemplatesRoute
   '/projects/$projectId': typeof AppProjectsProjectIdRouteWithChildren
   '/projects/new': typeof AppProjectsNewRoute
   '/deployments/': typeof AppDeploymentsIndexRoute
@@ -301,6 +308,7 @@ export interface FileRoutesByTo {
   '/quotas': typeof AppQuotasRoute
   '/server': typeof AppServerRoute
   '/team': typeof AppTeamRoute
+  '/templates': typeof AppTemplatesRoute
   '/projects/new': typeof AppProjectsNewRoute
   '/deployments': typeof AppDeploymentsIndexRoute
   '/projects': typeof AppProjectsIndexRoute
@@ -339,6 +347,7 @@ export interface FileRoutesById {
   '/_app/quotas': typeof AppQuotasRoute
   '/_app/server': typeof AppServerRoute
   '/_app/team': typeof AppTeamRoute
+  '/_app/templates': typeof AppTemplatesRoute
   '/_app/projects/$projectId': typeof AppProjectsProjectIdRouteWithChildren
   '/_app/projects/new': typeof AppProjectsNewRoute
   '/_app/deployments/': typeof AppDeploymentsIndexRoute
@@ -379,6 +388,7 @@ export interface FileRouteTypes {
     | '/quotas'
     | '/server'
     | '/team'
+    | '/templates'
     | '/projects/$projectId'
     | '/projects/new'
     | '/deployments/'
@@ -417,6 +427,7 @@ export interface FileRouteTypes {
     | '/quotas'
     | '/server'
     | '/team'
+    | '/templates'
     | '/projects/new'
     | '/deployments'
     | '/projects'
@@ -454,6 +465,7 @@ export interface FileRouteTypes {
     | '/_app/quotas'
     | '/_app/server'
     | '/_app/team'
+    | '/_app/templates'
     | '/_app/projects/$projectId'
     | '/_app/projects/new'
     | '/_app/deployments/'
@@ -537,6 +549,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/_app/templates': {
+      id: '/_app/templates'
+      path: '/templates'
+      fullPath: '/templates'
+      preLoaderRoute: typeof AppTemplatesRouteImport
+      parentRoute: typeof AppRoute
     }
     '/_app/team': {
       id: '/_app/team'
@@ -826,6 +845,7 @@ interface AppRouteChildren {
   AppQuotasRoute: typeof AppQuotasRoute
   AppServerRoute: typeof AppServerRoute
   AppTeamRoute: typeof AppTeamRoute
+  AppTemplatesRoute: typeof AppTemplatesRoute
   AppProjectsProjectIdRoute: typeof AppProjectsProjectIdRouteWithChildren
   AppProjectsNewRoute: typeof AppProjectsNewRoute
   AppDeploymentsIndexRoute: typeof AppDeploymentsIndexRoute
@@ -843,6 +863,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppQuotasRoute: AppQuotasRoute,
   AppServerRoute: AppServerRoute,
   AppTeamRoute: AppTeamRoute,
+  AppTemplatesRoute: AppTemplatesRoute,
   AppProjectsProjectIdRoute: AppProjectsProjectIdRouteWithChildren,
   AppProjectsNewRoute: AppProjectsNewRoute,
   AppDeploymentsIndexRoute: AppDeploymentsIndexRoute,

@@ -26,6 +26,11 @@ type Config struct {
 	Keyring            *crypto.Keyring
 	CaddyAdminURL      string
 	CaddyContainerName string // Docker container name/ID for Caddy; used to attach it to per-project networks
+	// APIContainerName is this control-plane container's own Docker name/ID. The
+	// worker attaches it to each per-project network so the post-deploy health
+	// probe can reach app containers directly (app-to-app isolation is unaffected;
+	// only the trusted control plane bridges in). Empty disables self-attach.
+	APIContainerName string
 	// CaddyTLSProbeAddr is where the TLS status probe dials to see what Caddy
 	// actually serves. It is the proxy's own HTTPS listener, reached over the
 	// internal network — never the public hostname, which would leave the check
@@ -143,6 +148,7 @@ func Load() (*Config, error) {
 		JWTRefreshHours:    getEnvInt("JWT_REFRESH_HOURS", 24*7),
 		CaddyAdminURL:      getEnv("CADDY_ADMIN_URL", "http://localhost:2019"),
 		CaddyContainerName: getEnv("CADDY_CONTAINER_NAME", "infra-caddy-1"),
+		APIContainerName:   getEnv("API_CONTAINER_NAME", "infra-api-1"),
 		CaddyTLSProbeAddr:  getEnv("CADDY_TLS_PROBE_ADDR", "caddy:443"),
 		DashboardUpstream:  getEnv("DASHBOARD_UPSTREAM", "belune:8080"),
 		PublicIP:           getEnv("BELUNE_PUBLIC_IP", ""),

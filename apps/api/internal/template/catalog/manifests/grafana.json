@@ -1,0 +1,28 @@
+{
+  "schema": 1,
+  "id": "grafana",
+  "name": "Grafana",
+  "description": "Observability dashboards and visualization for metrics and logs.",
+  "category": "monitoring",
+  "logo_url": "https://raw.githubusercontent.com/grafana/grafana/main/public/img/grafana_icon.svg",
+  "website": "https://grafana.com",
+  "version": "latest",
+  "docs_url": "https://grafana.com/docs/grafana/latest/",
+  "tags": ["monitoring", "dashboards", "metrics"],
+  "services": [
+    {
+      "name": "grafana",
+      "image": "grafana/grafana:latest",
+      "port": 3000,
+      "env": {
+        "GF_SERVER_ROOT_URL": "{{domain.url}}",
+        "GF_SECURITY_ADMIN_PASSWORD": "{{secret 20}}"
+      },
+      "volumes": [
+        { "name": "data", "mount_path": "/var/lib/grafana" }
+      ],
+      "health_check_path": "/api/health"
+    }
+  ],
+  "notes": "Log in as **admin** with the generated password (reveal it under the app's env vars, `GF_SECURITY_ADMIN_PASSWORD`), then change it in your profile.\n"
+}

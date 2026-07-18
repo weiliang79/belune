@@ -1,0 +1,47 @@
+{
+  "schema": 1,
+  "id": "ghost",
+  "name": "Ghost",
+  "description": "Professional publishing platform for blogs and newsletters.",
+  "category": "cms",
+  "logo_url": "https://ghost.org/images/logos/ghost-logo-orb.png",
+  "website": "https://ghost.org",
+  "version": "6",
+  "docs_url": "https://ghost.org/docs/",
+  "tags": ["blog", "cms", "newsletter"],
+  "inputs": [
+    {
+      "key": "admin_email",
+      "label": "Admin email",
+      "description": "Used for transactional mail sender identity.",
+      "required": true,
+      "validation": "email"
+    }
+  ],
+  "databases": [
+    { "name": "db", "engine": "mysql", "version": "8.4" }
+  ],
+  "services": [
+    {
+      "name": "ghost",
+      "image": "ghost:6",
+      "port": 2368,
+      "env": {
+        "url": "{{domain.url}}",
+        "database__client": "mysql",
+        "database__connection__host": "{{db.db.host}}",
+        "database__connection__port": "{{db.db.port}}",
+        "database__connection__user": "{{db.db.user}}",
+        "database__connection__password": "{{db.db.password}}",
+        "database__connection__database": "{{db.db.database}}",
+        "mail__from": "{{input.admin_email}}"
+      },
+      "volumes": [
+        { "name": "content", "mount_path": "/var/lib/ghost/content" }
+      ],
+      "health_check_path": "/ghost/api/admin/site/",
+      "depends_on": ["db"]
+    }
+  ],
+  "notes": "Complete setup at `{{domain.url}}/ghost` right after deploy — the first visitor to that URL becomes the owner.\n"
+}

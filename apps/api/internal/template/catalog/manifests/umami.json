@@ -1,0 +1,29 @@
+{
+  "schema": 1,
+  "id": "umami",
+  "name": "Umami",
+  "description": "Privacy-friendly web analytics. A lightweight Google Analytics alternative.",
+  "category": "analytics",
+  "logo_url": "https://umami.is/logo.svg",
+  "website": "https://umami.is",
+  "version": "2",
+  "docs_url": "https://umami.is/docs",
+  "tags": ["analytics", "privacy"],
+  "databases": [
+    { "name": "db", "engine": "postgres", "version": "16" }
+  ],
+  "services": [
+    {
+      "name": "umami",
+      "image": "ghcr.io/umami-software/umami:postgresql-latest",
+      "port": 3000,
+      "env": {
+        "DATABASE_URL": "{{db.db.url}}",
+        "APP_SECRET": "{{secret 32}}"
+      },
+      "health_check_path": "/api/heartbeat",
+      "depends_on": ["db"]
+    }
+  ],
+  "notes": "Default login is **admin / umami** — change the password immediately (Settings → Profile).\n"
+}

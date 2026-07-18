@@ -43,6 +43,10 @@ export interface Application {
   preview_branch_pattern: string | null;
   preview_domain_template: string | null;
   last_activity_at: string;
+  source_kind: string | null;
+  source_ref: string | null;
+  readonly_rootfs: boolean;
+  container_caps: "minimal" | "standard";
   created_at: string;
   updated_at: string;
 }
@@ -268,6 +272,8 @@ export interface Database {
   backup_mode: "none" | "volume_snapshot" | "command";
   backup_command: string | null;
   restore_command: string | null;
+  source_kind: string | null;
+  source_ref: string | null;
   created_at: string;
   credentials?: Record<string, string>;
   connection_string?: string;

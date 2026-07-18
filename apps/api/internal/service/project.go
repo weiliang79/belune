@@ -13,40 +13,53 @@ import (
 )
 
 type ProjectService struct {
-	queries *generated.Queries
-	runtime runtime.ContainerRuntime
+	queries   *generated.Queries
+	runtime   runtime.ContainerRuntime
+	apps      *ApplicationService
+	databases *DatabaseService
 }
 
-func NewProjectService(queries *generated.Queries, rt runtime.ContainerRuntime) *ProjectService {
-	return &ProjectService{queries: queries, runtime: rt}
+func NewProjectService(queries *generated.Queries, rt runtime.ContainerRuntime, apps *ApplicationService, databases *DatabaseService) *ProjectService {
+	return &ProjectService{queries: queries, runtime: rt, apps: apps, databases: databases}
 }
 
-// Delete stops and removes all application containers for the project, then deletes the DB record.
-// The DB delete cascades applications, deployments, env vars, and domains via FK ON DELETE CASCADE.
+// Delete tears down an entire project: every application and database is removed
+// through its own service delete (so containers, data volumes, build caches,
+// file mounts, and cascaded rows are reclaimed exactly as an individual delete
+// would), then the per-project Docker network is removed and the project row
+// deleted. Every step is best-effort so one failure can't strand the project.
 func (s *ProjectService) Delete(ctx context.Context, projectID pgtype.UUID) error {
 	project, err := s.queries.GetProject(ctx, projectID)
 	if err != nil {
-		slog.Error("failed to fetch project for container cleanup", "project_id", fmt.Sprintf("%v", projectID), "error", err)
-		// Still attempt DB delete even if we can't clean up containers
+		slog.Error("failed to fetch project for cleanup", "project_id", fmt.Sprintf("%v", projectID), "error", err)
+		// Still attempt the row delete even if we can't clean up resources.
 		return s.queries.DeleteProject(ctx, projectID)
 	}
 
-	applications, err := s.queries.ListApplicationsByProject(ctx, projectID)
-	if err == nil {
+	if applications, err := s.queries.ListApplicationsByProject(ctx, projectID); err == nil {
 		for _, app := range applications {
-			appIDStr := uuidToString(app.ID)
-			containerName := naming.ContainerName(project.Slug, app.Slug, appIDStr)
-			intermediateContainerName := naming.IntermediateContainerName(project.Slug, appIDStr)
-			oldContainerName := naming.OldContainerName(appIDStr)
-			for _, name := range []string{containerName, intermediateContainerName, oldContainerName} {
-				if err := s.runtime.StopContainer(ctx, name); err != nil {
-					slog.Warn("could not stop container during project deletion", "container", name, "error", err)
-				}
-				if err := s.runtime.RemoveContainer(ctx, name); err != nil {
-					slog.Warn("could not remove container during project deletion", "container", name, "error", err)
-				}
+			if err := s.apps.Delete(ctx, app.ID, project.Slug, app.Slug); err != nil {
+				slog.Warn("could not delete application during project deletion",
+					"application_id", uuidToString(app.ID), "error", err)
 			}
 		}
+	}
+
+	if databases, err := s.queries.ListDatabasesByProject(ctx, projectID); err == nil {
+		for _, db := range databases {
+			if err := s.databases.Delete(ctx, db.ID); err != nil {
+				slog.Warn("could not delete database during project deletion",
+					"database_id", uuidToString(db.ID), "error", err)
+			}
+		}
+	}
+
+	// Remove the per-project Docker network (RemoveNetwork force-disconnects Caddy
+	// and the control plane, which are bridged in). Best-effort: a leftover empty
+	// network is cosmetic, so a failure must not block the row delete.
+	netName := naming.ProjectNetworkName(project.Slug)
+	if err := s.runtime.RemoveNetwork(ctx, netName); err != nil {
+		slog.Warn("could not remove project network during project deletion", "network", netName, "error", err)
 	}
 
 	return s.queries.DeleteProject(ctx, projectID)
