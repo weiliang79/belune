@@ -148,7 +148,7 @@ func Load() (*Config, error) {
 		JWTRefreshHours:    getEnvInt("JWT_REFRESH_HOURS", 24*7),
 		CaddyAdminURL:      getEnv("CADDY_ADMIN_URL", "http://localhost:2019"),
 		CaddyContainerName: getEnv("CADDY_CONTAINER_NAME", "infra-caddy-1"),
-		APIContainerName:   getEnv("API_CONTAINER_NAME", "infra-api-1"),
+		APIContainerName:   getEnv("API_CONTAINER_NAME", selfContainerRef()),
 		CaddyTLSProbeAddr:  getEnv("CADDY_TLS_PROBE_ADDR", "caddy:443"),
 		DashboardUpstream:  getEnv("DASHBOARD_UPSTREAM", "belune:8080"),
 		PublicIP:           getEnv("BELUNE_PUBLIC_IP", ""),
@@ -239,6 +239,21 @@ func getEnv(key, fallback string) string {
 		return val
 	}
 	return fallback
+}
+
+// selfContainerRef returns this process's own container reference so the worker
+// can bridge itself onto per-project networks without the operator having to
+// name the container. Docker sets a container's hostname to its short ID by
+// default, which the Docker API accepts as a container reference for
+// NetworkConnect. Outside Docker this is just the host name; the self-attach
+// then no-ops with a warning, which is fine. An explicit API_CONTAINER_NAME
+// still overrides this (e.g. when the container is run with a custom hostname).
+func selfContainerRef() string {
+	host, err := os.Hostname()
+	if err != nil {
+		return ""
+	}
+	return host
 }
 
 func getEnvInt(key string, fallback int) int {
