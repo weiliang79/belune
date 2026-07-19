@@ -111,8 +111,14 @@ default + ⚠️, ok → low + ✅.
 
 ### Email
 - **Recipients** — one or more comma-separated addresses.
-- Requires SMTP to be configured ([`smtp.md`](./smtp.md)); with no SMTP host,
-  sends fall back to log-only and the test will report the misconfiguration.
+- By default the channel uses the instance SMTP (**Server → Email (SMTP)**). If
+  that isn't configured, the channel's test and events fail with a clear error
+  rather than silently going nowhere — set SMTP first.
+- **Use a custom mail server** (optional) — toggle this to route *this channel*
+  through its own SMTP server (host/port/user/password/from/encryption), e.g. to
+  send alerts through a different provider than the app's transactional mail. Its
+  password is keyring-encrypted like every other channel secret. Left off, the
+  instance SMTP is used.
 
 > **Overlap with per-user alert emails.** An **email channel** subscribed to
 > *Deployment failed* delivers to its fixed recipient list *in addition to* the

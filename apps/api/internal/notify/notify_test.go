@@ -205,12 +205,24 @@ func TestGotifySend(t *testing.T) {
 }
 
 // fakeMailer records the messages an email channel would send.
-type fakeMailer struct{ sent []MailMessage }
+type fakeMailer struct {
+	sent          []MailMessage
+	overrides     []MailSMTP
+	notConfigured bool
+}
 
 func (f *fakeMailer) Send(_ context.Context, msg MailMessage) error {
 	f.sent = append(f.sent, msg)
 	return nil
 }
+
+func (f *fakeMailer) SendWithConfig(_ context.Context, smtp MailSMTP, msg MailMessage) error {
+	f.overrides = append(f.overrides, smtp)
+	f.sent = append(f.sent, msg)
+	return nil
+}
+
+func (f *fakeMailer) Configured(context.Context) bool { return !f.notConfigured }
 
 func TestEmailSend(t *testing.T) {
 	m := &fakeMailer{}
@@ -225,6 +237,42 @@ func TestEmailSend(t *testing.T) {
 	}
 	if m.sent[0].Subject != "Deploy failed" {
 		t.Errorf("subject = %q", m.sent[0].Subject)
+	}
+	if len(m.overrides) != 0 {
+		t.Errorf("expected instance-default send, got %d overrides", len(m.overrides))
+	}
+}
+
+func TestEmailSendWithOverride(t *testing.T) {
+	m := &fakeMailer{notConfigured: true} // instance SMTP off; channel brings its own
+	p := emailProvider{mailer: m}
+	cfg, _ := json.Marshal(emailConfig{
+		Recipients: []string{"a@x.io"},
+		SMTP:       &emailSMTP{Host: "smtp.chan.io", Port: 2525, User: "u", Password: "p", TLSMode: "tls"},
+	})
+
+	if err := p.Send(context.Background(), cfg, sampleEvent()); err != nil {
+		t.Fatalf("Send: %v", err)
+	}
+	if len(m.overrides) != 1 {
+		t.Fatalf("expected 1 override send, got %d", len(m.overrides))
+	}
+	if m.overrides[0].Host != "smtp.chan.io" || m.overrides[0].Port != 2525 {
+		t.Errorf("override = %+v", m.overrides[0])
+	}
+}
+
+func TestEmailSendLoudWhenUnconfigured(t *testing.T) {
+	m := &fakeMailer{notConfigured: true} // no instance SMTP, no override
+	p := emailProvider{mailer: m}
+	cfg, _ := json.Marshal(emailConfig{Recipients: []string{"a@x.io"}})
+
+	err := p.Send(context.Background(), cfg, sampleEvent())
+	if err == nil {
+		t.Fatal("expected an error when SMTP is not configured")
+	}
+	if len(m.sent) != 0 {
+		t.Errorf("expected no send attempt, got %d", len(m.sent))
 	}
 }
 
@@ -267,6 +315,60 @@ func TestSendPropagatesHTTPError(t *testing.T) {
 	cfg, _ := json.Marshal(discordConfig{WebhookURL: srv.URL})
 	if err := p.Send(context.Background(), cfg, sampleEvent()); err == nil {
 		t.Fatal("expected error on 500")
+	}
+}
+
+func TestRedactConfig(t *testing.T) {
+	// Non-secret fields stay; secrets are stripped.
+	got := RedactConfig("ntfy", json.RawMessage(`{"topic":"alerts","server_url":"https://n","access_token":"tok"}`))
+	m := map[string]any{}
+	_ = json.Unmarshal(got, &m)
+	if m["topic"] != "alerts" || m["server_url"] != "https://n" {
+		t.Errorf("non-secret fields lost: %v", m)
+	}
+	if _, ok := m["access_token"]; ok {
+		t.Errorf("secret leaked: %v", m)
+	}
+
+	// Email: recipients kept, nested smtp.password stripped.
+	got = RedactConfig("email", json.RawMessage(`{"recipients":["a@x.io"],"smtp":{"host":"h","password":"p"}}`))
+	m = map[string]any{}
+	_ = json.Unmarshal(got, &m)
+	smtp := m["smtp"].(map[string]any)
+	if smtp["host"] != "h" {
+		t.Errorf("smtp host lost")
+	}
+	if _, ok := smtp["password"]; ok {
+		t.Errorf("smtp password leaked")
+	}
+}
+
+func TestMergeSecrets(t *testing.T) {
+	stored := json.RawMessage(`{"webhook_url":"https://stored"}`)
+	// Blank secret in submission → preserved from stored.
+	got := MergeSecrets("discord", stored, json.RawMessage(`{"webhook_url":""}`))
+	m := map[string]any{}
+	_ = json.Unmarshal(got, &m)
+	if m["webhook_url"] != "https://stored" {
+		t.Errorf("blank secret not preserved: %v", m)
+	}
+	// Re-entered secret → taken from submission.
+	got = MergeSecrets("discord", stored, json.RawMessage(`{"webhook_url":"https://new"}`))
+	_ = json.Unmarshal(got, &m)
+	if m["webhook_url"] != "https://new" {
+		t.Errorf("re-entered secret not used: %v", m)
+	}
+	// Email nested smtp.password preserved when blank.
+	got = MergeSecrets("email",
+		json.RawMessage(`{"recipients":["a@x.io"],"smtp":{"host":"h","password":"stored"}}`),
+		json.RawMessage(`{"recipients":["b@x.io"],"smtp":{"host":"h","password":""}}`))
+	_ = json.Unmarshal(got, &m)
+	smtp := m["smtp"].(map[string]any)
+	if smtp["password"] != "stored" {
+		t.Errorf("smtp password not preserved: %v", smtp)
+	}
+	if r := m["recipients"].([]any); r[0] != "b@x.io" {
+		t.Errorf("non-secret change not applied: %v", r)
 	}
 }
 

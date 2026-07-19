@@ -294,6 +294,11 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService,
 				r.Post("/api/cleanup", h.TriggerCleanup)
 				r.Get("/api/settings", h.ListSettings)
 				r.Put("/api/settings", h.UpdateSettings)
+				// SMTP config: dedicated endpoints so the password stays
+				// keyring-encrypted and masked (never in the generic settings list).
+				r.Get("/api/settings/smtp", h.GetSMTPSettings)
+				r.Put("/api/settings/smtp", h.UpdateSMTPSettings)
+				r.Post("/api/settings/smtp/test", h.TestSMTPSettings)
 				r.Get("/api/requests", h.ListAllRequestLogs)
 				r.Get("/api/requests/summary", h.GetAllRequestsSummary)
 				r.Get("/api/server/services", h.GetServerServices)

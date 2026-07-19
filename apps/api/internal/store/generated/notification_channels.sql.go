@@ -128,23 +128,24 @@ func (q *Queries) ListEnabledChannelsForEvent(ctx context.Context, eventType str
 }
 
 const listNotificationChannels = `-- name: ListNotificationChannels :many
-SELECT id, name, type, events, enabled, last_sent_at, last_error, last_event_type, created_by, created_at, updated_at
+SELECT id, name, type, events, enabled, last_sent_at, last_error, last_event_type, config_encrypted, created_by, created_at, updated_at
 FROM notification_channels
 ORDER BY name
 `
 
 type ListNotificationChannelsRow struct {
-	ID            pgtype.UUID        `json:"id"`
-	Name          string             `json:"name"`
-	Type          string             `json:"type"`
-	Events        []string           `json:"events"`
-	Enabled       bool               `json:"enabled"`
-	LastSentAt    pgtype.Timestamptz `json:"last_sent_at"`
-	LastError     pgtype.Text        `json:"last_error"`
-	LastEventType pgtype.Text        `json:"last_event_type"`
-	CreatedBy     pgtype.UUID        `json:"created_by"`
-	CreatedAt     pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
+	ID              pgtype.UUID        `json:"id"`
+	Name            string             `json:"name"`
+	Type            string             `json:"type"`
+	Events          []string           `json:"events"`
+	Enabled         bool               `json:"enabled"`
+	LastSentAt      pgtype.Timestamptz `json:"last_sent_at"`
+	LastError       pgtype.Text        `json:"last_error"`
+	LastEventType   pgtype.Text        `json:"last_event_type"`
+	ConfigEncrypted []byte             `json:"config_encrypted"`
+	CreatedBy       pgtype.UUID        `json:"created_by"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
 }
 
 func (q *Queries) ListNotificationChannels(ctx context.Context) ([]ListNotificationChannelsRow, error) {
@@ -165,6 +166,7 @@ func (q *Queries) ListNotificationChannels(ctx context.Context) ([]ListNotificat
 			&i.LastSentAt,
 			&i.LastError,
 			&i.LastEventType,
+			&i.ConfigEncrypted,
 			&i.CreatedBy,
 			&i.CreatedAt,
 			&i.UpdatedAt,

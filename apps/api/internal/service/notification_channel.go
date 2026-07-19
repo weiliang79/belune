@@ -83,10 +83,16 @@ func (s *NotificationChannelService) Update(ctx context.Context, id pgtype.UUID,
 
 	var enc []byte
 	if len(p.Config) > 0 {
-		if err := s.validateConfig(existing.Type, p.Config); err != nil {
+		// Fill any secret the operator left blank (masked on read) from the stored
+		// config, then validate + encrypt the merged result.
+		merged := p.Config
+		if stored, derr := s.decryptConfig(existing.ConfigEncrypted); derr == nil {
+			merged = notify.MergeSecrets(existing.Type, stored, p.Config)
+		}
+		if err := s.validateConfig(existing.Type, merged); err != nil {
 			return generated.NotificationChannel{}, err
 		}
-		if enc, err = s.encryptConfig(p.Config); err != nil {
+		if enc, err = s.encryptConfig(merged); err != nil {
 			return generated.NotificationChannel{}, err
 		}
 	}
@@ -117,6 +123,17 @@ func (s *NotificationChannelService) List(ctx context.Context) ([]generated.List
 // Get returns a single raw channel row (including the encrypted config).
 func (s *NotificationChannelService) Get(ctx context.Context, id pgtype.UUID) (generated.NotificationChannel, error) {
 	return s.queries.GetNotificationChannel(ctx, id)
+}
+
+// RedactedConfig decrypts a channel's config and strips its secret fields,
+// returning JSON safe to send to the admin UI for prefilling an edit form.
+// Returns "{}" when the config can't be decrypted.
+func (s *NotificationChannelService) RedactedConfig(channelType string, encrypted []byte) json.RawMessage {
+	raw, err := s.decryptConfig(encrypted)
+	if err != nil {
+		return json.RawMessage("{}")
+	}
+	return notify.RedactConfig(channelType, raw)
 }
 
 // MaskedConfig returns the presence-only view of a channel's config, safe to

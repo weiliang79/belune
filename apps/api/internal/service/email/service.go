@@ -36,6 +36,63 @@ type Service struct {
 	cfg      *config.Config
 	baseURL  *url.URL // parsed PUBLIC_BASE_URL; nil if absent/unparseable
 	registry map[string]*templateDef
+	resolver SMTPResolver // optional; supplies DB-backed SMTP config per send
+}
+
+// SMTPConfig is the effective mail-server configuration for a single send. It is
+// resolved per-send so changes made in the admin UI take effect without a
+// restart.
+type SMTPConfig struct {
+	Host      string
+	Port      int
+	User      string
+	Password  string
+	FromEmail string
+	FromName  string
+	TLSMode   string
+}
+
+// SMTPResolver supplies the current effective SMTPConfig (DB settings merged over
+// env defaults). Implemented in the service layer and injected via SetResolver;
+// when absent, the env config is used.
+type SMTPResolver interface {
+	ResolveSMTP(ctx context.Context) (SMTPConfig, error)
+}
+
+// SetResolver installs the DB-backed SMTP resolver. Call once at startup on the
+// shared Service instance; all senders (worker, handler) then pick up live
+// settings.
+func (s *Service) SetResolver(r SMTPResolver) { s.resolver = r }
+
+// Configured reports whether the effective (DB-or-env) SMTP has a host set —
+// i.e. whether a real send would happen rather than falling into log-only mode.
+func (s *Service) Configured(ctx context.Context) bool {
+	return s.effectiveSMTP(ctx).Host != ""
+}
+
+// effectiveSMTP returns the config to use for a send: the resolver's value when
+// present (falling back to env on error), otherwise the env config.
+func (s *Service) effectiveSMTP(ctx context.Context) SMTPConfig {
+	if s.resolver != nil {
+		if c, err := s.resolver.ResolveSMTP(ctx); err == nil {
+			return c
+		} else {
+			slog.WarnContext(ctx, "smtp: resolve settings failed, using env config", "error", err)
+		}
+	}
+	return s.envSMTP()
+}
+
+func (s *Service) envSMTP() SMTPConfig {
+	return SMTPConfig{
+		Host:      s.cfg.SMTPHost,
+		Port:      s.cfg.SMTPPort,
+		User:      s.cfg.SMTPUser,
+		Password:  s.cfg.SMTPPassword,
+		FromEmail: s.cfg.SMTPFromEmail,
+		FromName:  s.cfg.SMTPFromName,
+		TLSMode:   s.cfg.SMTPTLSMode,
+	}
 }
 
 // New constructs an email Service from cfg. Returns an error if the embedded
@@ -49,14 +106,15 @@ func New(cfg *config.Config) (*Service, error) {
 
 	svc := &Service{cfg: cfg, registry: reg}
 
-	if cfg.SMTPHost != "" {
-		if cfg.PublicBaseURL == "" {
-			slog.Warn("SMTP_HOST is set but PUBLIC_BASE_URL is empty — email sending disabled until PUBLIC_BASE_URL is configured")
-		} else if u, err := url.Parse(cfg.PublicBaseURL); err != nil || u.Host == "" {
-			slog.Warn("SMTP_HOST is set but PUBLIC_BASE_URL is not a valid absolute URL — email sending disabled",
-				"public_base_url", cfg.PublicBaseURL)
-		} else {
+	// PUBLIC_BASE_URL gates sending (email links must be absolute). Parse it
+	// independent of SMTP config: SMTP may be configured later through the admin
+	// UI, while the base URL stays an env-level concern.
+	if cfg.PublicBaseURL != "" {
+		if u, err := url.Parse(cfg.PublicBaseURL); err == nil && u.Host != "" {
 			svc.baseURL = u
+		} else {
+			slog.Warn("PUBLIC_BASE_URL is not a valid absolute URL — email sending disabled until it is fixed",
+				"public_base_url", cfg.PublicBaseURL)
 		}
 	}
 
@@ -99,14 +157,16 @@ func (s *Service) SendTemplate(ctx context.Context, templateID, addr string, var
 		HTMLBody: htmlBody,
 	}
 
+	eff := s.effectiveSMTP(ctx)
+
 	// Only instrument when SMTP is actually configured; log-only sends are
 	// cheap no-ops that would skew duration histograms with near-zero values.
-	if s.cfg.SMTPHost == "" {
-		return s.Send(ctx, msg)
+	if eff.Host == "" {
+		return s.sendWith(ctx, eff, msg)
 	}
 
 	start := time.Now()
-	sendErr := s.Send(ctx, msg)
+	sendErr := s.sendWith(ctx, eff, msg)
 	metrics.RecordSMTPSend(templateID, sendErr, time.Since(start))
 	if sendErr != nil {
 		span.RecordError(sendErr)
@@ -115,10 +175,22 @@ func (s *Service) SendTemplate(ctx context.Context, templateID, addr string, var
 	return sendErr
 }
 
-// Send delivers msg via SMTP. If no SMTP host is configured, the rendered
-// message is written to slog at INFO level (dev/log-only fallback).
+// Send delivers msg using the effective SMTP config (DB settings over env). If
+// no SMTP host is configured, the rendered message is written to slog at INFO
+// level (dev/log-only fallback).
 func (s *Service) Send(ctx context.Context, msg Message) error {
-	if s.cfg.SMTPHost == "" {
+	return s.sendWith(ctx, s.effectiveSMTP(ctx), msg)
+}
+
+// SendWithConfig delivers msg using an explicit SMTP config, bypassing the
+// resolver. Used by the settings "send test" endpoint to exercise unsaved form
+// values.
+func (s *Service) SendWithConfig(ctx context.Context, cfg SMTPConfig, msg Message) error {
+	return s.sendWith(ctx, cfg, msg)
+}
+
+func (s *Service) sendWith(ctx context.Context, eff SMTPConfig, msg Message) error {
+	if eff.Host == "" {
 		slog.InfoContext(ctx, "email (log-only mode)",
 			"to", msg.To,
 			"subject", msg.Subject,
@@ -137,7 +209,7 @@ func (s *Service) Send(ctx context.Context, msg Message) error {
 	}
 
 	m := mail.NewMsg()
-	if err := m.FromFormat(s.cfg.SMTPFromName, s.cfg.SMTPFromEmail); err != nil {
+	if err := m.FromFormat(eff.FromName, eff.FromEmail); err != nil {
 		return fmt.Errorf("email: set from: %w", err)
 	}
 	if err := m.To(msg.To); err != nil {
@@ -154,7 +226,7 @@ func (s *Service) Send(ctx context.Context, msg Message) error {
 		m.SetGenHeader(mail.Header(k), v)
 	}
 
-	client, err := s.newClient()
+	client, err := s.newClient(eff)
 	if err != nil {
 		return fmt.Errorf("email: create client: %w", err)
 	}
@@ -182,20 +254,24 @@ func hashRecipient(addr string) string {
 	return hex.EncodeToString(sum[:8])
 }
 
-func (s *Service) newClient() (*mail.Client, error) {
+func (s *Service) newClient(eff SMTPConfig) (*mail.Client, error) {
+	port := eff.Port
+	if port == 0 {
+		port = 587
+	}
 	opts := []mail.Option{
-		mail.WithPort(s.cfg.SMTPPort),
+		mail.WithPort(port),
 		mail.WithTimeout(30 * time.Second),
 	}
 
-	if s.cfg.SMTPUser != "" {
-		opts = append(opts, mail.WithUsername(s.cfg.SMTPUser))
+	if eff.User != "" {
+		opts = append(opts, mail.WithUsername(eff.User))
 	}
-	if s.cfg.SMTPPassword != "" {
-		opts = append(opts, mail.WithPassword(s.cfg.SMTPPassword))
+	if eff.Password != "" {
+		opts = append(opts, mail.WithPassword(eff.Password))
 	}
 
-	switch s.cfg.SMTPTLSMode {
+	switch eff.TLSMode {
 	case "tls":
 		opts = append(opts, mail.WithSSL())
 	case "none":
@@ -204,5 +280,5 @@ func (s *Service) newClient() (*mail.Client, error) {
 		opts = append(opts, mail.WithTLSPolicy(mail.TLSMandatory))
 	}
 
-	return mail.NewClient(s.cfg.SMTPHost, opts...)
+	return mail.NewClient(eff.Host, opts...)
 }

@@ -28,7 +28,7 @@ RETURNING *;
 SELECT * FROM notification_channels WHERE id = $1;
 
 -- name: ListNotificationChannels :many
-SELECT id, name, type, events, enabled, last_sent_at, last_error, last_event_type, created_by, created_at, updated_at
+SELECT id, name, type, events, enabled, last_sent_at, last_error, last_event_type, config_encrypted, created_by, created_at, updated_at
 FROM notification_channels
 ORDER BY name;
 

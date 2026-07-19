@@ -184,6 +184,7 @@ export const queryKeys = {
   certificates: ["certificates"] as const,
   notificationChannels: ["notification-channels"] as const,
   notificationEvents: ["notification-events"] as const,
+  smtpSettings: ["smtp-settings"] as const,
   domainTLSStatus: ["domain-tls-status"] as const,
   gitProviders: ["git-providers"] as const,
   gitIntegrations: ["git-integrations"] as const,

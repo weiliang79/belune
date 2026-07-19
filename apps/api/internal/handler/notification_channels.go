@@ -30,8 +30,11 @@ type notificationChannelResponse struct {
 	// LastEvent is the human-readable label of the most recently delivered (or
 	// failed) event, or null if nothing has been delivered yet.
 	LastEvent *string `json:"last_event"`
-	CreatedAt string  `json:"created_at"`
-	UpdatedAt string  `json:"updated_at"`
+	// Config is the channel's connection config with secret fields stripped, for
+	// prefilling the edit form. Omitted on create/update responses.
+	Config    json.RawMessage `json:"config,omitempty"`
+	CreatedAt string          `json:"created_at"`
+	UpdatedAt string          `json:"updated_at"`
 }
 
 // lastEventLabel resolves a nullable stored event type to a display label.
@@ -124,7 +127,9 @@ func (h *Handler) ListNotificationChannels(w http.ResponseWriter, r *http.Reques
 	}
 	resp := make([]notificationChannelResponse, 0, len(rows))
 	for _, c := range rows {
-		resp = append(resp, toChannelListResponse(c))
+		item := toChannelListResponse(c)
+		item.Config = h.notifyChannelSvc.RedactedConfig(c.Type, c.ConfigEncrypted)
+		resp = append(resp, item)
 	}
 	writeJSON(w, http.StatusOK, resp)
 }

@@ -29,3 +29,26 @@ func (m emailMailer) Send(ctx context.Context, msg notify.MailMessage) error {
 		TextBody: msg.TextBody,
 	})
 }
+
+func (m emailMailer) SendWithConfig(ctx context.Context, smtp notify.MailSMTP, msg notify.MailMessage) error {
+	if m.svc == nil {
+		return errors.New("email: no mailer configured")
+	}
+	return m.svc.SendWithConfig(ctx, email.SMTPConfig{
+		Host:      smtp.Host,
+		Port:      smtp.Port,
+		User:      smtp.User,
+		Password:  smtp.Password,
+		FromEmail: smtp.FromEmail,
+		FromName:  smtp.FromName,
+		TLSMode:   smtp.TLSMode,
+	}, email.Message{
+		To:       msg.To,
+		Subject:  msg.Subject,
+		TextBody: msg.TextBody,
+	})
+}
+
+func (m emailMailer) Configured(ctx context.Context) bool {
+	return m.svc != nil && m.svc.Configured(ctx)
+}

@@ -143,10 +143,27 @@ const TYPE_FIELDS: Record<ChannelType, FieldDef[]> = {
       label: "Recipients",
       required: true,
       placeholder: "ops@example.com, oncall@example.com",
-      help: "Comma-separated addresses. Uses the same SMTP settings as the rest of the app.",
+      help: "Comma-separated addresses.",
     },
   ],
 };
+
+// Config keys for the optional per-channel SMTP override (email only).
+const SMTP_FIELDS = [
+  "smtp_host",
+  "smtp_port",
+  "smtp_user",
+  "smtp_password",
+  "smtp_from_email",
+  "smtp_from_name",
+  "smtp_tls_mode",
+] as const;
+
+const SMTP_TLS_MODES = [
+  { value: "starttls", label: "STARTTLS (port 587)" },
+  { value: "tls", label: "TLS / SSL (port 465)" },
+  { value: "none", label: "None (unencrypted)" },
+];
 
 export function ChannelFormDialog({ channel, open, onOpenChange }: Props) {
   return (
@@ -185,8 +202,15 @@ function ChannelForm({
   const [selectedEvents, setSelectedEvents] = useState<string[]>(
     channel?.events ?? [],
   );
-  // Config fields keyed by field key; cleared when the type changes.
-  const [config, setConfig] = useState<Record<string, string>>({});
+  // Config fields keyed by field key, prefilled from the channel's (secret-free)
+  // stored config on edit; cleared when the type changes.
+  const [config, setConfig] = useState<Record<string, string>>(() =>
+    initialConfig(channel),
+  );
+  // Email only: route this channel through its own SMTP server (Option B).
+  const [customSmtp, setCustomSmtp] = useState(
+    () => !!(channel?.type === "email" && channel.config?.smtp),
+  );
 
   const fields = TYPE_FIELDS[type];
 
@@ -197,10 +221,16 @@ function ChannelForm({
       prev.includes(t) ? prev.filter((e) => e !== t) : [...prev, t],
     );
 
+  const setKey = (k: string, v: string) =>
+    setConfig((prev) => ({ ...prev, [k]: v }));
+
   const handleTypeChange = (v: ChannelType) => {
     setType(v);
     setConfig({});
+    setCustomSmtp(false);
   };
+
+  const smtpActive = type === "email" && customSmtp;
 
   // buildConfig returns the provider config to send, or an error. On edit, an
   // all-blank config is omitted so the stored one is preserved.
@@ -209,7 +239,9 @@ function ChannelForm({
     error?: string;
     omit?: boolean;
   } => {
-    const anyProvided = fields.some((f) => (config[f.key] ?? "").trim() !== "");
+    const anyProvided =
+      fields.some((f) => (config[f.key] ?? "").trim() !== "") ||
+      (smtpActive && SMTP_FIELDS.some((k) => (config[k] ?? "").trim() !== ""));
     if (editing && !anyProvided) return { omit: true };
 
     const out: Record<string, unknown> = {};
@@ -225,8 +257,25 @@ function ChannelForm({
         out.recipients = list;
         continue;
       }
+      // A blank secret on edit means "keep the stored one" — the server merges
+      // it back in, so don't require it or send an empty value.
+      if (raw === "" && editing && f.secret) continue;
       if (f.required && raw === "") return { error: `${f.label} is required` };
       if (raw !== "") out[f.key] = raw;
+    }
+
+    if (smtpActive) {
+      const host = (config.smtp_host ?? "").trim();
+      if (!host) return { error: "A custom mail server needs a host" };
+      out.smtp = {
+        host,
+        port: Number(config.smtp_port) || 587,
+        user: (config.smtp_user ?? "").trim(),
+        password: config.smtp_password ?? "",
+        from_email: (config.smtp_from_email ?? "").trim(),
+        from_name: (config.smtp_from_name ?? "").trim(),
+        tls_mode: config.smtp_tls_mode || "starttls",
+      };
     }
     return { config: out };
   };
@@ -374,12 +423,144 @@ function ChannelForm({
                 )}
               </div>
             ))}
-            {editing && (
+            {editing && fields.some((f) => f.secret) && (
               <p className="text-muted-foreground text-xs">
-                Leave the fields above blank to keep the current configuration.
+                Secret fields are hidden — leave them blank to keep the stored
+                value.
               </p>
             )}
           </div>
+
+          {/* Email: optional per-channel mail server (Option B) */}
+          {type === "email" && (
+            <div className="space-y-3 rounded-md border p-3">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium">
+                    Use a custom mail server
+                  </p>
+                  <p className="text-muted-foreground text-xs">
+                    Off, this channel sends through the instance SMTP (Server →
+                    Email). On, it dials its own server instead.
+                  </p>
+                </div>
+                <Switch
+                  aria-label="Use a custom mail server"
+                  checked={customSmtp}
+                  onCheckedChange={(v: boolean) => setCustomSmtp(v)}
+                  className="mt-0.5 shrink-0"
+                />
+              </div>
+
+              {customSmtp && (
+                <div className="space-y-3 border-t pt-3">
+                  <div className="grid grid-cols-3 gap-2">
+                    <div className="col-span-2 space-y-1.5">
+                      <Label htmlFor="channel-smtp_host">Host</Label>
+                      <Input
+                        id="channel-smtp_host"
+                        value={config.smtp_host ?? ""}
+                        onChange={(e) => setKey("smtp_host", e.target.value)}
+                        placeholder="smtp.example.com"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="channel-smtp_port">Port</Label>
+                      <Input
+                        id="channel-smtp_port"
+                        inputMode="numeric"
+                        value={config.smtp_port ?? ""}
+                        onChange={(e) =>
+                          setKey(
+                            "smtp_port",
+                            e.target.value.replace(/[^0-9]/g, ""),
+                          )
+                        }
+                        placeholder="587"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="space-y-1.5">
+                      <Label htmlFor="channel-smtp_user">Username</Label>
+                      <Input
+                        id="channel-smtp_user"
+                        value={config.smtp_user ?? ""}
+                        onChange={(e) => setKey("smtp_user", e.target.value)}
+                        autoComplete="off"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="channel-smtp_password">Password</Label>
+                      <Input
+                        id="channel-smtp_password"
+                        type="password"
+                        value={config.smtp_password ?? ""}
+                        onChange={(e) =>
+                          setKey("smtp_password", e.target.value)
+                        }
+                        placeholder={
+                          editing && !!channel?.config?.smtp
+                            ? "•••• (leave blank to keep)"
+                            : ""
+                        }
+                        autoComplete="off"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="space-y-1.5">
+                      <Label htmlFor="channel-smtp_from_email">
+                        From address
+                      </Label>
+                      <Input
+                        id="channel-smtp_from_email"
+                        value={config.smtp_from_email ?? ""}
+                        onChange={(e) =>
+                          setKey("smtp_from_email", e.target.value)
+                        }
+                        placeholder="noreply@example.com"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="channel-smtp_from_name">From name</Label>
+                      <Input
+                        id="channel-smtp_from_name"
+                        value={config.smtp_from_name ?? ""}
+                        onChange={(e) =>
+                          setKey("smtp_from_name", e.target.value)
+                        }
+                        placeholder="Belune"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label>Encryption</Label>
+                    <Select
+                      value={config.smtp_tls_mode || "starttls"}
+                      onValueChange={(v) =>
+                        setKey("smtp_tls_mode", v ?? "starttls")
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select mode" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {SMTP_TLS_MODES.map((m) => (
+                          <SelectItem key={m.value} value={m.value}>
+                            {m.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Event subscriptions */}
           <div className="space-y-2">
@@ -442,6 +623,49 @@ function ChannelForm({
       </form>
     </>
   );
+}
+
+// initialConfig maps a channel's stored (secret-free) config into the flat
+// field state the form uses. Secret fields are absent from the config, so they
+// stay blank and show a "leave blank to keep" placeholder.
+function initialConfig(
+  channel?: NotificationChannel | null,
+): Record<string, string> {
+  const c = channel?.config;
+  if (!c) return {};
+  const out: Record<string, string> = {};
+  const asStr = (v: unknown): string | undefined => {
+    if (typeof v === "string") return v;
+    if (typeof v === "number") return String(v);
+    return undefined;
+  };
+
+  for (const f of TYPE_FIELDS[channel.type]) {
+    const v = c[f.key];
+    if (f.key === "recipients" && Array.isArray(v)) {
+      out.recipients = v.join(", ");
+    } else {
+      const s = asStr(v);
+      if (s !== undefined) out[f.key] = s;
+    }
+  }
+
+  if (channel.type === "email" && c.smtp && typeof c.smtp === "object") {
+    const s = c.smtp as Record<string, unknown>;
+    const pairs: [string, string][] = [
+      ["smtp_host", "host"],
+      ["smtp_port", "port"],
+      ["smtp_user", "user"],
+      ["smtp_from_email", "from_email"],
+      ["smtp_from_name", "from_name"],
+      ["smtp_tls_mode", "tls_mode"],
+    ];
+    for (const [k, key] of pairs) {
+      const val = asStr(s[key]);
+      if (val !== undefined) out[k] = val;
+    }
+  }
+  return out;
 }
 
 function groupEvents(events: NotificationEvent[]) {

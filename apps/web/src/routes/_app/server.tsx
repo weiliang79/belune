@@ -50,6 +50,7 @@ import { SystemBackupsPanel } from "@/components/backups/system-backups-panel";
 import { MaintenanceSection } from "@/components/server/maintenance-section";
 import { useServerIP } from "@/lib/hooks/use-maintenance";
 import { DashboardDomainSection } from "@/components/server/dashboard-domain-section";
+import { SmtpSection } from "@/components/server/smtp-section";
 import { cn } from "@/lib/utils";
 import { formatDateTimeShort } from "@/lib/utils/format";
 
@@ -402,6 +403,15 @@ function ServerSettingsPage() {
                 Host metrics are stored at 1-second granularity and pruned hourly
                 to the selected window. Logs are pruned daily.
               </p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Email (SMTP)</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <SmtpSection />
             </CardContent>
           </Card>
 

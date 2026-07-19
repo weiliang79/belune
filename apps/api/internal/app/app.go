@@ -136,6 +136,10 @@ func New(cfg *config.Config) (*App, error) {
 		db.Close()
 		return nil, fmt.Errorf("load email templates: %w", err)
 	}
+	// DB-backed SMTP settings override the env defaults and take effect without a
+	// restart: the resolver is read per-send by the shared email service.
+	emailSvc.SetResolver(service.NewSMTPSettingsService(queries, cfg.Keyring, cfg))
+
 	backupSvc := backup.New(cfg)
 	backupDestSvc := service.NewBackupDestinationService(queries, cfg.Keyring)
 	notifyRegistry := service.NewNotifyRegistry(emailSvc)

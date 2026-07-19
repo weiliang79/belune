@@ -13,6 +13,7 @@ import (
 
 	"github.com/weiliang79/belune/internal/config"
 	"github.com/weiliang79/belune/internal/proxy"
+	"github.com/weiliang79/belune/internal/service"
 	"github.com/weiliang79/belune/internal/store/generated"
 )
 
@@ -44,6 +45,11 @@ func (h *Handler) ListSettings(w http.ResponseWriter, r *http.Request) {
 
 	result := make([]settingResponse, 0, len(settings))
 	for _, s := range settings {
+		// The SMTP password is keyring-encrypted and managed via the dedicated
+		// /api/settings/smtp endpoints — never expose it in the generic listing.
+		if s.Key == service.SettingSMTPPassword {
+			continue
+		}
 		result = append(result, settingResponse{
 			Key:   s.Key,
 			Value: s.Value,

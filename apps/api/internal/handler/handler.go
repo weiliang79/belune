@@ -83,6 +83,9 @@ type Handler struct {
 	// notifyChannelSvc is built here (like certSvc) from queries, keyring and the
 	// email service. The worker holds its own equivalent instance for delivery.
 	notifyChannelSvc *service.NotificationChannelService
+	// smtpSettingsSvc reads/writes DB-backed SMTP config; the same logic is wired
+	// as the email service's resolver in app.go.
+	smtpSettingsSvc *service.SMTPSettingsService
 }
 
 func New(
@@ -134,6 +137,7 @@ func New(
 		emailSvc:          emailSvc,
 		certSvc:           service.NewCertificateService(queries, cfg.Keyring),
 		notifyChannelSvc:  service.NewNotificationChannelService(queries, cfg.Keyring, service.NewNotifyRegistry(emailSvc), cfg.PublicBaseURL),
+		smtpSettingsSvc:   service.NewSMTPSettingsService(queries, cfg.Keyring, cfg),
 	}
 }
 

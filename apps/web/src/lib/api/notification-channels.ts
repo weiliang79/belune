@@ -31,6 +31,8 @@ export interface NotificationChannel {
   last_error: string | null;
   /** Label of the most recently delivered/failed event, or null if none yet. */
   last_event: string | null;
+  /** Connection config with secrets stripped, for prefilling the edit form. */
+  config?: Record<string, unknown>;
   created_at: string;
   updated_at: string;
 }

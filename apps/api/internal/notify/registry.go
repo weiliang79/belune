@@ -17,7 +17,14 @@ const httpTimeout = 15 * time.Second
 // it here keeps notify decoupled from the concrete service and trivially fakeable
 // in tests.
 type Mailer interface {
+	// Send delivers via the instance-default SMTP transport.
 	Send(ctx context.Context, msg MailMessage) error
+	// SendWithConfig delivers via a channel's own SMTP server (Option B override).
+	SendWithConfig(ctx context.Context, smtp MailSMTP, msg MailMessage) error
+	// Configured reports whether the instance-default SMTP has a host set, so the
+	// email provider can fail loudly instead of silently dropping into log-only
+	// mode when a channel relies on the default but none is configured.
+	Configured(ctx context.Context) bool
 }
 
 // MailMessage is the provider-level view of an outbound email, mapped onto the
@@ -26,6 +33,18 @@ type MailMessage struct {
 	To       string
 	Subject  string
 	TextBody string
+}
+
+// MailSMTP is a channel-specific mail-server override, mapped onto the email
+// service's SMTPConfig by the wiring layer.
+type MailSMTP struct {
+	Host      string
+	Port      int
+	User      string
+	Password  string
+	FromEmail string
+	FromName  string
+	TLSMode   string
 }
 
 // Registry resolves a channel type to its Provider. Construct it once at startup
