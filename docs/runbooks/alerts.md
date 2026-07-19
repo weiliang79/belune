@@ -5,6 +5,11 @@ failures, and resource quota threshold crossings. Alerts are delivered per-user
 — each team member controls their own preferences from the **Account → Alert
 Preferences** page.
 
+> **Related:** for instance-wide delivery to Discord, Telegram, Slack, a
+> webhook, ntfy, Gotify, or a fixed email list, see
+> [Notification Channels](./notifications.md). These per-user alert emails and
+> the admin-managed channels are separate paths — the same event can reach both.
+
 ---
 
 ## 1. Prerequisite: SMTP

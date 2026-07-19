@@ -21,6 +21,7 @@ import (
 	"github.com/weiliang79/belune/internal/build"
 	"github.com/weiliang79/belune/internal/git"
 	"github.com/weiliang79/belune/internal/naming"
+	"github.com/weiliang79/belune/internal/notify"
 	"github.com/weiliang79/belune/internal/pkg/buildlog"
 	"github.com/weiliang79/belune/internal/pkg/metrics"
 	"github.com/weiliang79/belune/internal/pkg/redact"
@@ -920,13 +921,37 @@ func (h *TaskHandler) failDeployment(ctx context.Context, deploymentID pgtype.UU
 // deploy_success, deploy failure honours deploy_failures, and build failure
 // honours build_failures. Defaults to enabled when no preferences row exists.
 func (h *TaskHandler) notifyDeployment(ctx context.Context, deploymentID pgtype.UUID, outcome, kind, errMsg string) {
-	if h.Notifier == nil {
+	if h.Notifier == nil && h.NotifyChannels == nil {
 		return
 	}
 
 	info, err := h.Queries.GetDeploymentNotifyInfo(ctx, deploymentID)
 	if err != nil {
 		slog.Warn("notify: failed to fetch deployment info", "deployment_id", fmt.Sprintf("%v", deploymentID), "error", err)
+		return
+	}
+
+	var notifType, title, body string
+	if outcome == status.DeploymentFailed {
+		notifType = "deployment.failed"
+		title = fmt.Sprintf("Deployment failed — %s", info.AppName)
+		body = errMsg
+	} else {
+		notifType = "deployment.succeeded"
+		title = fmt.Sprintf("Deployment succeeded — %s", info.AppName)
+		body = fmt.Sprintf("%s is now running.", info.AppName)
+	}
+
+	link := fmt.Sprintf("/projects/%s/applications/%s/deployments",
+		formatUUID(info.ProjectID), formatUUID(info.ApplicationID))
+
+	// Provider channels are global admin subscriptions: fire once per event,
+	// independent of the owner's personal in-app alert preferences.
+	h.dispatchToChannels(ctx, notify.Event{
+		Type: notifType, Title: title, Body: body, Link: link, OccurredAt: time.Now(),
+	})
+
+	if h.Notifier == nil {
 		return
 	}
 
@@ -949,20 +974,6 @@ func (h *TaskHandler) notifyDeployment(ctx context.Context, deploymentID pgtype.
 			return
 		}
 	}
-
-	var notifType, title, body string
-	if outcome == status.DeploymentFailed {
-		notifType = "deployment.failed"
-		title = fmt.Sprintf("Deployment failed — %s", info.AppName)
-		body = errMsg
-	} else {
-		notifType = "deployment.succeeded"
-		title = fmt.Sprintf("Deployment succeeded — %s", info.AppName)
-		body = fmt.Sprintf("%s is now running.", info.AppName)
-	}
-
-	link := fmt.Sprintf("/projects/%s/applications/%s/deployments",
-		formatUUID(info.ProjectID), formatUUID(info.ApplicationID))
 
 	h.Notifier.Notify(formatUUID(info.UserID), notifType, title, body, link)
 }

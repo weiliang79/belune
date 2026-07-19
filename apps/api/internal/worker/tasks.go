@@ -22,4 +22,5 @@ const (
 	TypeTLSStatusSweep      = "tls:status_sweep"
 	TypeTLSProbe            = "tls:probe"
 	TypeTemplateFinalize    = "template:finalize"
+	TypeNotifyDeliver       = "notify:deliver"
 )

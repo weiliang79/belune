@@ -16,6 +16,7 @@ import (
 	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/weiliang79/belune/internal/notify"
 	"github.com/weiliang79/belune/internal/pkg/joblog"
 	"github.com/weiliang79/belune/internal/pkg/loglevel"
 	"github.com/weiliang79/belune/internal/runtime"
@@ -778,6 +779,16 @@ func (h *TaskHandler) finaliseDatabaseRestore(ctx context.Context, id pgtype.UUI
 // notifyDatabaseOwner sends the database's owner a notification (bell +
 // deep-link). No-op when no notifier is wired (e.g. tests).
 func (h *TaskHandler) notifyDatabaseOwner(ctx context.Context, db generated.Database, notifType, title, body string) {
+	if h.Notifier == nil && h.NotifyChannels == nil {
+		return
+	}
+	link := fmt.Sprintf("/projects/%s/databases/%s", formatUUID(db.ProjectID), formatUUID(db.ID))
+
+	// Fire provider channels once per event, before resolving the in-app recipient.
+	h.dispatchToChannels(ctx, notify.Event{
+		Type: notifType, Title: title, Body: body, Link: link, OccurredAt: time.Now(),
+	})
+
 	if h.Notifier == nil {
 		return
 	}
@@ -786,7 +797,6 @@ func (h *TaskHandler) notifyDatabaseOwner(ctx context.Context, db generated.Data
 		slog.Warn("notify: could not resolve database owner", "database_id", formatUUID(db.ID), "error", err)
 		return
 	}
-	link := fmt.Sprintf("/projects/%s/databases/%s", formatUUID(db.ProjectID), formatUUID(db.ID))
 	h.Notifier.Notify(formatUUID(owner), notifType, title, body, link)
 }
 

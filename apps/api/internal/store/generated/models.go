@@ -373,6 +373,21 @@ type Notification struct {
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
 }
 
+type NotificationChannel struct {
+	ID              pgtype.UUID        `json:"id"`
+	Name            string             `json:"name"`
+	Type            string             `json:"type"`
+	ConfigEncrypted []byte             `json:"config_encrypted"`
+	Events          []string           `json:"events"`
+	Enabled         bool               `json:"enabled"`
+	LastSentAt      pgtype.Timestamptz `json:"last_sent_at"`
+	LastError       pgtype.Text        `json:"last_error"`
+	CreatedBy       pgtype.UUID        `json:"created_by"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+	LastEventType   pgtype.Text        `json:"last_event_type"`
+}
+
 type PasswordResetToken struct {
 	ID        pgtype.UUID        `json:"id"`
 	UserID    pgtype.UUID        `json:"user_id"`

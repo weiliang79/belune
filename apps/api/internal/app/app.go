@@ -138,6 +138,8 @@ func New(cfg *config.Config) (*App, error) {
 	}
 	backupSvc := backup.New(cfg)
 	backupDestSvc := service.NewBackupDestinationService(queries, cfg.Keyring)
+	notifyRegistry := service.NewNotifyRegistry(emailSvc)
+	notifyChannelSvc := service.NewNotificationChannelService(queries, cfg.Keyring, notifyRegistry, cfg.PublicBaseURL)
 	taskHandler := &worker.TaskHandler{
 		Runtime:               dockerClient,
 		Proxy:                 caddyClient,
@@ -154,6 +156,7 @@ func New(cfg *config.Config) (*App, error) {
 		EmailService:          emailSvc,
 		BackupService:         backupSvc,
 		BackupDestinations:    backupDestSvc,
+		NotifyChannels:        notifyChannelSvc,
 		AuditLog:              auditSvc,
 		Notifier:              notifySvc,
 		Enqueuer:              asynqClient,

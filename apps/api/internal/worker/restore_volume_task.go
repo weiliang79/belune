@@ -16,6 +16,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/weiliang79/belune/internal/naming"
+	"github.com/weiliang79/belune/internal/notify"
 	"github.com/weiliang79/belune/internal/runtime"
 	"github.com/weiliang79/belune/internal/store/generated"
 )
@@ -85,6 +86,9 @@ func (h *TaskHandler) HandleRestoreVolumeTask(ctx context.Context, t *asynq.Task
 	archivePath, cleanup, err := h.resolveVolumeBackupFile(ctx, bk)
 	if err != nil {
 		h.failVolumeRestoreLog(ctx, run.ID, fmt.Sprintf("resolve backup file: %v", err), lg)
+		h.notifyApplicationOwner(ctx, vol.ApplicationID, appRow.ProjectID, notify.EventVolumeRestoreFailed,
+			"Volume restore failed",
+			fmt.Sprintf("Restoring volume %s of %s failed: %v", vol.Name, appRow.Name, err))
 		return fmt.Errorf("resolve backup file: %w", err)
 	}
 	defer cleanup()
@@ -92,6 +96,9 @@ func (h *TaskHandler) HandleRestoreVolumeTask(ctx context.Context, t *asynq.Task
 
 	if err := h.restoreAppVolume(ctx, volumeName, vol.MountPath, containerName, appRow.Status == "running", archivePath, lg); err != nil {
 		h.failVolumeRestoreLog(ctx, run.ID, err.Error(), lg)
+		h.notifyApplicationOwner(ctx, vol.ApplicationID, appRow.ProjectID, notify.EventVolumeRestoreFailed,
+			"Volume restore failed",
+			fmt.Sprintf("Restoring volume %s of %s failed: %s", vol.Name, appRow.Name, err.Error()))
 		return err
 	}
 
@@ -102,6 +109,9 @@ func (h *TaskHandler) HandleRestoreVolumeTask(ctx context.Context, t *asynq.Task
 		Status:     "succeeded",
 		Log:        pgtype.Text{String: lg.String(), Valid: true},
 	})
+	h.notifyApplicationOwner(ctx, vol.ApplicationID, appRow.ProjectID, notify.EventVolumeRestored,
+		"Volume restored",
+		fmt.Sprintf("Volume %s of %s was restored from a backup.", vol.Name, appRow.Name))
 
 	slog.Info("volume restored", "volume_id", payload.ApplicationVolumeID, "backup_id", payload.BackupID)
 	return nil

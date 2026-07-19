@@ -80,6 +80,9 @@ type Handler struct {
 	// certSvc is built here rather than injected: it needs only queries and the
 	// keyring, both already held above, and nothing outside the handler uses it.
 	certSvc *service.CertificateService
+	// notifyChannelSvc is built here (like certSvc) from queries, keyring and the
+	// email service. The worker holds its own equivalent instance for delivery.
+	notifyChannelSvc *service.NotificationChannelService
 }
 
 func New(
@@ -130,6 +133,7 @@ func New(
 		quotaSvc:          quotaSvc,
 		emailSvc:          emailSvc,
 		certSvc:           service.NewCertificateService(queries, cfg.Keyring),
+		notifyChannelSvc:  service.NewNotificationChannelService(queries, cfg.Keyring, service.NewNotifyRegistry(emailSvc), cfg.PublicBaseURL),
 	}
 }
 

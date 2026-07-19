@@ -16,6 +16,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/weiliang79/belune/internal/naming"
+	"github.com/weiliang79/belune/internal/notify"
 	"github.com/weiliang79/belune/internal/runtime"
 	"github.com/weiliang79/belune/internal/service/backup"
 	"github.com/weiliang79/belune/internal/store/generated"
@@ -117,6 +118,9 @@ func (h *TaskHandler) HandleBackupVolumeTask(ctx context.Context, t *asynq.Task)
 	if snapErr != nil {
 		_ = os.Remove(localPath)
 		h.failVolumeBackupLog(ctx, run.ID, snapErr.Error(), lg)
+		h.notifyApplicationOwner(ctx, vol.ApplicationID, appRow.ProjectID, notify.EventVolumeBackupFailed,
+			"Volume backup failed",
+			fmt.Sprintf("Backing up volume %s of %s failed: %s", vol.Name, appRow.Name, snapErr.Error()))
 		return snapErr
 	}
 	if closeErr != nil {
@@ -137,6 +141,9 @@ func (h *TaskHandler) HandleBackupVolumeTask(ctx context.Context, t *asynq.Task)
 	if _, upErr := destClient.UploadTo(ctx, localPath, key); upErr != nil {
 		_ = os.Remove(localPath)
 		h.failVolumeBackupLog(ctx, run.ID, fmt.Sprintf("upload to destination: %v", upErr), lg)
+		h.notifyApplicationOwner(ctx, vol.ApplicationID, appRow.ProjectID, notify.EventVolumeBackupFailed,
+			"Volume backup failed",
+			fmt.Sprintf("Backing up volume %s of %s failed: %v", vol.Name, appRow.Name, upErr))
 		return fmt.Errorf("upload to destination: %w", upErr)
 	}
 	// Remote is authoritative; drop the local copy so the server disk doesn't
@@ -221,6 +228,32 @@ func (h *TaskHandler) failVolumeBackupLog(ctx context.Context, id pgtype.UUID, e
 		Error:      pgtype.Text{String: errMsg, Valid: true},
 		Log:        pgtype.Text{String: logText, Valid: true},
 	})
+}
+
+// notifyApplicationOwner sends the application's owner a notification (bell +
+// deep-link) and fans the event out to notification channels once. It is the
+// application-scoped sibling of notifyDatabaseOwner. No-op when nothing is wired
+// (e.g. tests). Channel dispatch fires independently of the owner's in-app
+// alert preferences, matching the deploy/backup/TLS notification paths.
+func (h *TaskHandler) notifyApplicationOwner(ctx context.Context, appID, projectID pgtype.UUID, notifType, title, body string) {
+	if h.Notifier == nil && h.NotifyChannels == nil {
+		return
+	}
+	link := fmt.Sprintf("/projects/%s/applications/%s", formatUUID(projectID), formatUUID(appID))
+
+	h.dispatchToChannels(ctx, notify.Event{
+		Type: notifType, Title: title, Body: body, Link: link, OccurredAt: time.Now(),
+	})
+
+	if h.Notifier == nil {
+		return
+	}
+	owner, err := h.Queries.GetApplicationOwnerUserID(ctx, appID)
+	if err != nil {
+		slog.Warn("notify: could not resolve application owner", "application_id", formatUUID(appID), "error", err)
+		return
+	}
+	h.Notifier.Notify(formatUUID(owner), notifType, title, body, link)
 }
 
 func (h *TaskHandler) finaliseVolumeBackup(ctx context.Context, id pgtype.UUID, params generated.UpdateApplicationVolumeBackupParams) {

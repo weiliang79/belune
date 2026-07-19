@@ -182,6 +182,8 @@ export const queryKeys = {
   auditLogs: (params?: object) => ["audit-logs", params] as const,
   auditActions: ["audit-actions"] as const,
   certificates: ["certificates"] as const,
+  notificationChannels: ["notification-channels"] as const,
+  notificationEvents: ["notification-events"] as const,
   domainTLSStatus: ["domain-tls-status"] as const,
   gitProviders: ["git-providers"] as const,
   gitIntegrations: ["git-integrations"] as const,

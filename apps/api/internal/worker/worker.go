@@ -56,6 +56,7 @@ type TaskHandler struct {
 	EmailService          *email.Service
 	BackupService         *backup.Service
 	BackupDestinations    *service.BackupDestinationService
+	NotifyChannels        *service.NotificationChannelService
 	AuditLog              auditLogger
 	Notifier              notifier
 	Enqueuer              TaskEnqueuer
@@ -131,6 +132,7 @@ func (w *Worker) Start() error {
 		return nil
 	})
 	mux.HandleFunc(TypeTemplateFinalize, w.handler.HandleTemplateFinalizeTask)
+	mux.HandleFunc(TypeNotifyDeliver, w.handler.HandleNotifyDeliverTask)
 	mux.HandleFunc(TypeTLSProbe, func(ctx context.Context, t *asynq.Task) error {
 		return w.handler.HandleTLSProbeTask(ctx, t.Payload())
 	})

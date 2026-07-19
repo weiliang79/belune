@@ -9,6 +9,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/weiliang79/belune/internal/notify"
 	"github.com/weiliang79/belune/internal/proxy"
 	"github.com/weiliang79/belune/internal/store/generated"
 	"github.com/weiliang79/belune/internal/tlsstatus"
@@ -118,7 +119,7 @@ func (h *TaskHandler) probeDomain(ctx context.Context, d generated.ListDomainsFo
 // human action. Only transitions notify, so a domain that stays broken does not
 // re-notify every minute.
 func (h *TaskHandler) notifyTLSTransition(ctx context.Context, hostname string, res tlsstatus.ProbeResult) {
-	if h.Notifier == nil {
+	if h.Notifier == nil && h.NotifyChannels == nil {
 		return
 	}
 	var title, body string
@@ -136,13 +137,23 @@ func (h *TaskHandler) notifyTLSTransition(ctx context.Context, hostname string, 
 		return
 	}
 
+	notifType := "tls." + res.Status
+
+	// Provider channels fire once per transition, not once per admin.
+	h.dispatchToChannels(ctx, notify.Event{
+		Type: notifType, Title: title, Body: body, Link: "/certificates", OccurredAt: time.Now(),
+	})
+
+	if h.Notifier == nil {
+		return
+	}
 	admins, err := h.Queries.ListAdminUserIDs(ctx)
 	if err != nil {
 		slog.Warn("tls probe: failed to list admins for notification", "error", err)
 		return
 	}
 	for _, id := range admins {
-		h.Notifier.Notify(formatUUID(id), "tls."+res.Status, title, body, "/certificates")
+		h.Notifier.Notify(formatUUID(id), notifType, title, body, "/certificates")
 	}
 }
 
