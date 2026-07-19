@@ -3,6 +3,7 @@ package worker
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -58,16 +59,23 @@ func (h *TaskHandler) HandleNotifyDeliverTask(ctx context.Context, t *asynq.Task
 
 	delivered, err := h.NotifyChannels.Deliver(ctx, channelID, p.Event)
 	if err != nil {
-		// Stamp the error only once retries are exhausted, so a transient failure
-		// that later succeeds doesn't leave a stale error on the row.
+		// A permanent failure (misconfigured/corrupt channel) can't recover on
+		// retry — stamp it now and skip the backoff schedule. A transient failure
+		// is stamped only once retries are exhausted, so a later success doesn't
+		// leave a stale error on the row.
+		permanent := errors.Is(err, notify.ErrPermanent)
 		retried, _ := asynq.GetRetryCount(ctx)
 		maxRetry, _ := asynq.GetMaxRetry(ctx)
-		if retried >= maxRetry {
+		if permanent || retried >= maxRetry {
 			if mErr := h.NotifyChannels.MarkError(ctx, channelID, err.Error(), p.Event.Type); mErr != nil {
 				slog.Warn("notify: failed to record channel error", "channel_id", p.ChannelID, "error", mErr)
 			}
 		}
-		return fmt.Errorf("deliver to channel %s: %w", p.ChannelID, err)
+		wrapped := fmt.Errorf("deliver to channel %s: %w", p.ChannelID, err)
+		if permanent {
+			return errors.Join(wrapped, asynq.SkipRetry)
+		}
+		return wrapped
 	}
 	if delivered {
 		if err := h.NotifyChannels.MarkSent(ctx, channelID, p.Event.Type); err != nil {

@@ -211,6 +211,19 @@ function ChannelForm({
   const [customSmtp, setCustomSmtp] = useState(
     () => !!(channel?.type === "email" && channel.config?.smtp),
   );
+  // Optional secrets the operator explicitly cleared on edit (sent as empty so
+  // the server drops the stored value rather than preserving it).
+  const [clearedSecrets, setClearedSecrets] = useState<Set<string>>(
+    () => new Set(),
+  );
+
+  const toggleCleared = (key: string) =>
+    setClearedSecrets((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
 
   const fields = TYPE_FIELDS[type];
 
@@ -228,6 +241,7 @@ function ChannelForm({
     setType(v);
     setConfig({});
     setCustomSmtp(false);
+    setClearedSecrets(new Set());
   };
 
   const smtpActive = type === "email" && customSmtp;
@@ -241,6 +255,7 @@ function ChannelForm({
   } => {
     const anyProvided =
       fields.some((f) => (config[f.key] ?? "").trim() !== "") ||
+      clearedSecrets.size > 0 ||
       (smtpActive && SMTP_FIELDS.some((k) => (config[k] ?? "").trim() !== ""));
     if (editing && !anyProvided) return { omit: true };
 
@@ -257,9 +272,15 @@ function ChannelForm({
         out.recipients = list;
         continue;
       }
-      // A blank secret on edit means "keep the stored one" — the server merges
-      // it back in, so don't require it or send an empty value.
-      if (raw === "" && editing && f.secret) continue;
+      if (f.secret && editing) {
+        // Explicitly cleared → send empty so the server drops the stored value.
+        // Otherwise a blank secret is omitted so the stored one is preserved.
+        if (clearedSecrets.has(f.key)) {
+          out[f.key] = "";
+          continue;
+        }
+        if (raw === "") continue;
+      }
       if (f.required && raw === "") return { error: `${f.label} is required` };
       if (raw !== "") out[f.key] = raw;
     }
@@ -267,15 +288,19 @@ function ChannelForm({
     if (smtpActive) {
       const host = (config.smtp_host ?? "").trim();
       if (!host) return { error: "A custom mail server needs a host" };
-      out.smtp = {
+      const smtp: Record<string, unknown> = {
         host,
         port: Number(config.smtp_port) || 587,
         user: (config.smtp_user ?? "").trim(),
-        password: config.smtp_password ?? "",
         from_email: (config.smtp_from_email ?? "").trim(),
         from_name: (config.smtp_from_name ?? "").trim(),
         tls_mode: config.smtp_tls_mode || "starttls",
       };
+      // Include the password only when entered; blank omits it so the server
+      // preserves the stored one (or stays passwordless on create).
+      if ((config.smtp_password ?? "") !== "")
+        smtp.password = config.smtp_password;
+      out.smtp = smtp;
     }
     return { config: out };
   };
@@ -407,7 +432,8 @@ function ChannelForm({
                 <Input
                   id={`channel-${f.key}`}
                   type={f.secret ? "password" : "text"}
-                  value={config[f.key] ?? ""}
+                  value={clearedSecrets.has(f.key) ? "" : (config[f.key] ?? "")}
+                  disabled={clearedSecrets.has(f.key)}
                   onChange={(e) =>
                     setConfig((prev) => ({ ...prev, [f.key]: e.target.value }))
                   }
@@ -418,6 +444,19 @@ function ChannelForm({
                   }
                   autoComplete="off"
                 />
+                {/* Optional secrets can be removed on edit — a blank field alone
+                    can't distinguish "keep" from "clear". */}
+                {editing && f.secret && !f.required && (
+                  <label className="text-muted-foreground flex items-center gap-2 text-xs">
+                    <input
+                      type="checkbox"
+                      className="size-3.5"
+                      checked={clearedSecrets.has(f.key)}
+                      onChange={() => toggleCleared(f.key)}
+                    />
+                    Remove the stored {f.label.toLowerCase()}
+                  </label>
+                )}
                 {f.help && (
                   <p className="text-muted-foreground text-xs">{f.help}</p>
                 )}

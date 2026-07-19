@@ -199,13 +199,12 @@ func (s *Service) sendWith(ctx context.Context, eff SMTPConfig, msg Message) err
 		return nil
 	}
 
-	// Refuse to send if PUBLIC_BASE_URL was missing/invalid at startup.
+	// SMTP is configured but PUBLIC_BASE_URL is not — links would be broken, so we
+	// can't send. Return an error rather than a silent no-op: otherwise a "send
+	// test" would report success and a channel would be marked delivered while
+	// nothing was ever dialed.
 	if s.baseURL == nil {
-		slog.WarnContext(ctx, "email send skipped: PUBLIC_BASE_URL not configured",
-			"to", msg.To,
-			"subject", msg.Subject,
-		)
-		return nil
+		return fmt.Errorf("email: PUBLIC_BASE_URL is not configured — set it so links resolve")
 	}
 
 	m := mail.NewMsg()

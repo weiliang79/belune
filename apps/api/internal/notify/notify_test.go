@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -271,6 +272,9 @@ func TestEmailSendLoudWhenUnconfigured(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected an error when SMTP is not configured")
 	}
+	if !errors.Is(err, ErrPermanent) {
+		t.Errorf("expected ErrPermanent, got %v", err)
+	}
 	if len(m.sent) != 0 {
 		t.Errorf("expected no send attempt, got %d", len(m.sent))
 	}
@@ -345,37 +349,45 @@ func TestRedactConfig(t *testing.T) {
 
 func TestMergeSecrets(t *testing.T) {
 	stored := json.RawMessage(`{"webhook_url":"https://stored"}`)
-	// Blank secret in submission → preserved from stored.
-	got := MergeSecrets("discord", stored, json.RawMessage(`{"webhook_url":""}`))
-	m := map[string]any{}
-	_ = json.Unmarshal(got, &m)
+	decode := func(raw json.RawMessage) map[string]any {
+		m := map[string]any{}
+		_ = json.Unmarshal(raw, &m)
+		return m
+	}
+
+	// Secret ABSENT from submission → preserved from stored.
+	m := decode(MergeSecrets("discord", stored, json.RawMessage(`{}`)))
 	if m["webhook_url"] != "https://stored" {
-		t.Errorf("blank secret not preserved: %v", m)
+		t.Errorf("absent secret not preserved: %v", m)
+	}
+	// Secret PRESENT but empty → cleared.
+	m = decode(MergeSecrets("discord", stored, json.RawMessage(`{"webhook_url":""}`)))
+	if m["webhook_url"] != "" {
+		t.Errorf("present-empty secret not cleared: %v", m)
 	}
 	// Re-entered secret → taken from submission.
-	got = MergeSecrets("discord", stored, json.RawMessage(`{"webhook_url":"https://new"}`))
-	_ = json.Unmarshal(got, &m)
+	m = decode(MergeSecrets("discord", stored, json.RawMessage(`{"webhook_url":"https://new"}`)))
 	if m["webhook_url"] != "https://new" {
 		t.Errorf("re-entered secret not used: %v", m)
 	}
-	// Email nested smtp.password preserved when blank.
-	got = MergeSecrets("email",
+
+	// Email nested smtp.password: absent → preserved; non-secret change applied.
+	m = decode(MergeSecrets("email",
 		json.RawMessage(`{"recipients":["a@x.io"],"smtp":{"host":"h","password":"stored"}}`),
-		json.RawMessage(`{"recipients":["b@x.io"],"smtp":{"host":"h","password":""}}`))
-	_ = json.Unmarshal(got, &m)
+		json.RawMessage(`{"recipients":["b@x.io"],"smtp":{"host":"h"}}`)))
 	smtp := m["smtp"].(map[string]any)
 	if smtp["password"] != "stored" {
-		t.Errorf("smtp password not preserved: %v", smtp)
+		t.Errorf("absent smtp password not preserved: %v", smtp)
 	}
 	if r := m["recipients"].([]any); r[0] != "b@x.io" {
 		t.Errorf("non-secret change not applied: %v", r)
 	}
-}
-
-func TestMaskConfig(t *testing.T) {
-	raw := json.RawMessage(`{"webhook_url":"https://x","secret":"","recipients":["a@x.io"]}`)
-	m := MaskConfig(raw)
-	if !m["webhook_url"] || m["secret"] || !m["recipients"] {
-		t.Errorf("mask = %v", m)
+	// Email smtp.password PRESENT but empty → cleared.
+	m = decode(MergeSecrets("email",
+		json.RawMessage(`{"recipients":["a@x.io"],"smtp":{"host":"h","password":"stored"}}`),
+		json.RawMessage(`{"recipients":["a@x.io"],"smtp":{"host":"h","password":""}}`)))
+	smtp = m["smtp"].(map[string]any)
+	if smtp["password"] != "" {
+		t.Errorf("present-empty smtp password not cleared: %v", smtp)
 	}
 }

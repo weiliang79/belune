@@ -41,10 +41,14 @@ func RedactConfig(channelType string, raw json.RawMessage) json.RawMessage {
 	return out
 }
 
-// MergeSecrets fills blank/absent secret fields in submitted with the stored
-// values, so an edit that leaves a masked secret untouched preserves it. Any
-// non-secret field, and any secret the operator actually re-entered, is taken
-// from submitted verbatim.
+// MergeSecrets reconciles the secret fields of submitted against stored, keyed
+// on presence so the operator keeps control:
+//
+//   - secret ABSENT from submitted   → keep the stored value (unchanged edit)
+//   - secret PRESENT but empty ("")  → clear it (explicit removal)
+//   - secret PRESENT with a value    → use the re-entered value
+//
+// Non-secret fields are always taken from submitted verbatim.
 func MergeSecrets(channelType string, stored, submitted json.RawMessage) json.RawMessage {
 	sub := decodeObject(submitted)
 	if sub == nil {
@@ -53,14 +57,14 @@ func MergeSecrets(channelType string, stored, submitted json.RawMessage) json.Ra
 	st := decodeObject(stored)
 
 	for _, k := range secretConfigFields[channelType] {
-		if isBlankVal(sub[k]) && st != nil && !isBlankVal(st[k]) {
+		if _, present := sub[k]; !present && st != nil && !isBlankVal(st[k]) {
 			sub[k] = st[k]
 		}
 	}
 	if channelType == "email" {
 		if subSMTP, ok := sub["smtp"].(map[string]any); ok && st != nil {
 			if stSMTP, ok := st["smtp"].(map[string]any); ok {
-				if isBlankVal(subSMTP["password"]) && !isBlankVal(stSMTP["password"]) {
+				if _, present := subSMTP["password"]; !present && !isBlankVal(stSMTP["password"]) {
 					subSMTP["password"] = stSMTP["password"]
 				}
 			}

@@ -161,6 +161,18 @@ func (s *SMTPSettingsService) Save(ctx context.Context, p SMTPSaveParams) error 
 			}
 			writes[SettingSMTPPassword] = enc
 		}
+	} else if _, ok := s.read(ctx, SettingSMTPPassword); !ok {
+		// Blank password with none stored yet: adopt the effective (env) password
+		// into the DB so the config is self-contained. Otherwise a saved host
+		// override would keep pairing with the leftover env password per-field,
+		// and the form's "leave blank to keep" would quietly drop it.
+		if eff, err := s.ResolveSMTP(ctx); err == nil && eff.Password != "" {
+			enc, err := s.encryptPassword(eff.Password)
+			if err != nil {
+				return err
+			}
+			writes[SettingSMTPPassword] = enc
+		}
 	}
 
 	for k, v := range writes {

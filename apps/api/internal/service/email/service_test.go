@@ -197,12 +197,14 @@ func TestNew_WarnOnMissingPublicBaseURL(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, svc)
 
-	// Send must be a no-op (warn + return nil) not a crash.
+	// SMTP configured but PUBLIC_BASE_URL missing: sending fails loudly (no
+	// crash, but a real error) so the misconfiguration surfaces.
 	err = svc.Send(context.Background(), email.Message{
 		To:      "user@example.com",
 		Subject: "Test",
 	})
-	require.NoError(t, err)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "PUBLIC_BASE_URL")
 }
 
 func TestNew_WarnOnInvalidPublicBaseURL(t *testing.T) {
@@ -218,9 +220,12 @@ func TestNew_WarnOnInvalidPublicBaseURL(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, svc)
 
+	// SMTP is configured but PUBLIC_BASE_URL is invalid: sending must fail loudly
+	// rather than silently no-op, so a "send test" can't report a false success.
 	err = svc.Send(context.Background(), email.Message{
 		To:      "user@example.com",
 		Subject: "Test",
 	})
-	require.NoError(t, err)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "PUBLIC_BASE_URL")
 }

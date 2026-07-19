@@ -12,9 +12,17 @@ package notify
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 	"time"
 )
+
+// ErrPermanent marks a delivery failure that cannot succeed on retry — a
+// misconfigured or corrupt channel (unknown type, undecryptable config, no SMTP)
+// rather than a transient network error. The worker wraps these with
+// asynq.SkipRetry so the error is stamped immediately instead of after the full
+// backoff schedule.
+var ErrPermanent = errors.New("notify: permanent delivery failure")
 
 // Severity is derived from an event type and drives per-provider styling
 // (Discord embed colour, ntfy priority, emoji prefixes...).
@@ -70,30 +78,3 @@ type Provider interface {
 	Send(ctx context.Context, raw json.RawMessage, ev Event) error
 }
 
-// MaskConfig reduces a decrypted config blob to a presence map: each top-level
-// key maps to whether it holds a non-empty value. It never returns secret
-// material, so it is safe to serialise to the UI.
-func MaskConfig(raw json.RawMessage) map[string]bool {
-	out := map[string]bool{}
-	var m map[string]any
-	if err := json.Unmarshal(raw, &m); err != nil {
-		return out
-	}
-	for k, v := range m {
-		out[k] = !isEmptyValue(v)
-	}
-	return out
-}
-
-func isEmptyValue(v any) bool {
-	switch t := v.(type) {
-	case nil:
-		return true
-	case string:
-		return strings.TrimSpace(t) == ""
-	case []any:
-		return len(t) == 0
-	default:
-		return false
-	}
-}

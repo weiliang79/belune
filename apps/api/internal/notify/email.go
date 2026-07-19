@@ -73,7 +73,7 @@ func (p emailProvider) Send(ctx context.Context, raw json.RawMessage, ev Event) 
 	// Without a channel override we rely on the instance SMTP; if that is not
 	// configured, fail loudly rather than dropping into silent log-only mode.
 	if !override && !p.mailer.Configured(ctx) {
-		return fmt.Errorf("email: SMTP is not configured — set it under Server → Email (SMTP), or give this channel its own mail server")
+		return fmt.Errorf("email: SMTP is not configured — set it under Server → Email (SMTP), or give this channel its own mail server: %w", ErrPermanent)
 	}
 
 	body := ev.Body

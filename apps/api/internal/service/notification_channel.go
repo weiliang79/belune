@@ -136,20 +136,6 @@ func (s *NotificationChannelService) RedactedConfig(channelType string, encrypte
 	return notify.RedactConfig(channelType, raw)
 }
 
-// MaskedConfig returns the presence-only view of a channel's config, safe to
-// serialise to the UI.
-func (s *NotificationChannelService) MaskedConfig(ctx context.Context, id pgtype.UUID) (map[string]bool, error) {
-	row, err := s.queries.GetNotificationChannel(ctx, id)
-	if err != nil {
-		return nil, err
-	}
-	raw, err := s.decryptConfig(row.ConfigEncrypted)
-	if err != nil {
-		return nil, err
-	}
-	return notify.MaskConfig(raw), nil
-}
-
 // Delete removes a channel by id.
 func (s *NotificationChannelService) Delete(ctx context.Context, id pgtype.UUID) error {
 	return s.queries.DeleteNotificationChannel(ctx, id)
@@ -174,11 +160,11 @@ func (s *NotificationChannelService) Deliver(ctx context.Context, id pgtype.UUID
 	}
 	provider, ok := s.registry.Provider(row.Type)
 	if !ok {
-		return false, fmt.Errorf("unknown channel type %q", row.Type)
+		return false, fmt.Errorf("unknown channel type %q: %w", row.Type, notify.ErrPermanent)
 	}
 	raw, err := s.decryptConfig(row.ConfigEncrypted)
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("%w: %w", err, notify.ErrPermanent)
 	}
 	if err := provider.Send(ctx, raw, ev); err != nil {
 		return false, err
@@ -224,10 +210,17 @@ func (s *NotificationChannelService) Test(ctx context.Context, id pgtype.UUID) e
 // without re-entering the secret), the stored config is used instead.
 func (s *NotificationChannelService) TestConfig(ctx context.Context, channelType string, config json.RawMessage, fallbackID pgtype.UUID) error {
 	raw := config
-	if len(raw) == 0 && fallbackID.Valid {
+	// When editing (fallbackID set), reconcile against the stored config so a
+	// masked secret left blank tests with the stored value — exactly what Update
+	// would persist. An entirely empty submission tests the stored config as-is.
+	if fallbackID.Valid {
 		if row, err := s.queries.GetNotificationChannel(ctx, fallbackID); err == nil {
-			if dec, derr := s.decryptConfig(row.ConfigEncrypted); derr == nil {
-				raw = dec
+			if stored, derr := s.decryptConfig(row.ConfigEncrypted); derr == nil {
+				if len(raw) == 0 {
+					raw = stored
+				} else {
+					raw = notify.MergeSecrets(channelType, stored, raw)
+				}
 			}
 		}
 	}
