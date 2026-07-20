@@ -10,11 +10,15 @@ import (
 	"strings"
 )
 
-// PushEvent is a normalized push webhook across providers.
+// PushEvent is a normalized push webhook across providers. CommitMessage and
+// CommitAuthor are display-only provenance for the deployment record; they are
+// best-effort, since not every provider populates every field.
 type PushEvent struct {
-	RepoURL   string
-	Branch    string
-	CommitSHA string
+	RepoURL       string
+	Branch        string
+	CommitSHA     string
+	CommitMessage string
+	CommitAuthor  string
 }
 
 // VerifyAndParseWebhook verifies a push webhook's signature with the provider
@@ -22,11 +26,9 @@ type PushEvent struct {
 func VerifyAndParseWebhook(provider string, header http.Header, body []byte, secret string) (PushEvent, error) {
 	switch provider {
 	case "github":
-		repo, branch, sha, err := ParseGitHubWebhook(body, header.Get("X-Hub-Signature-256"), secret)
-		return PushEvent{RepoURL: repo, Branch: branch, CommitSHA: sha}, err
+		return ParseGitHubWebhook(body, header.Get("X-Hub-Signature-256"), secret)
 	case "gitlab":
-		repo, branch, sha, err := ParseGitLabWebhook(body, header.Get("X-Gitlab-Token"), secret)
-		return PushEvent{RepoURL: repo, Branch: branch, CommitSHA: sha}, err
+		return ParseGitLabWebhook(body, header.Get("X-Gitlab-Token"), secret)
 	case "gitea":
 		return parseGiteaWebhook(body, header.Get("X-Gitea-Signature"), secret)
 	case "bitbucket":
@@ -49,20 +51,17 @@ func parseGiteaWebhook(body []byte, signature, secret string) (PushEvent, error)
 	if !hmac.Equal([]byte(signature), []byte(expected)) {
 		return PushEvent{}, fmt.Errorf("signature mismatch")
 	}
-	var ev struct {
-		Ref        string `json:"ref"`
-		After      string `json:"after"`
-		Repository struct {
-			CloneURL string `json:"clone_url"`
-		} `json:"repository"`
-	}
+	var ev githubShapedPush
 	if err := json.Unmarshal(body, &ev); err != nil {
 		return PushEvent{}, fmt.Errorf("parse gitea payload: %w", err)
 	}
+	message, author := commitDetails(pickCommit(ev.HeadCommit, ev.Commits, ev.After))
 	return PushEvent{
-		RepoURL:   ev.Repository.CloneURL,
-		Branch:    strings.TrimPrefix(ev.Ref, "refs/heads/"),
-		CommitSHA: ev.After,
+		RepoURL:       ev.Repository.CloneURL,
+		Branch:        strings.TrimPrefix(ev.Ref, "refs/heads/"),
+		CommitSHA:     ev.After,
+		CommitMessage: message,
+		CommitAuthor:  author,
 	}, nil
 }
 

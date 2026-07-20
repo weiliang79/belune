@@ -58,15 +58,16 @@ func (h *Handler) HandleProviderWebhook(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	triggered := h.deployMatchingApps(r, event.RepoURL, event.Branch, event.CommitSHA)
+	triggered := h.deployMatchingApps(r, event)
 	slog.Info("provider webhook: processed", "provider", provider, "repo", event.RepoURL, "triggered", triggered)
 	w.WriteHeader(http.StatusOK)
 }
 
-// deployMatchingApps finds applications whose source_repo matches repoURL and
-// dispatches a push deploy to each. Returns the number of deploys triggered.
-func (h *Handler) deployMatchingApps(r *http.Request, repoURL, branch, commitSHA string) int {
-	normalized := normalizeRepoURL(repoURL)
+// deployMatchingApps finds applications whose source_repo matches the event's
+// repo and dispatches a push deploy to each. Returns the number of deploys
+// triggered.
+func (h *Handler) deployMatchingApps(r *http.Request, event providers.PushEvent) int {
+	normalized := normalizeRepoURL(event.RepoURL)
 	apps, err := h.queries.ListApplicationsBySourceRepo(r.Context(), pgtype.Text{String: normalized, Valid: true})
 	if err != nil {
 		slog.Warn("provider webhook: failed to query applications", "error", err)
@@ -77,7 +78,7 @@ func (h *Handler) deployMatchingApps(r *http.Request, repoURL, branch, commitSHA
 	}
 	triggered := 0
 	for _, app := range apps {
-		if h.dispatchAppPush(r, app, branch, commitSHA) {
+		if h.dispatchAppPush(r, app, event) {
 			triggered++
 		}
 	}
@@ -87,13 +88,14 @@ func (h *Handler) deployMatchingApps(r *http.Request, repoURL, branch, commitSHA
 // dispatchAppPush routes an already-verified push to an application: a deploy
 // when the branch matches auto_deploy_branch, or a preview deploy when it
 // matches the parent's preview pattern. Returns true when a deploy was queued.
-func (h *Handler) dispatchAppPush(r *http.Request, app generated.Application, branch, commitSHA string) bool {
+func (h *Handler) dispatchAppPush(r *http.Request, app generated.Application, event providers.PushEvent) bool {
+	branch := event.Branch
 	autoBranch := "main"
 	if app.AutoDeployBranch.Valid && app.AutoDeployBranch.String != "" {
 		autoBranch = app.AutoDeployBranch.String
 	}
 	if branch == autoBranch {
-		return h.triggerPushDeploy(r, app, branch, commitSHA)
+		return h.triggerPushDeploy(r, app, event)
 	}
 
 	// Preview path: branch did not match auto_deploy_branch, but may match a
@@ -110,5 +112,5 @@ func (h *Handler) dispatchAppPush(r *http.Request, app generated.Application, br
 		slog.Error("webhook: failed to materialize preview app", "parent", app.Name, "branch", branch, "error", err)
 		return false
 	}
-	return h.triggerPushDeploy(r, previewApp, branch, commitSHA)
+	return h.triggerPushDeploy(r, previewApp, event)
 }

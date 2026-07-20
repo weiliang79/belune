@@ -51,12 +51,32 @@ export interface Application {
   updated_at: string;
 }
 
+// Deploy hook state. `token` and `path` are only populated by generate and
+// reveal — the status read reports `enabled` alone.
+export interface DeployHook {
+  enabled: boolean;
+  path?: string;
+  token?: string;
+}
+
 export interface Deployment {
   id: string;
   application_id: string;
   status: "pending" | "building" | "deploying" | "success" | "failed";
-  triggered_by: "push" | "manual" | "api" | "rollback";
+  triggered_by:
+    | "push"
+    | "manual"
+    | "api"
+    | "rollback"
+    | "reload"
+    | "rebuild"
+    | "template"
+    | "hook";
   commit_sha: string | null;
+  // Provenance from the push webhook payload; null for deploys with no
+  // upstream commit (manual, reload, rebuild, template, deploy hook).
+  commit_message: string | null;
+  commit_author: string | null;
   build_logs: string;
   error_message: string | null;
   image_tag: string | null;
@@ -216,6 +236,8 @@ export interface GlobalDeployment {
   status: string;
   triggered_by: string;
   commit_sha: string | null;
+  commit_message: string | null;
+  commit_author: string | null;
   build_logs: string | null;
   error_message: string | null;
   image_tag: string | null;

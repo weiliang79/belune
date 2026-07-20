@@ -20,6 +20,7 @@ import (
 
 	"github.com/weiliang79/belune/internal/deploy"
 	"github.com/weiliang79/belune/internal/git"
+	"github.com/weiliang79/belune/internal/git/providers"
 	"github.com/weiliang79/belune/internal/pkg/metrics"
 	"github.com/weiliang79/belune/internal/pkg/tracing"
 	"github.com/weiliang79/belune/internal/preview"
@@ -95,7 +96,7 @@ func (h *Handler) HandleWebhookPush(w http.ResponseWriter, r *http.Request) {
 			slog.Warn("webhook: parse/verify failed", "application", app.Name, "error", err)
 			continue
 		}
-		if h.dispatchAppPush(r, app, payload.Branch, payload.CommitSHA) {
+		if h.dispatchAppPush(r, app, payload.PushEvent) {
 			triggered++
 		}
 	}
@@ -211,8 +212,9 @@ func normalizeRepoURL(url string) string {
 // triggerPushDeploy creates a deployment row and enqueues the deploy task for
 // a specific application (parent or preview). Returns true when the task was
 // successfully enqueued. Dedups duplicate webhook deliveries by commit SHA.
-func (h *Handler) triggerPushDeploy(r *http.Request, app generated.Application, branch, commitSHA string) bool {
+func (h *Handler) triggerPushDeploy(r *http.Request, app generated.Application, event providers.PushEvent) bool {
 	applicationID := uuidToString(app.ID)
+	branch, commitSHA := event.Branch, event.CommitSHA
 
 	var idempotencyKey pgtype.Text
 	if commitSHA != "" {
@@ -245,6 +247,8 @@ func (h *Handler) triggerPushDeploy(r *http.Request, app generated.Application, 
 		TriggeredBy:    "push",
 		CommitSha:      pgtype.Text{String: commitSHA, Valid: commitSHA != ""},
 		IdempotencyKey: idempotencyKey,
+		CommitMessage:  pgtype.Text{String: event.CommitMessage, Valid: event.CommitMessage != ""},
+		CommitAuthor:   pgtype.Text{String: event.CommitAuthor, Valid: event.CommitAuthor != ""},
 	})
 	if err != nil {
 		slog.Error("webhook: failed to create deployment", "application", app.Name, "error", err)

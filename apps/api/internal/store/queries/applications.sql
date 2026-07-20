@@ -41,6 +41,23 @@ SELECT * FROM applications WHERE source_repo = $1 AND webhook_secret IS NOT NULL
 UPDATE applications SET webhook_secret = $2, auto_deploy_branch = $3, updated_at = NOW()
 WHERE id = $1 RETURNING *;
 
+-- name: SetApplicationDeployHook :one
+UPDATE applications SET
+    deploy_hook_token_hash = $2,
+    deploy_hook_token_encrypted = $3,
+    updated_at = NOW()
+WHERE id = $1 RETURNING *;
+
+-- name: ClearApplicationDeployHook :one
+UPDATE applications SET
+    deploy_hook_token_hash = NULL,
+    deploy_hook_token_encrypted = NULL,
+    updated_at = NOW()
+WHERE id = $1 RETURNING *;
+
+-- name: GetApplicationByDeployHookToken :one
+SELECT * FROM applications WHERE deploy_hook_token_hash = $1;
+
 -- name: ListAllApplications :many
 SELECT * FROM applications;
 

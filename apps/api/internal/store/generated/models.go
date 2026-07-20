@@ -52,6 +52,8 @@ type Application struct {
 	ContainerPort             pgtype.Int4        `json:"container_port"`
 	HealthCheckTimeoutSeconds pgtype.Int4        `json:"health_check_timeout_seconds"`
 	HealthCheckExpectStatus   pgtype.Int4        `json:"health_check_expect_status"`
+	DeployHookTokenHash       []byte             `json:"deploy_hook_token_hash"`
+	DeployHookTokenEncrypted  []byte             `json:"deploy_hook_token_encrypted"`
 }
 
 type ApplicationFileMount struct {
@@ -258,6 +260,8 @@ type Deployment struct {
 	HealthStatus    pgtype.Text        `json:"health_status"`
 	HealthMessage   pgtype.Text        `json:"health_message"`
 	HealthCheckedAt pgtype.Timestamptz `json:"health_checked_at"`
+	CommitMessage   pgtype.Text        `json:"commit_message"`
+	CommitAuthor    pgtype.Text        `json:"commit_author"`
 }
 
 type Domain struct {

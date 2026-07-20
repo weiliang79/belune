@@ -18,6 +18,14 @@ export const queryKeys = {
       ["projects", projectId, "applications", applicationId] as const,
     buildCache: (projectId: string, applicationId: string) =>
       ["projects", projectId, "applications", applicationId, "cache"] as const,
+    deployHook: (projectId: string, applicationId: string) =>
+      [
+        "projects",
+        projectId,
+        "applications",
+        applicationId,
+        "deploy-hook",
+      ] as const,
   },
   deployments: {
     all: (projectId: string, applicationId: string) =>

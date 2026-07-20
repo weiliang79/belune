@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useApplication } from "@/lib/hooks/use-applications";
+import { useApplication, useDeployHook } from "@/lib/hooks/use-applications";
 import { useDeployments } from "@/lib/hooks/use-deployments";
 import { useAppMetricsStream } from "@/lib/hooks/use-metrics";
 import { useAuditLogs } from "@/lib/hooks/use-audit-logs";
@@ -78,6 +78,37 @@ function MetricCard({
   );
 }
 
+/**
+ * Summarises how this app deploys itself, so the answer to "is auto-deploy on?"
+ * is visible without hunting through Settings. Git apps can have both paths
+ * active at once (push webhook and deploy hook), so both are listed.
+ */
+function AutoDeployValue({ app }: { app: Application }) {
+  const { data: hook } = useDeployHook(app.project_id, app.id);
+  const pushEnabled = app.type === "git" && !!app.webhook_secret;
+
+  const active: string[] = [];
+  if (pushEnabled) active.push(`push to ${app.auto_deploy_branch || "main"}`);
+  if (hook?.enabled) active.push("deploy hook");
+
+  if (active.length === 0) {
+    return (
+      <Link
+        to="/projects/$projectId/applications/$applicationId/settings"
+        params={{ projectId: app.project_id, applicationId: app.id }}
+        className="text-muted-foreground hover:text-foreground underline"
+      >
+        Off — configure
+      </Link>
+    );
+  }
+  // Uppercase the first letter in JS rather than with CSS: `capitalize` would
+  // title-case every word ("Push To Main"), and `first-letter:uppercase` maps to
+  // ::first-letter, which browsers ignore on an inline element like this span.
+  const summary = active.join(" + ");
+  return <span>{summary.charAt(0).toUpperCase() + summary.slice(1)}</span>;
+}
+
 function BuildInfoCard({
   app,
   deploy,
@@ -130,6 +161,7 @@ function BuildInfoCard({
       value: deploy ? formatRelativeTime(deploy.started_at) : "—",
     },
     { label: "Duration", value: duration ?? "—" },
+    { label: "Auto deploy", value: <AutoDeployValue app={app} /> },
   ];
 
   return (

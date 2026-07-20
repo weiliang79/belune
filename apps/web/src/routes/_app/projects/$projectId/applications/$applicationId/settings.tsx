@@ -6,7 +6,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
 import { ApplicationSettingsForm } from "@/components/applications/application-settings-form";
-import { WebhookSection } from "@/components/applications/webhook-section";
 import { BuildCacheSection } from "@/components/applications/build-cache-section";
 import { RuntimeSection } from "@/components/applications/runtime-section";
 import { DeleteApplicationDialog } from "@/components/applications/delete-application-dialog";
@@ -49,17 +48,6 @@ function ApplicationSettingsPage() {
         applicationId={applicationId}
         application={application}
       />
-
-      {application.type === "git" && (
-        <>
-          <Separator />
-          <WebhookSection
-            projectId={projectId}
-            applicationId={applicationId}
-            application={application}
-          />
-        </>
-      )}
 
       {application.type === "git" && (
         <>

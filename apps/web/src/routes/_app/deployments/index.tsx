@@ -89,7 +89,7 @@ function DeploymentFilters({
         <Input
           value={filters.search}
           onChange={(e) => onChange({ ...filters, search: e.target.value })}
-          placeholder="Commit SHA or app name…"
+          placeholder="Commit SHA, message, or app name…"
           aria-label="Search deployments"
           className="pl-9"
         />
@@ -191,9 +191,23 @@ const deploymentColumns: ColumnDef<GlobalDeployment>[] = [
   {
     id: "commit",
     header: "Commit",
+    meta: { className: "max-w-[20rem]" },
     cell: ({ row: { original: d } }) =>
       d.commit_sha ? (
-        <span className="font-mono text-xs">{d.commit_sha.slice(0, 7)}</span>
+        <div className="min-w-0">
+          <span className="font-mono text-xs">{d.commit_sha.slice(0, 7)}</span>
+          {d.commit_message && (
+            // Subject line only — commit bodies are multi-paragraph.
+            <span className="text-text-muted ml-2 text-xs">
+              {d.commit_message.split("\n")[0]}
+            </span>
+          )}
+          {d.commit_author && (
+            <div className="text-text-faint truncate text-xs">
+              {d.commit_author}
+            </div>
+          )}
+        </div>
       ) : (
         <span className="text-text-faint">—</span>
       ),

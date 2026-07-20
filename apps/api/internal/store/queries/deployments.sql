@@ -20,8 +20,8 @@ ORDER BY d.image_tag, d.started_at DESC;
 SELECT * FROM deployments WHERE id = $1;
 
 -- name: CreateDeployment :one
-INSERT INTO deployments (application_id, status, triggered_by, commit_sha, idempotency_key)
-VALUES ($1, $2, $3, $4, $5)
+INSERT INTO deployments (application_id, status, triggered_by, commit_sha, idempotency_key, commit_message, commit_author)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
 RETURNING *;
 
 -- name: FindRecentDeploymentByIdempotencyKey :one
@@ -92,7 +92,7 @@ DELETE FROM deployments WHERE id = $1;
 SELECT count(*) FROM deployments;
 
 -- name: ListGlobalDeployments :many
-SELECT d.id, d.application_id, d.status, d.triggered_by, d.commit_sha, d.build_logs, d.error_message, d.started_at, d.finished_at, d.image_tag,
+SELECT d.id, d.application_id, d.status, d.triggered_by, d.commit_sha, d.commit_message, d.commit_author, d.build_logs, d.error_message, d.started_at, d.finished_at, d.image_tag,
        a.name AS application_name, a.slug AS application_slug,
        p.id AS project_id, p.name AS project_name
 FROM deployments d
@@ -102,7 +102,7 @@ ORDER BY d.started_at DESC
 LIMIT $1 OFFSET $2;
 
 -- name: ListGlobalDeploymentsFiltered :many
-SELECT d.id, d.application_id, d.status, d.triggered_by, d.commit_sha, d.build_logs, d.error_message, d.started_at, d.finished_at, d.image_tag,
+SELECT d.id, d.application_id, d.status, d.triggered_by, d.commit_sha, d.commit_message, d.commit_author, d.build_logs, d.error_message, d.started_at, d.finished_at, d.image_tag,
        a.name AS application_name, a.slug AS application_slug,
        p.id AS project_id, p.name AS project_name
 FROM deployments d
@@ -116,12 +116,13 @@ WHERE (sqlc.narg('project_id')::uuid IS NULL OR p.id = sqlc.narg('project_id'))
   AND (sqlc.narg('user_id')::uuid IS NULL OR p.user_id = sqlc.narg('user_id'))
   AND (sqlc.narg('search')::text IS NULL
        OR d.commit_sha ILIKE '%' || sqlc.narg('search') || '%'
+       OR d.commit_message ILIKE '%' || sqlc.narg('search') || '%'
        OR a.name ILIKE '%' || sqlc.narg('search') || '%')
 ORDER BY d.started_at DESC
 LIMIT $1 OFFSET $2;
 
 -- name: ListUserDeployments :many
-SELECT d.id, d.application_id, d.status, d.triggered_by, d.commit_sha, d.build_logs, d.error_message, d.started_at, d.finished_at, d.image_tag,
+SELECT d.id, d.application_id, d.status, d.triggered_by, d.commit_sha, d.commit_message, d.commit_author, d.build_logs, d.error_message, d.started_at, d.finished_at, d.image_tag,
        a.name AS application_name, a.slug AS application_slug,
        p.id AS project_id, p.name AS project_name
 FROM deployments d

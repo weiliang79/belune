@@ -1,4 +1,4 @@
-import type { Application } from "@/lib/types";
+import type { Application, DeployHook } from "@/lib/types";
 import { api } from "./client";
 
 export function listApplications(projectId: string) {
@@ -128,5 +128,34 @@ export function updateWebhook(
   return api.put<Application>(
     `/projects/${projectId}/applications/${applicationId}/webhook`,
     data,
+  );
+}
+
+export function getDeployHook(projectId: string, applicationId: string) {
+  return api.get<DeployHook>(
+    `/projects/${projectId}/applications/${applicationId}/deploy-hook`,
+  );
+}
+
+// Returns the stored token so the URL can be copied again later. Audited
+// server-side, so only call it when the user asks to see the URL.
+export function revealDeployHook(projectId: string, applicationId: string) {
+  return api.get<DeployHook>(
+    `/projects/${projectId}/applications/${applicationId}/deploy-hook/reveal`,
+  );
+}
+
+// Generates or rotates the token. Rotating invalidates the previous URL
+// immediately, so any CI still using it starts getting 404s.
+export function generateDeployHook(projectId: string, applicationId: string) {
+  return api.post<DeployHook>(
+    `/projects/${projectId}/applications/${applicationId}/deploy-hook`,
+    {},
+  );
+}
+
+export function deleteDeployHook(projectId: string, applicationId: string) {
+  return api.delete<DeployHook>(
+    `/projects/${projectId}/applications/${applicationId}/deploy-hook`,
   );
 }

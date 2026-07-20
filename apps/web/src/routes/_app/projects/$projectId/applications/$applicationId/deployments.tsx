@@ -1,5 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useDeployments, useRollbackDeployment } from "@/lib/hooks/use-deployments";
+import { useApplication } from "@/lib/hooks/use-applications";
+import { AutoDeploySection } from "@/components/applications/auto-deploy-section";
 import { useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/lib/hooks/query-keys";
 import { Card, CardContent } from "@/components/ui/card";
@@ -233,6 +235,16 @@ function DeploymentCard({
                 {d.commit_sha.slice(0, 7)}
               </span>
             )}
+            {d.commit_message && (
+              // Only the subject line: commit bodies are multi-paragraph and
+              // this row is a single line.
+              <span className="text-muted-foreground min-w-0 truncate text-xs">
+                {d.commit_message.split("\n")[0]}
+                {d.commit_author && (
+                  <span className="text-text-faint"> · {d.commit_author}</span>
+                )}
+              </span>
+            )}
           </div>
           <div className="flex items-center gap-3">
             {canRollback && (
@@ -278,6 +290,32 @@ function DeploymentCard({
 
 function DeploymentsPage() {
   const { projectId, applicationId } = Route.useParams();
+  const { data: application } = useApplication(projectId, applicationId);
+
+  return (
+    <div className="space-y-6">
+      {/* How this app deploys itself sits above the record of what it has
+          deployed. Rendered outside DeploymentHistory so it is still reachable
+          when there is no history yet — which is exactly when you want it. */}
+      {application && (
+        <AutoDeploySection
+          projectId={projectId}
+          applicationId={applicationId}
+          application={application}
+        />
+      )}
+      <DeploymentHistory projectId={projectId} applicationId={applicationId} />
+    </div>
+  );
+}
+
+function DeploymentHistory({
+  projectId,
+  applicationId,
+}: {
+  projectId: string;
+  applicationId: string;
+}) {
   const { data: deployments, isLoading, error } = useDeployments(projectId, applicationId);
 
   if (isLoading) {

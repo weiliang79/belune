@@ -9,33 +9,30 @@ import (
 	"strings"
 )
 
-type gitHubPushEvent struct {
-	Ref        string `json:"ref"`
-	After      string `json:"after"`
-	Repository struct {
-		CloneURL string `json:"clone_url"`
-	} `json:"repository"`
-}
-
 // ParseGitHubWebhook parses a GitHub push webhook payload and verifies the HMAC signature.
-func ParseGitHubWebhook(body []byte, signature string, secret string) (repoURL, branch, commitSHA string, err error) {
+func ParseGitHubWebhook(body []byte, signature string, secret string) (PushEvent, error) {
 	// Verify HMAC-SHA256 signature. Fail closed: a missing secret cannot verify.
 	if secret == "" {
-		return "", "", "", fmt.Errorf("no webhook secret configured")
+		return PushEvent{}, fmt.Errorf("no webhook secret configured")
 	}
 	if err := verifyGitHubSignature(body, signature, secret); err != nil {
-		return "", "", "", err
+		return PushEvent{}, err
 	}
 
-	var event gitHubPushEvent
+	var event githubShapedPush
 	if err := json.Unmarshal(body, &event); err != nil {
-		return "", "", "", fmt.Errorf("parse github payload: %w", err)
+		return PushEvent{}, fmt.Errorf("parse github payload: %w", err)
 	}
 
-	// Extract branch from ref (refs/heads/main -> main)
-	branch = strings.TrimPrefix(event.Ref, "refs/heads/")
-
-	return event.Repository.CloneURL, branch, event.After, nil
+	message, author := commitDetails(pickCommit(event.HeadCommit, event.Commits, event.After))
+	return PushEvent{
+		RepoURL: event.Repository.CloneURL,
+		// Extract branch from ref (refs/heads/main -> main)
+		Branch:        strings.TrimPrefix(event.Ref, "refs/heads/"),
+		CommitSHA:     event.After,
+		CommitMessage: message,
+		CommitAuthor:  author,
+	}, nil
 }
 
 func verifyGitHubSignature(body []byte, signature string, secret string) error {

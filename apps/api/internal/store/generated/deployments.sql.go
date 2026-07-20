@@ -23,9 +23,9 @@ func (q *Queries) CountDeployments(ctx context.Context) (int64, error) {
 }
 
 const createDeployment = `-- name: CreateDeployment :one
-INSERT INTO deployments (application_id, status, triggered_by, commit_sha, idempotency_key)
-VALUES ($1, $2, $3, $4, $5)
-RETURNING id, application_id, status, triggered_by, commit_sha, image_tag, build_logs, error_message, started_at, build_started_at, build_ended_at, deploy_started_at, finished_at, idempotency_key, health_status, health_message, health_checked_at
+INSERT INTO deployments (application_id, status, triggered_by, commit_sha, idempotency_key, commit_message, commit_author)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
+RETURNING id, application_id, status, triggered_by, commit_sha, image_tag, build_logs, error_message, started_at, build_started_at, build_ended_at, deploy_started_at, finished_at, idempotency_key, health_status, health_message, health_checked_at, commit_message, commit_author
 `
 
 type CreateDeploymentParams struct {
@@ -34,6 +34,8 @@ type CreateDeploymentParams struct {
 	TriggeredBy    string      `json:"triggered_by"`
 	CommitSha      pgtype.Text `json:"commit_sha"`
 	IdempotencyKey pgtype.Text `json:"idempotency_key"`
+	CommitMessage  pgtype.Text `json:"commit_message"`
+	CommitAuthor   pgtype.Text `json:"commit_author"`
 }
 
 func (q *Queries) CreateDeployment(ctx context.Context, arg CreateDeploymentParams) (Deployment, error) {
@@ -43,6 +45,8 @@ func (q *Queries) CreateDeployment(ctx context.Context, arg CreateDeploymentPara
 		arg.TriggeredBy,
 		arg.CommitSha,
 		arg.IdempotencyKey,
+		arg.CommitMessage,
+		arg.CommitAuthor,
 	)
 	var i Deployment
 	err := row.Scan(
@@ -63,6 +67,8 @@ func (q *Queries) CreateDeployment(ctx context.Context, arg CreateDeploymentPara
 		&i.HealthStatus,
 		&i.HealthMessage,
 		&i.HealthCheckedAt,
+		&i.CommitMessage,
+		&i.CommitAuthor,
 	)
 	return i, err
 }
@@ -77,7 +83,7 @@ func (q *Queries) DeleteDeployment(ctx context.Context, id pgtype.UUID) error {
 }
 
 const findRecentDeploymentByIdempotencyKey = `-- name: FindRecentDeploymentByIdempotencyKey :one
-SELECT id, application_id, status, triggered_by, commit_sha, image_tag, build_logs, error_message, started_at, build_started_at, build_ended_at, deploy_started_at, finished_at, idempotency_key, health_status, health_message, health_checked_at FROM deployments
+SELECT id, application_id, status, triggered_by, commit_sha, image_tag, build_logs, error_message, started_at, build_started_at, build_ended_at, deploy_started_at, finished_at, idempotency_key, health_status, health_message, health_checked_at, commit_message, commit_author FROM deployments
 WHERE application_id = $1
   AND idempotency_key = $2
   AND started_at > NOW() - make_interval(secs => $3::int)
@@ -112,12 +118,14 @@ func (q *Queries) FindRecentDeploymentByIdempotencyKey(ctx context.Context, arg 
 		&i.HealthStatus,
 		&i.HealthMessage,
 		&i.HealthCheckedAt,
+		&i.CommitMessage,
+		&i.CommitAuthor,
 	)
 	return i, err
 }
 
 const getDeployment = `-- name: GetDeployment :one
-SELECT id, application_id, status, triggered_by, commit_sha, image_tag, build_logs, error_message, started_at, build_started_at, build_ended_at, deploy_started_at, finished_at, idempotency_key, health_status, health_message, health_checked_at FROM deployments WHERE id = $1
+SELECT id, application_id, status, triggered_by, commit_sha, image_tag, build_logs, error_message, started_at, build_started_at, build_ended_at, deploy_started_at, finished_at, idempotency_key, health_status, health_message, health_checked_at, commit_message, commit_author FROM deployments WHERE id = $1
 `
 
 func (q *Queries) GetDeployment(ctx context.Context, id pgtype.UUID) (Deployment, error) {
@@ -141,6 +149,8 @@ func (q *Queries) GetDeployment(ctx context.Context, id pgtype.UUID) (Deployment
 		&i.HealthStatus,
 		&i.HealthMessage,
 		&i.HealthCheckedAt,
+		&i.CommitMessage,
+		&i.CommitAuthor,
 	)
 	return i, err
 }
@@ -179,7 +189,7 @@ func (q *Queries) GetLatestApplicationHealth(ctx context.Context, applicationID 
 }
 
 const getLatestSuccessfulDeployment = `-- name: GetLatestSuccessfulDeployment :one
-SELECT id, application_id, status, triggered_by, commit_sha, image_tag, build_logs, error_message, started_at, build_started_at, build_ended_at, deploy_started_at, finished_at, idempotency_key, health_status, health_message, health_checked_at FROM deployments
+SELECT id, application_id, status, triggered_by, commit_sha, image_tag, build_logs, error_message, started_at, build_started_at, build_ended_at, deploy_started_at, finished_at, idempotency_key, health_status, health_message, health_checked_at, commit_message, commit_author FROM deployments
 WHERE application_id = $1
   AND status = 'success'
   AND image_tag IS NOT NULL AND image_tag <> ''
@@ -210,12 +220,14 @@ func (q *Queries) GetLatestSuccessfulDeployment(ctx context.Context, application
 		&i.HealthStatus,
 		&i.HealthMessage,
 		&i.HealthCheckedAt,
+		&i.CommitMessage,
+		&i.CommitAuthor,
 	)
 	return i, err
 }
 
 const listDeploymentsByApplication = `-- name: ListDeploymentsByApplication :many
-SELECT id, application_id, status, triggered_by, commit_sha, image_tag, build_logs, error_message, started_at, build_started_at, build_ended_at, deploy_started_at, finished_at, idempotency_key, health_status, health_message, health_checked_at FROM deployments WHERE application_id = $1 ORDER BY started_at DESC
+SELECT id, application_id, status, triggered_by, commit_sha, image_tag, build_logs, error_message, started_at, build_started_at, build_ended_at, deploy_started_at, finished_at, idempotency_key, health_status, health_message, health_checked_at, commit_message, commit_author FROM deployments WHERE application_id = $1 ORDER BY started_at DESC
 `
 
 func (q *Queries) ListDeploymentsByApplication(ctx context.Context, applicationID pgtype.UUID) ([]Deployment, error) {
@@ -245,6 +257,8 @@ func (q *Queries) ListDeploymentsByApplication(ctx context.Context, applicationI
 			&i.HealthStatus,
 			&i.HealthMessage,
 			&i.HealthCheckedAt,
+			&i.CommitMessage,
+			&i.CommitAuthor,
 		); err != nil {
 			return nil, err
 		}
@@ -257,7 +271,7 @@ func (q *Queries) ListDeploymentsByApplication(ctx context.Context, applicationI
 }
 
 const listGlobalDeployments = `-- name: ListGlobalDeployments :many
-SELECT d.id, d.application_id, d.status, d.triggered_by, d.commit_sha, d.build_logs, d.error_message, d.started_at, d.finished_at, d.image_tag,
+SELECT d.id, d.application_id, d.status, d.triggered_by, d.commit_sha, d.commit_message, d.commit_author, d.build_logs, d.error_message, d.started_at, d.finished_at, d.image_tag,
        a.name AS application_name, a.slug AS application_slug,
        p.id AS project_id, p.name AS project_name
 FROM deployments d
@@ -278,6 +292,8 @@ type ListGlobalDeploymentsRow struct {
 	Status          string             `json:"status"`
 	TriggeredBy     string             `json:"triggered_by"`
 	CommitSha       pgtype.Text        `json:"commit_sha"`
+	CommitMessage   pgtype.Text        `json:"commit_message"`
+	CommitAuthor    pgtype.Text        `json:"commit_author"`
 	BuildLogs       pgtype.Text        `json:"build_logs"`
 	ErrorMessage    pgtype.Text        `json:"error_message"`
 	StartedAt       pgtype.Timestamptz `json:"started_at"`
@@ -304,6 +320,8 @@ func (q *Queries) ListGlobalDeployments(ctx context.Context, arg ListGlobalDeplo
 			&i.Status,
 			&i.TriggeredBy,
 			&i.CommitSha,
+			&i.CommitMessage,
+			&i.CommitAuthor,
 			&i.BuildLogs,
 			&i.ErrorMessage,
 			&i.StartedAt,
@@ -325,7 +343,7 @@ func (q *Queries) ListGlobalDeployments(ctx context.Context, arg ListGlobalDeplo
 }
 
 const listGlobalDeploymentsFiltered = `-- name: ListGlobalDeploymentsFiltered :many
-SELECT d.id, d.application_id, d.status, d.triggered_by, d.commit_sha, d.build_logs, d.error_message, d.started_at, d.finished_at, d.image_tag,
+SELECT d.id, d.application_id, d.status, d.triggered_by, d.commit_sha, d.commit_message, d.commit_author, d.build_logs, d.error_message, d.started_at, d.finished_at, d.image_tag,
        a.name AS application_name, a.slug AS application_slug,
        p.id AS project_id, p.name AS project_name
 FROM deployments d
@@ -339,6 +357,7 @@ WHERE ($3::uuid IS NULL OR p.id = $3)
   AND ($8::uuid IS NULL OR p.user_id = $8)
   AND ($9::text IS NULL
        OR d.commit_sha ILIKE '%' || $9 || '%'
+       OR d.commit_message ILIKE '%' || $9 || '%'
        OR a.name ILIKE '%' || $9 || '%')
 ORDER BY d.started_at DESC
 LIMIT $1 OFFSET $2
@@ -362,6 +381,8 @@ type ListGlobalDeploymentsFilteredRow struct {
 	Status          string             `json:"status"`
 	TriggeredBy     string             `json:"triggered_by"`
 	CommitSha       pgtype.Text        `json:"commit_sha"`
+	CommitMessage   pgtype.Text        `json:"commit_message"`
+	CommitAuthor    pgtype.Text        `json:"commit_author"`
 	BuildLogs       pgtype.Text        `json:"build_logs"`
 	ErrorMessage    pgtype.Text        `json:"error_message"`
 	StartedAt       pgtype.Timestamptz `json:"started_at"`
@@ -398,6 +419,8 @@ func (q *Queries) ListGlobalDeploymentsFiltered(ctx context.Context, arg ListGlo
 			&i.Status,
 			&i.TriggeredBy,
 			&i.CommitSha,
+			&i.CommitMessage,
+			&i.CommitAuthor,
 			&i.BuildLogs,
 			&i.ErrorMessage,
 			&i.StartedAt,
@@ -467,7 +490,7 @@ func (q *Queries) ListImageTagOwners(ctx context.Context) ([]ListImageTagOwnersR
 }
 
 const listOldDeployments = `-- name: ListOldDeployments :many
-SELECT id, application_id, status, triggered_by, commit_sha, image_tag, build_logs, error_message, started_at, build_started_at, build_ended_at, deploy_started_at, finished_at, idempotency_key, health_status, health_message, health_checked_at FROM deployments WHERE application_id = $1 ORDER BY started_at DESC OFFSET $2
+SELECT id, application_id, status, triggered_by, commit_sha, image_tag, build_logs, error_message, started_at, build_started_at, build_ended_at, deploy_started_at, finished_at, idempotency_key, health_status, health_message, health_checked_at, commit_message, commit_author FROM deployments WHERE application_id = $1 ORDER BY started_at DESC OFFSET $2
 `
 
 type ListOldDeploymentsParams struct {
@@ -502,6 +525,8 @@ func (q *Queries) ListOldDeployments(ctx context.Context, arg ListOldDeployments
 			&i.HealthStatus,
 			&i.HealthMessage,
 			&i.HealthCheckedAt,
+			&i.CommitMessage,
+			&i.CommitAuthor,
 		); err != nil {
 			return nil, err
 		}
@@ -514,7 +539,7 @@ func (q *Queries) ListOldDeployments(ctx context.Context, arg ListOldDeployments
 }
 
 const listUserDeployments = `-- name: ListUserDeployments :many
-SELECT d.id, d.application_id, d.status, d.triggered_by, d.commit_sha, d.build_logs, d.error_message, d.started_at, d.finished_at, d.image_tag,
+SELECT d.id, d.application_id, d.status, d.triggered_by, d.commit_sha, d.commit_message, d.commit_author, d.build_logs, d.error_message, d.started_at, d.finished_at, d.image_tag,
        a.name AS application_name, a.slug AS application_slug,
        p.id AS project_id, p.name AS project_name
 FROM deployments d
@@ -537,6 +562,8 @@ type ListUserDeploymentsRow struct {
 	Status          string             `json:"status"`
 	TriggeredBy     string             `json:"triggered_by"`
 	CommitSha       pgtype.Text        `json:"commit_sha"`
+	CommitMessage   pgtype.Text        `json:"commit_message"`
+	CommitAuthor    pgtype.Text        `json:"commit_author"`
 	BuildLogs       pgtype.Text        `json:"build_logs"`
 	ErrorMessage    pgtype.Text        `json:"error_message"`
 	StartedAt       pgtype.Timestamptz `json:"started_at"`
@@ -563,6 +590,8 @@ func (q *Queries) ListUserDeployments(ctx context.Context, arg ListUserDeploymen
 			&i.Status,
 			&i.TriggeredBy,
 			&i.CommitSha,
+			&i.CommitMessage,
+			&i.CommitAuthor,
 			&i.BuildLogs,
 			&i.ErrorMessage,
 			&i.StartedAt,
@@ -677,7 +706,7 @@ func (q *Queries) UpdateDeploymentImageTag(ctx context.Context, arg UpdateDeploy
 const updateDeploymentStatus = `-- name: UpdateDeploymentStatus :one
 UPDATE deployments SET status = $2, error_message = $3, finished_at = NOW()
 WHERE id = $1
-RETURNING id, application_id, status, triggered_by, commit_sha, image_tag, build_logs, error_message, started_at, build_started_at, build_ended_at, deploy_started_at, finished_at, idempotency_key, health_status, health_message, health_checked_at
+RETURNING id, application_id, status, triggered_by, commit_sha, image_tag, build_logs, error_message, started_at, build_started_at, build_ended_at, deploy_started_at, finished_at, idempotency_key, health_status, health_message, health_checked_at, commit_message, commit_author
 `
 
 type UpdateDeploymentStatusParams struct {
@@ -707,6 +736,8 @@ func (q *Queries) UpdateDeploymentStatus(ctx context.Context, arg UpdateDeployme
 		&i.HealthStatus,
 		&i.HealthMessage,
 		&i.HealthCheckedAt,
+		&i.CommitMessage,
+		&i.CommitAuthor,
 	)
 	return i, err
 }

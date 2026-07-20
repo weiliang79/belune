@@ -222,6 +222,54 @@ export function useClearBuildCache(projectId: string, applicationId: string) {
   });
 }
 
+// Reports whether the deploy hook is enabled. Never carries the token itself —
+// use useRevealDeployHook for that.
+export function useDeployHook(projectId: string, applicationId: string) {
+  return useQuery({
+    queryKey: queryKeys.applications.deployHook(projectId, applicationId),
+    queryFn: () => applicationsApi.getDeployHook(projectId, applicationId),
+  });
+}
+
+export function useGenerateDeployHook(
+  projectId: string,
+  applicationId: string,
+) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      applicationsApi.generateDeployHook(projectId, applicationId),
+    onSuccess: () => {
+      qc.invalidateQueries({
+        queryKey: queryKeys.applications.deployHook(projectId, applicationId),
+      });
+    },
+    onError: (error) => toast.error(error.message),
+  });
+}
+
+// A mutation rather than a query so the token is fetched only on an explicit
+// click: each call writes an audit-log entry server-side.
+export function useRevealDeployHook(projectId: string, applicationId: string) {
+  return useMutation({
+    mutationFn: () => applicationsApi.revealDeployHook(projectId, applicationId),
+    onError: (error) => toast.error(error.message),
+  });
+}
+
+export function useDeleteDeployHook(projectId: string, applicationId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => applicationsApi.deleteDeployHook(projectId, applicationId),
+    onSuccess: () => {
+      qc.invalidateQueries({
+        queryKey: queryKeys.applications.deployHook(projectId, applicationId),
+      });
+    },
+    onError: (error) => toast.error(error.message),
+  });
+}
+
 export function useUpdateWebhook(projectId: string, applicationId: string) {
   const qc = useQueryClient();
   return useMutation({

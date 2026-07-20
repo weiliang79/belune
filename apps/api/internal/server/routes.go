@@ -107,6 +107,9 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService,
 			// Provider App/OAuth webhooks (verified against the provider app's
 			// shared webhook secret).
 			r.With(withTimeout(handlerTimeout)).Post("/api/git/webhooks/{provider}", h.HandleProviderWebhook)
+			// Per-application deploy hook. Unauthenticated by design: the token
+			// in the path is the credential, so CI can fire it with a bare curl.
+			r.With(withTimeout(handlerTimeout)).Post("/api/webhooks/deploy/{token}", h.HandleDeployHook)
 		})
 
 		// Git provider OAuth/manifest callbacks are public: they are top-level
@@ -207,6 +210,10 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService,
 			r.Put("/api/projects/{projectId}/applications/{applicationId}/runtime", h.UpdateApplicationRuntime)
 			r.Delete("/api/projects/{projectId}/applications/{applicationId}", h.DeleteApplication)
 			r.Put("/api/projects/{projectId}/applications/{applicationId}/webhook", h.UpdateApplicationWebhook)
+			r.Get("/api/projects/{projectId}/applications/{applicationId}/deploy-hook", h.GetDeployHook)
+			r.Get("/api/projects/{projectId}/applications/{applicationId}/deploy-hook/reveal", h.RevealDeployHook)
+			r.Post("/api/projects/{projectId}/applications/{applicationId}/deploy-hook", h.GenerateDeployHook)
+			r.Delete("/api/projects/{projectId}/applications/{applicationId}/deploy-hook", h.DeleteDeployHook)
 			r.Post("/api/projects/{projectId}/applications/{applicationId}/deploy", h.DeployApplication)
 			r.Post("/api/projects/{projectId}/applications/{applicationId}/stop", h.StopApplication)
 			r.Post("/api/projects/{projectId}/applications/{applicationId}/start", h.StartApplication)

@@ -9,10 +9,8 @@ import (
 
 // WebhookPayload represents a parsed webhook event.
 type WebhookPayload struct {
-	Provider  string // "github" or "gitlab"
-	RepoURL   string
-	Branch    string
-	CommitSHA string
+	Provider string // "github" or "gitlab"
+	providers.PushEvent
 }
 
 // ParseWebhook parses an incoming webhook request from a git provider.
@@ -22,7 +20,7 @@ func ParseWebhook(r *http.Request, body []byte, secret string) (*WebhookPayload,
 		if r.Header.Get("X-GitHub-Event") != "push" {
 			return nil, fmt.Errorf("ignoring non-push github event: %s", r.Header.Get("X-GitHub-Event"))
 		}
-		repoURL, branch, commitSHA, err := providers.ParseGitHubWebhook(
+		event, err := providers.ParseGitHubWebhook(
 			body,
 			r.Header.Get("X-Hub-Signature-256"),
 			secret,
@@ -30,19 +28,14 @@ func ParseWebhook(r *http.Request, body []byte, secret string) (*WebhookPayload,
 		if err != nil {
 			return nil, fmt.Errorf("github: %w", err)
 		}
-		return &WebhookPayload{
-			Provider:  "github",
-			RepoURL:   repoURL,
-			Branch:    branch,
-			CommitSHA: commitSHA,
-		}, nil
+		return &WebhookPayload{Provider: "github", PushEvent: event}, nil
 	}
 
 	if r.Header.Get("X-Gitlab-Event") != "" {
 		if r.Header.Get("X-Gitlab-Event") != "Push Hook" {
 			return nil, fmt.Errorf("ignoring non-push gitlab event: %s", r.Header.Get("X-Gitlab-Event"))
 		}
-		repoURL, branch, commitSHA, err := providers.ParseGitLabWebhook(
+		event, err := providers.ParseGitLabWebhook(
 			body,
 			r.Header.Get("X-Gitlab-Token"),
 			secret,
@@ -50,12 +43,7 @@ func ParseWebhook(r *http.Request, body []byte, secret string) (*WebhookPayload,
 		if err != nil {
 			return nil, fmt.Errorf("gitlab: %w", err)
 		}
-		return &WebhookPayload{
-			Provider:  "gitlab",
-			RepoURL:   repoURL,
-			Branch:    branch,
-			CommitSHA: commitSHA,
-		}, nil
+		return &WebhookPayload{Provider: "gitlab", PushEvent: event}, nil
 	}
 
 	return nil, fmt.Errorf("unknown webhook provider")

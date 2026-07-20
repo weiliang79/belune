@@ -1,6 +1,7 @@
 package handler_test
 
 import (
+	"context"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
@@ -65,6 +66,11 @@ func TestWebhookPush_GitHub(t *testing.T) {
 	payload := map[string]any{
 		"ref":   "refs/heads/main",
 		"after": "abc123def456",
+		"head_commit": map[string]any{
+			"id":      "abc123def456",
+			"message": "Fix login redirect",
+			"author":  map[string]any{"name": "Alice", "username": "alice"},
+		},
 		"repository": map[string]any{
 			"clone_url": "https://github.com/test/repo.git",
 		},
@@ -86,6 +92,17 @@ func TestWebhookPush_GitHub(t *testing.T) {
 	// Verify deploy task was enqueued
 	require.Len(t, env.Asynq.Tasks, 1)
 	assert.Equal(t, "deploy", env.Asynq.Tasks[0].TypeName)
+
+	// The commit provenance the payload carried must be persisted, not just the
+	// SHA — it is what the deployments list renders.
+	var sha, message, author string
+	require.NoError(t, env.Pool.QueryRow(context.Background(),
+		`SELECT commit_sha, COALESCE(commit_message, ''), COALESCE(commit_author, '')
+		   FROM deployments WHERE application_id = $1`, appID,
+	).Scan(&sha, &message, &author))
+	assert.Equal(t, "abc123def456", sha)
+	assert.Equal(t, "Fix login redirect", message)
+	assert.Equal(t, "Alice", author)
 }
 
 func TestWebhookPush_DuplicateDelivery(t *testing.T) {
