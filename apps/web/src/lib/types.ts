@@ -70,6 +70,9 @@ export interface Application {
   source_changed_at: string | null;
   source_kind: string | null;
   source_ref: string | null;
+  // Set when the repository comes from a connected git account rather than a
+  // plain URL.
+  git_integration_id: string | null;
   readonly_rootfs: boolean;
   container_caps: "minimal" | "standard";
   created_at: string;

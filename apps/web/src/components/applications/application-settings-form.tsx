@@ -28,6 +28,7 @@ import {
   SegmentedControl,
   SegmentedControlItem,
 } from "@/components/ui/segmented-control";
+import { IntegrationRepoPicker } from "@/components/applications/integration-repo-picker";
 import {
   useUpdateApplication,
   useChangeApplicationSource,
@@ -74,6 +75,16 @@ export function ApplicationSettingsForm({
   // Captured on submit and applied only once the user confirms — the switch
   // deletes secrets and needs a deploy, which is too much to do on one click.
   const [pending, setPending] = useState<FormValues | null>(null);
+
+  // Where the git repository comes from — a connected account or a plain URL —
+  // mirroring the create dialog. Defaults to whichever the app already uses; an
+  // app with an integration is on the connection path.
+  const [gitSource, setGitSource] = useState<"connection" | "url">(
+    application.git_integration_id ? "connection" : "url",
+  );
+  const [gitIntegrationId, setGitIntegrationId] = useState(
+    application.git_integration_id ?? "",
+  );
 
   // A switch to git has no stored build_type to fall back on, so the control
   // starts from railpack (what the create flow defaults to). A same-type edit
@@ -123,7 +134,20 @@ export function ApplicationSettingsForm({
           build_type_override: isGit
             ? value.build_type_override || undefined
             : undefined,
-          git_token: value.git_token || undefined,
+          // A token only applies to the public-URL path; a connected account
+          // carries its own credentials.
+          git_token:
+            isGit && gitSource === "url"
+              ? value.git_token || undefined
+              : undefined,
+          // Set the integration on the connection path, and clear it ("" =
+          // clear) when the app is edited onto a plain URL. Omitted for image
+          // apps so it is preserved.
+          git_integration_id: isGit
+            ? gitSource === "connection"
+              ? gitIntegrationId
+              : ""
+            : undefined,
         }),
         {
           loading: "Saving...",
@@ -146,7 +170,10 @@ export function ApplicationSettingsForm({
             branch: v.branch.trim(),
             build_type: v.build_type_override || "railpack",
             dockerfile_path: v.dockerfile_path || undefined,
-            git_token: v.git_token || undefined,
+            git_token:
+              gitSource === "url" ? v.git_token || undefined : undefined,
+            git_integration_id:
+              gitSource === "connection" ? gitIntegrationId : undefined,
           };
     toast.promise(changeSource.mutateAsync(data), {
       loading: "Changing source...",
@@ -278,35 +305,77 @@ export function ApplicationSettingsForm({
           )}
           {selectedType === "git" && (
             <>
-              <form.Field
-                name="source_repo"
-                validators={{
-                  onChange: z
-                    .string()
-                    .refine(
-                      (v) =>
-                        !v || v.startsWith("https://") || v.startsWith("git@"),
-                      "URL must start with https:// or git@",
-                    ),
-                }}
-                children={(field) => (
-                  <div className="space-y-2">
-                    <Label>Repository URL</Label>
-                    <Input
-                      value={field.state.value}
-                      onBlur={field.handleBlur}
-                      onChange={(e) => field.handleChange(e.target.value)}
-                    />
-                    {field.state.meta.errors.length > 0 && (
-                      <p className="text-destructive text-sm">
-                        {typeof field.state.meta.errors[0] === "string"
-                          ? field.state.meta.errors[0]
-                          : field.state.meta.errors[0]?.message}
-                      </p>
-                    )}
-                  </div>
-                )}
-              />
+              <div className="space-y-2">
+                <Label>Repository Source</Label>
+                <SegmentedControl
+                  value={gitSource}
+                  onValueChange={(v) =>
+                    setGitSource(v as "connection" | "url")
+                  }
+                >
+                  <SegmentedControlItem value="connection">
+                    Connected Account
+                  </SegmentedControlItem>
+                  <SegmentedControlItem value="url">
+                    Public URL
+                  </SegmentedControlItem>
+                </SegmentedControl>
+              </div>
+              {gitSource === "connection" ? (
+                <>
+                  <form.Subscribe
+                    selector={(s) => s.values.source_repo}
+                    children={(repo) =>
+                      repo ? (
+                        <p className="text-muted-foreground text-xs">
+                          Current repository:{" "}
+                          <span className="font-mono">{repo}</span>. Pick one
+                          below to change it.
+                        </p>
+                      ) : null
+                    }
+                  />
+                  <IntegrationRepoPicker
+                    onSelect={({ integrationId, cloneUrl, branch }) => {
+                      setGitIntegrationId(integrationId);
+                      form.setFieldValue("source_repo", cloneUrl);
+                      form.setFieldValue("branch", branch);
+                    }}
+                  />
+                </>
+              ) : (
+                <form.Field
+                  name="source_repo"
+                  validators={{
+                    onChange: z
+                      .string()
+                      .refine(
+                        (v) =>
+                          !v ||
+                          v.startsWith("https://") ||
+                          v.startsWith("git@"),
+                        "URL must start with https:// or git@",
+                      ),
+                  }}
+                  children={(field) => (
+                    <div className="space-y-2">
+                      <Label>Repository URL</Label>
+                      <Input
+                        value={field.state.value}
+                        onBlur={field.handleBlur}
+                        onChange={(e) => field.handleChange(e.target.value)}
+                      />
+                      {field.state.meta.errors.length > 0 && (
+                        <p className="text-destructive text-sm">
+                          {typeof field.state.meta.errors[0] === "string"
+                            ? field.state.meta.errors[0]
+                            : field.state.meta.errors[0]?.message}
+                        </p>
+                      )}
+                    </div>
+                  )}
+                />
+              )}
               <form.Field
                 name="branch"
                 children={(field) => (
@@ -325,30 +394,32 @@ export function ApplicationSettingsForm({
                   </div>
                 )}
               />
-              <form.Field
-                name="git_token"
-                children={(field) => (
-                  <div className="space-y-2">
-                    <Label>Private Token (PAT)</Label>
-                    <Input
-                      type="password"
-                      value={field.state.value}
-                      onBlur={field.handleBlur}
-                      onChange={(e) => field.handleChange(e.target.value)}
-                      placeholder={
-                        isSwitching
-                          ? "Leave empty for a public repository"
-                          : "Leave empty to keep existing token"
-                      }
-                      className="font-mono"
-                    />
-                    <p className="text-muted-foreground text-xs">
-                      Per-app token for private repositories. Use a repo-scoped
-                      token where possible.
-                    </p>
-                  </div>
-                )}
-              />
+              {gitSource === "url" && (
+                <form.Field
+                  name="git_token"
+                  children={(field) => (
+                    <div className="space-y-2">
+                      <Label>Private Token (PAT)</Label>
+                      <Input
+                        type="password"
+                        value={field.state.value}
+                        onBlur={field.handleBlur}
+                        onChange={(e) => field.handleChange(e.target.value)}
+                        placeholder={
+                          isSwitching
+                            ? "Leave empty for a public repository"
+                            : "Leave empty to keep existing token"
+                        }
+                        className="font-mono"
+                      />
+                      <p className="text-muted-foreground text-xs">
+                        Per-app token for private repositories. Use a repo-scoped
+                        token where possible.
+                      </p>
+                    </div>
+                  )}
+                />
+              )}
               <form.Subscribe
                 selector={(s) => s.values.build_type_override}
                 children={(override) =>
