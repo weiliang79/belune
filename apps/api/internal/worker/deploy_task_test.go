@@ -276,6 +276,44 @@ func TestApplicationStatusForEvent(t *testing.T) {
 			runtime.ContainerEvent{Status: "die", Labels: map[string]string{"exitCode": "1"}},
 			status.ApplicationError, true,
 		},
+		// The regression: `docker stop` sends SIGTERM, and an image that does
+		// not trap it exits 128+15. Reading that as a crash marked every
+		// deliberate stop as an error.
+		{
+			"terminated by SIGTERM on a deliberate stop",
+			runtime.ContainerEvent{Status: "die", Labels: map[string]string{"exitCode": "143"}},
+			status.ApplicationStopped, true,
+		},
+		{
+			"killed by SIGKILL after the stop grace period",
+			runtime.ContainerEvent{Status: "die", Labels: map[string]string{"exitCode": "137"}},
+			status.ApplicationStopped, true,
+		},
+		// Codes the application chose itself still mean a crash.
+		{
+			"fatal config error",
+			runtime.ContainerEvent{Status: "die", Labels: map[string]string{"exitCode": "2"}},
+			status.ApplicationError, true,
+		},
+		{
+			"command not found",
+			runtime.ContainerEvent{Status: "die", Labels: map[string]string{"exitCode": "127"}},
+			status.ApplicationError, true,
+		},
+		// Docker always sets exitCode on die, so these are defensive only —
+		// and when we cannot tell, the non-alarming reading wins.
+		{
+			"missing exit code",
+			runtime.ContainerEvent{Status: "die", Labels: map[string]string{}},
+			status.ApplicationStopped, true,
+		},
+		{
+			"unparseable exit code",
+			runtime.ContainerEvent{Status: "die", Labels: map[string]string{"exitCode": "nope"}},
+			status.ApplicationStopped, true,
+		},
+		// An OOM kill also exits 137, but Docker emits `oom` first and the
+		// watcher refuses to downgrade an errored app back to stopped.
 		{"oom", runtime.ContainerEvent{Status: "oom"}, status.ApplicationError, true},
 		{"unrelated", runtime.ContainerEvent{Status: "pause"}, "", false},
 	}

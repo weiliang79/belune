@@ -118,3 +118,72 @@ func pgUUID(s string) pgtype.UUID {
 	_ = u.Scan(s)
 	return u
 }
+
+// Replays the sequence that made a deliberate stop show up as "error".
+//
+// The application is a Next.js app started through npm. `docker stop` sends
+// SIGTERM, next exits, and npm reports exit code 1 rather than propagating 143
+// — so the exit code alone cannot distinguish this from a crash. Docker then
+// emits `die` followed by `stop`.
+func TestStopSequence_EndsStopped(t *testing.T) {
+	die := runtime.ContainerEvent{
+		Status: "die",
+		Labels: map[string]string{"exitCode": "1"}, // npm swallowed the signal
+	}
+	stop := runtime.ContainerEvent{Status: "stop"}
+
+	// The application is running when the stop is requested.
+	current := status.ApplicationRunning
+
+	// The die arrives first and, read on its own, looks like a crash.
+	derived, ok := ApplicationStatusForEvent(die)
+	assert.True(t, ok)
+	assert.Equal(t, status.ApplicationError, derived)
+	if ApplyDieStatus(derived, current) {
+		current = derived
+	}
+	assert.Equal(t, status.ApplicationError, current, "the die is indistinguishable from a crash on its own")
+
+	// The stop follows and is authoritative — this is the step that used to be
+	// swallowed for looking like a downgrade from "error".
+	derived, ok = ApplicationStatusForEvent(stop)
+	assert.True(t, ok)
+	current = derived
+
+	assert.Equal(t, status.ApplicationStopped, current,
+		"a deliberate stop must not leave the application showing an error")
+}
+
+func TestApplyDieStatus(t *testing.T) {
+	cases := []struct {
+		name             string
+		derived, current string
+		want             bool
+	}{
+		{
+			"a die during cleanup must not clear a failed deploy",
+			status.ApplicationStopped, status.ApplicationError, false,
+		},
+		{
+			"a non-zero exit must not error an app already stopped on purpose",
+			status.ApplicationError, status.ApplicationStopped, false,
+		},
+		{
+			"a genuine crash while running is recorded",
+			status.ApplicationError, status.ApplicationRunning, true,
+		},
+		{
+			"a clean exit while running is recorded",
+			status.ApplicationStopped, status.ApplicationRunning, true,
+		},
+		{
+			"a repeated error is harmless",
+			status.ApplicationError, status.ApplicationError, true,
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			assert.Equal(t, c.want, ApplyDieStatus(c.derived, c.current))
+		})
+	}
+}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strconv"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
@@ -109,8 +110,14 @@ func (w *Watcher) reconcile(ctx context.Context) {
 		if app.Status == status.ApplicationRunning && !isRunning {
 			slog.Info("eventwatcher: reconciling stopped application", "app_id", appIDStr)
 			w.updateAppStatus(ctx, app.ID, appIDStr, status.ApplicationStopped)
-		} else if app.Status == status.ApplicationStopped && isRunning {
-			slog.Info("eventwatcher: reconciling running application", "app_id", appIDStr)
+		} else if (app.Status == status.ApplicationStopped || app.Status == status.ApplicationError) && isRunning {
+			// "error" is included because the container is the ground truth: if
+			// it is up, the application is running, whatever went wrong before.
+			// Without this an app could sit in "error" indefinitely while
+			// serving traffic — reconciliation used to only ever move between
+			// running and stopped, which was complete only while "error" was
+			// never written.
+			slog.Info("eventwatcher: reconciling running application", "app_id", appIDStr, "from", app.Status)
 			w.updateAppStatus(ctx, app.ID, appIDStr, status.ApplicationRunning)
 		}
 	}
@@ -193,14 +200,13 @@ func (w *Watcher) handleApplicationEvent(ctx context.Context, event runtime.Cont
 		slog.Warn("eventwatcher: container killed by OOM", "app_id", appID, "container", event.ContainerName)
 	}
 
-	// Never downgrade a failed deploy to "stopped". The compensating cleanup
-	// removes the half-created container, and that die event can land after
-	// failDeployment has already recorded the error — losing the more
-	// informative status to a race.
-	if newStatus == status.ApplicationStopped {
-		if current, err := w.queries.GetApplication(ctx, appUUID); err == nil &&
-			current.Status == status.ApplicationError {
-			slog.Debug("eventwatcher: keeping errored status", "app_id", appID)
+	// Only a `die` needs the current status to be interpreted; every other
+	// event stands on its own, so the read is skipped for them.
+	if event.Status == "die" {
+		current, err := w.queries.GetApplication(ctx, appUUID)
+		if err == nil && !ApplyDieStatus(newStatus, current.Status) {
+			slog.Debug("eventwatcher: keeping existing status",
+				"app_id", appID, "keeping", current.Status, "ignored", newStatus)
 			return
 		}
 	}
@@ -218,9 +224,8 @@ func (w *Watcher) handleApplicationEvent(ctx context.Context, event runtime.Cont
 // ApplicationStatusForEvent maps a Docker container event to an application
 // status, returning ok=false for events that should not change status.
 //
-// A crash and a clean stop are distinguished by exit code, the same way
-// databases already are: previously any exit read as "stopped", so an app that
-// crash-looped looked identical to one the user had deliberately stopped.
+// A crash and a clean stop are distinguished by exit code, so an app that
+// crash-loops no longer looks identical to one the user deliberately stopped.
 func ApplicationStatusForEvent(event runtime.ContainerEvent) (newStatus string, ok bool) {
 	switch event.Status {
 	case "start", "restart":
@@ -228,15 +233,81 @@ func ApplicationStatusForEvent(event runtime.ContainerEvent) (newStatus string, 
 	case "stop":
 		return status.ApplicationStopped, true
 	case "die":
-		if event.Labels["exitCode"] == "0" {
-			return status.ApplicationStopped, true
-		}
-		return status.ApplicationError, true
+		return exitStatus(event.Labels["exitCode"]), true
 	case "oom":
 		return status.ApplicationError, true
 	default:
 		return "", false
 	}
+}
+
+// ApplyDieStatus reports whether the status derived from a `die` event should
+// be written over the status the application already has.
+//
+// A `die` is ambiguous: it carries an exit code but says nothing about who
+// asked for the exit, and it races with the writes made by whoever did the
+// asking. A `stop` event is not ambiguous — Docker emits it only because
+// something asked the container to stop — so callers apply those unconditionally
+// and never consult this.
+//
+// That distinction is the fix for the bug where stopping an application left it
+// showing "error". Docker emits `die` then `stop`; an earlier version guarded on
+// the status alone, so a stop whose process exited non-zero wrote "error" on the
+// die, and then the very event that would have corrected it was swallowed for
+// looking like a downgrade. The application stayed errored indefinitely.
+func ApplyDieStatus(derived, current string) bool {
+	// Never downgrade a failed deploy to "stopped". The compensating cleanup
+	// removes the half-created container, and that die can land after
+	// failDeployment has already recorded the error.
+	if derived == status.ApplicationStopped && current == status.ApplicationError {
+		return false
+	}
+	// Never turn a deliberate stop into an error. An application already
+	// recorded as stopped has nothing left running to crash, so this die is
+	// reporting the stop that was asked for — whatever exit code came back.
+	//
+	// Wrapper commands make that code untrustworthy in exactly this case:
+	// `npm start` exits 1 when its child is terminated by SIGTERM instead of
+	// propagating 143, so the exit code alone cannot tell a stop from a crash.
+	if derived == status.ApplicationError && current == status.ApplicationStopped {
+		return false
+	}
+	return true
+}
+
+// exitStatus decides whether an exit code describes a crash.
+//
+// Being killed by a signal is not a crash. `docker stop` sends SIGTERM, and a
+// process that does not install a handler is terminated by it — which Docker
+// reports as exit 128+signal, so 143 for SIGTERM and 137 for SIGKILL after the
+// grace period. Plenty of application images never trap SIGTERM, so treating
+// every non-zero exit as a crash marked ordinary, deliberate stops as errors.
+//
+// The database mapping gets away with the simpler rule because Postgres and
+// MySQL do trap SIGTERM and exit 0. Generalising that to arbitrary application
+// images was the mistake this corrects.
+//
+// An OOM kill also exits 137, but Docker emits a distinct `oom` event first and
+// the caller refuses to downgrade an errored application back to stopped, so
+// the more informative status survives.
+//
+// What remains an error is an exit code the application chose itself: a failed
+// start, a fatal config error, a panic.
+func exitStatus(exitCode string) string {
+	switch exitCode {
+	case "", "0":
+		return status.ApplicationStopped
+	}
+	code, err := strconv.Atoi(exitCode)
+	if err != nil {
+		// Unparseable: prefer the non-alarming reading rather than inventing a
+		// failure the user cannot explain.
+		return status.ApplicationStopped
+	}
+	if code > 128 && code <= 128+64 {
+		return status.ApplicationStopped
+	}
+	return status.ApplicationError
 }
 
 // databaseStatusForEvent maps a Docker container event to a database status,
