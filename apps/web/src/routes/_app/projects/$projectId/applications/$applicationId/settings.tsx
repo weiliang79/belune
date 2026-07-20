@@ -51,6 +51,22 @@ function ApplicationSettingsPage() {
         application={application}
       />
 
+      <Separator />
+
+      <ResourcesSection
+        projectId={projectId}
+        applicationId={applicationId}
+        application={application}
+      />
+
+      <Separator />
+
+      <HealthCheckSection
+        projectId={projectId}
+        applicationId={applicationId}
+        application={application}
+      />
+
       {application.type === "git" && (
         <>
           <Separator />
@@ -63,25 +79,7 @@ function ApplicationSettingsPage() {
 
       <Separator />
 
-      {/* How it runs: resource ceilings, then the security/runtime profile. */}
-      <ResourcesSection
-        projectId={projectId}
-        applicationId={applicationId}
-        application={application}
-      />
-
-      <Separator />
-
       <RuntimeSection
-        projectId={projectId}
-        applicationId={applicationId}
-        application={application}
-      />
-
-      <Separator />
-
-      {/* How it's monitored. */}
-      <HealthCheckSection
         projectId={projectId}
         applicationId={applicationId}
         application={application}
