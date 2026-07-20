@@ -237,7 +237,11 @@ function ApplicationOverview() {
   const { projectId, applicationId } = Route.useParams();
   const { data: application } = useApplication(projectId, applicationId);
   const { data: deployments } = useDeployments(projectId, applicationId);
-  const { data: metrics } = useAppMetricsStream(projectId, applicationId, true);
+  const { data: metrics } = useAppMetricsStream(
+    projectId,
+    applicationId,
+    application?.status === "running",
+  );
 
   if (!application) {
     return (
@@ -294,7 +298,10 @@ function ApplicationOverview() {
       </div>
 
       <p className="text-text-faint text-center text-xs">
-        Live metrics stream every ~2s while this page is open ·{" "}
+        {application.status === "running"
+          ? "Live metrics stream every ~2s while this page is open"
+          : "Live metrics are only collected while the application is running"}{" "}
+        ·{" "}
         <Link
           to="/projects/$projectId/applications/$applicationId/metrics"
           params={{ projectId, applicationId }}

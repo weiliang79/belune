@@ -11,6 +11,7 @@ import (
 
 	"github.com/weiliang79/belune/internal/naming"
 	"github.com/weiliang79/belune/internal/pkg/sse"
+	"github.com/weiliang79/belune/internal/status"
 )
 
 // StreamHostMetrics streams live host metric points via SSE.
@@ -103,6 +104,16 @@ func (h *Handler) StreamApplicationMetrics(w http.ResponseWriter, r *http.Reques
 				return
 			}
 		case <-ticker.C:
+			// Re-read the status each tick rather than trusting the one read at
+			// connect: a long-lived stream outlives a stop. Docker answers a
+			// stats request for a stopped container with its last cgroup
+			// reading rather than zeroes, so without this the stream reports
+			// memory the application is not using.
+			if row, err := h.queries.GetApplication(ctx, appUUID); err == nil &&
+				row.Status != status.ApplicationRunning {
+				continue
+			}
+
 			stats, err := h.runtime.ContainerStats(ctx, containerName)
 			if err != nil {
 				slog.Debug("failed to collect container stats for stream", "container", containerName, "error", err)

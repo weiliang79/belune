@@ -70,7 +70,14 @@ function ApplicationLayout() {
   const { data: deployments } = useDeployments(projectId, applicationId);
   const { data: domains } = useDomains(projectId, applicationId);
   const { data: projectMetrics } = useProjectMetrics(projectId);
-  const appMetrics = useAppMetricsStream(projectId, applicationId, true);
+  // Only subscribe while the container is up. Metrics describe a running
+  // process; for a stopped app the stream would sit idle and the last values
+  // would stay frozen on screen, reading as current.
+  const appMetrics = useAppMetricsStream(
+    projectId,
+    applicationId,
+    application?.status === "running",
+  );
   const qc = useQueryClient();
 
   // Subscribe to real-time container status changes

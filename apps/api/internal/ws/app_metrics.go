@@ -10,6 +10,7 @@ import (
 
 	"github.com/weiliang79/belune/internal/naming"
 	"github.com/weiliang79/belune/internal/runtime"
+	"github.com/weiliang79/belune/internal/status"
 	"github.com/weiliang79/belune/internal/store/generated"
 )
 
@@ -42,6 +43,17 @@ func RunAppMetricsBroadcaster(
 				if err != nil {
 					continue
 				}
+				// Docker still answers a stats request for a stopped
+				// container, and answers it with the last cgroup reading rather
+				// than zeroes — a stopped application was reporting a live,
+				// two-second-refreshing 117 MB of memory it was not using.
+				// There is no such thing as current usage for something that is
+				// not running, so nothing is published and the client shows no
+				// data instead of convincing fiction.
+				if row.Status != status.ApplicationRunning {
+					continue
+				}
+
 				containerName := naming.ContainerName(row.ProjectSlug, row.Slug, appIDStr)
 				stats, err := rt.ContainerStats(ctx, containerName)
 				if err != nil {
