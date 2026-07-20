@@ -37,7 +37,6 @@ import {
   SlidersHorizontal,
   Globe,
   Rocket,
-  GitBranch,
   ScrollText,
   Activity,
   SquareTerminal,
@@ -132,7 +131,13 @@ function ApplicationLayout() {
       live: isDeploying,
       liveLabel: "Deployment in progress",
     },
-    { to: `${basePath}/previews`, label: "Previews", icon: GitBranch },
+    // Previews are unlinked until the feature is finished (planned v0.1.x). The
+    // route and its components are left intact, so /previews still resolves by
+    // direct URL — preview children are filtered out of the app list
+    // (parent_application_id IS NULL), making that page the only way to reach
+    // any that already exist. Nothing new can be created while this is hidden:
+    // materialising a preview requires preview_branch_pattern +
+    // preview_domain_template, which only this tab can set.
     { to: `${basePath}/logs`, label: "Logs", icon: ScrollText },
     { to: `${basePath}/metrics`, label: "Metrics", icon: Activity },
     { to: `${basePath}/terminal`, label: "Terminal", icon: SquareTerminal },
