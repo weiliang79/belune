@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
+import { TriangleAlert } from "lucide-react";
 import { useApplication } from "@/lib/hooks/use-applications";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -89,7 +90,10 @@ function ApplicationSettingsPage() {
 
       <Card className="border-destructive/50">
         <CardHeader>
-          <CardTitle className="text-destructive">Danger Zone</CardTitle>
+          <CardTitle className="text-destructive flex items-center gap-2">
+            <TriangleAlert aria-hidden="true" className="size-4" />
+            Danger Zone
+          </CardTitle>
         </CardHeader>
         <CardContent>
           <Button variant="destructive" onClick={() => setDeleteOpen(true)}>

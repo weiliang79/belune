@@ -1,4 +1,5 @@
 import { toast } from "sonner";
+import { Layers } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -36,7 +37,10 @@ export function BuildCacheSection({ projectId, applicationId }: Props) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Build Cache</CardTitle>
+        <CardTitle className="flex items-center gap-2">
+          <Layers aria-hidden="true" className="size-4" />
+          Build Cache
+        </CardTitle>
         <CardDescription>
           Persistent layer cache reused across builds. Clearing forces the next
           build to start from scratch.

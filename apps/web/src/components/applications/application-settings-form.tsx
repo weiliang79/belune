@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useForm } from "@tanstack/react-form";
 import { z } from "zod";
 import { toast } from "sonner";
-import { TriangleAlert } from "lucide-react";
+import { TriangleAlert, Settings2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -161,7 +161,10 @@ export function ApplicationSettingsForm({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Application Settings</CardTitle>
+        <CardTitle className="flex items-center gap-2">
+          <Settings2 aria-hidden="true" className="size-4" />
+          Application Settings
+        </CardTitle>
         <CardDescription>
           Build and runtime configuration for this application. Saving does not
           touch the running container — the badge beside the application name

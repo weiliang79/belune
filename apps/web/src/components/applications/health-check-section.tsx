@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { toast } from "sonner";
+import { HeartPulse } from "lucide-react";
 import {
   Card,
   CardContent,
@@ -105,7 +106,10 @@ export function HealthCheckSection({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Health Check</CardTitle>
+        <CardTitle className="flex items-center gap-2">
+          <HeartPulse aria-hidden="true" className="size-4" />
+          Health Check
+        </CardTitle>
         <CardDescription>
           How the platform decides the application is healthy. A command check
           runs continuously inside the container and marks the app Unhealthy when

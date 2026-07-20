@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { toast } from "sonner";
+import { Cpu } from "lucide-react";
 import {
   Card,
   CardContent,
@@ -59,7 +60,10 @@ export function ResourcesSection({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Resources</CardTitle>
+        <CardTitle className="flex items-center gap-2">
+          <Cpu aria-hidden="true" className="size-4" />
+          Resources
+        </CardTitle>
         <CardDescription>
           CPU and memory ceilings for the container. Leave a field at 0 for no
           limit. Applied when the container is next recreated.
