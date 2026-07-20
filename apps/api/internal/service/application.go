@@ -154,17 +154,20 @@ func (s *ApplicationService) Update(
 	}
 
 	return s.queries.UpdateApplication(ctx, generated.UpdateApplicationParams{
-		ID:                      appID,
-		Name:                    name,
-		SourceRepo:              pgtype.Text{String: p.SourceRepo, Valid: p.SourceRepo != ""},
-		SourceImage:             pgtype.Text{String: p.SourceImage, Valid: p.SourceImage != ""},
-		DockerfilePath:          pgtype.Text{String: p.DockerfilePath, Valid: p.DockerfilePath != ""},
-		BuildTypeOverride:       pgtype.Text{String: p.BuildTypeOverride, Valid: p.BuildTypeOverride != ""},
-		BuilderImage:            pgtype.Text{String: p.BuilderImage, Valid: p.BuilderImage != ""},
-		CustomBuildpacks:        current.CustomBuildpacks,
-		Status:                  current.Status,
-		CpuLimit:                p.CPULimit,
-		MemoryLimit:             p.MemoryLimit,
+		ID:                appID,
+		Name:              name,
+		SourceRepo:        pgtype.Text{String: p.SourceRepo, Valid: p.SourceRepo != ""},
+		SourceImage:       pgtype.Text{String: p.SourceImage, Valid: p.SourceImage != ""},
+		DockerfilePath:    pgtype.Text{String: p.DockerfilePath, Valid: p.DockerfilePath != ""},
+		BuildTypeOverride: pgtype.Text{String: p.BuildTypeOverride, Valid: p.BuildTypeOverride != ""},
+		BuilderImage:      pgtype.Text{String: p.BuilderImage, Valid: p.BuilderImage != ""},
+		CustomBuildpacks:  current.CustomBuildpacks,
+		Status:            current.Status,
+		// Resource limits are owned by SetApplicationResources, not this general
+		// update — preserve them so saving settings can never reset them to
+		// unlimited out from under the Resources section.
+		CpuLimit:                current.CpuLimit,
+		MemoryLimit:             current.MemoryLimit,
 		GitCredentialsEncrypted: gitCreds,
 		// Health configuration is owned by SetApplicationHealthCheck, not this
 		// general update — preserve it so saving settings can never clear the

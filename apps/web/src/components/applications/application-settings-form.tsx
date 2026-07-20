@@ -47,8 +47,6 @@ type FormValues = {
   source_image: string;
   dockerfile_path: string;
   build_type_override: string;
-  cpu_limit: number;
-  memory_limit_mb: number;
   git_token: string;
   branch: string;
 };
@@ -89,8 +87,6 @@ export function ApplicationSettingsForm({
       source_image: application.source_image ?? "",
       dockerfile_path: application.dockerfile_path ?? "",
       build_type_override: application.build_type_override ?? "",
-      cpu_limit: application.cpu_limit ?? 0,
-      memory_limit_mb: Math.round(application.memory_limit / (1024 * 1024)),
       git_token: "",
       branch: application.branch ?? "",
     } as FormValues,
@@ -127,11 +123,6 @@ export function ApplicationSettingsForm({
           build_type_override: isGit
             ? value.build_type_override || undefined
             : undefined,
-          cpu_limit: value.cpu_limit,
-          memory_limit:
-            value.memory_limit_mb > 0
-              ? value.memory_limit_mb * 1024 * 1024
-              : 0,
           git_token: value.git_token || undefined,
         }),
         {
@@ -377,52 +368,6 @@ export function ApplicationSettingsForm({
               />
             </>
           )}
-          <div className="grid grid-cols-2 gap-4">
-            <form.Field
-              name="cpu_limit"
-              children={(field) => (
-                <div className="space-y-2">
-                  <Label>CPU Limit (cores)</Label>
-                  <Input
-                    type="number"
-                    min="0"
-                    step="0.1"
-                    value={field.state.value}
-                    onBlur={field.handleBlur}
-                    onChange={(e) =>
-                      field.handleChange(parseFloat(e.target.value) || 0)
-                    }
-                    placeholder="0 = unlimited"
-                  />
-                  <p className="text-muted-foreground text-xs">
-                    e.g. 0.5 = half a core, 0 = unlimited
-                  </p>
-                </div>
-              )}
-            />
-            <form.Field
-              name="memory_limit_mb"
-              children={(field) => (
-                <div className="space-y-2">
-                  <Label>Memory Limit (MB)</Label>
-                  <Input
-                    type="number"
-                    min="0"
-                    step="64"
-                    value={field.state.value}
-                    onBlur={field.handleBlur}
-                    onChange={(e) =>
-                      field.handleChange(parseInt(e.target.value) || 0)
-                    }
-                    placeholder="0 = unlimited"
-                  />
-                  <p className="text-muted-foreground text-xs">
-                    e.g. 512 = 512 MB, 0 = unlimited
-                  </p>
-                </div>
-              )}
-            />
-          </div>
           <form.Subscribe
             selector={(s) => s.isSubmitting}
             children={(isSubmitting) => (

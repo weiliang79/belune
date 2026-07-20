@@ -216,19 +216,24 @@ func TestCreateApplication_ResourceLimits(t *testing.T) {
 	assert.Equal(t, 0.5, app["cpu_limit"])
 	assert.Equal(t, float64(536870912), app["memory_limit"])
 
-	// Update resource limits
+	// Limits are updated through their own endpoint now.
 	appID := extractID(app["id"])
-	resp := env.DoRequest(t, "PUT", fmt.Sprintf("/api/projects/%s/applications/%s", projectID, appID), map[string]any{
-		// The source fields are resent: this endpoint replaces them, so
-		// omitting them would previously have cleared source_repo and is now
-		// rejected outright.
-		"source_repo":  "https://github.com/test/repo",
+	resp := env.DoRequest(t, "PUT", fmt.Sprintf("/api/projects/%s/applications/%s/resources", projectID, appID), map[string]any{
 		"cpu_limit":    1.0,
 		"memory_limit": 1073741824, // 1 GB
 	}, testutil.AuthHeader(token))
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 	result := testutil.ReadJSON(t, resp)
 	assert.Equal(t, 1.0, result["cpu_limit"])
+	assert.Equal(t, float64(1073741824), result["memory_limit"])
+
+	// A general settings save preserves the limits rather than resetting them.
+	resp = env.DoRequest(t, "PUT", fmt.Sprintf("/api/projects/%s/applications/%s", projectID, appID), map[string]any{
+		"source_repo": "https://github.com/test/repo",
+	}, testutil.AuthHeader(token))
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	result = testutil.ReadJSON(t, resp)
+	assert.Equal(t, 1.0, result["cpu_limit"], "settings save must not reset the CPU limit")
 	assert.Equal(t, float64(1073741824), result["memory_limit"])
 }
 

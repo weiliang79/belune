@@ -1684,6 +1684,72 @@ func (q *Queries) SetApplicationHealthTuning(ctx context.Context, arg SetApplica
 	return err
 }
 
+const setApplicationResources = `-- name: SetApplicationResources :one
+UPDATE applications
+SET cpu_limit = $2, memory_limit = $3, updated_at = NOW()
+WHERE id = $1
+RETURNING id, project_id, name, slug, type, source_repo, source_image, dockerfile_path, build_type, build_type_override, builder_image, custom_buildpacks, cpu_limit, memory_limit, webhook_secret, auto_deploy_branch, status, git_credentials_encrypted, health_check_path, created_at, updated_at, parent_application_id, branch, preview_branch_pattern, preview_domain_template, last_activity_at, git_integration_id, source_kind, source_ref, readonly_rootfs, container_caps, container_port, health_check_timeout_seconds, health_check_expect_status, deploy_hook_token_hash, deploy_hook_token_encrypted, webhook_secret_encrypted, config_changed_at, source_changed_at, last_deployed_at, health_check_type, health_check_command, health_check_interval_seconds, health_check_retries, health_check_start_period_seconds
+`
+
+type SetApplicationResourcesParams struct {
+	ID          pgtype.UUID `json:"id"`
+	CpuLimit    float64     `json:"cpu_limit"`
+	MemoryLimit int64       `json:"memory_limit"`
+}
+
+func (q *Queries) SetApplicationResources(ctx context.Context, arg SetApplicationResourcesParams) (Application, error) {
+	row := q.db.QueryRow(ctx, setApplicationResources, arg.ID, arg.CpuLimit, arg.MemoryLimit)
+	var i Application
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.Name,
+		&i.Slug,
+		&i.Type,
+		&i.SourceRepo,
+		&i.SourceImage,
+		&i.DockerfilePath,
+		&i.BuildType,
+		&i.BuildTypeOverride,
+		&i.BuilderImage,
+		&i.CustomBuildpacks,
+		&i.CpuLimit,
+		&i.MemoryLimit,
+		&i.WebhookSecret,
+		&i.AutoDeployBranch,
+		&i.Status,
+		&i.GitCredentialsEncrypted,
+		&i.HealthCheckPath,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.ParentApplicationID,
+		&i.Branch,
+		&i.PreviewBranchPattern,
+		&i.PreviewDomainTemplate,
+		&i.LastActivityAt,
+		&i.GitIntegrationID,
+		&i.SourceKind,
+		&i.SourceRef,
+		&i.ReadonlyRootfs,
+		&i.ContainerCaps,
+		&i.ContainerPort,
+		&i.HealthCheckTimeoutSeconds,
+		&i.HealthCheckExpectStatus,
+		&i.DeployHookTokenHash,
+		&i.DeployHookTokenEncrypted,
+		&i.WebhookSecretEncrypted,
+		&i.ConfigChangedAt,
+		&i.SourceChangedAt,
+		&i.LastDeployedAt,
+		&i.HealthCheckType,
+		&i.HealthCheckCommand,
+		&i.HealthCheckIntervalSeconds,
+		&i.HealthCheckRetries,
+		&i.HealthCheckStartPeriodSeconds,
+	)
+	return i, err
+}
+
 const touchApplicationActivity = `-- name: TouchApplicationActivity :exec
 UPDATE applications SET last_activity_at = NOW()
 WHERE id = $1

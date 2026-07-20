@@ -8,6 +8,7 @@ import { Separator } from "@/components/ui/separator";
 import { ApplicationSettingsForm } from "@/components/applications/application-settings-form";
 import { BuildCacheSection } from "@/components/applications/build-cache-section";
 import { RuntimeSection } from "@/components/applications/runtime-section";
+import { ResourcesSection } from "@/components/applications/resources-section";
 import { HealthCheckSection } from "@/components/applications/health-check-section";
 import { DeleteApplicationDialog } from "@/components/applications/delete-application-dialog";
 
@@ -62,7 +63,8 @@ function ApplicationSettingsPage() {
 
       <Separator />
 
-      <HealthCheckSection
+      {/* How it runs: resource ceilings, then the security/runtime profile. */}
+      <ResourcesSection
         projectId={projectId}
         applicationId={applicationId}
         application={application}
@@ -71,6 +73,15 @@ function ApplicationSettingsPage() {
       <Separator />
 
       <RuntimeSection
+        projectId={projectId}
+        applicationId={applicationId}
+        application={application}
+      />
+
+      <Separator />
+
+      {/* How it's monitored. */}
+      <HealthCheckSection
         projectId={projectId}
         applicationId={applicationId}
         application={application}

@@ -37,13 +37,13 @@ export function updateApplication(
     dockerfile_path?: string;
     build_type_override?: string;
     builder_image?: string;
-    cpu_limit?: number;
-    memory_limit?: number;
     git_token?: string;
     /** Ref to build; empty string clears it back to the repository default. */
     branch?: string;
     git_integration_id?: string;
-    health_check_path?: string;
+    // Note: resource limits (setResources) and health config (setHealthCheck)
+    // have their own endpoints. This update preserves them, so they are not
+    // accepted here — sending them would be silently ignored.
   },
 ) {
   return api.put<Application>(`/projects/${projectId}/applications/${applicationId}`, data);
@@ -217,6 +217,19 @@ export function setHealthCheck(
 ) {
   return api.put<Application>(
     `/projects/${projectId}/applications/${applicationId}/health-check`,
+    data,
+  );
+}
+
+// Sets CPU and memory limits. Its own endpoint so the Resources card need not
+// echo back every source field to avoid the general update's coherence check.
+export function setResources(
+  projectId: string,
+  applicationId: string,
+  data: { cpu_limit: number; memory_limit: number },
+) {
+  return api.put<Application>(
+    `/projects/${projectId}/applications/${applicationId}/resources`,
     data,
   );
 }

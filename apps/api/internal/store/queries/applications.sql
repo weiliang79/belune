@@ -165,6 +165,12 @@ WHERE id = $1;
 UPDATE applications SET readonly_rootfs = $2, container_caps = $3, updated_at = NOW()
 WHERE id = $1;
 
+-- name: SetApplicationResources :one
+UPDATE applications
+SET cpu_limit = $2, memory_limit = $3, updated_at = NOW()
+WHERE id = $1
+RETURNING *;
+
 -- name: SetApplicationContainerPort :exec
 UPDATE applications SET container_port = $2, updated_at = NOW()
 WHERE id = $1;

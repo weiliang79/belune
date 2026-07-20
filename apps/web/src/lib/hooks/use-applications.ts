@@ -328,3 +328,16 @@ export function useSetHealthCheck(projectId: string, applicationId: string) {
     onError: (error) => toast.error(error.message),
   });
 }
+
+export function useSetResources(projectId: string, applicationId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: Parameters<typeof applicationsApi.setResources>[2]) =>
+      applicationsApi.setResources(projectId, applicationId, data),
+    onSuccess: () =>
+      qc.invalidateQueries({
+        queryKey: queryKeys.applications.detail(projectId, applicationId),
+      }),
+    onError: (error) => toast.error(error.message),
+  });
+}
