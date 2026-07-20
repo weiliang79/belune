@@ -17,7 +17,7 @@ func TestAddDomain(t *testing.T) {
 	project := env.CreateProject(t, token, "Test Project", "test-project")
 	projectID := extractID(project["id"])
 	app := env.CreateApplication(t, token, projectID, map[string]any{
-		"name": "Domain App", "type": "git", "build_type": "dockerfile",
+		"name": "Domain App", "type": "git", "build_type": "dockerfile", "source_repo": "https://github.com/test/repo",
 	})
 	appID := extractID(app["id"])
 
@@ -40,7 +40,7 @@ func TestRemoveDomain(t *testing.T) {
 	project := env.CreateProject(t, token, "Test Project", "test-project")
 	projectID := extractID(project["id"])
 	app := env.CreateApplication(t, token, projectID, map[string]any{
-		"name": "Domain App", "type": "git", "build_type": "dockerfile",
+		"name": "Domain App", "type": "git", "build_type": "dockerfile", "source_repo": "https://github.com/test/repo",
 	})
 	appID := extractID(app["id"])
 
@@ -67,7 +67,7 @@ func TestAddDomainWithConfig(t *testing.T) {
 	project := env.CreateProject(t, token, "Test Project", "test-project")
 	projectID := extractID(project["id"])
 	app := env.CreateApplication(t, token, projectID, map[string]any{
-		"name": "Domain App", "type": "git", "build_type": "dockerfile",
+		"name": "Domain App", "type": "git", "build_type": "dockerfile", "source_repo": "https://github.com/test/repo",
 	})
 	appID := extractID(app["id"])
 
@@ -95,7 +95,7 @@ func TestUpdateDomain(t *testing.T) {
 	project := env.CreateProject(t, token, "Test Project", "test-project")
 	projectID := extractID(project["id"])
 	app := env.CreateApplication(t, token, projectID, map[string]any{
-		"name": "Domain App", "type": "git", "build_type": "dockerfile",
+		"name": "Domain App", "type": "git", "build_type": "dockerfile", "source_repo": "https://github.com/test/repo",
 	})
 	appID := extractID(app["id"])
 
@@ -123,7 +123,7 @@ func TestAddDomain_InvalidSSLMode(t *testing.T) {
 	project := env.CreateProject(t, token, "Test Project", "test-project")
 	projectID := extractID(project["id"])
 	app := env.CreateApplication(t, token, projectID, map[string]any{
-		"name": "Domain App", "type": "git", "build_type": "dockerfile",
+		"name": "Domain App", "type": "git", "build_type": "dockerfile", "source_repo": "https://github.com/test/repo",
 	})
 	appID := extractID(app["id"])
 
@@ -141,7 +141,7 @@ func TestListDomains(t *testing.T) {
 	project := env.CreateProject(t, token, "Test Project", "test-project")
 	projectID := extractID(project["id"])
 	app := env.CreateApplication(t, token, projectID, map[string]any{
-		"name": "Domain App", "type": "git", "build_type": "dockerfile",
+		"name": "Domain App", "type": "git", "build_type": "dockerfile", "source_repo": "https://github.com/test/repo",
 	})
 	appID := extractID(app["id"])
 

@@ -260,7 +260,10 @@ func TestApplicationBranch_WritesBothColumns(t *testing.T) {
 	// Updating moves both together.
 	resp := env.DoRequest(t, "PUT",
 		fmt.Sprintf("/api/projects/%s/applications/%s", projectID, appID),
-		map[string]any{"name": "Branch App", "branch": "develop"},
+		map[string]any{
+			"name": "Branch App", "branch": "develop",
+			"source_repo": "https://github.com/test/branch-repo",
+		},
 		testutil.AuthHeader(authToken))
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 	resp.Body.Close()

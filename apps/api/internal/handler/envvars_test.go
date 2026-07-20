@@ -17,7 +17,7 @@ func TestUpdateAndListEnvVars(t *testing.T) {
 	project := env.CreateProject(t, token, "Test Project", "test-project")
 	projectID := extractID(project["id"])
 	app := env.CreateApplication(t, token, projectID, map[string]any{
-		"name": "Env App", "type": "git", "build_type": "dockerfile",
+		"name": "Env App", "type": "git", "build_type": "dockerfile", "source_repo": "https://github.com/test/repo",
 	})
 	appID := extractID(app["id"])
 
@@ -59,7 +59,7 @@ func TestUpdateEnvVars_InvalidKey(t *testing.T) {
 	project := env.CreateProject(t, token, "Test Project", "test-project")
 	projectID := extractID(project["id"])
 	app := env.CreateApplication(t, token, projectID, map[string]any{
-		"name": "Env App", "type": "git", "build_type": "dockerfile",
+		"name": "Env App", "type": "git", "build_type": "dockerfile", "source_repo": "https://github.com/test/repo",
 	})
 	appID := extractID(app["id"])
 

@@ -86,6 +86,17 @@ func (h *Handler) CreateApplication(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if err := validateSource(sourceFields{
+		Type:           req.Type,
+		BuildType:      req.BuildType,
+		DockerfilePath: req.DockerfilePath,
+		SourceRepo:     req.SourceRepo,
+		SourceImage:    req.SourceImage,
+	}); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
 	if !validBranchName(req.Branch) {
 		writeError(w, http.StatusBadRequest, "invalid branch name")
 		return
@@ -663,6 +674,21 @@ func (h *Handler) UpdateApplication(w http.ResponseWriter, r *http.Request) {
 
 	if !validBranchName(req.Branch) {
 		writeError(w, http.StatusBadRequest, "invalid branch name")
+		return
+	}
+
+	// type and build_type are not updatable, so they come from the stored row:
+	// the request only ever moves the fields that have to stay coherent with
+	// them.
+	if err := validateSource(sourceFields{
+		Type:              current.Type,
+		BuildType:         current.BuildType,
+		BuildTypeOverride: req.BuildTypeOverride,
+		DockerfilePath:    req.DockerfilePath,
+		SourceRepo:        req.SourceRepo,
+		SourceImage:       req.SourceImage,
+	}); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 

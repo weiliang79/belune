@@ -47,10 +47,10 @@ func TestListApplications(t *testing.T) {
 	projectID := extractID(project["id"])
 
 	env.CreateApplication(t, token, projectID, map[string]any{
-		"name": "App 1", "type": "git", "build_type": "dockerfile",
+		"name": "App 1", "type": "git", "build_type": "dockerfile", "source_repo": "https://github.com/test/repo",
 	})
 	env.CreateApplication(t, token, projectID, map[string]any{
-		"name": "App 2", "type": "git", "build_type": "dockerfile",
+		"name": "App 2", "type": "git", "build_type": "dockerfile", "source_repo": "https://github.com/test/repo",
 	})
 
 	resp := env.DoRequest(t, "GET", fmt.Sprintf("/api/projects/%s/applications", projectID), nil, testutil.AuthHeader(token))
@@ -66,7 +66,7 @@ func TestUpdateApplication(t *testing.T) {
 	projectID := extractID(project["id"])
 
 	app := env.CreateApplication(t, token, projectID, map[string]any{
-		"name": "Original", "type": "git", "build_type": "dockerfile",
+		"name": "Original", "type": "git", "build_type": "dockerfile", "source_repo": "https://github.com/test/repo",
 	})
 	appID := extractID(app["id"])
 
@@ -86,7 +86,7 @@ func TestDeleteApplication(t *testing.T) {
 	projectID := extractID(project["id"])
 
 	app := env.CreateApplication(t, token, projectID, map[string]any{
-		"name": "To Delete", "type": "git", "build_type": "dockerfile",
+		"name": "To Delete", "type": "git", "build_type": "dockerfile", "source_repo": "https://github.com/test/repo",
 	})
 	appID := extractID(app["id"])
 
@@ -128,7 +128,7 @@ func TestStopStartRestartApplication(t *testing.T) {
 	projectID := extractID(project["id"])
 
 	app := env.CreateApplication(t, token, projectID, map[string]any{
-		"name": "Lifecycle App", "type": "git", "build_type": "dockerfile",
+		"name": "Lifecycle App", "type": "git", "build_type": "dockerfile", "source_repo": "https://github.com/test/repo",
 	})
 	appID := extractID(app["id"])
 
@@ -209,7 +209,7 @@ func TestCreateApplication_ResourceLimits(t *testing.T) {
 	projectID := extractID(project["id"])
 
 	app := env.CreateApplication(t, token, projectID, map[string]any{
-		"name": "Limited App", "type": "git", "build_type": "dockerfile",
+		"name": "Limited App", "type": "git", "build_type": "dockerfile", "source_repo": "https://github.com/test/repo",
 		"cpu_limit":    0.5,
 		"memory_limit": 536870912, // 512 MB
 	})
@@ -219,6 +219,10 @@ func TestCreateApplication_ResourceLimits(t *testing.T) {
 	// Update resource limits
 	appID := extractID(app["id"])
 	resp := env.DoRequest(t, "PUT", fmt.Sprintf("/api/projects/%s/applications/%s", projectID, appID), map[string]any{
+		// The source fields are resent: this endpoint replaces them, so
+		// omitting them would previously have cleared source_repo and is now
+		// rejected outright.
+		"source_repo":  "https://github.com/test/repo",
 		"cpu_limit":    1.0,
 		"memory_limit": 1073741824, // 1 GB
 	}, testutil.AuthHeader(token))
@@ -235,7 +239,7 @@ func TestCreateApplication_HealthCheckPath(t *testing.T) {
 	projectID := extractID(project["id"])
 
 	app := env.CreateApplication(t, token, projectID, map[string]any{
-		"name": "Healthy App", "type": "git", "build_type": "dockerfile",
+		"name": "Healthy App", "type": "git", "build_type": "dockerfile", "source_repo": "https://github.com/test/repo",
 		"health_check_path": "/healthz",
 	})
 	assert.Equal(t, "/healthz", app["health_check_path"])
@@ -243,6 +247,7 @@ func TestCreateApplication_HealthCheckPath(t *testing.T) {
 	// Update health check path
 	appID := extractID(app["id"])
 	resp := env.DoRequest(t, "PUT", fmt.Sprintf("/api/projects/%s/applications/%s", projectID, appID), map[string]any{
+		"source_repo":       "https://github.com/test/repo",
 		"health_check_path": "/ready",
 	}, testutil.AuthHeader(token))
 	assert.Equal(t, http.StatusOK, resp.StatusCode)

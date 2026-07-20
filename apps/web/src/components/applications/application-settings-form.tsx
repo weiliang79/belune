@@ -49,16 +49,24 @@ export function ApplicationSettingsForm({
       branch: application.branch ?? "",
     },
     onSubmit: async ({ value }) => {
+      // Only the fields belonging to this application's type are sent. The
+      // server rejects a mix (a source_repo on an image app was previously
+      // stored and then silently ignored), and the inputs for the other type
+      // are not rendered — so echoing a stale value back would produce a
+      // rejection the user has no field to fix.
+      const isGit = application.type === "git";
       toast.promise(
         updateApplication.mutateAsync({
           name: value.name || undefined,
-          source_repo: value.source_repo || undefined,
-          source_image: value.source_image || undefined,
-          dockerfile_path: value.dockerfile_path || undefined,
+          source_repo: isGit ? value.source_repo || undefined : undefined,
+          source_image: isGit ? undefined : value.source_image || undefined,
+          dockerfile_path: isGit ? value.dockerfile_path || undefined : undefined,
           // Sent even when blank: blank means "the repository's default ref",
           // which must be able to clear a previously set branch.
           branch: value.branch,
-          build_type_override: value.build_type_override || undefined,
+          build_type_override: isGit
+            ? value.build_type_override || undefined
+            : undefined,
           cpu_limit: value.cpu_limit,
           memory_limit:
             value.memory_limit_mb > 0

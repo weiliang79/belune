@@ -102,7 +102,7 @@ func TestDeleteCertificate_ConflictWhileInUse(t *testing.T) {
 	project := env.CreateProject(t, token, "Cert Project", "cert-project")
 	projectID := extractID(project["id"])
 	app := env.CreateApplication(t, token, projectID, map[string]any{
-		"name": "Cert App", "type": "git", "build_type": "dockerfile",
+		"name": "Cert App", "type": "git", "build_type": "dockerfile", "source_repo": "https://github.com/test/repo",
 	})
 	appID := extractID(app["id"])
 
@@ -132,7 +132,7 @@ func TestAddDomain_CustomModeRequiresCertificate(t *testing.T) {
 	project := env.CreateProject(t, token, "Cert Project", "cert-project")
 	projectID := extractID(project["id"])
 	app := env.CreateApplication(t, token, projectID, map[string]any{
-		"name": "Cert App", "type": "git", "build_type": "dockerfile",
+		"name": "Cert App", "type": "git", "build_type": "dockerfile", "source_repo": "https://github.com/test/repo",
 	})
 	appID := extractID(app["id"])
 
@@ -161,7 +161,7 @@ func TestAddDomain_RejectsDNSChallenge(t *testing.T) {
 	project := env.CreateProject(t, token, "DNS Project", "dns-project")
 	projectID := extractID(project["id"])
 	app := env.CreateApplication(t, token, projectID, map[string]any{
-		"name": "DNS App", "type": "git", "build_type": "dockerfile",
+		"name": "DNS App", "type": "git", "build_type": "dockerfile", "source_repo": "https://github.com/test/repo",
 	})
 	appID := extractID(app["id"])
 
