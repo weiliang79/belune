@@ -25,6 +25,10 @@ export interface Application {
   project_id: string;
   name: string;
   slug: string;
+  // `type` is labelled "Source" in the UI and `build_type` is labelled "Build
+  // Method". The field names are kept for schema/API stability; only the
+  // user-facing copy was renamed. Grep for the labels, not the field names,
+  // when hunting for the UI.
   type: "git" | "image";
   source_repo: string | null;
   source_image: string | null;

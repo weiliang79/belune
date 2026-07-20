@@ -172,7 +172,7 @@ export function ApplicationFormDialog({
             </p>
           </div>
           <div className="space-y-2">
-            <Label>Source Type</Label>
+            <Label>Source</Label>
             <SegmentedControl
               value={appType}
               onValueChange={(v) => setAppType(v as "image" | "git")}
@@ -234,7 +234,7 @@ export function ApplicationFormDialog({
                 </div>
               )}
               <div className="space-y-2">
-                <Label>Build Type</Label>
+                <Label>Build Method</Label>
                 <SegmentedControl
                   value={buildType}
                   onValueChange={(v) => setBuildType(v)}

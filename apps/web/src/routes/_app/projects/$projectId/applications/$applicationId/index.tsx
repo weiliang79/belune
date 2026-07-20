@@ -134,7 +134,7 @@ function BuildInfoCard({
       ),
     },
     {
-      label: "Method",
+      label: "Build Method",
       value: (
         <Badge variant="outline" className="capitalize">
           {app.build_type}

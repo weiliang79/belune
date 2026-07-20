@@ -46,14 +46,18 @@ func resolveOptionalUUID(in *string, current pgtype.UUID) pgtype.UUID {
 	return parseOptionalUUID(*in)
 }
 
+// Field/column names here are the stable internal identifiers. The UI renames
+// two of them in its copy only: `type` is shown as "Source" and `build_type`
+// as "Build Method". The schema and JSON keep the original names, so when
+// something in the UI mentions Source or Build Method, this is the field.
 type createApplicationRequest struct {
 	Name             string  `json:"name"`
 	Slug             string  `json:"slug"`               // optional, auto-generated from name if empty
-	Type             string  `json:"type"`               // "git" or "image"
+	Type             string  `json:"type"`               // UI "Source": "git" or "image"
 	SourceRepo       string  `json:"source_repo"`        // for git type
 	SourceImage      string  `json:"source_image"`       // for image type
 	DockerfilePath   string  `json:"dockerfile_path"`    // optional
-	BuildType        string  `json:"build_type"`         // dockerfile, buildpacks, railpack, image
+	BuildType        string  `json:"build_type"`         // UI "Build Method": dockerfile, buildpacks, railpack, image
 	CPULimit         float64 `json:"cpu_limit"`          // CPU cores (0 = unlimited)
 	MemoryLimit      int64   `json:"memory_limit"`       // bytes (0 = unlimited)
 	GitToken         string  `json:"git_token"`          // PAT for private repos; encrypted server-side

@@ -206,7 +206,7 @@ export function ApplicationSettingsForm({
             )}
           />
           <div className="space-y-2">
-            <Label>Type</Label>
+            <Label>Source</Label>
             <SegmentedControl
               value={selectedType}
               onValueChange={(v) => setSelectedType(v as "git" | "image")}
@@ -238,7 +238,7 @@ export function ApplicationSettingsForm({
                 const effectiveValue = field.state.value || gitBuildBase;
                 return (
                   <div className="space-y-2">
-                    <Label>Build Type</Label>
+                    <Label>Build Method</Label>
                     <SegmentedControl
                       value={effectiveValue}
                       onValueChange={(v) =>
