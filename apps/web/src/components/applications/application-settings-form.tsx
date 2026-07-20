@@ -81,8 +81,11 @@ export function ApplicationSettingsForm({
       <CardHeader>
         <CardTitle>Application Settings</CardTitle>
         <CardDescription>
-          Build and runtime configuration for this application. Changes take
-          effect on the next deploy.
+          Build and runtime configuration for this application. Saving does not
+          touch the running container — the badge beside the application name
+          says what is needed to apply the change, which depends on the field:
+          limits and the health-check path need only a reload, while the image,
+          branch, or builder settings need a deploy.
         </CardDescription>
       </CardHeader>
       <CardContent>

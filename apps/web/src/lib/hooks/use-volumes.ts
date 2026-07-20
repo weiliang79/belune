@@ -14,10 +14,18 @@ export function useCreateVolume(projectId: string, applicationId: string) {
   return useMutation({
     mutationFn: (data: { name: string; mount_path: string }) =>
       volumesApi.createVolume(projectId, applicationId, data),
+    // Also refresh the application: saving stamps the config-changed marker
+    // server-side, and the header badge that reports it reads the application
+    // detail. Without this the badge would not appear until the next poll.
     onSuccess: () =>
-      qc.invalidateQueries({
-        queryKey: queryKeys.volumes.all(projectId, applicationId),
-      }),
+      Promise.all([
+        qc.invalidateQueries({
+          queryKey: queryKeys.volumes.all(projectId, applicationId),
+        }),
+        qc.invalidateQueries({
+          queryKey: queryKeys.applications.detail(projectId, applicationId),
+        }),
+      ]),
   });
 }
 
@@ -31,9 +39,17 @@ export function useDeleteVolume(projectId: string, applicationId: string) {
       volumeId: string;
       deleteData: boolean;
     }) => volumesApi.deleteVolume(projectId, applicationId, volumeId, deleteData),
+    // Also refresh the application: saving stamps the config-changed marker
+    // server-side, and the header badge that reports it reads the application
+    // detail. Without this the badge would not appear until the next poll.
     onSuccess: () =>
-      qc.invalidateQueries({
-        queryKey: queryKeys.volumes.all(projectId, applicationId),
-      }),
+      Promise.all([
+        qc.invalidateQueries({
+          queryKey: queryKeys.volumes.all(projectId, applicationId),
+        }),
+        qc.invalidateQueries({
+          queryKey: queryKeys.applications.detail(projectId, applicationId),
+        }),
+      ]),
   });
 }

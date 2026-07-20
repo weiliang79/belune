@@ -65,7 +65,7 @@ export function VolumesSection({ projectId, applicationId }: Props) {
       }),
       {
         loading: "Creating volume...",
-        success: "Volume created — it will be mounted on the next deploy",
+        success: "Volume created — reload the application to mount it",
         error: (err) => err.message,
       },
     );
@@ -115,9 +115,9 @@ export function VolumesSection({ projectId, applicationId }: Props) {
         <div className="bg-muted/40 text-muted-foreground flex items-start gap-2 rounded-lg border p-3 text-sm">
           <InfoIcon aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
           <span>
-            Adding or removing a volume takes effect on the next deploy — the
-            container is recreated with the updated mounts. Redeploy the
-            application to apply changes.
+            Mounts are attached when the container is created, so a reload is
+            enough to apply a change here — no rebuild needed. The badge beside
+            the application name says when one is outstanding.
           </span>
         </div>
 

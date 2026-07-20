@@ -188,6 +188,8 @@ func (h *Handler) CreateApplicationVolume(w http.ResponseWriter, r *http.Request
 		return
 	}
 
+	h.markConfigChanged(r.Context(), applicationUUID)
+
 	h.audit(r, "create_volume", "application_volume", uuidToString(vol.ID), map[string]any{
 		"application_id": applicationID,
 		"name":           nameSlug,
@@ -253,6 +255,8 @@ func (h *Handler) DeleteApplicationVolume(w http.ResponseWriter, r *http.Request
 			warning = "volume record deleted, but the underlying data volume could not be removed yet (it may be in use — redeploy the application, then remove it)"
 		}
 	}
+
+	h.markConfigChanged(r.Context(), applicationUUID)
 
 	h.audit(r, "delete_volume", "application_volume", volumeID, map[string]any{
 		"application_id": applicationID,

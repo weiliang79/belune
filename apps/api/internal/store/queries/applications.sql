@@ -173,3 +173,41 @@ WHERE id = $1;
 UPDATE applications
 SET health_check_timeout_seconds = $2, health_check_expect_status = $3, updated_at = NOW()
 WHERE id = $1;
+
+-- name: TouchApplicationConfigChanged :exec
+-- Marks the application as having saved config that the running container does
+-- not yet reflect. Idempotent in effect: re-stamping an already-set marker just
+-- moves it later, which only makes the clearing condition stricter.
+UPDATE applications SET config_changed_at = NOW()
+WHERE id = $1;
+
+-- name: TouchApplicationSourceChanged :exec
+-- Only config_changed_at's stronger sibling is stamped: the indicator reports
+-- the stronger of the two, so a source change need not also set the config
+-- marker, and doing so would leave a stale "reload to apply" behind after the
+-- deploy cleared only the source marker.
+UPDATE applications SET source_changed_at = NOW()
+WHERE id = $1;
+
+-- name: ClearApplicationConfigChanged :exec
+-- The skip-build path (reload, rollback): the container is recreated from the
+-- image already present, so config is applied but the source is not.
+-- Only clears a marker that predates the deployment, so an edit made while the
+-- deploy was running keeps its marker rather than being silently swallowed.
+UPDATE applications SET config_changed_at = NULL
+WHERE applications.id = $1
+  AND config_changed_at IS NOT NULL
+  AND config_changed_at <= (SELECT started_at FROM deployments WHERE deployments.id = $2);
+
+-- name: ClearApplicationSourceChanged :exec
+-- The build/pull path additionally clears the source marker; the worker calls
+-- this alongside ClearApplicationConfigChanged, since a new image applies both.
+-- Same predates-the-deployment guard.
+UPDATE applications SET source_changed_at = NULL
+WHERE applications.id = $1
+  AND source_changed_at IS NOT NULL
+  AND source_changed_at <= (SELECT started_at FROM deployments WHERE deployments.id = $2);
+
+-- name: TouchApplicationDeployed :exec
+UPDATE applications SET last_deployed_at = NOW()
+WHERE id = $1;

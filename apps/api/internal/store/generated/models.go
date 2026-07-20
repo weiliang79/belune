@@ -55,6 +55,9 @@ type Application struct {
 	DeployHookTokenHash       []byte             `json:"deploy_hook_token_hash"`
 	DeployHookTokenEncrypted  []byte             `json:"deploy_hook_token_encrypted"`
 	WebhookSecretEncrypted    []byte             `json:"webhook_secret_encrypted"`
+	ConfigChangedAt           pgtype.Timestamptz `json:"config_changed_at"`
+	SourceChangedAt           pgtype.Timestamptz `json:"source_changed_at"`
+	LastDeployedAt            pgtype.Timestamptz `json:"last_deployed_at"`
 }
 
 type ApplicationFileMount struct {

@@ -421,6 +421,8 @@ func (h *Handler) UpdateApplicationRuntime(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
+	h.markConfigChanged(r.Context(), applicationUUID)
+
 	h.audit(r, "update_application_runtime", "application", applicationID, map[string]any{
 		"readonly_rootfs": req.ReadonlyRootfs,
 		"container_caps":  req.ContainerCaps,

@@ -48,6 +48,7 @@ import { formatUptime } from "@/lib/utils/format";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useBreadcrumbLabel } from "@/lib/hooks/use-breadcrumb";
 import { StatusBadge } from "@/lib/components/status-badge";
+import { PendingChangeBadge } from "@/lib/components/pending-change-badge";
 import { ProvenanceNote } from "@/lib/components/provenance-note";
 import { AppMetricsContext } from "@/lib/contexts/app-metrics-context";
 import { RouteError } from "@/lib/components/route-error";
@@ -159,6 +160,7 @@ function ApplicationLayout() {
                 {application.name}
               </h1>
               <StatusBadge status={application.status} />
+              <PendingChangeBadge app={application} />
               {application.status === "running" && uptimeSeconds ? (
                 <span className="text-text-faint text-sm">
                   Up {formatUptime(uptimeSeconds)}

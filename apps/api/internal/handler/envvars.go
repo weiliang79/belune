@@ -120,5 +120,7 @@ func (h *Handler) UpdateEnvVars(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	h.markConfigChanged(r.Context(), applicationUUID)
+
 	writeJSON(w, http.StatusOK, map[string]string{"status": "updated"})
 }

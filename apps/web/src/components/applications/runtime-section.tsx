@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { PendingChangeBadge } from "@/lib/components/pending-change-badge";
 import { ShieldCheck } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -20,8 +21,10 @@ interface Props {
 /**
  * Container runtime profile: read-only rootfs + capability set. Untrusted apps
  * (git builds, manually-added images) default to hardened; curated template
- * apps default to standard. Changes are staged locally and applied on Save; they
- * take effect on the next deploy.
+ * apps default to standard. Changes are staged locally and applied on Save.
+ * Saving stamps the config-changed marker, so the header badge then says how to
+ * apply it — a reload is enough, since the profile is applied when the
+ * container is created, not when the image is built.
  */
 export function RuntimeSection({ projectId, applicationId, application }: Props) {
   const update = useUpdateApplicationRuntime(projectId, applicationId);
@@ -99,11 +102,14 @@ export function RuntimeSection({ projectId, applicationId, application }: Props)
         </div>
 
         <div className="flex items-center justify-between gap-4">
-          <p className="text-text-faint text-xs">
-            Applied on the next deploy.
-            {application.source_kind === "template" &&
-              " This app was created from a template."}
-          </p>
+          <div className="text-text-faint flex items-center gap-2 text-xs">
+            <span>
+              Applied when the container is next recreated.
+              {application.source_kind === "template" &&
+                " This app was created from a template."}
+            </span>
+            <PendingChangeBadge app={application} />
+          </div>
           <Button size="sm" onClick={save} disabled={!dirty || update.isPending}>
             {update.isPending ? "Saving…" : "Save"}
           </Button>

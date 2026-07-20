@@ -876,8 +876,43 @@ func (h *TaskHandler) finalize(ctx context.Context, dc *deployContext) error {
 		// (not just previews) keeps the column meaningful if we later extend
 		// idle cleanup to parents too.
 		q.TouchApplicationActivity(ctx, dc.applicationID)
+		q.TouchApplicationDeployed(ctx, dc.applicationID)
+		h.clearChangeMarkers(ctx, q, dc)
 		return nil
 	})
+}
+
+// clearChangeMarkers resolves the "your saved config is not what is running"
+// indicator now that a deploy has succeeded.
+//
+// The branch is the same one prepareImage takes: a non-empty RollbackImageTag
+// means no build and no pull happened, so the container was recreated from an
+// image that already existed. That applies every config change (env, volumes,
+// mounts, limits, runtime profile) but nothing about the source — change
+// source_image and then roll back, and you still need a real deploy to get the
+// new image, so source_changed_at has to survive.
+//
+// Both queries only clear a marker older than this deployment's started_at, so
+// an edit saved while the deploy was in flight keeps its marker instead of
+// being silently swallowed. Errors are logged, not returned: the deploy
+// genuinely succeeded, and failing it over a stale indicator would be worse
+// than the stale indicator.
+func (h *TaskHandler) clearChangeMarkers(ctx context.Context, q *generated.Queries, dc *deployContext) {
+	skippedBuild := dc.payload.RollbackImageTag != ""
+
+	if err := q.ClearApplicationConfigChanged(ctx, generated.ClearApplicationConfigChangedParams{
+		ID: dc.applicationID, ID_2: dc.deploymentID,
+	}); err != nil {
+		slog.Warn("could not clear config change marker", "error", err, "application_id", dc.payload.ApplicationID)
+	}
+	if skippedBuild {
+		return
+	}
+	if err := q.ClearApplicationSourceChanged(ctx, generated.ClearApplicationSourceChangedParams{
+		ID: dc.applicationID, ID_2: dc.deploymentID,
+	}); err != nil {
+		slog.Warn("could not clear source change marker", "error", err, "application_id", dc.payload.ApplicationID)
+	}
 }
 
 // runCompensators runs all compensating cleanup functions in reverse order.

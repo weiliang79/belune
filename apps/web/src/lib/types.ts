@@ -47,6 +47,14 @@ export interface Application {
   preview_branch_pattern: string | null;
   preview_domain_template: string | null;
   last_activity_at: string;
+  last_deployed_at: string | null;
+  // What it would take to make the running container match the saved config.
+  // Derived server-side so the list and the detail page cannot disagree, and
+  // suppressed until the app has deployed once. The raw timestamps are for
+  // "changed 5m ago" detail only — branch on `pending_change`.
+  pending_change: "" | "config" | "source";
+  config_changed_at: string | null;
+  source_changed_at: string | null;
   source_kind: string | null;
   source_ref: string | null;
   readonly_rootfs: boolean;

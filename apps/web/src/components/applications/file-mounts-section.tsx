@@ -119,8 +119,8 @@ export function FileMountsSection({ projectId, applicationId }: Props) {
       {
         loading: editing ? "Saving..." : "Creating file mount...",
         success: editing
-          ? "File mount saved — applies on next deploy"
-          : "File mount created — mounted on next deploy",
+          ? "File mount saved — reload the application to apply it"
+          : "File mount created — reload the application to mount it",
         error: (err) => err.message,
       },
     );
@@ -329,7 +329,7 @@ export function FileMountsSection({ projectId, applicationId }: Props) {
             <AlertDialogTitle>Remove file mount?</AlertDialogTitle>
             <AlertDialogDescription>
               <span className="font-mono">{removeTarget?.mount_path}</span> will
-              no longer be mounted after the next deploy.
+              no longer be mounted once the application is reloaded.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

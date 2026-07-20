@@ -685,6 +685,8 @@ func (h *Handler) UpdateApplication(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	h.markApplicationUpdate(r.Context(), current, app)
+
 	h.audit(r, "update_application", "application", applicationID, nil)
 
 	writeJSON(w, http.StatusOK, toApplicationResponse(app))

@@ -238,6 +238,8 @@ func (h *Handler) CreateFileMount(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	h.markConfigChanged(r.Context(), applicationUUID)
+
 	h.audit(r, "create_file_mount", "application_file_mount", uuidToString(fm.ID), map[string]any{
 		"application_id": applicationID,
 		"mount_path":     req.MountPath,
@@ -319,6 +321,8 @@ func (h *Handler) UpdateFileMount(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	h.markConfigChanged(r.Context(), applicationUUID)
+
 	h.audit(r, "update_file_mount", "application_file_mount", fileMountID, map[string]any{
 		"application_id": applicationID,
 		"mount_path":     existing.MountPath,
@@ -361,6 +365,8 @@ func (h *Handler) DeleteFileMount(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "failed to delete file mount")
 		return
 	}
+
+	h.markConfigChanged(r.Context(), applicationUUID)
 
 	h.audit(r, "delete_file_mount", "application_file_mount", fileMountID, map[string]any{
 		"application_id": applicationID,

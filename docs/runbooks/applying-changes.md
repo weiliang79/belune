@@ -1,0 +1,75 @@
+# Applying configuration changes
+
+Saving a change in Belune never touches the running container. The container
+keeps serving the configuration it was started with until you explicitly apply
+the change — so a bad edit cannot take your app down by accident, and you can
+stage several edits and apply them once.
+
+The badge beside the application name tells you when something is outstanding
+and which button applies it.
+
+| Badge | Meaning | Apply with |
+|---|---|---|
+| *(none)* | The running container matches what is saved. | — |
+| **Reload to apply** | Configuration changed. The image is still correct. | **Reload** |
+| **Deploy to apply** | The build source changed. A new image is needed. | **Deploy** |
+
+The badge appears only after an application has deployed successfully at least
+once — before that there is no running container to disagree with.
+
+## Which change needs which
+
+**Reload** recreates the container from the image it is already running. That
+applies anything the container is *started* with:
+
+- environment variables
+- volumes and file mounts
+- CPU and memory limits
+- the runtime profile (read-only rootfs, capabilities)
+- the health-check path
+
+**Deploy** builds or pulls a new image, then recreates the container. Required
+for anything that changes what gets *built*:
+
+- the source image (image applications)
+- the branch, Dockerfile path, builder image, or build type override
+- git credentials or the git integration
+
+Deploy applies configuration too, so it is always a valid way to clear either
+badge — it is just slower, and for a git application it builds from the latest
+commit on the branch rather than the one you are running.
+
+**Rebuild** is deliberately not offered by the badge. It rebuilds the *pinned*
+commit, which is narrower: it picks up base-image and dependency updates without
+moving to a newer commit. It will not pick up a changed branch or image.
+
+## Why a reload does not clear "Deploy to apply"
+
+Reload does no build and no pull. If you change an image tag and reload, the
+container is recreated from the image that is already on the host — the old one.
+The source badge therefore survives a reload on purpose, and clears only when a
+real build or pull has happened.
+
+The clearest case is a rollback: change the image, then roll back. The rollback
+succeeds, but you still need a deploy to get the new image, so the badge stays.
+
+## Edits made during a deploy
+
+A change saved *while* a deploy is running is not included in that deploy — the
+configuration was already read. Its badge survives that deploy and clears on the
+next one, so the indicator never claims an edit is live when it is not.
+
+## Troubleshooting
+
+**The badge will not clear.** Check the Deployments tab: the marker clears only
+on a *successful* deploy. A failed deploy leaves the badge in place and sets the
+application status to `error`.
+
+**A change seems applied but the badge is still showing.** Some changes are
+visible without being applied — editing an env var updates the Env Vars tab
+immediately, but the running process still has the old value in its environment.
+The badge is describing the container, not the page.
+
+**No badge, but the app behaves as if the old config is live.** Restart is not
+Reload. **Restart** starts the same container again and changes nothing about
+its configuration; **Reload** creates a new one. If in doubt, use Reload.
