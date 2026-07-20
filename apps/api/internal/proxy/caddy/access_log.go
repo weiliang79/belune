@@ -36,13 +36,30 @@ func (c *Client) ConfigureAccessLogs(ctx context.Context) error {
 					// a non-root user and tails this file from its own container, so
 					// the default made every read fail with "permission denied" and
 					// request logging silently collected nothing in production.
-					// The file holds request metadata, not secrets. Verified against
-					// caddy:2-alpine (2.11): the writer accepts `mode` as a string
-					// and the file lands as -rw-r--r--.
+					// Verified against caddy:2-alpine (2.11): the writer accepts
+					// `mode` as a string and the file lands as -rw-r--r--.
+					//
+					// This file is world-readable and kept for 7 days, so nothing
+					// secret may reach it — see the URI filter below, which exists
+					// precisely because 0644 makes a leak here cheap to exploit.
 					"mode": "0644",
 				},
+				// The deploy-hook token travels in the request path, and an access
+				// log records the request line verbatim — so the raw URI would
+				// persist here as a working credential. The filter encoder wraps
+				// the JSON encoder and rewrites just that one field.
 				"encoder": map[string]any{
-					"format": "json",
+					"format": "filter",
+					"wrap":   map[string]any{"format": "json"},
+					"fields": map[string]any{
+						"request>uri": map[string]any{
+							"filter": "regexp",
+							// Only the token segment is replaced; the route stays
+							// intact so these requests remain greppable.
+							"regexp": `/api/webhooks/deploy/[^/?\s]+`,
+							"value":  "/api/webhooks/deploy/[REDACTED]",
+						},
+					},
 				},
 				"level": "INFO",
 			},

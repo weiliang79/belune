@@ -9,6 +9,8 @@ import (
 	"time"
 
 	chiMiddleware "github.com/go-chi/chi/v5/middleware"
+
+	"github.com/weiliang79/belune/internal/pkg/redact"
 )
 
 // Logger logs each HTTP request with method, path, status, duration, and request ID.
@@ -22,7 +24,9 @@ func Logger(next http.Handler) http.Handler {
 
 		slog.Info("request",
 			"method", r.Method,
-			"path", r.URL.Path,
+			// Redacted: some routes carry a credential in the path itself, and
+			// this line is shipped wherever stdout goes.
+			"path", redact.Path(r.URL.Path),
 			"status", ww.statusCode,
 			"duration", time.Since(start).String(),
 			"request_id", chiMiddleware.GetReqID(r.Context()),
