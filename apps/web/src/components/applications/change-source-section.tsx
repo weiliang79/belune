@@ -90,19 +90,34 @@ export function ChangeSourceSection({
       <CardHeader>
         <CardTitle>Source</CardTitle>
         <CardDescription>
-          This application{" "}
-          {application.type === "git"
-            ? "builds from a git repository"
-            : "runs a prebuilt image"}
-          . Switching keeps its domains and certificates, volumes and their
-          data, file mounts, environment variables, deploy hook, and deployment
-          history — the container keeps serving until you deploy.
+          Switching keeps this application's domains and certificates, volumes
+          and their data, file mounts, environment variables, deploy hook, and
+          deployment history — and the container keeps serving until you deploy.
         </CardDescription>
       </CardHeader>
-      <CardContent>
-        <Button variant="outline" onClick={() => setOpen(true)}>
-          {target === "image" ? "Switch to a prebuilt image" : "Switch to git"}
-        </Button>
+      <CardContent className="space-y-4">
+        {/* The type lives here rather than in the settings form above, which
+            used to show it as a permanently disabled control — a claim that
+            stopped being true once it became changeable. */}
+        <div className="flex items-center justify-between gap-4">
+          <div className="min-w-0 space-y-1">
+            <p className="text-sm font-medium">
+              {application.type === "git" ? "Git Repository" : "Docker Image"}
+            </p>
+            <p className="text-text-faint truncate font-mono text-xs">
+              {application.type === "git"
+                ? application.source_repo || "—"
+                : application.source_image || "—"}
+            </p>
+          </div>
+          <Button
+            variant="outline"
+            className="shrink-0"
+            onClick={() => setOpen(true)}
+          >
+            {target === "image" ? "Switch to image" : "Switch to git"}
+          </Button>
+        </div>
       </CardContent>
 
       <Dialog open={open} onOpenChange={setOpen}>

@@ -119,21 +119,6 @@ export function ApplicationSettingsForm({
               </div>
             )}
           />
-          <div className="space-y-2">
-            <Label>Type</Label>
-            <SegmentedControl
-              value={application.type}
-              onValueChange={() => {}}
-              disabled
-            >
-              <SegmentedControlItem value="image">
-                Docker Image
-              </SegmentedControlItem>
-              <SegmentedControlItem value="git">
-                Git Repository
-              </SegmentedControlItem>
-            </SegmentedControl>
-          </div>
           {application.type === "git" && (
             <form.Field
               name="build_type_override"
