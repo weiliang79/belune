@@ -185,19 +185,24 @@ func (w *Watcher) handleApplicationEvent(ctx context.Context, event runtime.Cont
 		return
 	}
 
-	var newStatus string
-	switch event.Status {
-	case "start", "restart":
-		newStatus = status.ApplicationRunning
-	case "stop":
-		newStatus = status.ApplicationStopped
-	case "die":
-		newStatus = status.ApplicationStopped
-	case "oom":
-		newStatus = status.ApplicationStopped
-		slog.Warn("eventwatcher: container killed by OOM", "app_id", appID, "container", event.ContainerName)
-	default:
+	newStatus, ok := ApplicationStatusForEvent(event)
+	if !ok {
 		return
+	}
+	if newStatus == status.ApplicationError && event.Status == "oom" {
+		slog.Warn("eventwatcher: container killed by OOM", "app_id", appID, "container", event.ContainerName)
+	}
+
+	// Never downgrade a failed deploy to "stopped". The compensating cleanup
+	// removes the half-created container, and that die event can land after
+	// failDeployment has already recorded the error — losing the more
+	// informative status to a race.
+	if newStatus == status.ApplicationStopped {
+		if current, err := w.queries.GetApplication(ctx, appUUID); err == nil &&
+			current.Status == status.ApplicationError {
+			slog.Debug("eventwatcher: keeping errored status", "app_id", appID)
+			return
+		}
 	}
 
 	slog.Info("eventwatcher: container event",
@@ -208,6 +213,30 @@ func (w *Watcher) handleApplicationEvent(ctx context.Context, event runtime.Cont
 	)
 
 	w.updateAppStatus(ctx, appUUID, appID, newStatus)
+}
+
+// ApplicationStatusForEvent maps a Docker container event to an application
+// status, returning ok=false for events that should not change status.
+//
+// A crash and a clean stop are distinguished by exit code, the same way
+// databases already are: previously any exit read as "stopped", so an app that
+// crash-looped looked identical to one the user had deliberately stopped.
+func ApplicationStatusForEvent(event runtime.ContainerEvent) (newStatus string, ok bool) {
+	switch event.Status {
+	case "start", "restart":
+		return status.ApplicationRunning, true
+	case "stop":
+		return status.ApplicationStopped, true
+	case "die":
+		if event.Labels["exitCode"] == "0" {
+			return status.ApplicationStopped, true
+		}
+		return status.ApplicationError, true
+	case "oom":
+		return status.ApplicationError, true
+	default:
+		return "", false
+	}
 }
 
 // databaseStatusForEvent maps a Docker container event to a database status,

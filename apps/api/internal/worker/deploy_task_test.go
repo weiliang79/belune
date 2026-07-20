@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/weiliang79/belune/internal/config"
+	"github.com/weiliang79/belune/internal/eventwatcher"
 	"github.com/weiliang79/belune/internal/pkg/crypto"
 	"github.com/weiliang79/belune/internal/proxy"
 	"github.com/weiliang79/belune/internal/runtime"
@@ -100,13 +101,13 @@ func seedApp(t *testing.T, opts ...func(app *generated.CreateApplicationParams, 
 	require.NoError(t, err)
 
 	appParams := generated.CreateApplicationParams{
-		ProjectID:     project.ID,
-		Name:          "Test App",
-		Slug:          project.Slug + "-app",
-		Type:          "image",
-		SourceImage:   pgtype.Text{String: "nginx:alpine", Valid: true},
-		BuildType:     "image",
-		WebhookSecret: pgtype.Text{String: "secret-" + suffix, Valid: true},
+		ProjectID:              project.ID,
+		Name:                   "Test App",
+		Slug:                   project.Slug + "-app",
+		Type:                   "image",
+		SourceImage:            pgtype.Text{String: "nginx:alpine", Valid: true},
+		BuildType:              "image",
+		WebhookSecretEncrypted: []byte("ciphertext-" + suffix),
 	}
 	depParams := generated.CreateDeploymentParams{
 		Status:      status.DeploymentPending,
@@ -244,6 +245,45 @@ func TestHandleDeployTask_CompensatesOnProxyFailure(t *testing.T) {
 	final, err := testQueries.GetDeployment(context.Background(), dep.ID)
 	require.NoError(t, err)
 	assert.Equal(t, status.DeploymentFailed, final.Status)
+
+	// The application must go with it. cleanupExisting removes the previous
+	// container before the build, so a failure here leaves nothing serving —
+	// the app used to keep its old status and read as healthy.
+	failedApp, err := testQueries.GetApplication(context.Background(), app.ID)
+	require.NoError(t, err)
+	assert.Equal(t, status.ApplicationError, failedApp.Status)
+}
+
+// A crashed container (non-zero exit) must be distinguishable from one the user
+// stopped, matching how database containers are already handled.
+func TestApplicationStatusForEvent(t *testing.T) {
+	cases := []struct {
+		name   string
+		event  runtime.ContainerEvent
+		want   string
+		wantOK bool
+	}{
+		{"start", runtime.ContainerEvent{Status: "start"}, status.ApplicationRunning, true},
+		{"restart", runtime.ContainerEvent{Status: "restart"}, status.ApplicationRunning, true},
+		{"explicit stop", runtime.ContainerEvent{Status: "stop"}, status.ApplicationStopped, true},
+		{
+			"clean exit",
+			runtime.ContainerEvent{Status: "die", Labels: map[string]string{"exitCode": "0"}},
+			status.ApplicationStopped, true,
+		},
+		{
+			"crash",
+			runtime.ContainerEvent{Status: "die", Labels: map[string]string{"exitCode": "1"}},
+			status.ApplicationError, true,
+		},
+		{"oom", runtime.ContainerEvent{Status: "oom"}, status.ApplicationError, true},
+		{"unrelated", runtime.ContainerEvent{Status: "pause"}, "", false},
+	}
+	for _, tc := range cases {
+		got, ok := eventwatcher.ApplicationStatusForEvent(tc.event)
+		assert.Equal(t, tc.wantOK, ok, tc.name)
+		assert.Equal(t, tc.want, got, tc.name)
+	}
 }
 
 func TestHandleDeployTask_HappyPathSkipsHealthCheck(t *testing.T) {
@@ -342,4 +382,11 @@ func TestHandleDeployTask_CreateContainerFailureMarksDeployFailed(t *testing.T) 
 	final, err := testQueries.GetDeployment(context.Background(), dep.ID)
 	require.NoError(t, err)
 	assert.Equal(t, status.DeploymentFailed, final.Status)
+
+	// The application must go with it. cleanupExisting removes the previous
+	// container before the build, so a failure here leaves nothing serving —
+	// the app used to keep its old status and read as healthy.
+	failedApp, err := testQueries.GetApplication(context.Background(), app.ID)
+	require.NoError(t, err)
+	assert.Equal(t, status.ApplicationError, failedApp.Status)
 }

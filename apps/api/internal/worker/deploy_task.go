@@ -907,6 +907,22 @@ func (h *TaskHandler) failDeployment(ctx context.Context, deploymentID pgtype.UU
 			Status:       status.DeploymentFailed,
 			ErrorMessage: pgtype.Text{String: safeMsg, Valid: true},
 		})
+
+		// The application is genuinely down: cleanupExisting removes the
+		// previous container at stage 2, before the build, so a terminal
+		// failure at any later stage leaves nothing serving. Without this the
+		// app kept its old status and a first-ever failed deploy still read
+		// "Inactive", hiding the failure everywhere except the deployment row.
+		// The next successful deploy sets it back to running.
+		if dep, err := h.Queries.GetDeployment(ctx, deploymentID); err == nil {
+			if _, err := h.Queries.UpdateApplicationStatus(ctx, generated.UpdateApplicationStatusParams{
+				ID:     dep.ApplicationID,
+				Status: status.ApplicationError,
+			}); err != nil {
+				slog.Warn("could not mark application errored", "error", err)
+			}
+		}
+
 		h.maybeAlertDeploymentFailed(ctx, deploymentID, kind, safeMsg)
 		h.notifyDeployment(ctx, deploymentID, status.DeploymentFailed, kind, safeMsg)
 	}

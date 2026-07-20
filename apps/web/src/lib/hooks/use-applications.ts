@@ -7,12 +7,12 @@ export function useApplications(projectId: string) {
   return useQuery({
     queryKey: queryKeys.applications.all(projectId),
     queryFn: () => applicationsApi.listApplications(projectId),
-    refetchInterval: (query) => {
-      const hasTransitional = query.state.data?.some((app) =>
-        ["building", "deploying", "pending"].includes(app.status),
-      );
-      return hasTransitional ? 3000 : 10000;
-    },
+    // A steady interval, not a status-driven one. The previous condition
+    // looked for "building" | "deploying" | "pending" — those are DEPLOYMENT
+    // statuses; an application's status is only inactive | running | stopped |
+    // error, so the fast branch never once fired. Live changes arrive over the
+    // WebSocket; this is the safety net for a missed event.
+    refetchInterval: 10000,
   });
 }
 
@@ -20,12 +20,10 @@ export function useApplication(projectId: string, applicationId: string) {
   return useQuery({
     queryKey: queryKeys.applications.detail(projectId, applicationId),
     queryFn: () => applicationsApi.getApplication(projectId, applicationId),
-    refetchInterval: (query) => {
-      const status = query.state.data?.status;
-      const isTransitional =
-        status === "deploying" || status === "building" || status === "pending";
-      return isTransitional ? 3000 : false;
-    },
+    // Same fix as above, and this one was worse: the dead condition made this
+    // return `false` every time, so the detail page never refreshed itself at
+    // all. It looked fine only because the WebSocket pushes status changes.
+    refetchInterval: 15000,
   });
 }
 

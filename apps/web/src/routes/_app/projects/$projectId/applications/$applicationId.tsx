@@ -230,10 +230,7 @@ function ApplicationLayout() {
               });
             }}
             disabled={
-              reload.isPending ||
-              application.status === "deploying" ||
-              application.status === "building"
-            }
+              reload.isPending || isDeploying}
             title="Recreate the container from the current image to apply config changes (volumes, file mounts, env) — no rebuild"
           >
             Reload
@@ -250,10 +247,7 @@ function ApplicationLayout() {
                 });
               }}
               disabled={
-                rebuild.isPending ||
-                application.status === "deploying" ||
-                application.status === "building"
-              }
+                rebuild.isPending || isDeploying}
               title="Rebuild the currently-deployed commit (not the latest) — picks up base-image and dependency updates"
             >
               Rebuild
@@ -308,10 +302,7 @@ function ApplicationLayout() {
                 });
               }}
               disabled={
-                start.isPending ||
-                application.status === "deploying" ||
-                application.status === "building"
-              }
+                start.isPending || isDeploying}
             >
               {start.isPending ? "Starting..." : "Start"}
             </Button>
