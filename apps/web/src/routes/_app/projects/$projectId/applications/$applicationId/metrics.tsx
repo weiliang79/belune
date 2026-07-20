@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { useApplication } from "@/lib/hooks/use-applications";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { LiveIndicator } from "@/components/ui/live-indicator";
 import { useAppMetricsContext } from "@/lib/contexts/app-metrics-context";
@@ -30,14 +31,25 @@ function formatBytes(bytes: number | null) {
 }
 
 function ApplicationMetricsPage() {
+  const { projectId, applicationId } = Route.useParams();
+  const { data: application } = useApplication(projectId, applicationId);
   const { data: streamData, connected } = useAppMetricsContext();
+
+  // Metrics describe a running process, so nothing is collected while the
+  // application is down. Saying so beats "Waiting for metrics data", which
+  // promises something that is never going to arrive, and beats "Connecting…",
+  // which suggests a connection problem rather than a stopped container.
+  const isRunning = application?.status === "running";
 
   return (
     <Card>
       <CardHeader>
         <div className="flex items-center justify-between">
           <CardTitle>Application Metrics</CardTitle>
-          <LiveIndicator active={connected} idleLabel="Connecting…" />
+          <LiveIndicator
+            active={connected && isRunning}
+            idleLabel={isRunning ? "Connecting…" : "Not running"}
+          />
         </div>
       </CardHeader>
       <CardContent>
@@ -74,8 +86,9 @@ function ApplicationMetricsPage() {
           </div>
         ) : (
           <p className="text-muted-foreground py-8 text-center text-sm">
-            Waiting for metrics data. Data streams in real-time every 2 seconds
-            for running applications.
+            {isRunning
+              ? "Waiting for metrics data. Data streams in real-time every 2 seconds."
+              : "No live metrics — this application is not running. Start it to begin collecting again."}
           </p>
         )}
       </CardContent>
