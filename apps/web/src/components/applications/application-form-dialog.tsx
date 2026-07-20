@@ -54,6 +54,7 @@ export function ApplicationFormDialog({
   const [gitSource, setGitSource] = useState<"connection" | "url">("connection");
   const [gitIntegrationId, setGitIntegrationId] = useState("");
   const [dockerfilePath, setDockerfilePath] = useState("Dockerfile");
+  const [branch, setBranch] = useState("");
   const [buildType, setBuildType] = useState("dockerfile");
   const [appError, setAppError] = useState("");
 
@@ -68,6 +69,7 @@ export function ApplicationFormDialog({
       setGitSource("connection");
       setGitIntegrationId("");
       setDockerfilePath("Dockerfile");
+      setBranch("");
       setBuildType("dockerfile");
       setAppError("");
     }
@@ -100,6 +102,7 @@ export function ApplicationFormDialog({
           ? { source_image: sourceImage, build_type: "image" }
           : {
               source_repo: sourceRepo,
+              branch: branch.trim(),
               dockerfile_path: dockerfilePath,
               build_type: buildType,
               ...(gitSource === "connection" && gitIntegrationId
@@ -256,6 +259,19 @@ export function ApplicationFormDialog({
                       </AlertDescription>
                     </Alert>
                   )}
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="app-branch">Branch</Label>
+                <Input
+                  id="app-branch"
+                  value={branch}
+                  onChange={(e) => setBranch(e.target.value)}
+                  placeholder="Default branch"
+                />
+                <p className="text-muted-foreground text-xs">
+                  The branch to build, and the one whose pushes deploy. Leave
+                  empty to track the repository's default branch.
+                </p>
               </div>
               {buildType === "dockerfile" && (
                 <div className="space-y-2">

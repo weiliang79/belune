@@ -45,16 +45,21 @@ Gitea works because it deliberately mirrors GitHub's headers and payload shape.
 
 ### Branch filtering
 
-Only pushes to the app's **Auto-Deploy Branch** deploy. Pushes to other branches
-are ignored — unless they match a configured preview branch pattern, in which
-case a preview app is materialised and deployed instead.
+An application tracks one branch, set by the **Branch** field on its Settings
+tab. That single field decides both what gets built and which pushes deploy, so
+the two can never disagree. Pushes to any other branch are ignored — unless they
+match a configured preview branch pattern, in which case a preview app is
+materialised and deployed instead.
 
-> **Known limitation.** Auto-Deploy Branch defaults to `main`, but the *build*
-> currently clones the repository's **default ref** — it does not read this
-> field. For a repo whose default branch is `master` (or anything other than
-> `main`), pushes will be silently ignored until you set Auto-Deploy Branch to
-> match. Selecting a build branch explicitly is planned; until then, set this
-> field to your repository's default branch name.
+Leave Branch empty to track the repository's **default branch**. That is what
+every application created before this field existed does, and it remains the
+default for new ones.
+
+> **If your default branch is not `main`.** Applications created before branch
+> selection have no branch recorded, so their push filter falls back to `main`
+> while the build clones the repository's default ref. On a `master`-default
+> repo that combination silently ignores every push. Set Branch explicitly and
+> both halves line up.
 
 ### Duplicate deliveries
 
@@ -106,7 +111,7 @@ the token is in the path.
 | App type | Effect |
 |---|---|
 | Image | Re-pulls the configured tag, resolves it to a fresh digest, recreates the container |
-| Git | Runs a normal deploy: clone, build, recreate |
+| Git | Runs a normal deploy: clone the tracked branch, build, recreate |
 
 The hook deliberately re-pulls rather than reusing the running image's pinned
 digest. A hook fires precisely because CI just pushed a *new* image to the same
@@ -165,8 +170,9 @@ commit column stays empty.
 
 **A push does nothing.**
 
-1. Check the branch. This is the most common cause — see the known limitation in
-   section 1. Auto-Deploy Branch must match the branch you pushed.
+1. Check the branch. This is the most common cause. The **Branch** field on the
+   Settings tab must match the branch you pushed; if it is empty, only pushes to
+   the repository's default branch deploy.
 2. Check the repository URL on the app matches the one in the payload. Matching
    normalises case and a trailing `.git`, but nothing else.
 3. Check a webhook secret is set. Without one, nothing can verify, and every

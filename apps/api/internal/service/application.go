@@ -45,6 +45,7 @@ type CreateApplicationParams struct {
 	GitToken         string      // plaintext PAT; encrypted before storage
 	HealthCheckPath  string      // HTTP path to poll after deploy (e.g. /healthz)
 	GitIntegrationID pgtype.UUID // optional FK to a connected provider account
+	Branch           string      // ref to build; empty = the repository's default ref
 }
 
 // Create inserts the application record and sets its final slug atomically.
@@ -82,6 +83,8 @@ func (s *ApplicationService) Create(ctx context.Context, p CreateApplicationPara
 			GitCredentialsEncrypted: gitCreds,
 			HealthCheckPath:         pgtype.Text{String: p.HealthCheckPath, Valid: p.HealthCheckPath != ""},
 			GitIntegrationID:        p.GitIntegrationID,
+			Branch:                  branchValue(p.Branch),
+			AutoDeployBranch:        branchValue(p.Branch),
 		})
 		if err != nil {
 			return err
@@ -113,6 +116,7 @@ type UpdateApplicationParams struct {
 	GitToken          string      // plaintext PAT; encrypted before storage; empty = no change
 	HealthCheckPath   string      // empty = clear existing
 	GitIntegrationID  pgtype.UUID // optional FK to a connected provider account; zero = clear
+	Branch            string      // ref to build; empty = the repository's default ref
 }
 
 // Update applies field changes to an application.
@@ -126,6 +130,14 @@ func (s *ApplicationService) Update(
 	name := p.Name
 	if name == "" {
 		name = current.Name
+	}
+
+	// A preview child's branch is its identity — it was materialised for that
+	// branch and its domain is derived from it. Never let a general update
+	// retarget one.
+	branch, autoDeployBranch := branchValue(p.Branch), branchValue(p.Branch)
+	if current.ParentApplicationID.Valid {
+		branch, autoDeployBranch = current.Branch, current.AutoDeployBranch
 	}
 
 	gitCreds := current.GitCredentialsEncrypted
@@ -152,7 +164,17 @@ func (s *ApplicationService) Update(
 		GitCredentialsEncrypted: gitCreds,
 		HealthCheckPath:         pgtype.Text{String: p.HealthCheckPath, Valid: p.HealthCheckPath != ""},
 		GitIntegrationID:        p.GitIntegrationID,
+		Branch:                  branch,
+		AutoDeployBranch:        autoDeployBranch,
 	})
+}
+
+// branchValue maps the user-facing Branch field onto the column. Empty means
+// "the repository's default ref", which is stored as NULL — the state every
+// application was in before branch selection existed, so leaving it blank
+// preserves the previous behaviour exactly.
+func branchValue(branch string) pgtype.Text {
+	return pgtype.Text{String: branch, Valid: branch != ""}
 }
 
 // Delete stops and removes the application container, then deletes the DB record.

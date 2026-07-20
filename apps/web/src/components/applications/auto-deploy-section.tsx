@@ -2,7 +2,6 @@ import { useCallback, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import { Eye, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Card,
@@ -149,11 +148,12 @@ function PushWebhookRow({ projectId, applicationId, application }: Props) {
   const updateWebhook = useUpdateWebhook(projectId, applicationId);
   const enabled = !!application.webhook_secret;
   const pushUrl = `${window.location.origin}/api/webhooks/push`;
-  const savedBranch = application.auto_deploy_branch || "main";
+  // The branch itself is edited on the Settings form — one field there writes
+  // both what we build and what we watch, so they cannot drift.
+  const trackedBranch = application.branch || application.auto_deploy_branch;
 
   const [confirmDisable, setConfirmDisable] = useState(false);
   const [secretShown, setSecretShown] = useState(false);
-  const [branch, setBranch] = useState(savedBranch);
 
   const generateSecret = () => {
     const bytes = new Uint8Array(32);
@@ -167,14 +167,11 @@ function PushWebhookRow({ projectId, applicationId, application }: Props) {
         setConfirmDisable(true);
         return;
       }
-      await updateWebhook.mutateAsync({
-        webhook_secret: generateSecret(),
-        auto_deploy_branch: branch || "main",
-      });
+      await updateWebhook.mutateAsync({ webhook_secret: generateSecret() });
       setSecretShown(true);
       toast.success("Push webhook enabled — add the URL and secret to your repository");
     },
-    [updateWebhook, branch],
+    [updateWebhook],
   );
 
   const handleDisable = useCallback(async () => {
@@ -192,11 +189,6 @@ function PushWebhookRow({ projectId, applicationId, application }: Props) {
     toast.success("New secret generated — update it in your repository");
   }, [updateWebhook]);
 
-  const saveBranch = useCallback(async () => {
-    await updateWebhook.mutateAsync({ auto_deploy_branch: branch || "main" });
-    toast.success("Branch saved");
-  }, [updateWebhook, branch]);
-
   const secret = application.webhook_secret ?? "";
 
   return (
@@ -206,7 +198,10 @@ function PushWebhookRow({ projectId, applicationId, application }: Props) {
         title="Git Push Hook"
         description={
           enabled
-            ? `Deploys when you push to ${savedBranch}.`
+            ? trackedBranch
+              ? `Deploys when you push to ${trackedBranch}.`
+              : "Deploys when you push to the repository's default branch."
+
             : "Deploy automatically when your git provider reports a push."
         }
         checked={enabled}
@@ -253,31 +248,6 @@ function PushWebhookRow({ projectId, applicationId, application }: Props) {
               </p>
             </div>
 
-            <div className="space-y-1.5">
-              <Label className="text-xs" htmlFor="auto-deploy-branch">
-                Branch
-              </Label>
-              <div className="flex gap-2">
-                <Input
-                  id="auto-deploy-branch"
-                  value={branch}
-                  onChange={(e) => setBranch(e.target.value)}
-                  placeholder="main"
-                />
-                {branch !== savedBranch && (
-                  <Button
-                    onClick={saveBranch}
-                    disabled={updateWebhook.isPending}
-                    className="shrink-0"
-                  >
-                    Save
-                  </Button>
-                )}
-              </div>
-              <p className="text-muted-foreground text-xs">
-                Only pushes to this branch trigger a deploy.
-              </p>
-            </div>
           </div>
         )}
       </ToggleRow>

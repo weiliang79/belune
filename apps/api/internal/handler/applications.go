@@ -7,7 +7,9 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
+	"unicode"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/hibiken/asynq"
@@ -57,6 +59,7 @@ type createApplicationRequest struct {
 	GitToken         string  `json:"git_token"`          // PAT for private repos; encrypted server-side
 	HealthCheckPath  string  `json:"health_check_path"`  // HTTP path to poll after deploy (e.g. /healthz)
 	GitIntegrationID string  `json:"git_integration_id"` // optional connected provider account
+	Branch           string  `json:"branch"`             // ref to build; empty = repository default
 }
 
 func (h *Handler) CreateApplication(w http.ResponseWriter, r *http.Request) {
@@ -80,6 +83,11 @@ func (h *Handler) CreateApplication(w http.ResponseWriter, r *http.Request) {
 
 	if req.Name == "" || req.Type == "" || req.BuildType == "" {
 		writeError(w, http.StatusBadRequest, "name, type, and build_type are required")
+		return
+	}
+
+	if !validBranchName(req.Branch) {
+		writeError(w, http.StatusBadRequest, "invalid branch name")
 		return
 	}
 
@@ -122,6 +130,7 @@ func (h *Handler) CreateApplication(w http.ResponseWriter, r *http.Request) {
 		GitToken:         req.GitToken,
 		HealthCheckPath:  req.HealthCheckPath,
 		GitIntegrationID: parseOptionalUUID(req.GitIntegrationID),
+		Branch:           req.Branch,
 	})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to create application")
@@ -620,6 +629,7 @@ type updateApplicationRequest struct {
 	MemoryLimit       int64   `json:"memory_limit"`
 	GitToken          string  `json:"git_token"`         // PAT for private repos; encrypted server-side; empty = preserve existing
 	HealthCheckPath   string  `json:"health_check_path"` // HTTP path to poll after deploy; empty = clear
+	Branch            string  `json:"branch"`            // ref to build; empty = repository default
 	// GitIntegrationID: pointer so we can tell "absent" (preserve) from ""
 	// (clear) from a UUID (set the connected provider account).
 	GitIntegrationID *string `json:"git_integration_id"`
@@ -651,6 +661,11 @@ func (h *Handler) UpdateApplication(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if !validBranchName(req.Branch) {
+		writeError(w, http.StatusBadRequest, "invalid branch name")
+		return
+	}
+
 	app, err := h.appService.Update(r.Context(), applicationUUID, current, service.UpdateApplicationParams{
 		Name:              req.Name,
 		SourceRepo:        req.SourceRepo,
@@ -663,6 +678,7 @@ func (h *Handler) UpdateApplication(w http.ResponseWriter, r *http.Request) {
 		GitToken:          req.GitToken,
 		HealthCheckPath:   req.HealthCheckPath,
 		GitIntegrationID:  resolveOptionalUUID(req.GitIntegrationID, current.GitIntegrationID),
+		Branch:            req.Branch,
 	})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to update application")
@@ -879,4 +895,26 @@ func (h *Handler) maybeEnqueueQuotaAlert(r *http.Request, projectID, ownerUserID
 	if _, err := h.asynq.Enqueue(task); err != nil {
 		slog.Warn("quota alert: failed to enqueue email task", "error", err)
 	}
+}
+
+// validBranchName reports whether a branch name is safe to hand to
+// `git clone --branch`. Not a full git-refname validator — just enough to keep
+// obviously broken input out of an argv slot and out of the database.
+//
+// A leading "-" is rejected specifically: git would read it as a flag rather
+// than a ref name if argument order ever changed.
+func validBranchName(branch string) bool {
+	if branch == "" {
+		return true // empty is meaningful: the repository's default ref
+	}
+	if len(branch) > 255 || strings.HasPrefix(branch, "-") {
+		return false
+	}
+	for _, r := range branch {
+		if unicode.IsSpace(r) || unicode.IsControl(r) {
+			return false
+		}
+	}
+	// Refs cannot contain these, per git-check-ref-format.
+	return !strings.ContainsAny(branch, "~^:?*[\\") && !strings.Contains(branch, "..")
 }

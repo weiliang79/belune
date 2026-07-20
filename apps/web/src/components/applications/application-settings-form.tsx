@@ -46,6 +46,7 @@ export function ApplicationSettingsForm({
       memory_limit_mb: Math.round(application.memory_limit / (1024 * 1024)),
       git_token: "",
       health_check_path: application.health_check_path ?? "",
+      branch: application.branch ?? "",
     },
     onSubmit: async ({ value }) => {
       toast.promise(
@@ -54,6 +55,9 @@ export function ApplicationSettingsForm({
           source_repo: value.source_repo || undefined,
           source_image: value.source_image || undefined,
           dockerfile_path: value.dockerfile_path || undefined,
+          // Sent even when blank: blank means "the repository's default ref",
+          // which must be able to clear a previously set branch.
+          branch: value.branch,
           build_type_override: value.build_type_override || undefined,
           cpu_limit: value.cpu_limit,
           memory_limit:
@@ -204,6 +208,24 @@ export function ApplicationSettingsForm({
                           : field.state.meta.errors[0]?.message}
                       </p>
                     )}
+                  </div>
+                )}
+              />
+              <form.Field
+                name="branch"
+                children={(field) => (
+                  <div className="space-y-2">
+                    <Label>Branch</Label>
+                    <Input
+                      value={field.state.value}
+                      onBlur={field.handleBlur}
+                      onChange={(e) => field.handleChange(e.target.value)}
+                      placeholder="Default branch"
+                    />
+                    <p className="text-muted-foreground text-xs">
+                      The branch to build, and the one whose pushes deploy.
+                      Leave empty to track the repository's default branch.
+                    </p>
                   </div>
                 )}
               />

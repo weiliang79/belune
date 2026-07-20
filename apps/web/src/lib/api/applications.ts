@@ -20,6 +20,8 @@ export function createApplication(
     dockerfile_path?: string;
     build_type?: string;
     git_integration_id?: string;
+    /** Ref to build; empty/omitted = the repository's default ref. */
+    branch?: string;
   },
 ) {
   return api.post<Application>(`/projects/${projectId}/applications`, data);
@@ -38,6 +40,8 @@ export function updateApplication(
     cpu_limit?: number;
     memory_limit?: number;
     git_token?: string;
+    /** Ref to build; empty string clears it back to the repository default. */
+    branch?: string;
     git_integration_id?: string;
     health_check_path?: string;
   },

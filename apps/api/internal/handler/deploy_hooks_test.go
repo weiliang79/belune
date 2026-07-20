@@ -231,3 +231,77 @@ func TestDeployHook_RequiresApplicationAccess(t *testing.T) {
 		resp.Body.Close()
 	}
 }
+
+// The user-facing "Branch" writes both columns: `branch` decides what we clone,
+// `auto_deploy_branch` decides which pushes deploy. They must never drift —
+// that divergence is what made a master-default repo silently never deploy.
+func TestApplicationBranch_WritesBothColumns(t *testing.T) {
+	resetDB(t)
+	authToken := env.SetupAdmin(t, "admin@test.com", "password123")
+	project := env.CreateProject(t, authToken, "Branch Project", "branch-project")
+	projectID := extractID(project["id"])
+
+	app := env.CreateApplication(t, authToken, projectID, map[string]any{
+		"name":        "Branch App",
+		"type":        "git",
+		"build_type":  "dockerfile",
+		"source_repo": "https://github.com/test/branch-repo",
+		"branch":      "master",
+	})
+	appID := extractID(app["id"])
+
+	var branch, autoBranch string
+	require.NoError(t, env.Pool.QueryRow(context.Background(),
+		`SELECT COALESCE(branch,''), COALESCE(auto_deploy_branch,'') FROM applications WHERE id = $1`,
+		appID).Scan(&branch, &autoBranch))
+	assert.Equal(t, "master", branch)
+	assert.Equal(t, "master", autoBranch)
+
+	// Updating moves both together.
+	resp := env.DoRequest(t, "PUT",
+		fmt.Sprintf("/api/projects/%s/applications/%s", projectID, appID),
+		map[string]any{"name": "Branch App", "branch": "develop"},
+		testutil.AuthHeader(authToken))
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	resp.Body.Close()
+
+	require.NoError(t, env.Pool.QueryRow(context.Background(),
+		`SELECT COALESCE(branch,''), COALESCE(auto_deploy_branch,'') FROM applications WHERE id = $1`,
+		appID).Scan(&branch, &autoBranch))
+	assert.Equal(t, "develop", branch)
+	assert.Equal(t, "develop", autoBranch)
+}
+
+// Empty means "the repository's default ref" and must store NULL — that is the
+// state every pre-existing application is in, so blank preserves old behaviour.
+func TestApplicationBranch_EmptyStoresNull(t *testing.T) {
+	resetDB(t)
+	authToken := env.SetupAdmin(t, "admin@test.com", "password123")
+	project := env.CreateProject(t, authToken, "Branch Project", "branch-project")
+	projectID := extractID(project["id"])
+
+	app := env.CreateApplication(t, authToken, projectID, map[string]any{
+		"name": "Default Branch App", "type": "git",
+		"build_type": "dockerfile", "source_repo": "https://github.com/test/x",
+	})
+
+	var isNull bool
+	require.NoError(t, env.Pool.QueryRow(context.Background(),
+		`SELECT branch IS NULL FROM applications WHERE id = $1`, extractID(app["id"])).Scan(&isNull))
+	assert.True(t, isNull, "blank branch must store NULL, not an empty string")
+}
+
+func TestApplicationBranch_RejectsInvalidName(t *testing.T) {
+	resetDB(t)
+	authToken := env.SetupAdmin(t, "admin@test.com", "password123")
+	project := env.CreateProject(t, authToken, "Branch Project", "branch-project")
+	projectID := extractID(project["id"])
+
+	resp := env.DoRequest(t, "POST", fmt.Sprintf("/api/projects/%s/applications", projectID),
+		map[string]any{
+			"name": "Bad Branch", "type": "git", "build_type": "dockerfile",
+			"source_repo": "https://github.com/test/x", "branch": "--upload-pack=evil",
+		}, testutil.AuthHeader(authToken))
+	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+	resp.Body.Close()
+}
