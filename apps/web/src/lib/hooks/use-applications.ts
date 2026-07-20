@@ -291,3 +291,27 @@ export function useUpdateWebhook(projectId: string, applicationId: string) {
     onError: (error) => toast.error(error.message),
   });
 }
+
+export function useChangeApplicationSource(
+  projectId: string,
+  applicationId: string,
+) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (
+      data: Parameters<typeof applicationsApi.changeApplicationSource>[2],
+    ) => applicationsApi.changeApplicationSource(projectId, applicationId, data),
+    // The list carries `type` too, and the settings page renders entirely
+    // different fields either side of the switch.
+    onSuccess: () =>
+      Promise.all([
+        qc.invalidateQueries({
+          queryKey: queryKeys.applications.detail(projectId, applicationId),
+        }),
+        qc.invalidateQueries({
+          queryKey: queryKeys.applications.all(projectId),
+        }),
+      ]),
+    onError: (error) => toast.error(error.message),
+  });
+}

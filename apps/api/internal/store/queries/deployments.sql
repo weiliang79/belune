@@ -131,3 +131,9 @@ JOIN projects p ON p.id = a.project_id
 WHERE p.user_id = $1
 ORDER BY d.started_at DESC
 LIMIT $2 OFFSET $3;
+
+-- name: CountActiveDeployments :one
+-- Guards changes that would pull the ground out from under a running deploy.
+SELECT count(*) FROM deployments
+WHERE application_id = $1
+  AND status IN ('pending', 'building', 'deploying');

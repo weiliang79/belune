@@ -211,3 +211,36 @@ WHERE applications.id = $1
 -- name: TouchApplicationDeployed :exec
 UPDATE applications SET last_deployed_at = NOW()
 WHERE id = $1;
+
+-- name: ChangeApplicationSource :one
+-- Swaps an application between git and image in one statement, so it is never
+-- observable in a half-changed state where type disagrees with the source
+-- columns.
+--
+-- Every field belonging to the abandoned source is written, not left alone:
+-- the caller passes NULL for the ones that no longer apply. Leaving a stale
+-- source_repo on an image application is exactly the incoherence the source
+-- validation now rejects, and it is what let a push webhook match an app it
+-- could not build.
+--
+-- source_changed_at is stamped rather than config_changed_at: the running
+-- container is still the pre-switch image, and only a real build or pull can
+-- change that.
+UPDATE applications SET
+    type = $2,
+    build_type = $3,
+    source_repo = $4,
+    source_image = $5,
+    dockerfile_path = $6,
+    build_type_override = NULL,
+    builder_image = NULL,
+    branch = $7,
+    auto_deploy_branch = $8,
+    git_integration_id = $9,
+    git_credentials_encrypted = $10,
+    webhook_secret_encrypted = $11,
+    webhook_secret = NULL,
+    source_changed_at = NOW(),
+    updated_at = NOW()
+WHERE id = $1
+RETURNING *;

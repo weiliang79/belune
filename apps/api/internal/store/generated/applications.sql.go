@@ -27,6 +27,114 @@ func (q *Queries) BackfillWebhookSecret(ctx context.Context, arg BackfillWebhook
 	return err
 }
 
+const changeApplicationSource = `-- name: ChangeApplicationSource :one
+UPDATE applications SET
+    type = $2,
+    build_type = $3,
+    source_repo = $4,
+    source_image = $5,
+    dockerfile_path = $6,
+    build_type_override = NULL,
+    builder_image = NULL,
+    branch = $7,
+    auto_deploy_branch = $8,
+    git_integration_id = $9,
+    git_credentials_encrypted = $10,
+    webhook_secret_encrypted = $11,
+    webhook_secret = NULL,
+    source_changed_at = NOW(),
+    updated_at = NOW()
+WHERE id = $1
+RETURNING id, project_id, name, slug, type, source_repo, source_image, dockerfile_path, build_type, build_type_override, builder_image, custom_buildpacks, cpu_limit, memory_limit, webhook_secret, auto_deploy_branch, status, git_credentials_encrypted, health_check_path, created_at, updated_at, parent_application_id, branch, preview_branch_pattern, preview_domain_template, last_activity_at, git_integration_id, source_kind, source_ref, readonly_rootfs, container_caps, container_port, health_check_timeout_seconds, health_check_expect_status, deploy_hook_token_hash, deploy_hook_token_encrypted, webhook_secret_encrypted, config_changed_at, source_changed_at, last_deployed_at
+`
+
+type ChangeApplicationSourceParams struct {
+	ID                      pgtype.UUID `json:"id"`
+	Type                    string      `json:"type"`
+	BuildType               string      `json:"build_type"`
+	SourceRepo              pgtype.Text `json:"source_repo"`
+	SourceImage             pgtype.Text `json:"source_image"`
+	DockerfilePath          pgtype.Text `json:"dockerfile_path"`
+	Branch                  pgtype.Text `json:"branch"`
+	AutoDeployBranch        pgtype.Text `json:"auto_deploy_branch"`
+	GitIntegrationID        pgtype.UUID `json:"git_integration_id"`
+	GitCredentialsEncrypted []byte      `json:"git_credentials_encrypted"`
+	WebhookSecretEncrypted  []byte      `json:"webhook_secret_encrypted"`
+}
+
+// Swaps an application between git and image in one statement, so it is never
+// observable in a half-changed state where type disagrees with the source
+// columns.
+//
+// Every field belonging to the abandoned source is written, not left alone:
+// the caller passes NULL for the ones that no longer apply. Leaving a stale
+// source_repo on an image application is exactly the incoherence the source
+// validation now rejects, and it is what let a push webhook match an app it
+// could not build.
+//
+// source_changed_at is stamped rather than config_changed_at: the running
+// container is still the pre-switch image, and only a real build or pull can
+// change that.
+func (q *Queries) ChangeApplicationSource(ctx context.Context, arg ChangeApplicationSourceParams) (Application, error) {
+	row := q.db.QueryRow(ctx, changeApplicationSource,
+		arg.ID,
+		arg.Type,
+		arg.BuildType,
+		arg.SourceRepo,
+		arg.SourceImage,
+		arg.DockerfilePath,
+		arg.Branch,
+		arg.AutoDeployBranch,
+		arg.GitIntegrationID,
+		arg.GitCredentialsEncrypted,
+		arg.WebhookSecretEncrypted,
+	)
+	var i Application
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.Name,
+		&i.Slug,
+		&i.Type,
+		&i.SourceRepo,
+		&i.SourceImage,
+		&i.DockerfilePath,
+		&i.BuildType,
+		&i.BuildTypeOverride,
+		&i.BuilderImage,
+		&i.CustomBuildpacks,
+		&i.CpuLimit,
+		&i.MemoryLimit,
+		&i.WebhookSecret,
+		&i.AutoDeployBranch,
+		&i.Status,
+		&i.GitCredentialsEncrypted,
+		&i.HealthCheckPath,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.ParentApplicationID,
+		&i.Branch,
+		&i.PreviewBranchPattern,
+		&i.PreviewDomainTemplate,
+		&i.LastActivityAt,
+		&i.GitIntegrationID,
+		&i.SourceKind,
+		&i.SourceRef,
+		&i.ReadonlyRootfs,
+		&i.ContainerCaps,
+		&i.ContainerPort,
+		&i.HealthCheckTimeoutSeconds,
+		&i.HealthCheckExpectStatus,
+		&i.DeployHookTokenHash,
+		&i.DeployHookTokenEncrypted,
+		&i.WebhookSecretEncrypted,
+		&i.ConfigChangedAt,
+		&i.SourceChangedAt,
+		&i.LastDeployedAt,
+	)
+	return i, err
+}
+
 const clearApplicationConfigChanged = `-- name: ClearApplicationConfigChanged :exec
 UPDATE applications SET config_changed_at = NULL
 WHERE applications.id = $1

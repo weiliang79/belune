@@ -11,6 +11,20 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const countActiveDeployments = `-- name: CountActiveDeployments :one
+SELECT count(*) FROM deployments
+WHERE application_id = $1
+  AND status IN ('pending', 'building', 'deploying')
+`
+
+// Guards changes that would pull the ground out from under a running deploy.
+func (q *Queries) CountActiveDeployments(ctx context.Context, applicationID pgtype.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countActiveDeployments, applicationID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countDeployments = `-- name: CountDeployments :one
 SELECT count(*) FROM deployments
 `

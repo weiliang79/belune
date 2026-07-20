@@ -180,6 +180,13 @@ commit column stays empty.
 4. Check your git host's delivery log. A `200` from Belune means the request
    arrived and was processed — it does *not* mean a deploy was triggered.
 
+**A push stopped working after changing the source.** Switching an application
+to a prebuilt image clears the repository and the push webhook secret, because
+both refer to a repository it no longer builds. Switching back to git requires
+setting a new secret — see
+[Applying configuration changes](applying-changes.md#changing-where-an-application-comes-from).
+The deploy hook is unaffected: it triggers a deploy whatever the source is.
+
 **The deploy hook returns 404.** The token was regenerated, or the hook was
 disabled. Open the app's Deployments tab, check the switch, and **Show URL** to
 copy the current one.

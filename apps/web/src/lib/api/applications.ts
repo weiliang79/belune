@@ -171,3 +171,28 @@ export function deleteDeployHook(projectId: string, applicationId: string) {
     `/projects/${projectId}/applications/${applicationId}/deploy-hook`,
   );
 }
+
+// Swaps the application between git and image. An explicit action rather than
+// part of updateApplication: several fields must move together, and everything
+// that belongs to the application rather than its source — domains and their
+// certificates, volumes and their data, file mounts, env vars, the deploy hook,
+// deployment history — is preserved.
+export function changeApplicationSource(
+  projectId: string,
+  applicationId: string,
+  data: {
+    type: "git" | "image";
+    source_image?: string;
+    source_repo?: string;
+    branch?: string;
+    build_type?: string;
+    dockerfile_path?: string;
+    git_integration_id?: string;
+    git_token?: string;
+  },
+) {
+  return api.post<Application>(
+    `/projects/${projectId}/applications/${applicationId}/change-source`,
+    data,
+  );
+}

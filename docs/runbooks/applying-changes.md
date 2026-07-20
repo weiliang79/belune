@@ -53,6 +53,35 @@ real build or pull has happened.
 The clearest case is a rollback: change the image, then roll back. The rollback
 succeeds, but you still need a deploy to get the new image, so the badge stays.
 
+## Changing where an application comes from
+
+Settings → Source switches an application between building from git and running
+a prebuilt image, without recreating it. Use this rather than deleting and
+making a new one: deleting removes the persistent data volumes and cascades
+domains, environment variables, file mounts, and deployment history, and
+re-adding the domains re-issues certificates against Let's Encrypt's limit of
+five duplicates per week.
+
+**Kept:** domains and their certificates, volumes and their data, file mounts,
+environment variables, resource limits, the runtime profile, the deploy hook,
+and deployment history.
+
+**Replaced:** the source itself. Switching to an image clears the repository,
+branch, build settings, git credentials, and the push webhook secret — those
+authenticate against a repository the application no longer has, and a push hook
+that can never fire is worse than no hook. Switching to git clears the image
+reference.
+
+The switch stamps "Deploy to apply". The container keeps serving the old image
+until you deploy, so a switch is not itself an outage.
+
+It is refused while a deploy is running (the worker would build one source and
+deploy the other) and while the application has preview environments, which are
+git-only by construction and would be orphaned.
+
+After switching to git, **Rebuild** will fail until the first deploy: it rebuilds
+a recorded commit, and there is not one yet. Use **Deploy**.
+
 ## Edits made during a deploy
 
 A change saved *while* a deploy is running is not included in that deploy — the

@@ -222,6 +222,7 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService,
 			r.Post("/api/projects/{projectId}/applications/{applicationId}/reload", h.ReloadApplication)
 			r.Post("/api/projects/{projectId}/applications/{applicationId}/rebuild", h.RebuildApplication)
 			r.Post("/api/projects/{projectId}/applications/{applicationId}/build", h.BuildApplication)
+			r.Post("/api/projects/{projectId}/applications/{applicationId}/change-source", h.ChangeApplicationSource)
 			r.Post("/api/projects/{projectId}/applications/{applicationId}/rollback", h.RollbackDeployment)
 			r.Get("/api/projects/{projectId}/applications/{applicationId}/cache", h.GetBuildCache)
 			r.Delete("/api/projects/{projectId}/applications/{applicationId}/cache", h.ClearBuildCache)
