@@ -17,7 +17,7 @@ WHERE a.id = $1;
 -- what every application did before branch selection existed.
 -- auto_deploy_branch is kept in lockstep with it: one user-facing "Branch"
 -- decides both what we build and which pushes deploy, so the two cannot drift.
-INSERT INTO applications (project_id, name, slug, type, source_repo, source_image, dockerfile_path, build_type, cpu_limit, memory_limit, webhook_secret, git_credentials_encrypted, health_check_path, git_integration_id, branch, auto_deploy_branch)
+INSERT INTO applications (project_id, name, slug, type, source_repo, source_image, dockerfile_path, build_type, cpu_limit, memory_limit, webhook_secret_encrypted, git_credentials_encrypted, health_check_path, git_integration_id, branch, auto_deploy_branch)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
 RETURNING *;
 
@@ -40,11 +40,29 @@ RETURNING *;
 DELETE FROM applications WHERE id = $1;
 
 -- name: ListApplicationsBySourceRepo :many
-SELECT * FROM applications WHERE source_repo = $1 AND webhook_secret IS NOT NULL;
+-- Either column counts as "has a secret": a row may still be un-backfilled.
+SELECT * FROM applications
+WHERE source_repo = $1
+  AND (webhook_secret_encrypted IS NOT NULL OR webhook_secret IS NOT NULL);
 
 -- name: UpdateApplicationWebhook :one
-UPDATE applications SET webhook_secret = $2, auto_deploy_branch = $3, updated_at = NOW()
+-- Writing the secret always clears the legacy plaintext column, so a row that
+-- has been touched since the encryption migration never carries both.
+UPDATE applications SET
+    webhook_secret_encrypted = $2,
+    webhook_secret = NULL,
+    auto_deploy_branch = $3,
+    updated_at = NOW()
 WHERE id = $1 RETURNING *;
+
+-- name: BackfillWebhookSecret :exec
+-- One-time move of a plaintext secret into the encrypted column.
+UPDATE applications SET webhook_secret_encrypted = $2, webhook_secret = NULL
+WHERE id = $1;
+
+-- name: ListApplicationsWithPlaintextWebhookSecret :many
+SELECT * FROM applications
+WHERE webhook_secret IS NOT NULL AND webhook_secret <> '';
 
 -- name: SetApplicationDeployHook :one
 UPDATE applications SET

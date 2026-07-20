@@ -182,6 +182,11 @@ func New(cfg *config.Config) (*App, error) {
 	reconciler := proxy.NewReconciler(queries, caddyClient, cfg.Keyring, 30*time.Second).
 		WithNetworkAttacher(dockerClient, cfg.CaddyContainerName)
 
+	// One-time move of plaintext webhook secrets into the keyring-encrypted
+	// column (migration 000051). Safe to run on every boot: it only touches
+	// rows that still hold plaintext.
+	service.BackfillWebhookSecrets(context.Background(), queries, cfg.Keyring)
+
 	if err := caddyClient.ConfigureAccessLogs(context.Background()); err != nil {
 		slog.Warn("failed to configure Caddy access logs", "error", err)
 	}

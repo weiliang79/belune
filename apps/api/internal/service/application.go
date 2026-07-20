@@ -55,6 +55,10 @@ func (s *ApplicationService) Create(ctx context.Context, p CreateApplicationPara
 	if err != nil {
 		return generated.Application{}, fmt.Errorf("generate webhook secret: %w", err)
 	}
+	encryptedSecret, err := s.keyring.Encrypt([]byte(webhookSecret))
+	if err != nil {
+		return generated.Application{}, fmt.Errorf("encrypt webhook secret: %w", err)
+	}
 
 	var gitCreds []byte
 	if p.GitToken != "" {
@@ -79,7 +83,7 @@ func (s *ApplicationService) Create(ctx context.Context, p CreateApplicationPara
 			BuildType:               p.BuildType,
 			CpuLimit:                p.CPULimit,
 			MemoryLimit:             p.MemoryLimit,
-			WebhookSecret:           pgtype.Text{String: webhookSecret, Valid: true},
+			WebhookSecretEncrypted:  encryptedSecret,
 			GitCredentialsEncrypted: gitCreds,
 			HealthCheckPath:         pgtype.Text{String: p.HealthCheckPath, Valid: p.HealthCheckPath != ""},
 			GitIntegrationID:        p.GitIntegrationID,

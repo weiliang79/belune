@@ -27,6 +27,7 @@ import {
   useDeployHook,
   useGenerateDeployHook,
   useRevealDeployHook,
+  useRevealWebhookSecret,
   useUpdateWebhook,
 } from "@/lib/hooks/use-applications";
 import { CopyButton } from "@/lib/components/copy-button";
@@ -146,14 +147,18 @@ function CopyRow({ value, children }: { value: string; children?: ReactNode }) {
  */
 function PushWebhookRow({ projectId, applicationId, application }: Props) {
   const updateWebhook = useUpdateWebhook(projectId, applicationId);
-  const enabled = !!application.webhook_secret;
+  const enabled = application.has_webhook_secret;
   const pushUrl = `${window.location.origin}/api/webhooks/push`;
   // The branch itself is edited on the Settings form — one field there writes
   // both what we build and what we watch, so they cannot drift.
   const trackedBranch = application.branch || application.auto_deploy_branch;
 
+  const reveal = useRevealWebhookSecret(projectId, applicationId);
   const [confirmDisable, setConfirmDisable] = useState(false);
-  const [secretShown, setSecretShown] = useState(false);
+  // Held only in local state, like the deploy-hook URL: the secret is no longer
+  // part of the application payload, so it lives here for as long as the user
+  // is looking at it and a page change drops it.
+  const [secret, setSecret] = useState<string | null>(null);
 
   const generateSecret = () => {
     const bytes = new Uint8Array(32);
@@ -167,8 +172,11 @@ function PushWebhookRow({ projectId, applicationId, application }: Props) {
         setConfirmDisable(true);
         return;
       }
-      await updateWebhook.mutateAsync({ webhook_secret: generateSecret() });
-      setSecretShown(true);
+      const fresh = generateSecret();
+      await updateWebhook.mutateAsync({ webhook_secret: fresh });
+      // Shown straight away: enabling exists to get the secret into the
+      // provider, so making the user click Show first is pure friction.
+      setSecret(fresh);
       toast.success("Push webhook enabled — add the URL and secret to your repository");
     },
     [updateWebhook],
@@ -178,18 +186,22 @@ function PushWebhookRow({ projectId, applicationId, application }: Props) {
     // Clearing the secret is what actually disables it: the push endpoint fails
     // closed without one, and app matching requires it.
     await updateWebhook.mutateAsync({ webhook_secret: "" });
-    setSecretShown(false);
+    setSecret(null);
     setConfirmDisable(false);
     toast.success("Push webhook disabled");
   }, [updateWebhook]);
 
   const handleRegenerate = useCallback(async () => {
-    await updateWebhook.mutateAsync({ webhook_secret: generateSecret() });
-    setSecretShown(true);
+    const fresh = generateSecret();
+    await updateWebhook.mutateAsync({ webhook_secret: fresh });
+    setSecret(fresh);
     toast.success("New secret generated — update it in your repository");
   }, [updateWebhook]);
 
-  const secret = application.webhook_secret ?? "";
+  const handleReveal = useCallback(async () => {
+    const result = await reveal.mutateAsync();
+    setSecret(result.webhook_secret);
+  }, [reveal]);
 
   return (
     <>
@@ -219,18 +231,33 @@ function PushWebhookRow({ projectId, applicationId, application }: Props) {
               <Label className="text-xs">Secret</Label>
               <div className="bg-muted flex items-center gap-2 rounded-md px-3 py-2">
                 <code className="min-w-0 flex-1 font-mono text-sm break-all">
-                  {secretShown ? secret : "•".repeat(32)}
+                  {secret ?? "•".repeat(32)}
                 </code>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 shrink-0"
-                  onClick={() => setSecretShown((s) => !s)}
-                >
-                  <Eye className="mr-1.5 h-3.5 w-3.5" />
-                  {secretShown ? "Hide" : "Show"}
-                </Button>
-                {secretShown && <CopyButton value={secret} />}
+                {secret ? (
+                  <>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 shrink-0"
+                      onClick={() => setSecret(null)}
+                    >
+                      <Eye className="mr-1.5 h-3.5 w-3.5" />
+                      Hide
+                    </Button>
+                    <CopyButton value={secret} />
+                  </>
+                ) : (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 shrink-0"
+                    onClick={handleReveal}
+                    disabled={reveal.isPending}
+                  >
+                    <Eye className="mr-1.5 h-3.5 w-3.5" />
+                    {reveal.isPending ? "Revealing..." : "Show"}
+                  </Button>
+                )}
                 <Button
                   variant="outline"
                   size="sm"

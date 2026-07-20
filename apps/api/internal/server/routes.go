@@ -210,6 +210,7 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService,
 			r.Put("/api/projects/{projectId}/applications/{applicationId}/runtime", h.UpdateApplicationRuntime)
 			r.Delete("/api/projects/{projectId}/applications/{applicationId}", h.DeleteApplication)
 			r.Put("/api/projects/{projectId}/applications/{applicationId}/webhook", h.UpdateApplicationWebhook)
+			r.Get("/api/projects/{projectId}/applications/{applicationId}/webhook/reveal", h.RevealWebhookSecret)
 			r.Get("/api/projects/{projectId}/applications/{applicationId}/deploy-hook", h.GetDeployHook)
 			r.Get("/api/projects/{projectId}/applications/{applicationId}/deploy-hook/reveal", h.RevealDeployHook)
 			r.Post("/api/projects/{projectId}/applications/{applicationId}/deploy-hook", h.GenerateDeployHook)

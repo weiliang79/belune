@@ -46,8 +46,9 @@ func TestApplicationService_Create_FinalizesSlugAndWebhookSecret(t *testing.T) {
 	// A non-empty webhook secret is required for git push verification — the
 	// service must never persist an application without one, even when the
 	// caller didn't ask for git auth.
-	assert.True(t, persisted.WebhookSecret.Valid)
-	assert.NotEmpty(t, persisted.WebhookSecret.String)
+	// Stored encrypted, never as plaintext.
+	assert.NotEmpty(t, persisted.WebhookSecretEncrypted)
+	assert.False(t, persisted.WebhookSecret.Valid)
 }
 
 func TestApplicationService_Create_EncryptsGitToken(t *testing.T) {

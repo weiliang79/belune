@@ -37,8 +37,78 @@ func TestUpdateApplicationWebhook(t *testing.T) {
 	}, testutil.AuthHeader(token))
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 	result := testutil.ReadJSON(t, resp)
-	assert.Equal(t, secret, result["webhook_secret"])
 	assert.Equal(t, branch, result["auto_deploy_branch"])
+	// The secret is reported as present but never returned — it used to ride
+	// along in this response and in every application fetch.
+	assert.Equal(t, true, result["has_webhook_secret"])
+	assert.NotContains(t, result, "webhook_secret")
+
+	// It is stored encrypted, not in the legacy plaintext column.
+	var hasEncrypted, hasPlaintext bool
+	require.NoError(t, env.Pool.QueryRow(context.Background(),
+		`SELECT webhook_secret_encrypted IS NOT NULL, webhook_secret IS NOT NULL
+		   FROM applications WHERE id = $1`, appID).Scan(&hasEncrypted, &hasPlaintext))
+	assert.True(t, hasEncrypted, "secret must be stored encrypted")
+	assert.False(t, hasPlaintext, "plaintext column must be cleared")
+
+	// Reveal is the only way back to the value.
+	resp = env.DoRequest(t, "GET",
+		fmt.Sprintf("/api/projects/%s/applications/%s/webhook/reveal", projectID, appID),
+		nil, testutil.AuthHeader(token))
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	assert.Equal(t, secret, testutil.ReadJSON(t, resp)["webhook_secret"])
+}
+
+// No application-shaped response may carry a secret column. This is the
+// regression guard for the leak the DTO was introduced to close.
+func TestApplicationResponse_OmitsSecrets(t *testing.T) {
+	resetDB(t)
+	token := env.SetupAdmin(t, "admin@test.com", "password123")
+	project := env.CreateProject(t, token, "Test Project", "test-project")
+	projectID := extractID(project["id"])
+	app := env.CreateApplication(t, token, projectID, map[string]any{
+		"name": "Secret App", "type": "git",
+		"build_type": "dockerfile", "source_repo": "https://github.com/test/repo",
+		"git_token": "ghp_supersecret",
+	})
+	appID := extractID(app["id"])
+
+	secretKeys := []string{
+		"webhook_secret",
+		"git_credentials_encrypted",
+		"deploy_hook_token_hash",
+		"deploy_hook_token_encrypted",
+	}
+
+	// Create response.
+	for _, k := range secretKeys {
+		assert.NotContains(t, app, k, "create response leaked %s", k)
+	}
+	assert.Equal(t, true, app["has_webhook_secret"])
+	assert.Equal(t, true, app["has_git_credentials"])
+
+	// Get response.
+	resp := env.DoRequest(t, "GET",
+		fmt.Sprintf("/api/projects/%s/applications/%s", projectID, appID),
+		nil, testutil.AuthHeader(token))
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	detail := testutil.ReadJSON(t, resp)
+	for _, k := range secretKeys {
+		assert.NotContains(t, detail, k, "get response leaked %s", k)
+	}
+
+	// List response.
+	resp = env.DoRequest(t, "GET",
+		fmt.Sprintf("/api/projects/%s/applications", projectID),
+		nil, testutil.AuthHeader(token))
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	var list []map[string]any
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&list))
+	resp.Body.Close()
+	require.Len(t, list, 1)
+	for _, k := range secretKeys {
+		assert.NotContains(t, list[0], k, "list response leaked %s", k)
+	}
 }
 
 func TestWebhookPush_GitHub(t *testing.T) {

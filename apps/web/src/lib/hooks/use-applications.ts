@@ -222,6 +222,16 @@ export function useClearBuildCache(projectId: string, applicationId: string) {
   });
 }
 
+// A mutation, not a query: each call writes an audit-log entry server-side, so
+// the secret is fetched only on an explicit click.
+export function useRevealWebhookSecret(projectId: string, applicationId: string) {
+  return useMutation({
+    mutationFn: () =>
+      applicationsApi.revealWebhookSecret(projectId, applicationId),
+    onError: (error) => toast.error(error.message),
+  });
+}
+
 // Reports whether the deploy hook is enabled. Never carries the token itself —
 // use useRevealDeployHook for that.
 export function useDeployHook(projectId: string, applicationId: string) {

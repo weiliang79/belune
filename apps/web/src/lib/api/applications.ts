@@ -135,6 +135,14 @@ export function updateWebhook(
   );
 }
 
+// Returns the plaintext webhook secret. Audited server-side, so call it only
+// when the user asks to see it.
+export function revealWebhookSecret(projectId: string, applicationId: string) {
+  return api.get<{ webhook_secret: string }>(
+    `/projects/${projectId}/applications/${applicationId}/webhook/reveal`,
+  );
+}
+
 export function getDeployHook(projectId: string, applicationId: string) {
   return api.get<DeployHook>(
     `/projects/${projectId}/applications/${applicationId}/deploy-hook`,

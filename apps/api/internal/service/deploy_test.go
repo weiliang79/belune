@@ -40,13 +40,13 @@ func seedImageApp(t *testing.T) generated.Application {
 	t.Helper()
 	_, project := seedUserAndProject(t)
 	app, err := testQueries.CreateApplication(context.Background(), generated.CreateApplicationParams{
-		ProjectID:     project.ID,
-		Name:          "Image App",
-		Slug:          project.Slug + "-img",
-		Type:          "image",
-		SourceImage:   pgtype.Text{String: "nginx:alpine", Valid: true},
-		BuildType:     "image",
-		WebhookSecret: pgtype.Text{String: "secret-" + randomSuffix(t), Valid: true},
+		ProjectID:              project.ID,
+		Name:                   "Image App",
+		Slug:                   project.Slug + "-img",
+		Type:                   "image",
+		SourceImage:            pgtype.Text{String: "nginx:alpine", Valid: true},
+		BuildType:              "image",
+		WebhookSecretEncrypted: []byte("ciphertext-" + randomSuffix(t)),
 	})
 	require.NoError(t, err)
 	return app

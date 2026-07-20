@@ -54,6 +54,7 @@ type Application struct {
 	HealthCheckExpectStatus   pgtype.Int4        `json:"health_check_expect_status"`
 	DeployHookTokenHash       []byte             `json:"deploy_hook_token_hash"`
 	DeployHookTokenEncrypted  []byte             `json:"deploy_hook_token_encrypted"`
+	WebhookSecretEncrypted    []byte             `json:"webhook_secret_encrypted"`
 }
 
 type ApplicationFileMount struct {

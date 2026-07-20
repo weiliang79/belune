@@ -35,8 +35,12 @@ export interface Application {
   cpu_limit: number;
   memory_limit: number;
   status: string;
-  webhook_secret: string | null;
   auto_deploy_branch: string | null;
+  // Secrets never cross the wire. These say only whether one is set; the
+  // values come from audited reveal endpoints.
+  has_webhook_secret: boolean;
+  has_git_credentials: boolean;
+  deploy_hook_enabled: boolean;
   health_check_path: string | null;
   parent_application_id: string | null;
   branch: string | null;

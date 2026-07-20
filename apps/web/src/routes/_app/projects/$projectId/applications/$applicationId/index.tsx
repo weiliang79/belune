@@ -85,7 +85,7 @@ function MetricCard({
  */
 function AutoDeployValue({ app }: { app: Application }) {
   const { data: hook } = useDeployHook(app.project_id, app.id);
-  const pushEnabled = app.type === "git" && !!app.webhook_secret;
+  const pushEnabled = app.type === "git" && app.has_webhook_secret;
 
   const active: string[] = [];
   if (pushEnabled) active.push(`push to ${app.auto_deploy_branch || "main"}`);

@@ -141,7 +141,7 @@ func (h *Handler) CreateApplication(w http.ResponseWriter, r *http.Request) {
 
 	h.maybeEnqueueQuotaAlert(r, projectUUID, project.UserID)
 
-	writeJSON(w, http.StatusCreated, app)
+	writeJSON(w, http.StatusCreated, toApplicationResponse(app))
 }
 
 func (h *Handler) GetApplication(w http.ResponseWriter, r *http.Request) {
@@ -163,7 +163,7 @@ func (h *Handler) GetApplication(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, app)
+	writeJSON(w, http.StatusOK, toApplicationResponse(app))
 }
 
 // GetApplicationHealth returns the most recent post-deploy health probe
@@ -234,7 +234,7 @@ func (h *Handler) ListApplications(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, applications)
+	writeJSON(w, http.StatusOK, toApplicationResponses(applications))
 }
 
 type deployPayload struct {
@@ -339,7 +339,7 @@ func (h *Handler) StopApplication(w http.ResponseWriter, r *http.Request) {
 
 	h.audit(r, "stop_application", "application", applicationID, nil)
 
-	writeJSON(w, http.StatusOK, app)
+	writeJSON(w, http.StatusOK, toApplicationResponse(app))
 }
 
 func (h *Handler) StartApplication(w http.ResponseWriter, r *http.Request) {
@@ -379,7 +379,7 @@ func (h *Handler) StartApplication(w http.ResponseWriter, r *http.Request) {
 
 	h.audit(r, "start_application", "application", applicationID, nil)
 
-	writeJSON(w, http.StatusOK, app)
+	writeJSON(w, http.StatusOK, toApplicationResponse(app))
 }
 
 func (h *Handler) RestartApplication(w http.ResponseWriter, r *http.Request) {
@@ -425,7 +425,7 @@ func (h *Handler) RestartApplication(w http.ResponseWriter, r *http.Request) {
 
 	h.audit(r, "restart_application", "application", applicationID, nil)
 
-	writeJSON(w, http.StatusOK, app)
+	writeJSON(w, http.StatusOK, toApplicationResponse(app))
 }
 
 // ReloadApplication recreates the application container from its current image
@@ -687,7 +687,7 @@ func (h *Handler) UpdateApplication(w http.ResponseWriter, r *http.Request) {
 
 	h.audit(r, "update_application", "application", applicationID, nil)
 
-	writeJSON(w, http.StatusOK, app)
+	writeJSON(w, http.StatusOK, toApplicationResponse(app))
 }
 
 func (h *Handler) DeleteApplication(w http.ResponseWriter, r *http.Request) {

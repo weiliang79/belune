@@ -89,7 +89,7 @@ func (h *Handler) HandleWebhookPush(w http.ResponseWriter, r *http.Request) {
 
 	triggered := 0
 	for _, app := range applications {
-		secret := app.WebhookSecret.String
+		secret := h.webhookSecretFor(app)
 
 		payload, err := git.ParseWebhook(r, body, secret)
 		if err != nil {
@@ -137,9 +137,21 @@ func (h *Handler) UpdateApplicationWebhook(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	secret := current.WebhookSecret
+	// Preserve the stored secret unless the request carries one. An explicit
+	// empty string clears it, which is how the UI disables push deploys.
+	secret := current.WebhookSecretEncrypted
 	if req.WebhookSecret != nil {
-		secret = pgtype.Text{String: *req.WebhookSecret, Valid: *req.WebhookSecret != ""}
+		if *req.WebhookSecret == "" {
+			secret = nil
+		} else {
+			encrypted, encErr := h.cfg.Keyring.Encrypt([]byte(*req.WebhookSecret))
+			if encErr != nil {
+				slog.Error("could not encrypt webhook secret", "application", applicationID, "error", encErr)
+				writeError(w, http.StatusInternalServerError, "failed to store webhook secret")
+				return
+			}
+			secret = encrypted
+		}
 	}
 
 	branch := current.AutoDeployBranch
@@ -152,16 +164,16 @@ func (h *Handler) UpdateApplicationWebhook(w http.ResponseWriter, r *http.Reques
 	}
 
 	app, err := h.queries.UpdateApplicationWebhook(r.Context(), generated.UpdateApplicationWebhookParams{
-		ID:               applicationUUID,
-		WebhookSecret:    secret,
-		AutoDeployBranch: branch,
+		ID:                     applicationUUID,
+		WebhookSecretEncrypted: secret,
+		AutoDeployBranch:       branch,
 	})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to update webhook settings")
 		return
 	}
 
-	writeJSON(w, http.StatusOK, app)
+	writeJSON(w, http.StatusOK, toApplicationResponse(app))
 }
 
 // webhookSource returns "github", "gitlab", or "unknown" based on request headers.
@@ -389,4 +401,54 @@ func deriveBaseSlug(fullSlug, projectSlug, appID string) string {
 		return remainder
 	}
 	return strings.TrimSuffix(remainder, suffix)
+}
+
+// RevealWebhookSecret returns the plaintext webhook secret.
+//
+// The secret used to ride along in every application fetch, so the UI could
+// render it for free. It no longer does — this endpoint is the only way to see
+// it, and each call is audited, matching how the deploy-hook token is handled.
+func (h *Handler) RevealWebhookSecret(w http.ResponseWriter, r *http.Request) {
+	applicationID := chi.URLParam(r, "applicationId")
+	var applicationUUID pgtype.UUID
+	if err := applicationUUID.Scan(applicationID); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid application id")
+		return
+	}
+	if !h.canAccessApplication(r, applicationUUID) {
+		writeError(w, http.StatusForbidden, "access denied")
+		return
+	}
+
+	app, err := h.queries.GetApplication(r.Context(), applicationUUID)
+	if err != nil {
+		writeError(w, http.StatusNotFound, "application not found")
+		return
+	}
+	secret := h.webhookSecretFor(app)
+	if secret == "" {
+		writeError(w, http.StatusNotFound, "no webhook secret is set")
+		return
+	}
+
+	h.audit(r, "reveal_webhook_secret", "application", applicationID, nil)
+
+	writeJSON(w, http.StatusOK, map[string]string{"webhook_secret": secret})
+}
+
+// webhookSecretFor returns an application's plaintext webhook secret,
+// preferring the encrypted column and falling back to the legacy plaintext one
+// for rows the startup backfill has not reached yet. Returns "" when no secret
+// is set, which callers must treat as "cannot verify" — never as "skip
+// verification".
+func (h *Handler) webhookSecretFor(app generated.Application) string {
+	if len(app.WebhookSecretEncrypted) > 0 {
+		plaintext, err := h.cfg.Keyring.Decrypt(app.WebhookSecretEncrypted)
+		if err != nil {
+			slog.Error("could not decrypt webhook secret", "application", app.Name, "error", err)
+			return ""
+		}
+		return string(plaintext)
+	}
+	return app.WebhookSecret.String
 }
