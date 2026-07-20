@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useForm } from "@tanstack/react-form";
 import { z } from "zod";
 import { toast } from "sonner";
@@ -14,10 +15,23 @@ import {
 } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   SegmentedControl,
   SegmentedControlItem,
 } from "@/components/ui/segmented-control";
-import { useUpdateApplication } from "@/lib/hooks/use-applications";
+import {
+  useUpdateApplication,
+  useChangeApplicationSource,
+} from "@/lib/hooks/use-applications";
 import { useFeatures } from "@/lib/hooks/use-features";
 import type { Application } from "@/lib/types";
 
@@ -27,13 +41,47 @@ interface Props {
   application: Application;
 }
 
+type FormValues = {
+  name: string;
+  source_repo: string;
+  source_image: string;
+  dockerfile_path: string;
+  build_type_override: string;
+  cpu_limit: number;
+  memory_limit_mb: number;
+  git_token: string;
+  health_check_path: string;
+  branch: string;
+};
+
 export function ApplicationSettingsForm({
   projectId,
   applicationId,
   application,
 }: Props) {
   const updateApplication = useUpdateApplication(projectId, applicationId);
+  const changeSource = useChangeApplicationSource(projectId, applicationId);
   const { data: features } = useFeatures();
+
+  // The type is edited here rather than in a separate section: switching it is
+  // a save like any other from the user's point of view. What makes it not a
+  // plain save is the endpoint — PUT cannot change type, and folding that
+  // capability into it would re-open the incoherent-source hole the change-
+  // source endpoint was built to close. So Save routes by whether the type
+  // moved: unchanged goes to the ordinary update; changed goes through a
+  // confirmation to the dedicated endpoint, which swaps every source column as
+  // one unit and drops the credentials that no longer apply.
+  const [selectedType, setSelectedType] = useState(application.type);
+  const isSwitching = selectedType !== application.type;
+
+  // Captured on submit and applied only once the user confirms — the switch
+  // deletes secrets and needs a deploy, which is too much to do on one click.
+  const [pending, setPending] = useState<FormValues | null>(null);
+
+  // A switch to git has no stored build_type to fall back on, so the control
+  // starts from railpack (what the create flow defaults to). A same-type edit
+  // keeps override semantics against the stored base.
+  const gitBuildBase = isSwitching ? "railpack" : application.build_type;
 
   const form = useForm({
     defaultValues: {
@@ -47,14 +95,28 @@ export function ApplicationSettingsForm({
       git_token: "",
       health_check_path: application.health_check_path ?? "",
       branch: application.branch ?? "",
-    },
+    } as FormValues,
     onSubmit: async ({ value }) => {
-      // Only the fields belonging to this application's type are sent. The
-      // server rejects a mix (a source_repo on an image app was previously
-      // stored and then silently ignored), and the inputs for the other type
-      // are not rendered — so echoing a stale value back would produce a
+      if (isSwitching) {
+        // Guard the required field here, since the type control can flip to a
+        // type whose source input the user has not filled in yet.
+        if (selectedType === "git" && !value.source_repo.trim()) {
+          toast.error("A repository URL is required to switch to git");
+          return;
+        }
+        if (selectedType === "image" && !value.source_image.trim()) {
+          toast.error("An image is required to switch to a prebuilt image");
+          return;
+        }
+        setPending(value);
+        return;
+      }
+
+      // Unchanged type: the ordinary update. Only the fields belonging to this
+      // type are sent — the server rejects a mix, and the other type's inputs
+      // are not rendered, so echoing a stale value back would produce a
       // rejection the user has no field to fix.
-      const isGit = application.type === "git";
+      const isGit = selectedType === "git";
       toast.promise(
         updateApplication.mutateAsync({
           name: value.name || undefined,
@@ -83,6 +145,30 @@ export function ApplicationSettingsForm({
       );
     },
   });
+
+  const confirmSwitch = () => {
+    if (!pending) return;
+    const v = pending;
+    const data =
+      selectedType === "image"
+        ? { type: "image" as const, source_image: v.source_image.trim() }
+        : {
+            type: "git" as const,
+            source_repo: v.source_repo.trim(),
+            branch: v.branch.trim(),
+            build_type: v.build_type_override || "railpack",
+            dockerfile_path: v.dockerfile_path || undefined,
+            git_token: v.git_token || undefined,
+          };
+    toast.promise(changeSource.mutateAsync(data), {
+      loading: "Changing source...",
+      success: () => {
+        setPending(null);
+        return "Source changed — deploy to apply it";
+      },
+      error: (err) => err.message,
+    });
+  };
 
   return (
     <Card>
@@ -119,21 +205,44 @@ export function ApplicationSettingsForm({
               </div>
             )}
           />
-          {application.type === "git" && (
+          <div className="space-y-2">
+            <Label>Type</Label>
+            <SegmentedControl
+              value={selectedType}
+              onValueChange={(v) => setSelectedType(v as "git" | "image")}
+            >
+              <SegmentedControlItem value="image">
+                Docker Image
+              </SegmentedControlItem>
+              <SegmentedControlItem value="git">
+                Git Repository
+              </SegmentedControlItem>
+            </SegmentedControl>
+            {isSwitching && (
+              <Alert>
+                <TriangleAlert />
+                <AlertDescription>
+                  {selectedType === "image"
+                    ? "Switching to an image removes the repository, branch, build settings, git credentials and push webhook secret. Domains, volumes, mounts, environment variables and the deploy hook are kept."
+                    : "Switching to git removes the image reference and builds from source instead. Domains, volumes, mounts, environment variables and the deploy hook are kept."}{" "}
+                  You will confirm before anything changes, and the running
+                  container keeps serving until you deploy.
+                </AlertDescription>
+              </Alert>
+            )}
+          </div>
+          {selectedType === "git" && (
             <form.Field
               name="build_type_override"
               children={(field) => {
-                const effectiveValue =
-                  field.state.value || application.build_type;
+                const effectiveValue = field.state.value || gitBuildBase;
                 return (
                   <div className="space-y-2">
                     <Label>Build Type</Label>
                     <SegmentedControl
                       value={effectiveValue}
                       onValueChange={(v) =>
-                        field.handleChange(
-                          v === application.build_type ? "" : v,
-                        )
+                        field.handleChange(v === gitBuildBase ? "" : v)
                       }
                     >
                       <SegmentedControlItem value="dockerfile">
@@ -161,7 +270,7 @@ export function ApplicationSettingsForm({
               }}
             />
           )}
-          {application.type === "image" && (
+          {selectedType === "image" && (
             <form.Field
               name="source_image"
               children={(field) => (
@@ -171,12 +280,13 @@ export function ApplicationSettingsForm({
                     value={field.state.value}
                     onBlur={field.handleBlur}
                     onChange={(e) => field.handleChange(e.target.value)}
+                    placeholder="nginx:1.27"
                   />
                 </div>
               )}
             />
           )}
-          {application.type === "git" && (
+          {selectedType === "git" && (
             <>
               <form.Field
                 name="source_repo"
@@ -235,7 +345,11 @@ export function ApplicationSettingsForm({
                       value={field.state.value}
                       onBlur={field.handleBlur}
                       onChange={(e) => field.handleChange(e.target.value)}
-                      placeholder="Leave empty to keep existing token"
+                      placeholder={
+                        isSwitching
+                          ? "Leave empty for a public repository"
+                          : "Leave empty to keep existing token"
+                      }
                       className="font-mono"
                     />
                     <p className="text-muted-foreground text-xs">
@@ -245,22 +359,26 @@ export function ApplicationSettingsForm({
                   </div>
                 )}
               />
-              {(application.build_type_override ?? application.build_type) ===
-                "dockerfile" && (
-                <form.Field
-                  name="dockerfile_path"
-                  children={(field) => (
-                    <div className="space-y-2">
-                      <Label>Dockerfile Path</Label>
-                      <Input
-                        value={field.state.value}
-                        onBlur={field.handleBlur}
-                        onChange={(e) => field.handleChange(e.target.value)}
-                      />
-                    </div>
-                  )}
-                />
-              )}
+              <form.Subscribe
+                selector={(s) => s.values.build_type_override}
+                children={(override) =>
+                  (override || gitBuildBase) === "dockerfile" ? (
+                    <form.Field
+                      name="dockerfile_path"
+                      children={(field) => (
+                        <div className="space-y-2">
+                          <Label>Dockerfile Path</Label>
+                          <Input
+                            value={field.state.value}
+                            onBlur={field.handleBlur}
+                            onChange={(e) => field.handleChange(e.target.value)}
+                          />
+                        </div>
+                      )}
+                    />
+                  ) : null
+                }
+              />
             </>
           )}
           <div className="grid grid-cols-2 gap-4">
@@ -334,12 +452,45 @@ export function ApplicationSettingsForm({
             selector={(s) => s.isSubmitting}
             children={(isSubmitting) => (
               <Button type="submit" disabled={isSubmitting}>
-                {isSubmitting ? "Saving..." : "Save Changes"}
+                {isSubmitting
+                  ? "Saving..."
+                  : isSwitching
+                    ? "Save & change source"
+                    : "Save Changes"}
               </Button>
             )}
           />
         </form>
       </CardContent>
+
+      <AlertDialog
+        open={pending !== null}
+        onOpenChange={(open) => {
+          if (!open) setPending(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {selectedType === "image"
+                ? "Switch to a prebuilt image?"
+                : "Switch to git?"}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {selectedType === "image"
+                ? "The repository, branch, build settings, git credentials and push webhook secret are removed. Domains, volumes and their data, file mounts, environment variables, the deploy hook, and deployment history are kept."
+                : "The image reference is removed and the application will be built from source. Domains, volumes and their data, file mounts, environment variables, the deploy hook, and deployment history are kept."}{" "}
+              The running container keeps serving until you deploy.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmSwitch}>
+              Change source
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Card>
   );
 }
