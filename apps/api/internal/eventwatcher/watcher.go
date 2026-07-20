@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
@@ -83,13 +84,13 @@ func (w *Watcher) reconcile(ctx context.Context) {
 	// by container name (which equals the slug) so databases provisioned before
 	// the database-id label existed are still recognized as running and not
 	// falsely flipped to stopped.
-	runningApps := make(map[string]bool)
+	runningApps := make(map[string]string) // app ID → container name
 	runningDBs := make(map[string]bool)
 	runningNames := make(map[string]bool)
 	for _, c := range containers {
 		runningNames[c.Name] = true
 		if appID, ok := c.Labels[labelApplicationID]; ok {
-			runningApps[appID] = true
+			runningApps[appID] = c.Name
 		}
 		if dbID, ok := c.Labels[labelDatabaseID]; ok {
 			runningDBs[dbID] = true
@@ -105,20 +106,39 @@ func (w *Watcher) reconcile(ctx context.Context) {
 
 	for _, app := range apps {
 		appIDStr := pgUUIDToString(app.ID)
-		isRunning := runningApps[appIDStr]
+		containerName, isRunning := runningApps[appIDStr]
 
-		if app.Status == status.ApplicationRunning && !isRunning {
-			slog.Info("eventwatcher: reconciling stopped application", "app_id", appIDStr)
-			w.updateAppStatus(ctx, app.ID, appIDStr, status.ApplicationStopped)
-		} else if (app.Status == status.ApplicationStopped || app.Status == status.ApplicationError) && isRunning {
-			// "error" is included because the container is the ground truth: if
-			// it is up, the application is running, whatever went wrong before.
-			// Without this an app could sit in "error" indefinitely while
-			// serving traffic — reconciliation used to only ever move between
-			// running and stopped, which was complete only while "error" was
-			// never written.
-			slog.Info("eventwatcher: reconciling running application", "app_id", appIDStr, "from", app.Status)
-			w.updateAppStatus(ctx, app.ID, appIDStr, status.ApplicationRunning)
+		if !isRunning {
+			// The container is gone. Anything that implies "up" (running or
+			// unhealthy) is corrected to stopped; a deliberate stop or a
+			// recorded error is left alone.
+			if app.Status == status.ApplicationRunning || app.Status == status.ApplicationUnhealthy {
+				slog.Info("eventwatcher: reconciling stopped application", "app_id", appIDStr)
+				w.updateAppStatus(ctx, app.ID, appIDStr, status.ApplicationStopped)
+			}
+			continue
+		}
+
+		// The container is up, so the app is running — unless a command health
+		// check says otherwise. This is the only place that catches an app that
+		// went unhealthy while the control plane was down, since Docker only
+		// emits a health event on a *change*.
+		desired := status.ApplicationRunning
+		if app.HealthCheckType == "command" {
+			if h, err := w.runtime.ContainerHealth(ctx, containerName); err == nil && h == "unhealthy" {
+				desired = status.ApplicationUnhealthy
+			}
+		}
+		// "error" is included because the container is ground truth: if it is
+		// up, the app is running (or unhealthy), whatever went wrong before.
+		// Without this an app could sit in "error" indefinitely while serving.
+		if app.Status != desired &&
+			(app.Status == status.ApplicationStopped ||
+				app.Status == status.ApplicationError ||
+				app.Status == status.ApplicationRunning ||
+				app.Status == status.ApplicationUnhealthy) {
+			slog.Info("eventwatcher: reconciling application", "app_id", appIDStr, "from", app.Status, "to", desired)
+			w.updateAppStatus(ctx, app.ID, appIDStr, desired)
 		}
 	}
 
@@ -151,7 +171,7 @@ func (w *Watcher) reconcile(ctx context.Context) {
 func (w *Watcher) watchEvents(ctx context.Context) error {
 	eventCh, errCh := w.runtime.ContainerEvents(ctx, map[string][]string{
 		"label": {"managed-by=belune"},
-		"event": {"start", "stop", "die", "restart", "oom"},
+		"event": {"start", "stop", "die", "restart", "oom", "health_status"},
 	})
 
 	for {
@@ -200,13 +220,27 @@ func (w *Watcher) handleApplicationEvent(ctx context.Context, event runtime.Cont
 		slog.Warn("eventwatcher: container killed by OOM", "app_id", appID, "container", event.ContainerName)
 	}
 
-	// Only a `die` needs the current status to be interpreted; every other
-	// event stands on its own, so the read is skipped for them.
+	// Two events need the current status to be interpreted; the rest stand on
+	// their own, so the read is skipped for them.
 	if event.Status == "die" {
 		current, err := w.queries.GetApplication(ctx, appUUID)
 		if err == nil && !ApplyDieStatus(newStatus, current.Status) {
 			slog.Debug("eventwatcher: keeping existing status",
 				"app_id", appID, "keeping", current.Status, "ignored", newStatus)
+			return
+		}
+	}
+	if isHealthEvent(event.Status) {
+		// A health verdict only means something while the container is meant to
+		// be up. If the app is stopped, errored, or inactive, a late or stale
+		// health event must not resurrect it — the container's own start/stop
+		// events own those transitions.
+		current, err := w.queries.GetApplication(ctx, appUUID)
+		if err == nil &&
+			current.Status != status.ApplicationRunning &&
+			current.Status != status.ApplicationUnhealthy {
+			slog.Debug("eventwatcher: ignoring health event on non-running app",
+				"app_id", appID, "status", current.Status, "event", event.Status)
 			return
 		}
 	}
@@ -221,12 +255,30 @@ func (w *Watcher) handleApplicationEvent(ctx context.Context, event runtime.Cont
 	w.updateAppStatus(ctx, appUUID, appID, newStatus)
 }
 
+// isHealthEvent reports whether a Docker event action is a health-status
+// transition, which Docker phrases as "health_status: healthy" or
+// "health_status: unhealthy".
+func isHealthEvent(action string) bool {
+	return strings.HasPrefix(action, "health_status")
+}
+
 // ApplicationStatusForEvent maps a Docker container event to an application
 // status, returning ok=false for events that should not change status.
 //
 // A crash and a clean stop are distinguished by exit code, so an app that
 // crash-loops no longer looks identical to one the user deliberately stopped.
 func ApplicationStatusForEvent(event runtime.ContainerEvent) (newStatus string, ok bool) {
+	// Docker phrases health events as "health_status: healthy" /
+	// "health_status: unhealthy". A healthy verdict means the container is up
+	// and passing, so it also clears a prior unhealthy/starting state back to
+	// running.
+	if isHealthEvent(event.Status) {
+		if strings.HasSuffix(event.Status, "healthy") && !strings.HasSuffix(event.Status, "unhealthy") {
+			return status.ApplicationRunning, true
+		}
+		return status.ApplicationUnhealthy, true
+	}
+
 	switch event.Status {
 	case "start", "restart":
 		return status.ApplicationRunning, true

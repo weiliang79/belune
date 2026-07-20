@@ -315,3 +315,16 @@ export function useChangeApplicationSource(
     onError: (error) => toast.error(error.message),
   });
 }
+
+export function useSetHealthCheck(projectId: string, applicationId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: Parameters<typeof applicationsApi.setHealthCheck>[2]) =>
+      applicationsApi.setHealthCheck(projectId, applicationId, data),
+    onSuccess: () =>
+      qc.invalidateQueries({
+        queryKey: queryKeys.applications.detail(projectId, applicationId),
+      }),
+    onError: (error) => toast.error(error.message),
+  });
+}

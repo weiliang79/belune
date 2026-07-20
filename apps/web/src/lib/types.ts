@@ -46,6 +46,15 @@ export interface Application {
   has_git_credentials: boolean;
   deploy_hook_enabled: boolean;
   health_check_path: string | null;
+  // "http" (control-plane probe of a path), "command" (Docker HEALTHCHECK run
+  // in the container, continuous, drives status), or "none".
+  health_check_type: "none" | "http" | "command";
+  health_check_command: string | null;
+  health_check_expect_status: number | null;
+  health_check_interval_seconds: number | null;
+  health_check_retries: number | null;
+  health_check_start_period_seconds: number | null;
+  health_check_timeout_seconds: number | null;
   parent_application_id: string | null;
   branch: string | null;
   preview_branch_pattern: string | null;

@@ -244,14 +244,23 @@ func TestCreateApplication_HealthCheckPath(t *testing.T) {
 	})
 	assert.Equal(t, "/healthz", app["health_check_path"])
 
-	// Update health check path
+	// The health path is now managed by its own endpoint, not the general
+	// update — a settings save must never clear it.
 	appID := extractID(app["id"])
-	resp := env.DoRequest(t, "PUT", fmt.Sprintf("/api/projects/%s/applications/%s", projectID, appID), map[string]any{
-		"source_repo":       "https://github.com/test/repo",
-		"health_check_path": "/ready",
+	resp := env.DoRequest(t, "PUT", fmt.Sprintf("/api/projects/%s/applications/%s/health-check", projectID, appID), map[string]any{
+		"type": "http",
+		"path": "/ready",
 	}, testutil.AuthHeader(token))
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 	result := testutil.ReadJSON(t, resp)
+	assert.Equal(t, "/ready", result["health_check_path"])
+
+	// A general settings save preserves it rather than clearing it.
+	resp = env.DoRequest(t, "PUT", fmt.Sprintf("/api/projects/%s/applications/%s", projectID, appID), map[string]any{
+		"source_repo": "https://github.com/test/repo",
+	}, testutil.AuthHeader(token))
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	result = testutil.ReadJSON(t, resp)
 	assert.Equal(t, "/ready", result["health_check_path"])
 }
 

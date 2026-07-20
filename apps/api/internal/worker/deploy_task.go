@@ -674,6 +674,8 @@ func (h *TaskHandler) createAndStart(ctx context.Context, dc *deployContext) err
 		tmpfs = map[string]string{"/tmp": "", "/run": ""}
 	}
 
+	hc := healthCheckRuntimeConfig(dc.app)
+
 	containerID, err := h.Runtime.CreateContainer(ctx, runtime.ContainerConfig{
 		Name:            dc.containerName,
 		Image:           dc.imageName,
@@ -684,6 +686,13 @@ func (h *TaskHandler) createAndStart(ctx context.Context, dc *deployContext) err
 		CPULimit:        dc.app.CpuLimit,
 		MemoryLimit:     dc.app.MemoryLimit,
 		HealthCheckPath: dc.app.HealthCheckPath.String,
+		// Native Docker HEALTHCHECK — set only for the command type; empty
+		// command leaves the image's own HEALTHCHECK untouched.
+		HealthCheckCommand:     hc.command,
+		HealthCheckInterval:    hc.interval,
+		HealthCheckTimeout:     hc.timeout,
+		HealthCheckRetries:     hc.retries,
+		HealthCheckStartPeriod: hc.startPeriod,
 		// Persistent volumes mounted at their configured paths. These mounts
 		// are writable even though ReadonlyRootfs is true — a volume mount
 		// overrides the read-only rootfs at that path.
@@ -755,6 +764,106 @@ func (h *TaskHandler) checkDeployQuota(ctx context.Context, dc *deployContext) e
 // healthVerifyTimeout is the upper bound for post-deploy probing.
 const healthVerifyTimeout = 2 * time.Minute
 
+// Defaults for a command health check when the row leaves a field NULL. They
+// mirror Docker's own HEALTHCHECK defaults so a check configured with only a
+// command behaves the way its author would expect from a Dockerfile.
+const (
+	defaultHealthInterval    = 30 * time.Second
+	defaultHealthTimeout     = 30 * time.Second
+	defaultHealthRetries     = 3
+	defaultHealthStartPeriod = 0
+)
+
+type healthRuntimeConfig struct {
+	command     string
+	interval    time.Duration
+	timeout     time.Duration
+	retries     int
+	startPeriod time.Duration
+}
+
+// healthCheckRuntimeConfig resolves the stored per-app health fields into the
+// Docker HEALTHCHECK values, filling NULLs with the defaults. It returns an
+// empty command for any type other than "command", which is what tells the
+// runtime to leave the image's own HEALTHCHECK alone.
+func healthCheckRuntimeConfig(app generated.Application) healthRuntimeConfig {
+	if app.HealthCheckType != "command" || !app.HealthCheckCommand.Valid || app.HealthCheckCommand.String == "" {
+		return healthRuntimeConfig{}
+	}
+	cfg := healthRuntimeConfig{
+		command:     app.HealthCheckCommand.String,
+		interval:    defaultHealthInterval,
+		timeout:     defaultHealthTimeout,
+		retries:     defaultHealthRetries,
+		startPeriod: defaultHealthStartPeriod,
+	}
+	if app.HealthCheckIntervalSeconds.Valid && app.HealthCheckIntervalSeconds.Int32 > 0 {
+		cfg.interval = time.Duration(app.HealthCheckIntervalSeconds.Int32) * time.Second
+	}
+	if app.HealthCheckTimeoutSeconds.Valid && app.HealthCheckTimeoutSeconds.Int32 > 0 {
+		cfg.timeout = time.Duration(app.HealthCheckTimeoutSeconds.Int32) * time.Second
+	}
+	if app.HealthCheckRetries.Valid && app.HealthCheckRetries.Int32 > 0 {
+		cfg.retries = int(app.HealthCheckRetries.Int32)
+	}
+	if app.HealthCheckStartPeriodSeconds.Valid && app.HealthCheckStartPeriodSeconds.Int32 > 0 {
+		cfg.startPeriod = time.Duration(app.HealthCheckStartPeriodSeconds.Int32) * time.Second
+	}
+	return cfg
+}
+
+// verifyCommandHealth is the deploy-time gate for a command health check. It
+// asks Docker for the container's health until it settles on healthy (pass) or
+// unhealthy (fail), giving up after a budget derived from the check's own
+// timing — a check that never leaves "starting" is treated as a failure so a
+// misconfigured command cannot let a broken deploy through.
+func (h *TaskHandler) verifyCommandHealth(ctx context.Context, dc *deployContext) error {
+	hc := healthCheckRuntimeConfig(dc.app)
+
+	// Enough time for the start period plus a full run of retries, floored so a
+	// fast check still gets a fair chance and capped so a hung deploy cannot
+	// wait forever.
+	budget := hc.startPeriod + hc.interval*time.Duration(hc.retries+1) + hc.timeout*time.Duration(hc.retries)
+	if budget < 30*time.Second {
+		budget = 30 * time.Second
+	}
+	if budget > healthVerifyTimeout {
+		budget = healthVerifyTimeout
+	}
+	slog.Info("verifying container health (command)", "container", dc.containerName, "budget", budget)
+
+	deadline := time.Now().Add(budget)
+	ticker := time.NewTicker(2 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		switch st, err := h.Runtime.ContainerHealth(ctx, dc.containerName); {
+		case err != nil:
+			// Transient inspect failure — keep trying until the budget runs out.
+			slog.Debug("verifyCommandHealth: inspect failed", "container", dc.containerName, "error", err)
+		case st == "healthy":
+			h.recordHealth(ctx, dc.deploymentID, healthStatusPassing, "")
+			slog.Info("container health verified", "container", dc.containerName)
+			return nil
+		case st == "unhealthy":
+			msg := "container reported unhealthy"
+			h.recordHealth(ctx, dc.deploymentID, healthStatusFailing, msg)
+			return errors.New(msg)
+		}
+
+		if time.Now().After(deadline) {
+			msg := "health check did not pass within the deploy window"
+			h.recordHealth(ctx, dc.deploymentID, healthStatusFailing, msg)
+			return errors.New(msg)
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-ticker.C:
+		}
+	}
+}
+
 // Health status values persisted on the deployments row.
 const (
 	healthStatusPassing = "passing"
@@ -772,8 +881,20 @@ const (
 // the caller invokes compensators so the bad container/route do not replace
 // the working ones.
 func (h *TaskHandler) verifyHealth(ctx context.Context, dc *deployContext) error {
-	if !dc.app.HealthCheckPath.Valid || dc.app.HealthCheckPath.String == "" {
-		h.recordHealth(ctx, dc.deploymentID, healthStatusSkipped, "no health_check_path configured")
+	// The command type does not probe over HTTP — Docker runs the check inside
+	// the container. The gate here waits for Docker's own verdict so a broken
+	// command fails the deploy, exactly as a failing HTTP probe does; after
+	// that the check keeps running and the eventwatcher turns later verdicts
+	// into status changes.
+	if dc.app.HealthCheckType == "command" {
+		return h.verifyCommandHealth(ctx, dc)
+	}
+
+	// 'none', or 'http' with no path, is not an error — there is simply nothing
+	// to verify.
+	if dc.app.HealthCheckType == "none" ||
+		!dc.app.HealthCheckPath.Valid || dc.app.HealthCheckPath.String == "" {
+		h.recordHealth(ctx, dc.deploymentID, healthStatusSkipped, "no health check configured")
 		return nil
 	}
 

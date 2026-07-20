@@ -196,3 +196,27 @@ export function changeApplicationSource(
     data,
   );
 }
+
+// Configures how the application's health is checked. Type-specific: "http"
+// uses path/expect_status, "command" uses command/interval/retries/start_period,
+// both share timeout_seconds. The server clears the fields of the unselected
+// mechanism, so the row never carries a stale command or path.
+export function setHealthCheck(
+  projectId: string,
+  applicationId: string,
+  data: {
+    type: "none" | "http" | "command";
+    path?: string;
+    expect_status?: number;
+    command?: string;
+    interval_seconds?: number;
+    retries?: number;
+    start_period_seconds?: number;
+    timeout_seconds?: number;
+  },
+) {
+  return api.put<Application>(
+    `/projects/${projectId}/applications/${applicationId}/health-check`,
+    data,
+  );
+}

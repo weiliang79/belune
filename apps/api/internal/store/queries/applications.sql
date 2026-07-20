@@ -174,6 +174,24 @@ UPDATE applications
 SET health_check_timeout_seconds = $2, health_check_expect_status = $3, updated_at = NOW()
 WHERE id = $1;
 
+-- name: SetApplicationHealthCheck :one
+-- Writes the whole health-check configuration as one unit — the type plus both
+-- mechanisms' fields — so the stored row is always internally consistent (an
+-- http type never carries a stale command, and vice versa; the handler nulls
+-- the fields that do not apply to the chosen type).
+UPDATE applications SET
+    health_check_type                 = $2,
+    health_check_path                 = $3,
+    health_check_expect_status        = $4,
+    health_check_command              = $5,
+    health_check_interval_seconds     = $6,
+    health_check_retries              = $7,
+    health_check_start_period_seconds = $8,
+    health_check_timeout_seconds      = $9,
+    updated_at = NOW()
+WHERE id = $1
+RETURNING *;
+
 -- name: TouchApplicationConfigChanged :exec
 -- Marks the application as having saved config that the running container does
 -- not yet reflect. Idempotent in effect: re-stamping an already-set marker just

@@ -82,6 +82,35 @@ git-only by construction and would be orphaned.
 After switching to git, **Rebuild** will fail until the first deploy: it rebuilds
 a recorded commit, and there is not one yet. Use **Deploy**.
 
+## Health checks
+
+Settings → Health Check decides how the platform judges an application healthy.
+Three methods:
+
+- **None** — no check.
+- **HTTP** — after each deploy the control plane makes one request to a path on
+  the container. A non-2xx response (or a mismatch with the expected status)
+  fails the deploy and rolls back. Needs nothing installed in the image, but
+  only works for HTTP services. This is the historical behaviour.
+- **Command** — a native Docker `HEALTHCHECK`: a command run *inside* the
+  container, continuously, on an interval. It works for anything (a database, a
+  queue, a worker), and because it keeps running, the container's health drives
+  the application's status — a failing check shows the app as **Unhealthy**
+  (up, but not passing), distinct from Stopped or Error.
+
+A command check depends on the tool it calls (`curl`, `wget`, `pg_isready`,
+`redis-cli`, …) being present in the image; a minimal or distroless image may
+not have it. The HTTP check has no such requirement.
+
+The check is part of the container, so a change takes effect on the next deploy
+or reload, not on save — the badge beside the application name says which. On
+that deploy, a command check gates success the same way HTTP does: the deploy
+waits for Docker to report `healthy`, and fails if the check does not pass in
+time.
+
+**Unhealthy** is corrected automatically: when the check next passes, the app
+returns to Running; if the container stops or is removed, it moves to Stopped.
+
 ## Edits made during a deploy
 
 A change saved *while* a deploy is running is not included in that deploy — the

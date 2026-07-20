@@ -15,6 +15,10 @@ const (
 	ApplicationRunning  = "running"
 	ApplicationStopped  = "stopped"
 	ApplicationError    = "error"
+	// ApplicationUnhealthy is a running container that is failing its command
+	// health check. Distinct from Error (crashed / failed deploy, not serving)
+	// and Stopped (deliberate) — the container is up but reporting unhealthy.
+	ApplicationUnhealthy = "unhealthy"
 )
 
 // Database statuses

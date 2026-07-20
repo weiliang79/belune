@@ -166,10 +166,13 @@ func (s *ApplicationService) Update(
 		CpuLimit:                p.CPULimit,
 		MemoryLimit:             p.MemoryLimit,
 		GitCredentialsEncrypted: gitCreds,
-		HealthCheckPath:         pgtype.Text{String: p.HealthCheckPath, Valid: p.HealthCheckPath != ""},
-		GitIntegrationID:        p.GitIntegrationID,
-		Branch:                  branch,
-		AutoDeployBranch:        autoDeployBranch,
+		// Health configuration is owned by SetApplicationHealthCheck, not this
+		// general update — preserve it so saving settings can never clear the
+		// path out from under the Health Check section.
+		HealthCheckPath:  current.HealthCheckPath,
+		GitIntegrationID: p.GitIntegrationID,
+		Branch:           branch,
+		AutoDeployBranch: autoDeployBranch,
 	})
 }
 

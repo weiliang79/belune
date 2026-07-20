@@ -23,6 +23,7 @@ type MockContainerRuntime struct {
 	StartCalls      []string
 	CreateCalls     []runtime.ContainerConfig
 	PullCalls       []string // image tags passed to PullImage
+	HealthStatus_   string   // returned by ContainerHealth (empty → "healthy")
 	ListContainers_ []runtime.ContainerInfo
 
 	// Read-only admin Docker inspect fixtures (nil → empty result).
@@ -204,6 +205,15 @@ func (m *MockContainerRuntime) PruneVolumes(_ context.Context) error           {
 func (m *MockContainerRuntime) PruneBuildCache(_ context.Context) error        { return nil }
 func (m *MockContainerRuntime) ContainerStats(_ context.Context, _ string) (*runtime.ContainerResourceStats, error) {
 	return &runtime.ContainerResourceStats{}, nil
+}
+
+// ContainerHealth returns HealthStatus_, defaulting to "healthy" so the deploy
+// gate passes in tests that do not exercise it. Set HealthStatus_ to drive it.
+func (m *MockContainerRuntime) ContainerHealth(_ context.Context, _ string) (string, error) {
+	if m.HealthStatus_ == "" {
+		return "healthy", nil
+	}
+	return m.HealthStatus_, nil
 }
 
 func (m *MockContainerRuntime) ContainerEvents(_ context.Context, _ map[string][]string) (<-chan runtime.ContainerEvent, <-chan error) {

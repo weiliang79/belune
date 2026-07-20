@@ -8,6 +8,7 @@ import { Separator } from "@/components/ui/separator";
 import { ApplicationSettingsForm } from "@/components/applications/application-settings-form";
 import { BuildCacheSection } from "@/components/applications/build-cache-section";
 import { RuntimeSection } from "@/components/applications/runtime-section";
+import { HealthCheckSection } from "@/components/applications/health-check-section";
 import { DeleteApplicationDialog } from "@/components/applications/delete-application-dialog";
 
 export const Route = createFileRoute(
@@ -58,6 +59,14 @@ function ApplicationSettingsPage() {
           />
         </>
       )}
+
+      <Separator />
+
+      <HealthCheckSection
+        projectId={projectId}
+        applicationId={applicationId}
+        application={application}
+      />
 
       <Separator />
 

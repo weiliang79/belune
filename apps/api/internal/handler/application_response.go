@@ -52,6 +52,12 @@ type applicationResponse struct {
 	HealthCheckTimeoutSeconds pgtype.Int4        `json:"health_check_timeout_seconds"`
 	HealthCheckExpectStatus   pgtype.Int4        `json:"health_check_expect_status"`
 
+	HealthCheckType               string      `json:"health_check_type"`
+	HealthCheckCommand            pgtype.Text `json:"health_check_command"`
+	HealthCheckIntervalSeconds    pgtype.Int4 `json:"health_check_interval_seconds"`
+	HealthCheckRetries            pgtype.Int4 `json:"health_check_retries"`
+	HealthCheckStartPeriodSeconds pgtype.Int4 `json:"health_check_start_period_seconds"`
+
 	// Presence flags standing in for the secrets themselves.
 	HasWebhookSecret  bool `json:"has_webhook_secret"`
 	HasGitCredentials bool `json:"has_git_credentials"`
@@ -128,6 +134,12 @@ func toApplicationResponse(a generated.Application) applicationResponse {
 		ContainerPort:             a.ContainerPort,
 		HealthCheckTimeoutSeconds: a.HealthCheckTimeoutSeconds,
 		HealthCheckExpectStatus:   a.HealthCheckExpectStatus,
+
+		HealthCheckType:               a.HealthCheckType,
+		HealthCheckCommand:            a.HealthCheckCommand,
+		HealthCheckIntervalSeconds:    a.HealthCheckIntervalSeconds,
+		HealthCheckRetries:            a.HealthCheckRetries,
+		HealthCheckStartPeriodSeconds: a.HealthCheckStartPeriodSeconds,
 
 		// Either column counts — a row may not be backfilled yet.
 		HasWebhookSecret:  len(a.WebhookSecretEncrypted) > 0 || (a.WebhookSecret.Valid && a.WebhookSecret.String != ""),

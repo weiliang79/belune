@@ -75,6 +75,20 @@ func (c *Client) CreateContainer(ctx context.Context, cfg runtime.ContainerConfi
 		resources.Memory = cfg.MemoryLimit
 	}
 
+	// Native Docker HEALTHCHECK, only when a command health check is configured.
+	// Left nil otherwise so the image's own HEALTHCHECK (usually none) is
+	// untouched — the HTTP check is a separate control-plane probe, not this.
+	var healthConfig *container.HealthConfig
+	if cfg.HealthCheckCommand != "" {
+		healthConfig = &container.HealthConfig{
+			Test:        []string{"CMD-SHELL", cfg.HealthCheckCommand},
+			Interval:    cfg.HealthCheckInterval,
+			Timeout:     cfg.HealthCheckTimeout,
+			Retries:     cfg.HealthCheckRetries,
+			StartPeriod: cfg.HealthCheckStartPeriod,
+		}
+	}
+
 	resp, err := c.cli.ContainerCreate(ctx,
 		&container.Config{
 			Image:        cfg.Image,
@@ -82,6 +96,7 @@ func (c *Client) CreateContainer(ctx context.Context, cfg runtime.ContainerConfi
 			Cmd:          cfg.Cmd,
 			ExposedPorts: exposedPorts,
 			Labels:       labels,
+			Healthcheck:  healthConfig,
 		},
 		&container.HostConfig{
 			PortBindings:   portBindings,
@@ -265,6 +280,20 @@ func mapContainerSummaries(containers []container.Summary) []runtime.ContainerIn
 		})
 	}
 	return result
+}
+
+// ContainerHealth reports Docker's health status for a container. A container
+// with no HEALTHCHECK has no Health object at all, which is reported as "none"
+// so callers can tell "no check configured" apart from "check not yet run".
+func (c *Client) ContainerHealth(ctx context.Context, containerID string) (string, error) {
+	info, err := c.cli.ContainerInspect(ctx, containerID)
+	if err != nil {
+		return "", fmt.Errorf("inspect container: %w", err)
+	}
+	if info.State == nil || info.State.Health == nil {
+		return "none", nil
+	}
+	return info.State.Health.Status, nil
 }
 
 func (c *Client) ContainerStats(ctx context.Context, containerID string) (*runtime.ContainerResourceStats, error) {

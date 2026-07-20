@@ -50,7 +50,6 @@ type FormValues = {
   cpu_limit: number;
   memory_limit_mb: number;
   git_token: string;
-  health_check_path: string;
   branch: string;
 };
 
@@ -93,7 +92,6 @@ export function ApplicationSettingsForm({
       cpu_limit: application.cpu_limit ?? 0,
       memory_limit_mb: Math.round(application.memory_limit / (1024 * 1024)),
       git_token: "",
-      health_check_path: application.health_check_path ?? "",
       branch: application.branch ?? "",
     } as FormValues,
     onSubmit: async ({ value }) => {
@@ -135,7 +133,6 @@ export function ApplicationSettingsForm({
               ? value.memory_limit_mb * 1024 * 1024
               : 0,
           git_token: value.git_token || undefined,
-          health_check_path: value.health_check_path,
         }),
         {
           loading: "Saving...",
@@ -177,9 +174,8 @@ export function ApplicationSettingsForm({
         <CardDescription>
           Build and runtime configuration for this application. Saving does not
           touch the running container — the badge beside the application name
-          says what is needed to apply the change, which depends on the field:
-          limits and the health-check path need only a reload, while the image,
-          branch, or builder settings need a deploy.
+          says what is needed to apply the change: the resource limits need only
+          a reload, while the image, branch, or builder settings need a deploy.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -422,27 +418,6 @@ export function ApplicationSettingsForm({
                   />
                   <p className="text-muted-foreground text-xs">
                     e.g. 512 = 512 MB, 0 = unlimited
-                  </p>
-                </div>
-              )}
-            />
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <form.Field
-              name="health_check_path"
-              children={(field) => (
-                <div className="space-y-2">
-                  <Label>Health Check Path</Label>
-                  <Input
-                    value={field.state.value}
-                    onBlur={field.handleBlur}
-                    onChange={(e) => field.handleChange(e.target.value)}
-                    placeholder="/healthz"
-                    className="font-mono"
-                  />
-                  <p className="text-muted-foreground text-xs">
-                    HTTP path polled after deploy to confirm readiness. Leave
-                    empty to skip.
                   </p>
                 </div>
               )}

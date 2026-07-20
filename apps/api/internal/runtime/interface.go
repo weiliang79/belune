@@ -33,7 +33,17 @@ type ContainerConfig struct {
 	Labels          map[string]string
 	CPULimit        float64 // CPU cores (0 = unlimited, e.g. 0.5 = half a core)
 	MemoryLimit     int64   // bytes (0 = unlimited, e.g. 536870912 = 512 MB)
-	HealthCheckPath string  // HTTP path for health polling after deploy (e.g. /healthz); empty = skip
+	HealthCheckPath string  // HTTP path for control-plane polling after deploy (e.g. /healthz); empty = skip
+
+	// Command health check — a native Docker HEALTHCHECK run inside the
+	// container. Empty HealthCheckCommand means no HEALTHCHECK is set, leaving
+	// whatever the image declares (usually none). Zero durations/retries are
+	// resolved to platform defaults by the caller before this is populated.
+	HealthCheckCommand     string        // shell command; run as CMD-SHELL
+	HealthCheckInterval    time.Duration // between checks
+	HealthCheckTimeout     time.Duration // per check
+	HealthCheckRetries     int           // consecutive failures before unhealthy
+	HealthCheckStartPeriod time.Duration // grace window where failures do not count
 
 	// Security hardening — applied as-is to the Docker HostConfig. Defaults
 	// (zero-value) preserve legacy permissive behaviour so this struct can be
@@ -155,6 +165,9 @@ type ContainerRuntime interface {
 	// build repopulates them.
 	PruneBuildCache(ctx context.Context) error
 	ContainerStats(ctx context.Context, containerID string) (*ContainerResourceStats, error)
+	// ContainerHealth returns Docker's health status for a container: one of
+	// "healthy", "unhealthy", "starting", or "none" (no HEALTHCHECK configured).
+	ContainerHealth(ctx context.Context, containerID string) (string, error)
 	ContainerEvents(ctx context.Context, filters map[string][]string) (<-chan ContainerEvent, <-chan error)
 	// ContainerExecTTY creates a new exec session in the named container with TTY enabled.
 	// cmd is the command to run (e.g. ["sh"] or ["bash"]).

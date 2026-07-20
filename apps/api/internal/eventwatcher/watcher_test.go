@@ -187,3 +187,29 @@ func TestApplyDieStatus(t *testing.T) {
 		})
 	}
 }
+
+func TestApplicationStatusForEvent_Health(t *testing.T) {
+	cases := []struct {
+		name  string
+		event string
+		want  string
+	}{
+		// Docker phrases these with a space after the colon.
+		{"healthy → running", "health_status: healthy", status.ApplicationRunning},
+		{"unhealthy → unhealthy", "health_status: unhealthy", status.ApplicationUnhealthy},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got, ok := ApplicationStatusForEvent(runtime.ContainerEvent{Status: c.event})
+			assert.True(t, ok)
+			assert.Equal(t, c.want, got)
+		})
+	}
+}
+
+func TestIsHealthEvent(t *testing.T) {
+	assert.True(t, isHealthEvent("health_status: healthy"))
+	assert.True(t, isHealthEvent("health_status: unhealthy"))
+	assert.False(t, isHealthEvent("die"))
+	assert.False(t, isHealthEvent("start"))
+}
