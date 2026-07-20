@@ -368,18 +368,20 @@ export function ApplicationSettingsForm({
               />
             </>
           )}
-          <form.Subscribe
-            selector={(s) => s.isSubmitting}
-            children={(isSubmitting) => (
-              <Button type="submit" disabled={isSubmitting}>
-                {isSubmitting
-                  ? "Saving..."
-                  : isSwitching
-                    ? "Save & change source"
-                    : "Save Changes"}
-              </Button>
-            )}
-          />
+          <div className="flex justify-end">
+            <form.Subscribe
+              selector={(s) => s.isSubmitting}
+              children={(isSubmitting) => (
+                <Button type="submit" disabled={isSubmitting}>
+                  {isSubmitting
+                    ? "Saving..."
+                    : isSwitching
+                      ? "Save & change source"
+                      : "Save"}
+                </Button>
+              )}
+            />
+          </div>
         </form>
       </CardContent>
 

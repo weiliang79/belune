@@ -110,7 +110,7 @@ export function RuntimeSection({ projectId, applicationId, application }: Props)
             </span>
             <PendingChangeBadge app={application} />
           </div>
-          <Button size="sm" onClick={save} disabled={!dirty || update.isPending}>
+          <Button onClick={save} disabled={!dirty || update.isPending}>
             {update.isPending ? "Saving…" : "Save"}
           </Button>
         </div>

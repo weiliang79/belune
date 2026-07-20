@@ -227,9 +227,11 @@ export function HealthCheckSection({
           </div>
         )}
 
-        <Button onClick={save} disabled={!canSave || setHealthCheck.isPending}>
-          {setHealthCheck.isPending ? "Saving..." : "Save Health Check"}
-        </Button>
+        <div className="flex justify-end">
+          <Button onClick={save} disabled={!canSave || setHealthCheck.isPending}>
+            {setHealthCheck.isPending ? "Saving..." : "Save"}
+          </Button>
+        </div>
       </CardContent>
     </Card>
   );

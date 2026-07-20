@@ -96,11 +96,11 @@ export function ResourcesSection({
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center justify-end gap-3">
+          <PendingChangeBadge app={application} className="mr-auto" />
           <Button onClick={save} disabled={setResources.isPending}>
-            {setResources.isPending ? "Saving..." : "Save Resources"}
+            {setResources.isPending ? "Saving..." : "Save"}
           </Button>
-          <PendingChangeBadge app={application} />
         </div>
       </CardContent>
     </Card>
