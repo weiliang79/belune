@@ -47,8 +47,15 @@ func TestDetect(t *testing.T) {
 		{"substring not matched", "erroneous is not error-word", "stdout", Error}, // contains "error" whole word? no -> "erroneous" no, but "error-word" has error boundary
 		{"no keyword plain", "just a normal line", "stdout", Info},
 
-		// Stream fallback.
-		{"stderr fallback", "some opaque output", "stderr", Error},
+		// Failure words are recognised on content alone, since the stream is no
+		// longer a severity signal.
+		{"failed word is error", "Failed to bind socket", "stdout", Error},
+		{"exception is error", "Unhandled exception in worker", "stdout", Error},
+
+		// Fallback: the stream is NOT a severity signal. Plenty of runtimes
+		// (Go's log package, Python logging) write ordinary output to stderr.
+		{"stderr is not an error by itself", "some opaque output", "stderr", Info},
+		{"whoami startup on stderr is info", "2026/07/21 02:53:00 Starting up on port 80", "stderr", Info},
 		{"stdout fallback", "some opaque output", "stdout", Info},
 		{"empty stream fallback", "some opaque output", "", Info},
 	}

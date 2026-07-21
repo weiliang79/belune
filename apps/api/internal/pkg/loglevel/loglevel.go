@@ -9,7 +9,8 @@
 //  1. an explicit "[LEVEL]" tag a producer stamped onto the line,
 //  2. a structured JSON "level"/"severity" field,
 //  3. a case-insensitive keyword scan of the message,
-//  4. a fallback based on the originating stream (stderr => Error, else Info).
+//  4. a fallback to Info. The originating stream is deliberately NOT treated as
+//     a severity signal — see the note in Detect.
 package loglevel
 
 import (
@@ -36,8 +37,11 @@ var tagRe = regexp.MustCompile(`^\s*\[(DEBUG|INFO|WARN|WARNING|ERROR)\]\s?`)
 
 // keywordRe finds a severity keyword as a whole word anywhere in the message.
 // Checked in Error > Warning > Debug > Info priority by inspecting the match.
+// Failure words are part of the error set because severity now has to come from
+// the message: the stream fallback no longer supplies it, so a line like
+// "Failed to bind socket" must be recognised on its own content.
 var (
-	errRe   = regexp.MustCompile(`(?i)\b(fatal|error|err|panic)\b`)
+	errRe   = regexp.MustCompile(`(?i)\b(fatal|error|err|panic|failed|failure|exception|traceback)\b`)
 	warnRe  = regexp.MustCompile(`(?i)\b(warn|warning)\b`)
 	debugRe = regexp.MustCompile(`(?i)\b(debug|trace)\b`)
 	infoRe  = regexp.MustCompile(`(?i)\b(info|notice)\b`)
@@ -56,8 +60,8 @@ var (
 // dbSeverityRe matches the colon-delimited severity prefix that databases and
 // many app loggers emit, e.g. Postgres "LOG:  statement: ...", "WARNING: ...",
 // "ERROR: ...". The trailing colon keeps it from matching casual mentions of
-// these words. This matters because databases log to stderr, so without it the
-// stderr fallback would mislabel every normal line as an error.
+// these words. It runs before the keyword scan so an explicit "LOG:"/"DETAIL:"
+// prefix wins over an incidental failure word later in the same line.
 var dbSeverityRe = regexp.MustCompile(`(?i)\b(log|notice|info|detail|hint|context|statement|warning|error|fatal|panic)\s*:`)
 
 // Normalize maps an arbitrary level string (any casing, common aliases) to a
@@ -101,11 +105,23 @@ func Detect(message, stream string) Level {
 		}
 	}
 
-	// 4. Keyword / status-glyph scan, highest severity wins.
+	// 4. Explicit status glyphs. These are producer intent — as deliberate as a
+	// "[LEVEL]" tag — so they outrank the inferred keywords below. Without this
+	// ordering a line the tool itself marked as a warning, e.g.
+	// "⚠ Failed to get package versions", would be forced to Error by the word
+	// "Failed".
 	switch {
-	case errRe.MatchString(message) || errGlyphRe.MatchString(message):
+	case errGlyphRe.MatchString(message):
 		return Error
-	case warnRe.MatchString(message) || warnGlyphRe.MatchString(message):
+	case warnGlyphRe.MatchString(message):
+		return Warning
+	}
+
+	// 5. Inferred keyword scan, highest severity wins.
+	switch {
+	case errRe.MatchString(message):
+		return Error
+	case warnRe.MatchString(message):
 		return Warning
 	case debugRe.MatchString(message):
 		return Debug
@@ -113,10 +129,14 @@ func Detect(message, stream string) Level {
 		return Info
 	}
 
-	// 5. Stream fallback.
-	if strings.EqualFold(stream, "stderr") {
-		return Error
-	}
+	// 6. Fallback.
+	//
+	// stderr is deliberately NOT treated as Error. It is a stream, not a
+	// severity: Go's standard log package, Python's logging, and many CLIs send
+	// ordinary informational output there, so "stderr => Error" mislabelled
+	// perfectly healthy lines — traefik/whoami's "Starting up on port 80" being
+	// the canonical example. Genuine failures are identified from the message
+	// itself in the steps above.
 	return Info
 }
 
