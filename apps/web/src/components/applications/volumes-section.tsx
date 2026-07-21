@@ -9,6 +9,7 @@ import {
 import type { ApplicationVolume } from "@/lib/types";
 import { formatBytes } from "@/lib/utils/format";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { IconAction } from "@/components/ui/icon-action";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -250,11 +251,10 @@ export function VolumesSection({ projectId, applicationId }: Props) {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <label className="flex items-start gap-2 rounded-md border p-3 text-sm">
-            <input
-              type="checkbox"
-              className="mt-0.5 size-4"
+            <Checkbox
+              className="mt-0.5"
               checked={deleteData}
-              onChange={(e) => setDeleteData(e.target.checked)}
+              onCheckedChange={setDeleteData}
             />
             <span>
               <span className="text-destructive font-medium">

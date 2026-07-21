@@ -23,6 +23,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -306,10 +307,9 @@ function DomainForm({
                   name="strip_path"
                   children={(field) => (
                     <label className="flex items-center gap-2 text-sm">
-                      <input
-                        type="checkbox"
+                      <Checkbox
                         checked={field.state.value}
-                        onChange={(e) => field.handleChange(e.target.checked)}
+                        onCheckedChange={(v) => field.handleChange(v)}
                       />
                       Strip the prefix before forwarding
                     </label>
@@ -584,11 +584,10 @@ function DomainForm({
                 children={(field) => (
                   <div className="space-y-1 border-t pt-3">
                     <label className="flex items-center gap-2 text-sm">
-                      <input
-                        type="checkbox"
+                      <Checkbox
                         checked={sslMode !== "off" && field.state.value}
                         disabled={sslMode === "off"}
-                        onChange={(e) => field.handleChange(e.target.checked)}
+                        onCheckedChange={(v) => field.handleChange(v)}
                       />
                       <span
                         className={

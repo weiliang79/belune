@@ -10,6 +10,7 @@ import {
 } from "@/lib/hooks/use-file-mounts";
 import type { FileMount } from "@/lib/types";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { IconAction } from "@/components/ui/icon-action";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -275,11 +276,9 @@ export function FileMountsSection({ projectId, applicationId }: Props) {
             </div>
             <div className="flex items-center justify-between gap-4">
               <label className="flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  className="size-4"
+                <Checkbox
                   checked={isSecret}
-                  onChange={(e) => setIsSecret(e.target.checked)}
+                  onCheckedChange={setIsSecret}
                 />
                 Secret (mask content in the UI)
               </label>

@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import {
   Select,
   SelectContent,
@@ -218,11 +219,13 @@ function FeatureRow({
     // and the dialog with it.
     <div className="flex w-full min-w-0 items-center justify-between gap-2 rounded border p-2 text-sm">
       <div className="flex min-w-0 flex-1 items-center gap-2">
-        <input
-          type="checkbox"
+        {/* A Switch, not a checkbox: flipping this saves the feature
+            immediately — there is no submit button on the row. */}
+        <Switch
           className="shrink-0"
           checked={feature.enabled}
-          onChange={(e) => onToggle(e.target.checked)}
+          onCheckedChange={(enabled) => onToggle(enabled)}
+          aria-label={`Enable ${feature.feature_type}`}
         />
         <Badge variant="outline" className="shrink-0">
           {feature.feature_type}

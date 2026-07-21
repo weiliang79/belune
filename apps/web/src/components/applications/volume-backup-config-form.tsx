@@ -10,6 +10,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -299,11 +300,10 @@ function ConfigForm({
         </div>
 
         <label className="flex items-start gap-2 text-sm">
-          <input
-            type="checkbox"
-            className="mt-0.5 size-4"
+          <Checkbox
+            className="mt-0.5"
             checked={quiesce}
-            onChange={(e) => setQuiesce(e.target.checked)}
+            onCheckedChange={setQuiesce}
           />
           <span>
             Stop the app during backup (quiesce)
@@ -315,12 +315,7 @@ function ConfigForm({
         </label>
 
         <label className="flex items-center gap-2 text-sm">
-          <input
-            type="checkbox"
-            className="size-4"
-            checked={enabled}
-            onChange={(e) => setEnabled(e.target.checked)}
-          />
+          <Checkbox checked={enabled} onCheckedChange={setEnabled} />
           Enabled (run on schedule)
         </label>
 

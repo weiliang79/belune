@@ -10,6 +10,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -292,12 +293,7 @@ function BackupConfigForm({
           </div>
 
           <label className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              checked={enabled}
-              onChange={(e) => setEnabled(e.target.checked)}
-              className="size-4"
-            />
+            <Checkbox checked={enabled} onCheckedChange={setEnabled} />
             Enabled (run on schedule)
           </label>
 

@@ -9,6 +9,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -448,11 +449,10 @@ function ChannelForm({
                     can't distinguish "keep" from "clear". */}
                 {editing && f.secret && !f.required && (
                   <label className="text-muted-foreground flex items-center gap-2 text-xs">
-                    <input
-                      type="checkbox"
+                    <Checkbox
                       className="size-3.5"
                       checked={clearedSecrets.has(f.key)}
-                      onChange={() => toggleCleared(f.key)}
+                      onCheckedChange={() => toggleCleared(f.key)}
                     />
                     Remove the stored {f.label.toLowerCase()}
                   </label>

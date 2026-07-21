@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEnvVars, useUpsertEnvVars } from "@/lib/hooks/use-envvars";
 import { useProjectEnvVars } from "@/lib/hooks/use-project-envvars";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -184,12 +185,9 @@ function EnvVarsPage() {
                     onChange={(e) => updateRow(i, "value", e.target.value)}
                   />
                   <label className="text-muted-foreground flex items-center gap-1 text-xs whitespace-nowrap">
-                    <input
-                      type="checkbox"
+                    <Checkbox
                       checked={row.is_secret}
-                      onChange={(e) =>
-                        updateRow(i, "is_secret", e.target.checked)
-                      }
+                      onCheckedChange={(v) => updateRow(i, "is_secret", v)}
                     />
                     Secret
                   </label>
