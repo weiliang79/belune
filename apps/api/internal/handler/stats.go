@@ -155,11 +155,22 @@ func (h *Handler) GetStats(w http.ResponseWriter, r *http.Request) {
 		},
 	}
 
-	var failedBackups int64
+	// Scheduled backups belong to projects, so they are scoped like every other
+	// aggregate and counted for members too — a member whose database backup has
+	// been failing needs to know. The global platform backup below is a
+	// host-level concern and stays admin-only.
+	failedBackups, err := h.queries.CountUnresolvedFailedScheduledBackups(ctx, scope)
+	if err != nil {
+		slog.Warn("stats: count failed scheduled backups", "error", err)
+		failedBackups = 0
+	}
+
 	if isAdmin {
-		if failedBackups, err = h.queries.CountUnresolvedFailedBackup(ctx); err != nil {
-			slog.Warn("stats: count failed backups", "error", err)
-			failedBackups = 0
+		platformBackup, perr := h.queries.CountUnresolvedFailedBackup(ctx)
+		if perr != nil {
+			slog.Warn("stats: count failed platform backup", "error", perr)
+		} else {
+			failedBackups += platformBackup
 		}
 		host := h.latestHostStats(ctx)
 		resp.Host = &host

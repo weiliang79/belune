@@ -103,3 +103,63 @@ func TestNeedsAttention_FailedDeploysAreResolvedBySuccess(t *testing.T) {
 		"an unhealthy app must not also be counted as a failed deploy")
 	assert.EqualValues(t, 1, na["total"], "still one issue")
 }
+
+// Scheduled backups run on a cron and fail silently, leaving you believing you
+// have a backup you do not. Like deploys, the count is per-config and resolves
+// when the next run succeeds.
+func TestNeedsAttention_ScheduledBackupFailures(t *testing.T) {
+	resetDB(t)
+	adminToken := env.SetupAdmin(t, "admin@test.com", "password123")
+
+	project := env.CreateProject(t, adminToken, "Backup Project", "backup-project")
+	projectID := extractID(project["id"])
+
+	ctx := context.Background()
+	// Seed a database, a destination and an enabled backup schedule directly:
+	// the point under test is the aggregate, not the provisioning flow.
+	var dbID, destID, cfgID string
+	require.NoError(t, env.Pool.QueryRow(ctx, `
+		INSERT INTO databases (project_id, type, name, slug, version, status, credentials_encrypted)
+		VALUES ($1::uuid, 'postgres', 'db', 'backup-project-db', '16', 'running', '\x00')
+		RETURNING id::text`, projectID).Scan(&dbID))
+	require.NoError(t, env.Pool.QueryRow(ctx, `
+		INSERT INTO backup_destinations (project_id, name, provider, endpoint, region, bucket, use_ssl, credentials_encrypted)
+		VALUES ($1::uuid, 'dest', 's3', 'https://s3.example.com', 'us-east-1', 'b', true, '\x00')
+		RETURNING id::text`, projectID).Scan(&destID))
+	require.NoError(t, env.Pool.QueryRow(ctx, `
+		INSERT INTO database_backup_configs (database_id, destination_id, prefix, schedule, enabled)
+		VALUES ($1::uuid, $2::uuid, 'p', '0 3 * * *', true)
+		RETURNING id::text`, dbID, destID).Scan(&cfgID))
+
+	attention := func() map[string]any {
+		resp := env.DoRequest(t, "GET", "/api/stats", nil, testutil.AuthHeader(adminToken))
+		require.Equal(t, http.StatusOK, resp.StatusCode)
+		return testutil.ReadJSON(t, resp)["needs_attention"].(map[string]any)
+	}
+	run := func(st string, minutesAgo int) {
+		_, err := env.Pool.Exec(ctx, `
+			INSERT INTO database_backups (database_id, backup_config_id, status, started_at, target_database)
+			VALUES ($1::uuid, $2::uuid, $3, now() - make_interval(mins => $4), 'db')`,
+			dbID, cfgID, st, minutesAgo)
+		require.NoError(t, err)
+	}
+
+	assert.EqualValues(t, 0, attention()["failed_backups"], "no runs yet")
+
+	run("failed", 10)
+	assert.EqualValues(t, 1, attention()["failed_backups"],
+		"a schedule whose latest run failed needs attention")
+
+	// A later success resolves it, exactly as a successful redeploy does.
+	run("succeeded", 5)
+	assert.EqualValues(t, 0, attention()["failed_backups"],
+		"a failure followed by a successful run is resolved")
+
+	// Disabling the schedule after a failure is not outstanding work.
+	run("failed", 1)
+	require.EqualValues(t, 1, attention()["failed_backups"])
+	_, err := env.Pool.Exec(ctx, `UPDATE database_backup_configs SET enabled = false WHERE id = $1::uuid`, cfgID)
+	require.NoError(t, err)
+	assert.EqualValues(t, 0, attention()["failed_backups"],
+		"a disabled schedule is not outstanding work")
+}

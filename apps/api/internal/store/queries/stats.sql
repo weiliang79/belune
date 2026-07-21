@@ -75,6 +75,46 @@ FROM (
 ) latest
 WHERE latest.status = 'failed';
 
+-- name: CountUnresolvedFailedScheduledBackups :one
+-- Backup schedules whose most recent finished run failed, across both database
+-- and application-volume backups.
+--
+-- These are the automated backups: they run on a cron and fail silently, which
+-- is the canonical thing "needs attention" exists for — you are left believing
+-- you have a backup you do not. Unlike the single global platform job, they are
+-- per-config, so "unresolved" means the latest outcome per *config* failed,
+-- mirroring CountUnresolvedFailedDeploys: the next successful run clears it.
+--
+-- Only enabled configs count; a schedule that was turned off after its last run
+-- failed is not outstanding work. Runs still in progress are excluded from the
+-- "latest" pick so a retry cannot mask an unfixed failure before it succeeds.
+WITH latest_db AS (
+    SELECT DISTINCT ON (b.backup_config_id) b.status
+    FROM database_backups b
+    JOIN database_backup_configs c ON c.id = b.backup_config_id
+    JOIN databases db ON db.id = c.database_id
+    JOIN projects p ON p.id = db.project_id
+    WHERE c.enabled
+      AND b.status IN ('succeeded', 'failed')
+      AND (sqlc.narg('user_id')::uuid IS NULL OR p.user_id = sqlc.narg('user_id'))
+    ORDER BY b.backup_config_id, b.started_at DESC
+), latest_volume AS (
+    SELECT DISTINCT ON (v.backup_config_id) v.status
+    FROM application_volume_backups v
+    JOIN application_volume_backup_configs vc ON vc.id = v.backup_config_id
+    JOIN application_volumes av ON av.id = vc.application_volume_id
+    JOIN applications a ON a.id = av.application_id
+    JOIN projects p ON p.id = a.project_id
+    WHERE vc.enabled
+      AND v.status IN ('succeeded', 'failed')
+      AND (sqlc.narg('user_id')::uuid IS NULL OR p.user_id = sqlc.narg('user_id'))
+    ORDER BY v.backup_config_id, v.started_at DESC
+)
+SELECT (
+    (SELECT count(*) FROM latest_db WHERE status = 'failed') +
+    (SELECT count(*) FROM latest_volume WHERE status = 'failed')
+)::bigint AS failed;
+
 -- name: CountUnresolvedFailedBackup :one
 -- The platform backup is a single global job (backup_runs has no per-resource
 -- key), so "unresolved" is simply whether the most recent finished run failed.
