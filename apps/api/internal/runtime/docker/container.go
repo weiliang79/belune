@@ -188,6 +188,12 @@ func (c *Client) ContainerLogsTail(ctx context.Context, id string, tail int) (io
 		ShowStderr: true,
 		Follow:     false,
 		Tail:       tailStr,
+		// Docker prefixes every line with an RFC3339Nano timestamp, which is the
+		// only thing that reads uniformly across platform services: Caddy emits
+		// a JSON "ts" field, Go's slog emits "time", and postgres/redis emit
+		// plain text, so without this only Caddy showed a time. Callers strip
+		// the prefix (see splitTimestamp in the collector, and parse.ts).
+		Timestamps: true,
 	})
 }
 

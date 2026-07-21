@@ -52,19 +52,47 @@ export function parseLogBlob(blob: string, idPrefix = "blob"): LogEntry[] {
   return out;
 }
 
+// Docker prefixes each line with an RFC3339Nano timestamp when logs are
+// requested with timestamps (the platform/Maintenance viewer does). Split it off
+// so the remainder can still be parsed as JSON, and so services that print no
+// timestamp of their own still get one. Mirrors splitTimestamp in the Go
+// collector. Returns a null timestamp and the original line when there is no
+// parseable prefix, which is what a stored blob log (build/backup) looks like.
+function splitDockerTimestamp(line: string): {
+  ts: string | null;
+  rest: string;
+} {
+  const idx = line.indexOf(" ");
+  if (idx > 0 && idx <= 36) {
+    const candidate = line.slice(0, idx);
+    // Cheap shape check before Date parsing, so ordinary words that happen to
+    // sit at the start of a line are not mistaken for timestamps.
+    if (/^\d{4}-\d{2}-\d{2}T/.test(candidate)) {
+      const d = new Date(candidate);
+      if (!Number.isNaN(d.getTime())) {
+        return { ts: d.toISOString(), rest: line.slice(idx + 1) };
+      }
+    }
+  }
+  return { ts: null, rest: line };
+}
+
 function parseLine(line: string, id: string): LogEntry {
+  const { ts: dockerTs, rest } = splitDockerTimestamp(line);
   try {
-    const obj = JSON.parse(line) as RawEntry;
+    const obj = JSON.parse(rest) as RawEntry;
     if (obj && typeof obj.msg === "string") {
       return {
         id,
         level: normalizeLevel(obj.level ?? "info"),
         message: obj.msg,
-        recordedAt: normalizeTs(obj.ts),
+        // Docker's timestamp wins when present: it is uniform across services,
+        // whereas the in-payload field is whatever that particular logger chose.
+        recordedAt: dockerTs ?? normalizeTs(obj.ts),
       };
     }
   } catch {
     // not JSON — fall through
   }
-  return { id, level: "info", message: line };
+  return { id, level: "info", message: rest, recordedAt: dockerTs };
 }
