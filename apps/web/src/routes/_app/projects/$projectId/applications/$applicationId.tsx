@@ -33,7 +33,12 @@ import {
 import {
   AppWindowIcon,
   ExternalLinkIcon,
+  HammerIcon,
   LayoutDashboard,
+  PlayIcon,
+  RefreshCwIcon,
+  RotateCcwIcon,
+  SquareIcon,
   SlidersHorizontal,
   Globe,
   Rocket,
@@ -43,6 +48,7 @@ import {
   HardDrive,
   Settings,
 } from "lucide-react";
+import { ButtonGroup } from "@/components/ui/button-group";
 import { PageTabLinks, type PageTabLink } from "@/components/ui/page-tabs";
 import { formatUptime } from "@/lib/utils/format";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -155,7 +161,6 @@ function ApplicationLayout() {
 
   return (
     <div className="space-y-6">
-
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex min-w-0 items-center gap-3">
           <div className="bg-elev text-text-muted grid size-11 shrink-0 place-items-center rounded-xl">
@@ -183,140 +188,159 @@ function ApplicationLayout() {
             </div>
           </div>
         </div>
-        <div className="flex gap-2">
+        {/* Nested ButtonGroups: each cluster is joined into one segmented
+            control, and the outer group spaces the clusters apart (ButtonGroup
+            adds a gap when its own children are groups). This keeps "open the
+            site" and "deploy" from reading as part of the lifecycle controls
+            they sit beside. */}
+        <ButtonGroup aria-label="Application actions">
           {primaryDomain && (
-            <Button
-              size="sm"
-              variant="outline"
-              nativeButton={false}
-              render={
-                <a
-                  href={`https://${primaryDomain}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                />
-              }
-            >
-              <ExternalLinkIcon aria-hidden="true" className="size-4" />
-              Open URL
-            </Button>
-          )}
-          <Button
-            size="sm"
-            onClick={() => {
-              toast.promise(deploy.mutateAsync(), {
-                loading: "Deploying...",
-                success: "Deployment started",
-                error: (err) => err.message,
-              });
-            }}
-            disabled={deploy.isPending}
-          >
-            {deploy.isPending ? "Deploying..." : "Deploy"}
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => {
-              toast.promise(restart.mutateAsync(), {
-                loading: "Restarting...",
-                success: "Application restarted",
-                error: (err) => err.message,
-              });
-            }}
-            disabled={restart.isPending || application.status !== "running"}
-          >
-            Restart
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => {
-              toast.promise(reload.mutateAsync(), {
-                loading: "Reloading...",
-                success: "Reload started — applying current config",
-                error: (err) => err.message,
-              });
-            }}
-            disabled={
-              reload.isPending || isDeploying}
-            title="Recreate the container from the current image to apply config changes (volumes, file mounts, env) — no rebuild"
-          >
-            Reload
-          </Button>
-          {application.type === "git" && (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => {
-                toast.promise(rebuild.mutateAsync(), {
-                  loading: "Rebuilding...",
-                  success: "Rebuild started — building the current commit",
-                  error: (err) => err.message,
-                });
-              }}
-              disabled={
-                rebuild.isPending || isDeploying}
-              title="Rebuild the currently-deployed commit (not the latest) — picks up base-image and dependency updates"
-            >
-              Rebuild
-            </Button>
-          )}
-          {application.status === "running" ? (
-            <AlertDialog>
-              <AlertDialogTrigger
+            <ButtonGroup>
+              <Button
+                size="sm"
+                variant="outline"
+                nativeButton={false}
                 render={
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    disabled={stop.isPending}
+                  <a
+                    href={`https://${primaryDomain}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
                   />
                 }
               >
-                {stop.isPending ? "Stopping..." : "Stop"}
-              </AlertDialogTrigger>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>Stop {application.name}?</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    This will stop the running container. You can start it again
-                    later.
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel>Cancel</AlertDialogCancel>
-                  <AlertDialogAction
-                    onClick={() => {
-                      toast.promise(stop.mutateAsync(), {
-                        loading: "Stopping...",
-                        success: "Application stopped",
-                        error: (err) => err.message,
-                      });
-                    }}
-                  >
-                    Stop
-                  </AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
-          ) : (
+                {/* No size class on any icon in this row: the `sm` size variant
+                    already sets svg to size-3.5, and an explicit size-4 here
+                    made this one icon larger than its neighbours. */}
+                <ExternalLinkIcon aria-hidden="true" />
+                Open URL
+              </Button>
+            </ButtonGroup>
+          )}
+          <ButtonGroup>
+            <Button
+              size="sm"
+              onClick={() => {
+                toast.promise(deploy.mutateAsync(), {
+                  loading: "Deploying...",
+                  success: "Deployment started",
+                  error: (err) => err.message,
+                });
+              }}
+              disabled={deploy.isPending}
+            >
+              <Rocket aria-hidden="true" />
+              {deploy.isPending ? "Deploying..." : "Deploy"}
+            </Button>
+          </ButtonGroup>
+          <ButtonGroup>
             <Button
               size="sm"
               variant="outline"
               onClick={() => {
-                toast.promise(start.mutateAsync(), {
-                  loading: "Starting...",
-                  success: "Application started",
+                toast.promise(restart.mutateAsync(), {
+                  loading: "Restarting...",
+                  success: "Application restarted",
                   error: (err) => err.message,
                 });
               }}
-              disabled={
-                start.isPending || isDeploying}
+              disabled={restart.isPending || application.status !== "running"}
             >
-              {start.isPending ? "Starting..." : "Start"}
+              <RotateCcwIcon aria-hidden="true" />
+              Restart
             </Button>
-          )}
-        </div>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                toast.promise(reload.mutateAsync(), {
+                  loading: "Reloading...",
+                  success: "Reload started — applying current config",
+                  error: (err) => err.message,
+                });
+              }}
+              disabled={reload.isPending || isDeploying}
+              title="Recreate the container from the current image to apply config changes (volumes, file mounts, env) — no rebuild"
+            >
+              <RefreshCwIcon aria-hidden="true" />
+              Reload
+            </Button>
+            {application.type === "git" && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  toast.promise(rebuild.mutateAsync(), {
+                    loading: "Rebuilding...",
+                    success: "Rebuild started — building the current commit",
+                    error: (err) => err.message,
+                  });
+                }}
+                disabled={rebuild.isPending || isDeploying}
+                title="Rebuild the currently-deployed commit (not the latest) — picks up base-image and dependency updates"
+              >
+                <HammerIcon aria-hidden="true" />
+                Rebuild
+              </Button>
+            )}
+            {application.status === "running" ? (
+              <AlertDialog>
+                <AlertDialogTrigger
+                  render={
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={stop.isPending}
+                    />
+                  }
+                >
+                  <SquareIcon aria-hidden="true" />
+                  {stop.isPending ? "Stopping..." : "Stop"}
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>
+                      Stop {application.name}?
+                    </AlertDialogTitle>
+                    <AlertDialogDescription>
+                      This will stop the running container. You can start it
+                      again later.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction
+                      onClick={() => {
+                        toast.promise(stop.mutateAsync(), {
+                          loading: "Stopping...",
+                          success: "Application stopped",
+                          error: (err) => err.message,
+                        });
+                      }}
+                    >
+                      Stop
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            ) : (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  toast.promise(start.mutateAsync(), {
+                    loading: "Starting...",
+                    success: "Application started",
+                    error: (err) => err.message,
+                  });
+                }}
+                disabled={start.isPending || isDeploying}
+              >
+                <PlayIcon aria-hidden="true" />
+                {start.isPending ? "Starting..." : "Start"}
+              </Button>
+            )}
+          </ButtonGroup>
+        </ButtonGroup>
       </div>
 
       <PageTabLinks ariaLabel="Application navigation" items={tabs} />
