@@ -309,6 +309,8 @@ function DeploymentsPage() {
   );
 }
 
+const DEPLOYMENTS_PER_PAGE = 10;
+
 function DeploymentHistory({
   projectId,
   applicationId,
@@ -317,6 +319,7 @@ function DeploymentHistory({
   applicationId: string;
 }) {
   const { data: deployments, isLoading, error } = useDeployments(projectId, applicationId);
+  const [page, setPage] = useState(0);
 
   if (isLoading) {
     return (
@@ -358,9 +361,17 @@ function DeploymentHistory({
     );
   }
 
+  const total = deployments.length;
+  const totalPages = Math.ceil(total / DEPLOYMENTS_PER_PAGE);
+  // Clamp rather than trust `page`: a live update (WebSocket invalidation) can
+  // shrink the list under a page the user had scrolled to.
+  const safePage = Math.min(page, totalPages - 1);
+  const start = safePage * DEPLOYMENTS_PER_PAGE;
+  const pageItems = deployments.slice(start, start + DEPLOYMENTS_PER_PAGE);
+
   return (
     <div className="space-y-3">
-      {deployments.map((d) => (
+      {pageItems.map((d) => (
         <DeploymentCard
           key={d.id}
           deployment={d}
@@ -368,6 +379,29 @@ function DeploymentHistory({
           applicationId={applicationId}
         />
       ))}
+      {total > DEPLOYMENTS_PER_PAGE && (
+        <div className="flex items-center justify-between pt-1">
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={safePage <= 0}
+            onClick={() => setPage(safePage - 1)}
+          >
+            Previous
+          </Button>
+          <span className="text-muted-foreground text-sm">
+            {start + 1}–{Math.min(total, start + DEPLOYMENTS_PER_PAGE)} of {total}
+          </span>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={safePage >= totalPages - 1}
+            onClick={() => setPage(safePage + 1)}
+          >
+            Next
+          </Button>
+        </div>
+      )}
     </div>
   );
 }
