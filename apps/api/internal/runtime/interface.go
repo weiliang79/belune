@@ -164,6 +164,9 @@ type ContainerRuntime interface {
 	// preserves) and prunes the BuildKit builder cache. Disposable — the next
 	// build repopulates them.
 	PruneBuildCache(ctx context.Context) error
+	// ImageExists reports whether an image is present in the local store.
+	// "not found" is (false, nil); other failures are surfaced as errors.
+	ImageExists(ctx context.Context, ref string) (bool, error)
 	ContainerStats(ctx context.Context, containerID string) (*ContainerResourceStats, error)
 	// ContainerHealth returns Docker's health status for a container: one of
 	// "healthy", "unhealthy", "starting", or "none" (no HEALTHCHECK configured).

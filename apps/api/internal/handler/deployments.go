@@ -196,6 +196,25 @@ func (h *Handler) RollbackDeployment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Rollback reuses the stored image already on the host — it does not pull or
+	// rebuild. If that image has been removed (a manual `docker rmi`, or
+	// `docker image prune -a`), the deploy would fail creating the container
+	// AFTER the compensating cleanup had already taken the running one down,
+	// leaving the app in error. Verify the image is present first and refuse
+	// cleanly, so the running app is never touched.
+	//
+	// A transient inspect failure (not a clean "missing") is not treated as
+	// missing — we proceed and let the deploy's own error handling be the
+	// backstop, rather than block a rollback the image may well support.
+	if exists, err := h.runtime.ImageExists(r.Context(), target.ImageTag.String); err != nil {
+		slog.Warn("rollback: could not verify image presence, proceeding",
+			"image", target.ImageTag.String, "error", err)
+	} else if !exists {
+		writeError(w, http.StatusConflict,
+			"the image for this deployment is no longer on the host — deploy the application instead of rolling back")
+		return
+	}
+
 	// Create a new deployment record for the rollback.
 	deployment, err := h.queries.CreateDeployment(r.Context(), generated.CreateDeploymentParams{
 		ApplicationID: appUUID,

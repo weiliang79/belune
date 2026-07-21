@@ -24,6 +24,7 @@ type MockContainerRuntime struct {
 	CreateCalls     []runtime.ContainerConfig
 	PullCalls       []string // image tags passed to PullImage
 	HealthStatus_   string   // returned by ContainerHealth (empty → "healthy")
+	ImageMissing_   bool     // when true, ImageExists reports false
 	ListContainers_ []runtime.ContainerInfo
 
 	// Read-only admin Docker inspect fixtures (nil → empty result).
@@ -205,6 +206,13 @@ func (m *MockContainerRuntime) PruneVolumes(_ context.Context) error           {
 func (m *MockContainerRuntime) PruneBuildCache(_ context.Context) error        { return nil }
 func (m *MockContainerRuntime) ContainerStats(_ context.Context, _ string) (*runtime.ContainerResourceStats, error) {
 	return &runtime.ContainerResourceStats{}, nil
+}
+
+// ImageExists returns ImageMissing_ inverted: it reports true (present) by
+// default so existing tests are unaffected; set ImageMissing_ to simulate a
+// deleted image.
+func (m *MockContainerRuntime) ImageExists(_ context.Context, _ string) (bool, error) {
+	return !m.ImageMissing_, nil
 }
 
 // ContainerHealth returns HealthStatus_, defaulting to "healthy" so the deploy

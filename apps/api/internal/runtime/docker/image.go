@@ -105,6 +105,25 @@ func (c *Client) ListImages(ctx context.Context) (result []runtime.ImageInfo, er
 
 // ResolveImageDigest inspects a locally-present image and returns a
 // digest-pinned reference ("repo@sha256:…") drawn from its RepoDigests. It
+// ImageExists reports whether an image is present in the local Docker store.
+// A "not found" inspect is reported as (false, nil); any other error is
+// surfaced so a transient Docker failure is not mistaken for a missing image.
+func (c *Client) ImageExists(ctx context.Context, ref string) (exists bool, err error) {
+	defer func() { metrics.RecordDockerOp("image_exists", err) }()
+
+	_, err = c.cli.ImageInspect(ctx, ref)
+	if err != nil {
+		// Docker returns a 404 whose message contains "No such image" when the
+		// image is absent. A plain string match (as ConnectContainerToNetwork
+		// does for "already exists") avoids pulling in errdefs for one check.
+		if strings.Contains(err.Error(), "No such image") {
+			return false, nil
+		}
+		return false, fmt.Errorf("inspect image %s: %w", ref, err)
+	}
+	return true, nil
+}
+
 // prefers a digest whose repository matches ref (an image can carry digests for
 // several repos); otherwise it returns the first available. Returns "" (nil
 // error) when the image has no repo digest.

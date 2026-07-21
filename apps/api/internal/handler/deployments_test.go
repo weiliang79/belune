@@ -133,6 +133,19 @@ func TestRollbackDeployment(t *testing.T) {
 	}, testutil.AuthHeader(adminToken))
 	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
 	resp.Body.Close()
+
+	// Conflict: the stored image has been deleted off the host. Rollback does
+	// not pull, so it must refuse rather than take the running app down trying
+	// to recreate from an image that is gone — and it must not enqueue anything.
+	env.Runtime.ImageMissing_ = true
+	env.Asynq.Tasks = nil
+	resp = env.DoRequest(t, "POST", fmt.Sprintf("/api/projects/%s/applications/%s/rollback", projectID, appID), map[string]string{
+		"deployment_id": deploymentID,
+	}, testutil.AuthHeader(adminToken))
+	assert.Equal(t, http.StatusConflict, resp.StatusCode)
+	resp.Body.Close()
+	assert.Empty(t, env.Asynq.Tasks, "a rollback to a missing image must not enqueue a deploy")
+	env.Runtime.ImageMissing_ = false
 }
 
 func TestListApplicationLogs(t *testing.T) {

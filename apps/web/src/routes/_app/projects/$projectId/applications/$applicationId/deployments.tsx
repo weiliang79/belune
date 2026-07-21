@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { Loader2Icon } from "lucide-react";
 import { useDeployments, useRollbackDeployment } from "@/lib/hooks/use-deployments";
 import { useApplication } from "@/lib/hooks/use-applications";
 import { AutoDeploySection } from "@/components/applications/auto-deploy-section";
@@ -187,6 +188,12 @@ function DeploymentCard({
 }) {
   const [expanded, setExpanded] = useState(false);
   const isBuilding = d.status === "building" || d.status === "pending";
+  // A deployment has no meaningful duration until it finishes; while it runs,
+  // the slot shows a spinner instead of a stale or blank duration.
+  const inProgress =
+    d.status === "pending" ||
+    d.status === "building" ||
+    d.status === "deploying";
   const liveEntries = useBuildLogStream(
     projectId,
     applicationId,
@@ -255,7 +262,12 @@ function DeploymentCard({
               />
             )}
             <div className="text-muted-foreground flex items-center gap-3 text-xs">
-              {hasSplit ? (
+              {inProgress ? (
+                <Loader2Icon
+                  aria-label="In progress"
+                  className="size-3.5 animate-spin"
+                />
+              ) : hasSplit ? (
                 <span title={`Build: ${buildDuration} · Deploy: ${deployDuration}`}>
                   {buildDuration} + {deployDuration}
                 </span>
