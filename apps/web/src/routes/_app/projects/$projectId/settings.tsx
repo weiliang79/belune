@@ -1,8 +1,7 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import {
   useProject,
   useUpdateProject,
-  useDeleteProject,
   useTransferProject,
 } from "@/lib/hooks/use-projects";
 import { useUsers } from "@/lib/hooks/use-users";
@@ -21,18 +20,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { InfoIcon, PencilIcon, TriangleAlert, UserIcon } from "lucide-react";
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
+  InfoIcon,
+  PencilIcon,
+  Trash2,
+  TriangleAlert,
+  UserIcon,
+} from "lucide-react";
+import { DeleteProjectDialog } from "@/components/projects/delete-project-dialog";
 import { Separator } from "@/components/ui/separator";
 import { formatDateTimeShort } from "@/lib/utils/format";
 import { useState } from "react";
@@ -43,10 +38,9 @@ export const Route = createFileRoute("/_app/projects/$projectId/settings")({
 
 function ProjectSettings() {
   const { projectId } = Route.useParams();
-  const navigate = useNavigate();
   const { data: project } = useProject(projectId);
   const updateProject = useUpdateProject(projectId);
-  const deleteProject = useDeleteProject();
+  const [deleteOpen, setDeleteOpen] = useState(false);
 
   const form = useForm({
     defaultValues: {
@@ -142,7 +136,11 @@ function ProjectSettings() {
 
       <Separator />
 
-      <Card className="border-destructive/50">
+      {/* ring-, not border-: Card draws its edge with `ring-1` (a box-shadow)
+          and Tailwind's preflight zeroes border-width, so the previous
+          `border-destructive/50` set a colour on a 0px border and rendered
+          nothing. Matches the application Danger Zone. */}
+      <Card className="bg-status-error-soft ring-status-error-line">
         <CardHeader>
           <CardTitle className="text-destructive flex items-center gap-2">
             <TriangleAlert aria-hidden="true" className="size-4" />
@@ -150,42 +148,39 @@ function ProjectSettings() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <AlertDialog>
-            <AlertDialogTrigger render={<Button variant="destructive" />}>
-              Delete Project
-            </AlertDialogTrigger>
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle>Delete {project.name}?</AlertDialogTitle>
-                <AlertDialogDescription>
-                  This will permanently delete the project, all its
-                  applications, and stop all running containers. This action
-                  cannot be undone.
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                <AlertDialogAction
-                  onClick={() => {
-                    toast.promise(
-                      deleteProject.mutateAsync(projectId).then(() => {
-                        navigate({ to: "/projects" });
-                      }),
-                      {
-                        loading: "Deleting project...",
-                        success: "Project deleted",
-                        error: (err) => err.message,
-                      },
-                    );
-                  }}
-                >
-                  Delete
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
+          <div className="space-y-6">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <Trash2
+                    aria-hidden="true"
+                    className="text-destructive size-4"
+                  />
+                  <p className="text-sm font-medium">Delete Project</p>
+                </div>
+                <p className="text-muted-foreground mt-1 text-xs">
+                  Permanently deletes the project, every application in it, and
+                  stops all running containers. This cannot be undone.
+                </p>
+              </div>
+              <Button
+                size="sm"
+                variant="destructive-solid"
+                onClick={() => setDeleteOpen(true)}
+              >
+                Delete Project
+              </Button>
+            </div>
+          </div>
         </CardContent>
       </Card>
+
+      <DeleteProjectDialog
+        projectId={projectId}
+        projectName={project.name}
+        open={deleteOpen}
+        onOpenChange={setDeleteOpen}
+      />
     </div>
   );
 }
