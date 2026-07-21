@@ -40,9 +40,9 @@ export const Route = createFileRoute(
 
 const statusVariant: Record<
   string,
-  "default" | "secondary" | "destructive" | "outline"
+  "default" | "secondary" | "destructive" | "outline" | "light"
 > = {
-  success: "default",
+  success: "light",
   pending: "secondary",
   building: "secondary",
   deploying: "secondary",
@@ -231,7 +231,7 @@ function DeploymentCard({
       <CardContent className="py-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <Badge variant={statusVariant[d.status] ?? "outline"}>
+            <Badge variant={statusVariant[d.status] ?? "outline"} className="capitalize">
               {d.status}
             </Badge>
             <span className="text-muted-foreground text-sm">
