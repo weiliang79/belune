@@ -8,6 +8,12 @@ export interface LogEntry {
   message: string;
   stream?: string;
   recordedAt?: string | null;
+  // The deployment (session) this line belongs to, when known. null is the
+  // "earlier / unassigned" bucket; undefined means the source has no sessions.
+  deploymentId?: string | null;
+  // When set, this entry is a session divider rather than a log line; the string
+  // is the label to render. Used to separate deployments in the merged view.
+  divider?: string;
 }
 
 // Shape of one NDJSON log entry. joblog (build/backup/restore) writes `ts` as an

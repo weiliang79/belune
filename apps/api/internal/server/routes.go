@@ -246,6 +246,7 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService,
 
 			// Application logs history (paginated query, not a stream)
 			r.Get("/api/projects/{projectId}/applications/{applicationId}/logs/history", h.ListApplicationLogs)
+			r.Get("/api/projects/{projectId}/applications/{applicationId}/logs/sessions", h.ListApplicationLogSessions)
 
 			// Request logs (paginated)
 			r.Get("/api/projects/{projectId}/applications/{applicationId}/requests", h.ListRequestLogs)
@@ -393,6 +394,7 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService,
 			r.Post("/api/projects/{projectId}/databases/{databaseId}/restore", h.RestoreDatabase)
 			r.Get("/api/projects/{projectId}/databases/{databaseId}/restores", h.ListDatabaseRestores)
 			r.Get("/api/projects/{projectId}/databases/{databaseId}/logs/history", h.ListDatabaseLogs)
+			r.Get("/api/projects/{projectId}/databases/{databaseId}/logs/sessions", h.ListDatabaseLogSessions)
 			r.Post("/api/projects/{projectId}/databases/{databaseId}/upgrade", h.UpgradeDatabase)
 			r.Delete("/api/projects/{projectId}/databases/{databaseId}", h.DeleteDatabase)
 

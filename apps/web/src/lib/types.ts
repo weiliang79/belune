@@ -300,6 +300,20 @@ export interface ContainerLog {
   stream: "stdout" | "stderr";
   message: string;
   recorded_at: string;
+  deployment_id: string | null;
+}
+
+// A log "session": one deployment (image generation) that produced log lines,
+// or the NULL bucket (deployment_id null) for earlier/unassigned logs.
+export interface ContainerLogSession {
+  deployment_id: string | null;
+  first_at: string;
+  last_at: string;
+  line_count: number;
+  triggered_by: string | null;
+  status: string | null;
+  commit_sha: string | null;
+  started_at: string | null;
 }
 
 export interface Database {

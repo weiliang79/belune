@@ -183,6 +183,15 @@ export const queryKeys = {
         "history",
         params,
       ] as const,
+    sessions: (source: string, projectId: string, sourceId: string) =>
+      [
+        "projects",
+        projectId,
+        source === "database" ? "databases" : "applications",
+        sourceId,
+        "logs",
+        "sessions",
+      ] as const,
   },
   globalDeployments: (params?: object) => ["deployments", params] as const,
   requestLogs: (params?: object) => ["requests", params] as const,

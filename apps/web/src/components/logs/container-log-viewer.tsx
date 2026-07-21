@@ -1,4 +1,4 @@
-import { ClockIcon, ListIcon } from "lucide-react";
+import { ClockIcon, LayersIcon, ListIcon } from "lucide-react";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { LevelFilter, type LevelFilterValue } from "@/components/logs/level-filter";
 import { LogView } from "@/components/logs/log-view";
@@ -14,9 +14,30 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type { ContainerLogSource } from "@/lib/api/container-logs";
-import { useContainerLogs } from "@/lib/hooks/use-container-logs";
+import {
+  useContainerLogs,
+  useContainerLogSessions,
+} from "@/lib/hooks/use-container-logs";
 import { useChannel } from "@/lib/hooks/use-websocket";
 import { normalizeLevel } from "@/lib/logs/level";
+import type { ContainerLogSession } from "@/lib/types";
+import { formatRelativeTime } from "@/lib/utils/format";
+
+// Sentinel session-selector values distinct from any deployment UUID.
+const SESSION_ALL = "all";
+const SESSION_NONE = "none"; // the unassigned / "earlier logs" bucket
+
+// A short, human-readable label for one session: "#a1b2c3d · rollback · 2h ago".
+// The NULL bucket (no deployment) reads as "Earlier logs".
+function sessionLabel(s: ContainerLogSession): string {
+  if (!s.deployment_id) return "Earlier logs";
+  const short = s.deployment_id.slice(0, 7);
+  const when = s.started_at ?? s.last_at;
+  const parts = [`#${short}`];
+  if (s.triggered_by) parts.push(s.triggered_by);
+  if (when) parts.push(formatRelativeTime(when));
+  return parts.join(" · ");
+}
 
 const MAX_LIVE = 5000;
 
@@ -59,11 +80,23 @@ export function ContainerLogViewer({
   const [level, setLevel] = useState<LevelFilterValue>("");
   const [limit, setLimit] = useState(500);
   const [timeRange, setTimeRange] = useState("all");
+  const [session, setSession] = useState<string>(SESSION_ALL);
   const [wrap, setWrap] = useState(false);
   const [follow, setFollow] = useState(true);
   const [liveLogs, setLiveLogs] = useState<LogEntry[]>([]);
   const liveIdRef = useRef(0);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const { data: sessions } = useContainerLogSessions(source, projectId, sourceId);
+
+  // Server-side session filter: a specific deployment, the "none" bucket, or
+  // (for SESSION_ALL) nothing.
+  const deploymentId =
+    session === SESSION_ALL
+      ? undefined
+      : session === SESSION_NONE
+        ? "none"
+        : session;
 
   function handleSearchChange(value: string) {
     setInputValue(value);
@@ -87,6 +120,7 @@ export function ContainerLogViewer({
     q: q || undefined,
     level: level || undefined,
     since,
+    deploymentId,
   });
 
   // Capture every live line unfiltered; filters are applied at render time so
@@ -98,6 +132,7 @@ export function ContainerLogViewer({
       stream?: string;
       message?: string;
       recorded_at?: string;
+      deployment_id?: string;
     };
     if (typeof obj.message !== "string") return;
 
@@ -111,6 +146,8 @@ export function ContainerLogViewer({
           stream: obj.stream === "stderr" ? "stderr" : "stdout",
           message: obj.message as string,
           recordedAt: obj.recorded_at ?? new Date().toISOString(),
+          // Empty string from the collector means "no deployment" → null bucket.
+          deploymentId: obj.deployment_id ? obj.deployment_id : null,
         },
       ].slice(-MAX_LIVE),
     );
@@ -118,8 +155,18 @@ export function ContainerLogViewer({
 
   const { connected } = useChannel(`container-logs:${sourceId}`, handleMessage);
 
+  // Map of deployment_id (or "__none__") → label, for divider rendering.
+  const sessionLabels = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const s of sessions ?? []) {
+      map.set(s.deployment_id ?? "__none__", sessionLabel(s));
+    }
+    return map;
+  }, [sessions]);
+
   // History is most-recent first; reverse to chronological, then append live.
-  // History is already filtered server-side; live lines are filtered here.
+  // History is already filtered server-side; live lines are filtered here
+  // (including by the selected session, which the server applies to history).
   const entries = useMemo<LogEntry[]>(() => {
     const historical: LogEntry[] = history
       ? [...history].reverse().map((e) => ({
@@ -128,17 +175,56 @@ export function ContainerLogViewer({
           stream: e.stream,
           message: e.message,
           recordedAt: e.recorded_at,
+          deploymentId: e.deployment_id,
         }))
       : [];
     const live = liveLogs.filter((e) => {
       if (level && e.level !== level) return false;
       if (q && !e.message.toLowerCase().includes(q.toLowerCase())) return false;
-      return true;
+      if (session === SESSION_ALL) return true;
+      const key = e.deploymentId ?? null;
+      if (session === SESSION_NONE) return key === null;
+      return key === session;
     });
-    return [...historical, ...live];
-  }, [history, liveLogs, level, q]);
+    const merged = [...historical, ...live];
 
-  const filtered = q || level || timeRange !== "all";
+    // Only interleave session dividers in the "all sessions" view; when one
+    // session is selected the whole surface is already that one run.
+    if (session !== SESSION_ALL) return merged;
+
+    // Skip dividers entirely when everything in view belongs to a single
+    // session (databases, or an app with just one deployment) — a lone divider
+    // header would be noise, and "Earlier logs" would misdescribe all of it.
+    const distinctSessions = new Set(merged.map((e) => e.deploymentId ?? null));
+    if (distinctSessions.size < 2) return merged;
+
+    const withDividers: LogEntry[] = [];
+    let prevKey: string | null | undefined = undefined;
+    for (let i = 0; i < merged.length; i++) {
+      const e = merged[i];
+      const key = e.deploymentId ?? null;
+      if (key !== prevKey) {
+        const label =
+          sessionLabels.get(e.deploymentId ?? "__none__") ??
+          (e.deploymentId ? `#${e.deploymentId.slice(0, 7)}` : "Earlier logs");
+        withDividers.push({
+          id: `divider-${e.id}`,
+          level: "info",
+          message: "",
+          divider: label,
+        });
+        prevKey = key;
+      }
+      withDividers.push(e);
+    }
+    return withDividers;
+  }, [history, liveLogs, level, q, session, sessionLabels]);
+
+  const filtered = q || level || timeRange !== "all" || session !== SESSION_ALL;
+  const lineCount = entries.reduce(
+    (n, e) => (e.divider === undefined ? n + 1 : n),
+    0,
+  );
 
   return (
     <div className="space-y-3 pt-3">
@@ -188,6 +274,28 @@ export function ContainerLogViewer({
             </SelectContent>
           </Select>
 
+          {sessions && sessions.length > 1 && (
+            <Select value={session} onValueChange={(v) => v && setSession(v)}>
+              <SelectTrigger className="h-8 w-56" aria-label="Session">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={SESSION_ALL} icon={<LayersIcon />}>
+                  All deployments
+                </SelectItem>
+                {sessions.map((s) => (
+                  <SelectItem
+                    key={s.deployment_id ?? SESSION_NONE}
+                    value={s.deployment_id ?? SESSION_NONE}
+                    icon={<LayersIcon />}
+                  >
+                    {sessionLabel(s)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+
           <Input
             className="h-8 w-48 text-sm"
             placeholder="Search logs..."
@@ -206,8 +314,8 @@ export function ContainerLogViewer({
             />
           </span>
           <span className="text-muted-foreground text-sm">
-            {connected ? "Connected" : "Disconnected"} · {entries.length}{" "}
-            {entries.length === 1 ? "entry" : "entries"}
+            {connected ? "Connected" : "Disconnected"} · {lineCount}{" "}
+            {lineCount === 1 ? "entry" : "entries"}
           </span>
           <Button
             size="sm"

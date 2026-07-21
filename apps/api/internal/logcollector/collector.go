@@ -29,6 +29,11 @@ import (
 const (
 	labelApplicationID = "application-id"
 	labelDatabaseID    = "database-id"
+	// labelDeploymentID ties an application container to the deployment (image
+	// generation) that created it, so its logs can be grouped into a session
+	// distinct from the previous redeploy/rebuild/rollback. Only application
+	// containers carry it; databases and system containers have no deployment.
+	labelDeploymentID = "deployment-id"
 	// labelSystem marks Belune's own infrastructure containers (currently only
 	// Caddy). Collecting the proxy's logs is what lets the TLS status pipeline
 	// tell a user *why* a certificate failed, instead of leaving the reason in a
@@ -57,16 +62,17 @@ var CaddySourceID = systemSourceIDs[SystemCaddy]
 // containerSource identifies which resource a container belongs to, derived
 // from its labels.
 type containerSource struct {
-	typ  string // sourceApplication | sourceDatabase | sourceSystem
-	id   string // resource UUID (synthetic for system containers)
-	name string // system component name, empty for applications and databases
+	typ        string // sourceApplication | sourceDatabase | sourceSystem
+	id         string // resource UUID (synthetic for system containers)
+	name       string // system component name, empty for applications and databases
+	deployment string // deployment UUID for application containers, empty otherwise
 }
 
 // sourceOf returns the log source for a container, or false if the container
 // carries none of our resource labels.
 func sourceOf(labels map[string]string) (containerSource, bool) {
 	if id := labels[labelApplicationID]; id != "" {
-		return containerSource{typ: sourceApplication, id: id}, true
+		return containerSource{typ: sourceApplication, id: id, deployment: labels[labelDeploymentID]}, true
 	}
 	if id := labels[labelDatabaseID]; id != "" {
 		return containerSource{typ: sourceDatabase, id: id}, true
@@ -295,6 +301,18 @@ func (c *Collector) watchContainer(ctx context.Context, ctr runtime.ContainerInf
 		slog.Warn("log collector: invalid source id label", "container", ctr.Name, "source_type", src.typ, "source_id", src.id)
 		return
 	}
+
+	// The deployment id groups this container's lines into a session. It is
+	// optional (databases/system containers have none, and an app container
+	// predating this feature carries no label), so an unset or unparseable value
+	// leaves deployment_id NULL rather than dropping the container.
+	var deploymentUUID pgtype.UUID
+	if src.deployment != "" {
+		if err := deploymentUUID.Scan(src.deployment); err != nil {
+			slog.Warn("log collector: invalid deployment id label", "container", ctr.Name, "deployment_id", src.deployment)
+			deploymentUUID = pgtype.UUID{}
+		}
+	}
 	span.SetAttributes(
 		attribute.String("log.source_type", src.typ),
 		attribute.String("log.source_id", src.id),
@@ -347,12 +365,13 @@ func (c *Collector) watchContainer(ctx context.Context, ctr runtime.ContainerInf
 			recordedAt = pgtype.Timestamptz{Time: line.ts, Valid: true}
 		}
 		batch = append(batch, generated.InsertContainerLogParams{
-			SourceType: src.typ,
-			SourceID:   srcUUID,
-			Level:      line.level,
-			Stream:     line.stream,
-			Message:    line.message,
-			RecordedAt: recordedAt,
+			SourceType:   src.typ,
+			SourceID:     srcUUID,
+			Level:        line.level,
+			Stream:       line.stream,
+			Message:      line.message,
+			RecordedAt:   recordedAt,
+			DeploymentID: deploymentUUID,
 		})
 	}
 
@@ -431,10 +450,11 @@ func (c *Collector) flush(ctx context.Context, src containerSource, batch []gene
 			recordedAt = p.RecordedAt.Time
 		}
 		payload, _ := json.Marshal(map[string]any{
-			"level":       p.Level,
-			"stream":      p.Stream,
-			"message":     p.Message,
-			"recorded_at": recordedAt.UTC().Format(time.RFC3339Nano),
+			"level":         p.Level,
+			"stream":        p.Stream,
+			"message":       p.Message,
+			"recorded_at":   recordedAt.UTC().Format(time.RFC3339Nano),
+			"deployment_id": src.deployment,
 		})
 		c.rdb.Publish(ctx, channel, string(payload))
 	}

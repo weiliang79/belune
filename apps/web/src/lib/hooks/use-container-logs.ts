@@ -17,3 +17,17 @@ export function useContainerLogs(
     queryFn: () => logsApi.listContainerLogs(source, projectId, sourceId, params),
   });
 }
+
+export function useContainerLogSessions(
+  source: ContainerLogSource,
+  projectId: string,
+  sourceId: string,
+) {
+  return useQuery({
+    queryKey: queryKeys.containerLogs.sessions(source, projectId, sourceId),
+    queryFn: () => logsApi.listContainerLogSessions(source, projectId, sourceId),
+    // Sessions change as new deploys land; keep them reasonably fresh but don't
+    // hammer — a manual refresh or navigation will pick up new ones.
+    refetchInterval: 30_000,
+  });
+}

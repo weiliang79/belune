@@ -92,6 +92,54 @@ func (h *Handler) ListDatabaseLogs(w http.ResponseWriter, r *http.Request) {
 	h.listContainerLogs(w, r, "database", dbUUID)
 }
 
+// ListApplicationLogSessions returns the log sessions (one per deployment that
+// produced log lines, plus a NULL bucket for earlier/unassigned logs) for an
+// application, so the viewer can offer a session picker.
+// GET /api/projects/{projectId}/applications/{applicationId}/logs/sessions
+func (h *Handler) ListApplicationLogSessions(w http.ResponseWriter, r *http.Request) {
+	appID := chi.URLParam(r, "applicationId")
+	var appUUID pgtype.UUID
+	if err := appUUID.Scan(appID); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid application id")
+		return
+	}
+	if !h.canAccessApplication(r, appUUID) {
+		writeError(w, http.StatusForbidden, "access denied")
+		return
+	}
+	h.listContainerLogSessions(w, r, "application", appUUID)
+}
+
+// ListDatabaseLogSessions is the database counterpart. Databases have no
+// deployments, so this collapses to a single NULL-bucket session, but it keeps
+// the viewer's data shape uniform across resource types.
+// GET /api/projects/{projectId}/databases/{databaseId}/logs/sessions
+func (h *Handler) ListDatabaseLogSessions(w http.ResponseWriter, r *http.Request) {
+	dbID := chi.URLParam(r, "databaseId")
+	var dbUUID pgtype.UUID
+	if err := dbUUID.Scan(dbID); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid database id")
+		return
+	}
+	if !h.canAccessDatabase(r, dbUUID) {
+		writeError(w, http.StatusForbidden, "access denied")
+		return
+	}
+	h.listContainerLogSessions(w, r, "database", dbUUID)
+}
+
+func (h *Handler) listContainerLogSessions(w http.ResponseWriter, r *http.Request, sourceType string, sourceID pgtype.UUID) {
+	sessions, err := h.queries.ListContainerLogSessions(r.Context(), generated.ListContainerLogSessionsParams{
+		SourceType: sourceType,
+		SourceID:   sourceID,
+	})
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to list log sessions")
+		return
+	}
+	writeJSON(w, http.StatusOK, sessions)
+}
+
 // listContainerLogs is the shared implementation behind the application and
 // database log-history endpoints.
 //
@@ -131,6 +179,17 @@ func (h *Handler) listContainerLogs(w http.ResponseWriter, r *http.Request, sour
 	if v := q.Get("until"); v != "" {
 		if t, err := time.Parse(time.RFC3339, v); err == nil {
 			params.Until = pgtype.Timestamptz{Time: t, Valid: true}
+		}
+	}
+	// Session filter. "none" selects the unassigned (NULL) bucket — logs from
+	// before this feature or from non-deployment containers; a UUID selects that
+	// one deployment's session; absent means all sessions.
+	if v := q.Get("deployment_id"); v == "none" {
+		params.Unassigned = pgtype.Bool{Bool: true, Valid: true}
+	} else if v != "" {
+		var depUUID pgtype.UUID
+		if err := depUUID.Scan(v); err == nil {
+			params.DeploymentID = depUUID
 		}
 	}
 

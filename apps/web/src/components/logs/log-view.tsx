@@ -19,6 +19,18 @@ function LogLine({
   showLevel?: boolean;
   wrap?: boolean;
 }) {
+  // A session divider: a full-width labeled rule separating one deployment's
+  // logs from the next in the merged ("all sessions") view.
+  if (entry.divider !== undefined) {
+    return (
+      <div className="flex items-center gap-2 py-1 text-zinc-500 select-none">
+        <span className="h-px flex-1 bg-zinc-700" />
+        <span className="shrink-0 tracking-wide uppercase">{entry.divider}</span>
+        <span className="h-px flex-1 bg-zinc-700" />
+      </div>
+    );
+  }
+
   // When wrapping, hang-indent continuation lines so they align under the
   // message column (timestamp = 20 chars incl. trailing space, level = 10).
   const indentCh = (showTimestamp ? 20 : 0) + (showLevel ? 10 : 0);

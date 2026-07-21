@@ -176,13 +176,14 @@ type Certificate struct {
 }
 
 type ContainerLog struct {
-	ID         pgtype.UUID        `json:"id"`
-	SourceType string             `json:"source_type"`
-	SourceID   pgtype.UUID        `json:"source_id"`
-	Level      string             `json:"level"`
-	Stream     string             `json:"stream"`
-	Message    string             `json:"message"`
-	RecordedAt pgtype.Timestamptz `json:"recorded_at"`
+	ID           pgtype.UUID        `json:"id"`
+	SourceType   string             `json:"source_type"`
+	SourceID     pgtype.UUID        `json:"source_id"`
+	Level        string             `json:"level"`
+	Stream       string             `json:"stream"`
+	Message      string             `json:"message"`
+	RecordedAt   pgtype.Timestamptz `json:"recorded_at"`
+	DeploymentID pgtype.UUID        `json:"deployment_id"`
 }
 
 type Database struct {
