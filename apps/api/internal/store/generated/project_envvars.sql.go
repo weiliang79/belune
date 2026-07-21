@@ -29,6 +29,24 @@ func (q *Queries) DeleteProjectEnvVarsByProject(ctx context.Context, projectID p
 	return err
 }
 
+const deleteProjectEnvVarsNotIn = `-- name: DeleteProjectEnvVarsNotIn :exec
+DELETE FROM project_env_vars
+WHERE project_id = $1
+  AND key <> ALL($2::text[])
+`
+
+type DeleteProjectEnvVarsNotInParams struct {
+	ProjectID pgtype.UUID `json:"project_id"`
+	Keys      []string    `json:"keys"`
+}
+
+// Project counterpart of DeleteEnvVarsNotIn: removes what the caller did not
+// submit, so the stored set matches the submitted one exactly.
+func (q *Queries) DeleteProjectEnvVarsNotIn(ctx context.Context, arg DeleteProjectEnvVarsNotInParams) error {
+	_, err := q.db.Exec(ctx, deleteProjectEnvVarsNotIn, arg.ProjectID, arg.Keys)
+	return err
+}
+
 const listProjectEnvVars = `-- name: ListProjectEnvVars :many
 SELECT id, project_id, key, value_encrypted, is_secret, created_at, updated_at FROM project_env_vars WHERE project_id = $1 ORDER BY key
 `

@@ -2,12 +2,12 @@ package handler
 
 import (
 	"encoding/json"
-	"fmt"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/weiliang79/belune/internal/store"
 	"github.com/weiliang79/belune/internal/store/generated"
 )
 
@@ -72,37 +72,35 @@ func (h *Handler) UpdateProjectEnvVars(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Delete all existing project env vars, then upsert the new set
-	if err := h.queries.DeleteProjectEnvVarsByProject(r.Context(), projectUUID); err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to clear project env vars")
+	prepared, errMsg := prepareEnvVars(req.Vars, h.cfg.Keyring.Encrypt)
+	if errMsg != "" {
+		writeError(w, http.StatusBadRequest, errMsg)
 		return
 	}
 
-	for _, v := range req.Vars {
-		if v.Key == "" {
-			continue
+	// This used to delete every variable first and validate afterwards, so a
+	// single bad key — or a failure anywhere in the loop — returned an error
+	// having already wiped the project's variables, with no transaction to undo
+	// it. Validation and encryption now happen before any write, and the
+	// replacement runs in one transaction.
+	if err := store.WithTx(r.Context(), h.db, func(q *generated.Queries) error {
+		for _, p := range prepared {
+			if _, err := q.UpsertProjectEnvVar(r.Context(), generated.UpsertProjectEnvVarParams{
+				ProjectID:      projectUUID,
+				Key:            p.key,
+				ValueEncrypted: p.encrypted,
+				IsSecret:       p.isSecret,
+			}); err != nil {
+				return err
+			}
 		}
-		if !envKeyRegex.MatchString(v.Key) {
-			writeError(w, http.StatusBadRequest, fmt.Sprintf("invalid env var key: %q", v.Key))
-			return
-		}
-
-		encrypted, err := h.cfg.Keyring.Encrypt([]byte(v.Value))
-		if err != nil {
-			writeError(w, http.StatusInternalServerError, "failed to encrypt value")
-			return
-		}
-
-		_, err = h.queries.UpsertProjectEnvVar(r.Context(), generated.UpsertProjectEnvVarParams{
-			ProjectID:      projectUUID,
-			Key:            v.Key,
-			ValueEncrypted: encrypted,
-			IsSecret:       v.IsSecret,
+		return q.DeleteProjectEnvVarsNotIn(r.Context(), generated.DeleteProjectEnvVarsNotInParams{
+			ProjectID: projectUUID,
+			Keys:      keysOf(prepared),
 		})
-		if err != nil {
-			writeError(w, http.StatusInternalServerError, "failed to save project env var")
-			return
-		}
+	}); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to save project env vars")
+		return
 	}
 
 	writeJSON(w, http.StatusOK, map[string]string{"status": "updated"})

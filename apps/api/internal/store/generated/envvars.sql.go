@@ -29,6 +29,26 @@ func (q *Queries) DeleteEnvVarsByApplication(ctx context.Context, applicationID 
 	return err
 }
 
+const deleteEnvVarsNotIn = `-- name: DeleteEnvVarsNotIn :exec
+DELETE FROM env_vars
+WHERE application_id = $1
+  AND key <> ALL($2::text[])
+`
+
+type DeleteEnvVarsNotInParams struct {
+	ApplicationID pgtype.UUID `json:"application_id"`
+	Keys          []string    `json:"keys"`
+}
+
+// Removes the variables the caller did not submit, which is how a delete in the
+// UI reaches the database: the update endpoint upserts what it was given, and
+// anything absent from that set is gone. Passing an empty array deletes them
+// all, which is the correct reading of "the app now has no variables".
+func (q *Queries) DeleteEnvVarsNotIn(ctx context.Context, arg DeleteEnvVarsNotInParams) error {
+	_, err := q.db.Exec(ctx, deleteEnvVarsNotIn, arg.ApplicationID, arg.Keys)
+	return err
+}
+
 const listEnvVarsByApplication = `-- name: ListEnvVarsByApplication :many
 SELECT id, application_id, key, value_encrypted, is_secret, created_at, updated_at FROM env_vars WHERE application_id = $1 ORDER BY key
 `
