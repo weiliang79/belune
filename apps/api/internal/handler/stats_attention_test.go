@@ -72,4 +72,19 @@ func TestNeedsAttention_FailedDeploysAreResolvedBySuccess(t *testing.T) {
 	deploy(status.DeploymentFailed)
 	assert.EqualValues(t, 1, attention()["failed_deploys"],
 		"a new failure after a success needs attention again")
+
+	// A failed deploy usually also flags the application errored. That is one
+	// broken app, so it must be one issue: the deploy bucket yields to the
+	// errored bucket rather than both counting the same incident.
+	_, err := env.Queries.UpdateApplicationStatus(ctx, generated.UpdateApplicationStatusParams{
+		ID: appUUID, Status: status.ApplicationError,
+	})
+	require.NoError(t, err)
+
+	na := attention()
+	assert.EqualValues(t, 1, na["error_services"], "the app is errored")
+	assert.EqualValues(t, 0, na["failed_deploys"],
+		"an errored app must not also be counted as a failed deploy")
+	assert.EqualValues(t, 1, na["total"],
+		"one broken application is one issue, not two")
 }

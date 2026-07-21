@@ -150,6 +150,7 @@ FROM (
     JOIN applications a ON a.id = d.application_id
     JOIN projects p ON p.id = a.project_id
     WHERE a.parent_application_id IS NULL
+      AND a.status <> 'error'
       AND d.status IN ('success', 'failed')
       AND ($1::uuid IS NULL OR p.user_id = $1)
     ORDER BY d.application_id, d.started_at DESC
@@ -157,7 +158,8 @@ FROM (
 WHERE latest.status = 'failed'
 `
 
-// Applications whose most recent *resolved* deployment failed.
+// Applications that are still serving but whose most recent *resolved*
+// deployment failed.
 //
 // This counts the latest outcome per application rather than every failure in a
 // time window, which is what makes the "needs attention" figure actionable: a
@@ -166,6 +168,13 @@ WHERE latest.status = 'failed'
 // excluded from the "latest" pick so merely starting a retry cannot mask an
 // unfixed failure before it actually succeeds. Preview children are excluded to
 // match CountApplicationHealth — they are ephemeral and would inflate the count.
+//
+// Applications already in 'error' are excluded so this bucket is disjoint from
+// the errored-services count. A failed deploy usually also flags the
+// application errored, and counting both reported one broken app as two issues.
+// What is left here is the genuinely distinct case the deploy ordering created:
+// the previous container is still up and serving the old version, so the app is
+// not errored, but its latest deploy failed and needs looking at.
 func (q *Queries) CountUnresolvedFailedDeploys(ctx context.Context, userID pgtype.UUID) (int64, error) {
 	row := q.db.QueryRow(ctx, countUnresolvedFailedDeploys, userID)
 	var failed int64

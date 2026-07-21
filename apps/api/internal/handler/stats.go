@@ -127,6 +127,8 @@ func (h *Handler) GetStats(w http.ResponseWriter, r *http.Request) {
 	// Distinct from dep.Failed: that is the 7-day *statistic* behind the deploy
 	// success rate and stays historical. "Needs attention" instead wants what is
 	// still broken now, so it counts applications whose latest deploy failed.
+	// It excludes applications already counted as errored, so the attention
+	// buckets stay disjoint and one broken app is one issue, not two.
 	unresolvedDeploys, err := h.queries.CountUnresolvedFailedDeploys(ctx, scope)
 	if err != nil {
 		slog.Warn("stats: count unresolved failed deploys", "error", err)
