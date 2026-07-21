@@ -15,6 +15,9 @@ func TestAppHealth(t *testing.T) {
 		db      generated.CountDatabaseHealthRow
 		errored int64
 		want    healthRatio
+		// skipSum marks inputs that are impossible in practice (counts that
+		// exceed the total), where the clamp deliberately breaks the invariant.
+		skipSum bool
 	}{
 		{
 			name: "healthy fleet",
@@ -52,6 +55,7 @@ func TestAppHealth(t *testing.T) {
 			app:     generated.CountApplicationHealthRow{Total: 1, Running: 2},
 			errored: 0,
 			want:    healthRatio{Running: 2, Total: 1, Busy: 0},
+			skipSum: true,
 		},
 	}
 
@@ -61,10 +65,14 @@ func TestAppHealth(t *testing.T) {
 			if got != tt.want {
 				t.Errorf("appHealth() = %+v, want %+v", got, tt.want)
 			}
-			// The card's badges must account for every service.
+			// The card renders one badge per bucket, so they must account for
+			// every service — this is the property the residual exists to keep.
+			if tt.skipSum {
+				return
+			}
 			sum := got.Running + got.Errored + got.Stopped +
 				got.Unhealthy + got.Inactive + got.Busy
-			if got.Busy > 0 && sum != got.Total {
+			if sum != got.Total {
 				t.Errorf("buckets sum to %d, want total %d", sum, got.Total)
 			}
 		})

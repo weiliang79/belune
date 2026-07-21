@@ -95,4 +95,10 @@ func TestContainerLogSessions(t *testing.T) {
 	resp = env.DoRequest(t, "GET", fmt.Sprintf("/api/projects/%s/applications/%s/logs/history", projectID, appID), nil, testutil.AuthHeader(adminToken))
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 	assert.Len(t, testutil.ReadJSONArray(t, resp), 4)
+
+	// A malformed session id is rejected, not silently ignored — dropping the
+	// filter would return every session's logs instead of erroring.
+	resp = env.DoRequest(t, "GET", fmt.Sprintf("/api/projects/%s/applications/%s/logs/history?deployment_id=not-a-uuid", projectID, appID), nil, testutil.AuthHeader(adminToken))
+	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+	resp.Body.Close()
 }
