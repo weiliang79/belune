@@ -2,10 +2,17 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "./query-keys";
 import * as usersApi from "@/lib/api/users";
 
-export function useUsers() {
+/**
+ * `enabled` exists because /api/users is behind RequireRole("admin"). Callers
+ * that render only for admins still have to *call* this hook unconditionally —
+ * hooks cannot sit behind an early return — so without it every non-admin who
+ * opened such a page fired a request that came straight back 403.
+ */
+export function useUsers(options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: queryKeys.users.all,
     queryFn: usersApi.listUsers,
+    enabled: options?.enabled ?? true,
   });
 }
 

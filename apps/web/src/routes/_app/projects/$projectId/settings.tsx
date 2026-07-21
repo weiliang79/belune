@@ -117,14 +117,16 @@ function ProjectSettings() {
                 </div>
               )}
             />
-            <form.Subscribe
-              selector={(s) => s.isSubmitting}
-              children={(isSubmitting) => (
-                <Button type="submit" disabled={isSubmitting}>
-                  {isSubmitting ? "Saving..." : "Save Changes"}
-                </Button>
-              )}
-            />
+            <div className="flex justify-end">
+              <form.Subscribe
+                selector={(s) => s.isSubmitting}
+                children={(isSubmitting) => (
+                  <Button type="submit" disabled={isSubmitting}>
+                    {isSubmitting ? "Saving..." : "Save Changes"}
+                  </Button>
+                )}
+              />
+            </div>
           </form>
         </CardContent>
       </Card>
@@ -194,7 +196,9 @@ function TransferOwnerCard({
 }) {
   const currentUser = useAuthStore((s) => s.user);
   const isAdmin = currentUser?.role === "admin";
-  const { data: users } = useUsers();
+  // Gated on isAdmin: the card returns null below for everyone else, but the
+  // hook still runs, and /api/users is admin-only.
+  const { data: users } = useUsers({ enabled: isAdmin });
   const transferProject = useTransferProject(projectId);
   const [selectedUserId, setSelectedUserId] = useState(currentOwnerId);
 
@@ -243,14 +247,18 @@ function TransferOwnerCard({
             </SelectContent>
           </Select>
         </div>
-        <Button
-          onClick={handleTransfer}
-          disabled={
-            selectedUserId === currentOwnerId || transferProject.isPending
-          }
-        >
-          {transferProject.isPending ? "Transferring..." : "Transfer Ownership"}
-        </Button>
+        <div className="flex justify-end">
+          <Button
+            onClick={handleTransfer}
+            disabled={
+              selectedUserId === currentOwnerId || transferProject.isPending
+            }
+          >
+            {transferProject.isPending
+              ? "Transferring..."
+              : "Transfer Ownership"}
+          </Button>
+        </div>
       </CardContent>
     </Card>
   );
