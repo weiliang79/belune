@@ -300,8 +300,7 @@ function ProxyBlock() {
         disabled={reconcile.isPending}
         onClick={handleReconcile}
       >
-        <RefreshCwIcon aria-hidden="true" className="size-4" />
-        Reconcile routes
+        Reconcile Routes
       </Button>
     </div>
   );
@@ -420,7 +419,7 @@ function PlatformLogsBlock() {
         </div>
         <DropdownMenu>
           <DropdownMenuTrigger render={<Button size="sm" variant="outline" />}>
-            View logs
+            View Logs
             <ChevronDownIcon aria-hidden="true" className="size-4" />
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
@@ -542,7 +541,7 @@ function QueueBlock() {
             disabled={clearPending.isPending || pending === 0}
             onClick={() => setConfirmPending(true)}
           >
-            Cancel queued jobs
+            Cancel Queued Jobs
           </Button>
           <Button
             size="sm"
@@ -550,7 +549,7 @@ function QueueBlock() {
             disabled={clear.isPending || stuck === 0}
             onClick={() => setConfirm(true)}
           >
-            Clear stuck jobs
+            Clear Stuck Jobs
           </Button>
         </div>
       </div>

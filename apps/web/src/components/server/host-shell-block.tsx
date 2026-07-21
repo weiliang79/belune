@@ -72,7 +72,9 @@ export function HostShellBlock() {
       setPasswordOpen(false);
       setPassword("");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to open host shell");
+      toast.error(
+        err instanceof Error ? err.message : "Failed to open host shell",
+      );
     } finally {
       setOpening(false);
     }
@@ -90,8 +92,9 @@ export function HostShellBlock() {
             )}
           </div>
           <p className="text-muted-foreground mt-1 text-xs">
-            Opens a root shell on the host machine in the browser. Off by default;
-            each session re-asks for your password and is written to the audit log.
+            Opens a root shell on the host machine in the browser. Off by
+            default; each session re-asks for your password and is written to
+            the audit log.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -101,7 +104,7 @@ export function HostShellBlock() {
               variant="outline"
               onClick={() => setPasswordOpen(true)}
             >
-              Open host shell
+              Open Host Shell
             </Button>
           )}
           <Switch
@@ -119,10 +122,11 @@ export function HostShellBlock() {
           <AlertDialogHeader>
             <AlertDialogTitle>Enable host shell?</AlertDialogTitle>
             <AlertDialogDescription>
-              This lets any admin open a full <strong>root shell on the host</strong>{" "}
-              through the dashboard. Opening a session still requires re-entering
-              your password, and every session is audited — but the capability is a
-              large increase in blast radius. Only enable it if you understand that.
+              This lets any admin open a full{" "}
+              <strong>root shell on the host</strong> through the dashboard.
+              Opening a session still requires re-entering your password, and
+              every session is audited — but the capability is a large increase
+              in blast radius. Only enable it if you understand that.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -239,7 +243,11 @@ function HostShellTerminal({ sessionId }: { sessionId: string }) {
         const dims = fit.proposeDimensions();
         if (dims && socket.readyState === WebSocket.OPEN) {
           socket.send(
-            JSON.stringify({ type: "resize", cols: dims.cols, rows: dims.rows }),
+            JSON.stringify({
+              type: "resize",
+              cols: dims.cols,
+              rows: dims.rows,
+            }),
           );
         }
       };
