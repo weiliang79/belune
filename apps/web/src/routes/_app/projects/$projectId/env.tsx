@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { SlidersHorizontal } from "lucide-react";
 import {
   useProjectEnvVars,
   useUpsertProjectEnvVars,
@@ -126,7 +127,10 @@ function ProjectEnvVarsPage() {
         <CardHeader>
           <div className="flex items-center justify-between">
             <div>
-              <CardTitle>Project Environment Variables</CardTitle>
+              <CardTitle className="flex items-center gap-2">
+                <SlidersHorizontal aria-hidden="true" className="size-4" />
+                Project Environment Variables
+              </CardTitle>
               <p className="text-muted-foreground mt-1 text-sm">
                 These variables are inherited by all applications in this
                 project. Application-level variables with the same key will
@@ -212,7 +216,9 @@ function ProjectEnvVarsPage() {
           </DialogHeader>
           <Textarea
             className="min-h-50 font-mono text-xs"
-            placeholder={"# Paste your .env content\nKEY=value\nANOTHER_KEY=another_value"}
+            placeholder={
+              "# Paste your .env content\nKEY=value\nANOTHER_KEY=another_value"
+            }
             value={importText}
             onChange={(e) => setImportText(e.target.value)}
           />

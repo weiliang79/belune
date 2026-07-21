@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { toast } from "sonner";
-import { Plus, Trash2, Pencil, PlugZap, Loader2 } from "lucide-react";
+import { Plus, Trash2, Pencil, PlugZap, Loader2, Cloud } from "lucide-react";
 import {
   useBackupDestinations,
   useDeleteBackupDestination,
@@ -74,7 +74,10 @@ export function DestinationsPanel({ projectId }: { projectId: string }) {
     <Card>
       <CardHeader className="flex flex-row items-start justify-between gap-3">
         <div>
-          <CardTitle>Backup Destinations</CardTitle>
+          <CardTitle className="flex items-center gap-2">
+            <Cloud aria-hidden="true" className="size-4" />
+            Backup Destinations
+          </CardTitle>
           <CardDescription>
             S3-compatible storage targets for this project's database backups.
           </CardDescription>
@@ -194,8 +197,8 @@ export function DestinationsPanel({ projectId }: { projectId: string }) {
           <AlertDialogHeader>
             <AlertDialogTitle>Remove {deleteTarget?.name}?</AlertDialogTitle>
             <AlertDialogDescription>
-              This deletes the destination. It cannot be removed while a database
-              backup configuration still uses it.
+              This deletes the destination. It cannot be removed while a
+              database backup configuration still uses it.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

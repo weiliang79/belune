@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { Loader2, Cloud } from "lucide-react";
+import { Loader2, Cloud, Archive } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { CardDescription } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -34,7 +34,10 @@ function ProjectBackupsPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Recent backup activity</CardTitle>
+          <CardTitle className="flex items-center gap-2">
+            <Archive aria-hidden="true" className="size-4" />
+            Recent backup activity
+          </CardTitle>
           <CardDescription>
             The latest backups across all databases in this project.
           </CardDescription>

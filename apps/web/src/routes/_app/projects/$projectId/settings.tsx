@@ -21,7 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { UserIcon } from "lucide-react";
+import { InfoIcon, PencilIcon, TriangleAlert, UserIcon } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -67,7 +67,10 @@ function ProjectSettings() {
     <div className="space-y-6">
       <Card>
         <CardHeader>
-          <CardTitle>Project Details</CardTitle>
+          <CardTitle className="flex items-center gap-2">
+            <InfoIcon aria-hidden="true" className="size-4" />
+            Project Details
+          </CardTitle>
         </CardHeader>
         <CardContent className="space-y-2 text-sm">
           <div className="flex justify-between">
@@ -91,7 +94,10 @@ function ProjectSettings() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Edit Project</CardTitle>
+          <CardTitle className="flex items-center gap-2">
+            <PencilIcon aria-hidden="true" className="size-4" />
+            Edit Project
+          </CardTitle>
         </CardHeader>
         <CardContent>
           <form
@@ -129,13 +135,19 @@ function ProjectSettings() {
         </CardContent>
       </Card>
 
-      <TransferOwnerCard projectId={projectId} currentOwnerId={project.user_id} />
+      <TransferOwnerCard
+        projectId={projectId}
+        currentOwnerId={project.user_id}
+      />
 
       <Separator />
 
       <Card className="border-destructive/50">
         <CardHeader>
-          <CardTitle className="text-destructive">Danger Zone</CardTitle>
+          <CardTitle className="text-destructive flex items-center gap-2">
+            <TriangleAlert aria-hidden="true" className="size-4" />
+            Danger Zone
+          </CardTitle>
         </CardHeader>
         <CardContent>
           <AlertDialog>
@@ -207,7 +219,10 @@ function TransferOwnerCard({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Project Owner</CardTitle>
+        <CardTitle className="flex items-center gap-2">
+          <UserIcon aria-hidden="true" className="size-4" />
+          Project Owner
+        </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="space-y-2">
@@ -221,11 +236,7 @@ function TransferOwnerCard({
             </SelectTrigger>
             <SelectContent>
               {users?.map((user) => (
-                <SelectItem
-                  key={user.id}
-                  value={user.id}
-                  icon={<UserIcon />}
-                >
+                <SelectItem key={user.id} value={user.id} icon={<UserIcon />}>
                   {user.email}
                   {user.id === currentOwnerId ? " (current)" : ""}
                 </SelectItem>
