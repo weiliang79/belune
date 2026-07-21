@@ -76,8 +76,41 @@ func (w *Watcher) Run(ctx context.Context) {
 	}
 }
 
-// runningIndex builds lookup sets of the containers that are *actually up*,
-// keyed by application ID, database ID, and container name.
+// containerIndex sorts the host's containers into the two groups reconciliation
+// cares about: those that are demonstrably up, and those in a state that proves
+// nothing either way.
+type containerIndex struct {
+	runningApps  map[string]string // app ID → container name
+	runningDBs   map[string]bool
+	runningNames map[string]bool
+
+	// transient* hold resources whose container is neither up nor settled —
+	// mid-restart, mid-removal, or created but not yet started. Their stored
+	// status must be left alone rather than corrected from such a sample.
+	transientApps  map[string]bool
+	transientDBs   map[string]bool
+	transientNames map[string]bool
+}
+
+// isTransientState reports whether a Docker container state is a passing phase
+// rather than a settled outcome.
+//
+// This matters because containers are created with RestartPolicy
+// "unless-stopped", so a crash-looping container genuinely sits in "restarting".
+// Treating that as "not running" would flip the application to stopped — and
+// "stopped" means *deliberate* in this vocabulary, so a crash loop would read as
+// though the operator had turned it off. "created" is included because a deploy
+// briefly passes through it between creating and starting the container.
+func isTransientState(state string) bool {
+	switch state {
+	case "restarting", "removing", "created", "paused":
+		return true
+	}
+	return false
+}
+
+// buildContainerIndex sorts containers by state, keyed by application ID,
+// database ID, and container name.
 //
 // The state filter is essential. ListContainers asks Docker with All: true, so
 // it returns stopped containers as well, and a stopped container keeps every
@@ -89,25 +122,39 @@ func (w *Watcher) Run(ctx context.Context) {
 //
 // Names are indexed for databases provisioned before the database-id label
 // existed, which are recognised by container name instead.
-func runningIndex(containers []runtime.ContainerInfo) (
-	apps map[string]string, dbs map[string]bool, names map[string]bool,
-) {
-	apps = make(map[string]string) // app ID → container name
-	dbs = make(map[string]bool)
-	names = make(map[string]bool)
+func buildContainerIndex(containers []runtime.ContainerInfo) *containerIndex {
+	idx := &containerIndex{
+		runningApps:    make(map[string]string),
+		runningDBs:     make(map[string]bool),
+		runningNames:   make(map[string]bool),
+		transientApps:  make(map[string]bool),
+		transientDBs:   make(map[string]bool),
+		transientNames: make(map[string]bool),
+	}
 	for _, c := range containers {
-		if c.Status != containerStateRunning {
-			continue
-		}
-		names[c.Name] = true
-		if appID, ok := c.Labels[labelApplicationID]; ok {
-			apps[appID] = c.Name
-		}
-		if dbID, ok := c.Labels[labelDatabaseID]; ok {
-			dbs[dbID] = true
+		appID, hasApp := c.Labels[labelApplicationID]
+		dbID, hasDB := c.Labels[labelDatabaseID]
+
+		switch {
+		case c.Status == containerStateRunning:
+			idx.runningNames[c.Name] = true
+			if hasApp {
+				idx.runningApps[appID] = c.Name
+			}
+			if hasDB {
+				idx.runningDBs[dbID] = true
+			}
+		case isTransientState(c.Status):
+			idx.transientNames[c.Name] = true
+			if hasApp {
+				idx.transientApps[appID] = true
+			}
+			if hasDB {
+				idx.transientDBs[dbID] = true
+			}
 		}
 	}
-	return apps, dbs, names
+	return idx
 }
 
 // reconcile compares running containers with DB status and fixes mismatches.
@@ -122,7 +169,7 @@ func (w *Watcher) reconcile(ctx context.Context) {
 	// by container name (which equals the slug) so databases provisioned before
 	// the database-id label existed are still recognized as running and not
 	// falsely flipped to stopped.
-	runningApps, runningDBs, runningNames := runningIndex(containers)
+	idx := buildContainerIndex(containers)
 
 	// Check all applications and reconcile status
 	apps, err := w.queries.ListAllApplications(ctx)
@@ -133,9 +180,18 @@ func (w *Watcher) reconcile(ctx context.Context) {
 
 	for _, app := range apps {
 		appIDStr := pgUUIDToString(app.ID)
-		containerName, isRunning := runningApps[appIDStr]
+		containerName, isRunning := idx.runningApps[appIDStr]
 
 		if !isRunning {
+			// Mid-restart, mid-removal, or created-not-yet-started proves
+			// nothing: reconciliation samples only at startup and on event
+			// stream reconnect, so it must not turn a passing phase into a
+			// stored verdict. The start/die events settle it a moment later.
+			if idx.transientApps[appIDStr] {
+				slog.Debug("eventwatcher: skipping application in a transient container state",
+					"app_id", appIDStr, "status", app.Status)
+				continue
+			}
 			// The container is gone. Anything that implies "up" (running or
 			// unhealthy) is corrected to stopped; a deliberate stop or a
 			// recorded error is left alone.
@@ -180,7 +236,15 @@ func (w *Watcher) reconcile(ctx context.Context) {
 
 	for _, db := range dbs {
 		dbIDStr := pgUUIDToString(db.ID)
-		isRunning := runningDBs[dbIDStr] || runningNames[db.Slug]
+		isRunning := idx.runningDBs[dbIDStr] || idx.runningNames[db.Slug]
+
+		// Same reasoning as applications: a container mid-restart or mid-removal
+		// is not evidence of anything, so leave the stored status alone.
+		if !isRunning && (idx.transientDBs[dbIDStr] || idx.transientNames[db.Slug]) {
+			slog.Debug("eventwatcher: skipping database in a transient container state",
+				"database_id", dbIDStr, "status", db.Status)
+			continue
+		}
 
 		if db.Status == status.DatabaseRunning && !isRunning {
 			slog.Info("eventwatcher: reconciling stopped database", "database_id", dbIDStr)
