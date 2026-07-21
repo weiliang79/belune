@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { Folder, SlidersHorizontal } from "lucide-react";
 import { useEnvVars, useUpsertEnvVars } from "@/lib/hooks/use-envvars";
 import { useProjectEnvVars } from "@/lib/hooks/use-project-envvars";
 import { Button } from "@/components/ui/button";
@@ -147,7 +148,10 @@ function EnvVarsPage() {
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
-            <CardTitle>Environment Variables</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              <SlidersHorizontal aria-hidden="true" className="size-4" />
+              Environment Variables
+            </CardTitle>
             <div className="flex gap-2">
               <Button
                 size="sm"
@@ -226,7 +230,8 @@ function EnvVarsPage() {
       {inheritedVars.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Folder aria-hidden="true" className="size-4" />
               Inherited from Project
             </CardTitle>
             <p className="text-muted-foreground text-sm">

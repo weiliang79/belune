@@ -144,7 +144,10 @@ export function FileMountsSection({ projectId, applicationId }: Props) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>File Mounts</CardTitle>
+        <CardTitle className="flex items-center gap-2">
+          <FileTextIcon aria-hidden="true" className="size-4" />
+          File Mounts
+        </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="flex items-start justify-between gap-4">

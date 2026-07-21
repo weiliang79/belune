@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
+import { Globe } from "lucide-react";
 import { useDomains } from "@/lib/hooks/use-domains";
 import { Button } from "@/components/ui/button";
 import {
@@ -50,7 +51,10 @@ function DomainsPage() {
         <CardHeader>
           <div className="flex items-center justify-between">
             <div>
-              <CardTitle>Domains</CardTitle>
+              <CardTitle className="flex items-center gap-2">
+                <Globe aria-hidden="true" className="size-4" />
+                Domains
+              </CardTitle>
               <CardDescription>
                 Configure hostnames, TLS, and routing for this application.
               </CardDescription>

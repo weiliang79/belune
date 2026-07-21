@@ -93,7 +93,10 @@ export function VolumesSection({ projectId, applicationId }: Props) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Volumes</CardTitle>
+        <CardTitle className="flex items-center gap-2">
+          <HardDriveIcon aria-hidden="true" className="size-4" />
+          Volumes
+        </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="flex items-start justify-between gap-4">

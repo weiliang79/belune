@@ -78,7 +78,10 @@ export function VolumeBackupConfigsSection({ projectId, applicationId }: Props) 
       <CardHeader>
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <CardTitle>Backups</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              <DatabaseBackupIcon aria-hidden="true" className="size-4" />
+              Backups
+            </CardTitle>
             <CardDescription className="mt-1">
               Snapshot a volume to a project destination, on a schedule or on
               demand. A volume can back up to multiple destinations.

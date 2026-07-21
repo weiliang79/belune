@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { Activity } from "lucide-react";
 import { useApplication } from "@/lib/hooks/use-applications";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { LiveIndicator } from "@/components/ui/live-indicator";
@@ -45,7 +46,10 @@ function ApplicationMetricsPage() {
     <Card>
       <CardHeader>
         <div className="flex items-center justify-between">
-          <CardTitle>Application Metrics</CardTitle>
+          <CardTitle className="flex items-center gap-2">
+            <Activity aria-hidden="true" className="size-4" />
+            Application Metrics
+          </CardTitle>
           <LiveIndicator
             active={connected && isRunning}
             idleLabel={isRunning ? "Connecting…" : "Not running"}

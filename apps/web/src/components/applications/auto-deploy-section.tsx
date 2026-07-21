@@ -1,6 +1,6 @@
 import { useCallback, useState, type ReactNode } from "react";
 import { toast } from "sonner";
-import { Eye, RefreshCw } from "lucide-react";
+import { Eye, RefreshCw, Rocket } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import {
@@ -61,7 +61,10 @@ export function AutoDeploySection({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Auto Deploy</CardTitle>
+        <CardTitle className="flex items-center gap-2">
+          <Rocket aria-hidden="true" className="size-4" />
+          Auto Deploy
+        </CardTitle>
         <CardDescription>How this app deploys itself.</CardDescription>
       </CardHeader>
       {/* Stacked, not columns: each row expands when switched on, so side-by-side
