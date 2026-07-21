@@ -19,6 +19,10 @@ import (
 const (
 	labelApplicationID = "application-id"
 	labelDatabaseID    = "database-id"
+	// containerStateRunning is Docker's State value for a container that is
+	// actually up. ContainerInfo.Status carries State ("running", "exited",
+	// "created", "paused", …), not the human-readable "Up 5 minutes" string.
+	containerStateRunning = "running"
 )
 
 // Watcher monitors Docker container events and synchronizes application and
@@ -72,6 +76,40 @@ func (w *Watcher) Run(ctx context.Context) {
 	}
 }
 
+// runningIndex builds lookup sets of the containers that are *actually up*,
+// keyed by application ID, database ID, and container name.
+//
+// The state filter is essential. ListContainers asks Docker with All: true, so
+// it returns stopped containers as well, and a stopped container keeps every
+// label it was created with. Indexing them all made an exited container look
+// like proof its application was up: restarting the control plane left every app
+// reading "running" while nothing was serving, and a correctly-stopped app could
+// even be flipped back to running. Only containers in Docker's "running" state
+// count as evidence of a live service.
+//
+// Names are indexed for databases provisioned before the database-id label
+// existed, which are recognised by container name instead.
+func runningIndex(containers []runtime.ContainerInfo) (
+	apps map[string]string, dbs map[string]bool, names map[string]bool,
+) {
+	apps = make(map[string]string) // app ID → container name
+	dbs = make(map[string]bool)
+	names = make(map[string]bool)
+	for _, c := range containers {
+		if c.Status != containerStateRunning {
+			continue
+		}
+		names[c.Name] = true
+		if appID, ok := c.Labels[labelApplicationID]; ok {
+			apps[appID] = c.Name
+		}
+		if dbID, ok := c.Labels[labelDatabaseID]; ok {
+			dbs[dbID] = true
+		}
+	}
+	return apps, dbs, names
+}
+
 // reconcile compares running containers with DB status and fixes mismatches.
 func (w *Watcher) reconcile(ctx context.Context) {
 	containers, err := w.runtime.ListContainers(ctx)
@@ -84,18 +122,7 @@ func (w *Watcher) reconcile(ctx context.Context) {
 	// by container name (which equals the slug) so databases provisioned before
 	// the database-id label existed are still recognized as running and not
 	// falsely flipped to stopped.
-	runningApps := make(map[string]string) // app ID → container name
-	runningDBs := make(map[string]bool)
-	runningNames := make(map[string]bool)
-	for _, c := range containers {
-		runningNames[c.Name] = true
-		if appID, ok := c.Labels[labelApplicationID]; ok {
-			runningApps[appID] = c.Name
-		}
-		if dbID, ok := c.Labels[labelDatabaseID]; ok {
-			runningDBs[dbID] = true
-		}
-	}
+	runningApps, runningDBs, runningNames := runningIndex(containers)
 
 	// Check all applications and reconcile status
 	apps, err := w.queries.ListAllApplications(ctx)
