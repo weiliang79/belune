@@ -56,11 +56,19 @@ type deploy7dStats struct {
 	MedianBuildMs float64 `json:"median_build_ms"`
 }
 
+// needsAttention counts what is currently broken. The buckets are disjoint —
+// each affected service appears in exactly one — so they sum to Total and a
+// single incident is never reported as two issues.
+//
+// UnhealthyServices is separate from ErrorServices rather than folded into it:
+// an unhealthy container is up and serving, just failing its check, which is a
+// different situation (and a different urgency) from one that is not running.
 type needsAttention struct {
-	FailedDeploys int64 `json:"failed_deploys"`
-	ErrorServices int64 `json:"error_services"`
-	FailedBackups int64 `json:"failed_backups"`
-	Total         int64 `json:"total"`
+	FailedDeploys     int64 `json:"failed_deploys"`
+	ErrorServices     int64 `json:"error_services"`
+	UnhealthyServices int64 `json:"unhealthy_services"`
+	FailedBackups     int64 `json:"failed_backups"`
+	Total             int64 `json:"total"`
 }
 
 type statsResponse struct {
@@ -157,11 +165,14 @@ func (h *Handler) GetStats(w http.ResponseWriter, r *http.Request) {
 		resp.Host = &host
 	}
 
+	// Unhealthy is an application-only state; databases have no health check.
+	unhealthyServices := appH.Unhealthy
 	resp.NeedsAttention = needsAttention{
-		FailedDeploys: unresolvedDeploys,
-		ErrorServices: errorServices,
-		FailedBackups: failedBackups,
-		Total:         unresolvedDeploys + errorServices + failedBackups,
+		FailedDeploys:     unresolvedDeploys,
+		ErrorServices:     errorServices,
+		UnhealthyServices: unhealthyServices,
+		FailedBackups:     failedBackups,
+		Total:             unresolvedDeploys + errorServices + unhealthyServices + failedBackups,
 	}
 
 	writeJSON(w, http.StatusOK, resp)

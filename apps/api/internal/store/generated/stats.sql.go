@@ -150,7 +150,7 @@ FROM (
     JOIN applications a ON a.id = d.application_id
     JOIN projects p ON p.id = a.project_id
     WHERE a.parent_application_id IS NULL
-      AND a.status <> 'error'
+      AND a.status NOT IN ('error', 'unhealthy')
       AND d.status IN ('success', 'failed')
       AND ($1::uuid IS NULL OR p.user_id = $1)
     ORDER BY d.application_id, d.started_at DESC
@@ -169,9 +169,10 @@ WHERE latest.status = 'failed'
 // unfixed failure before it actually succeeds. Preview children are excluded to
 // match CountApplicationHealth — they are ephemeral and would inflate the count.
 //
-// Applications already in 'error' are excluded so this bucket is disjoint from
-// the errored-services count. A failed deploy usually also flags the
-// application errored, and counting both reported one broken app as two issues.
+// Applications already surfaced by another attention bucket ('error' and
+// 'unhealthy') are excluded so the buckets stay disjoint and sum to the headline
+// figure. A failed deploy usually also flags the application errored, and
+// counting both reported one broken app as two issues.
 // What is left here is the genuinely distinct case the deploy ordering created:
 // the previous container is still up and serving the old version, so the app is
 // not errored, but its latest deploy failed and needs looking at.

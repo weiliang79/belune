@@ -142,6 +142,13 @@ export function OperatorHealthStrip({ className }: { className?: string }) {
                   {needs_attention.error_services} errored
                 </Badge>
               )}
+              {needs_attention.unhealthy_services > 0 && (
+                // Up but failing its health check — a warning rather than a
+                // failure, so amber, matching the App health card's treatment.
+                <Badge className="border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-400">
+                  {needs_attention.unhealthy_services} unhealthy
+                </Badge>
+              )}
               {/* Both counts are "still broken now", not totals over a window:
                   one per application whose latest deploy failed, and 0-or-1 for
                   the global platform backup. Hence the singular forms. */}

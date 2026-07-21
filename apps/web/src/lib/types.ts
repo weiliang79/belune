@@ -567,7 +567,10 @@ export interface Stats {
     total: number;
     median_build_ms: number;
   };
+  // Disjoint buckets — each affected service is counted once, so they sum to
+  // total and one broken service is never reported as two issues.
   needs_attention: {
+    unhealthy_services: number;
     failed_deploys: number;
     error_services: number;
     failed_backups: number;

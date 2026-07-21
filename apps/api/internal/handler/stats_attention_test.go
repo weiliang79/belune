@@ -87,4 +87,19 @@ func TestNeedsAttention_FailedDeploysAreResolvedBySuccess(t *testing.T) {
 		"an errored app must not also be counted as a failed deploy")
 	assert.EqualValues(t, 1, na["total"],
 		"one broken application is one issue, not two")
+
+	// An unhealthy app is up but failing its check. It needs attention in its
+	// own right, and — like the errored case — must not be double counted.
+	_, err = env.Queries.UpdateApplicationStatus(ctx, generated.UpdateApplicationStatusParams{
+		ID: appUUID, Status: status.ApplicationUnhealthy,
+	})
+	require.NoError(t, err)
+
+	na = attention()
+	assert.EqualValues(t, 1, na["unhealthy_services"],
+		"an unhealthy service needs attention")
+	assert.EqualValues(t, 0, na["error_services"], "it is not errored")
+	assert.EqualValues(t, 0, na["failed_deploys"],
+		"an unhealthy app must not also be counted as a failed deploy")
+	assert.EqualValues(t, 1, na["total"], "still one issue")
 }
