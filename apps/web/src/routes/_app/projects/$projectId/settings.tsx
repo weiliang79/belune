@@ -122,7 +122,7 @@ function ProjectSettings() {
                 selector={(s) => s.isSubmitting}
                 children={(isSubmitting) => (
                   <Button type="submit" disabled={isSubmitting}>
-                    {isSubmitting ? "Saving..." : "Save Changes"}
+                    {isSubmitting ? "Saving..." : "Save"}
                   </Button>
                 )}
               />
@@ -169,8 +169,11 @@ function ProjectSettings() {
                 size="sm"
                 variant="destructive-solid"
                 onClick={() => setDeleteOpen(true)}
+                // "Delete" alone is ambiguous out of context, and this is the
+                // most destructive control in the product.
+                aria-label="Delete project"
               >
-                Delete Project
+                Delete
               </Button>
             </div>
           </div>
@@ -253,10 +256,11 @@ function TransferOwnerCard({
             disabled={
               selectedUserId === currentOwnerId || transferProject.isPending
             }
+            // The visible label is just "Transfer"; the card title supplies the
+            // context visually but not to a screen reader reaching the button.
+            aria-label="Transfer project ownership"
           >
-            {transferProject.isPending
-              ? "Transferring..."
-              : "Transfer Ownership"}
+            {transferProject.isPending ? "Transferring..." : "Transfer"}
           </Button>
         </div>
       </CardContent>

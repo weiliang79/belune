@@ -110,7 +110,10 @@ function ApplicationSettingsPage() {
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
-                  <Trash2 aria-hidden="true" className="text-destructive size-4" />
+                  <Trash2
+                    aria-hidden="true"
+                    className="text-destructive size-4"
+                  />
                   <p className="text-sm font-medium">Delete Application</p>
                 </div>
                 <p className="text-muted-foreground mt-1 text-xs">
@@ -122,8 +125,10 @@ function ApplicationSettingsPage() {
                 size="sm"
                 variant="destructive-solid"
                 onClick={() => setDeleteOpen(true)}
+                // "Delete" alone is ambiguous out of context.
+                aria-label="Delete application"
               >
-                Delete Application
+                Delete
               </Button>
             </div>
           </div>
