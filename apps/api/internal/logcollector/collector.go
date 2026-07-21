@@ -322,13 +322,23 @@ func (c *Collector) watchContainer(ctx context.Context, ctr runtime.ContainerInf
 	// server (or a brand-new container) doesn't drop early log lines.
 	// Zero time = fetch from the beginning of the container's log buffer.
 	var since time.Time
-	latest, err := c.queries.GetLatestContainerLogTime(ctx, generated.GetLatestContainerLogTimeParams{
-		SourceType: src.typ,
-		SourceID:   srcUUID,
-	})
-	if err == nil && latest.Valid {
-		// Add 1ns so we don't re-ingest the exact line we already stored.
-		since = latest.Time.Add(time.Nanosecond)
+	if src.typ == sourceSystem {
+		// System containers are not stored, so there is no recorded position to
+		// resume from and the lookup below would eventually return nothing and
+		// replay the whole buffer. Their lines exist only to feed the line hook,
+		// which records per-domain TLS status — replaying historical ACME
+		// failures would re-record them against domains that have since issued
+		// successfully. Take live lines only; Caddy re-emits on its next attempt.
+		since = time.Now()
+	} else {
+		latest, err := c.queries.GetLatestContainerLogTime(ctx, generated.GetLatestContainerLogTimeParams{
+			SourceType: src.typ,
+			SourceID:   srcUUID,
+		})
+		if err == nil && latest.Valid {
+			// Add 1ns so we don't re-ingest the exact line we already stored.
+			since = latest.Time.Add(time.Nanosecond)
+		}
 	}
 
 	slog.Info("log collector: attaching to container",
@@ -359,6 +369,15 @@ func (c *Collector) watchContainer(ctx context.Context, ctr runtime.ContainerInf
 	appendLine := func(line logLine) {
 		if c.lineHook != nil {
 			c.lineHook(ctx, src.typ, src.name, line.message)
+		}
+		// System containers are watched but not stored. Caddy alone accounted
+		// for 94% of container_logs and nothing ever read it back — the rows
+		// existed for no consumer. What Caddy's log is actually needed for is
+		// the TLS status pipeline, and that reads the line above, before this
+		// point, so it is unaffected. Anything that needs to *display* proxy
+		// logs reads them live from Docker, as the Maintenance panel does.
+		if src.typ == sourceSystem {
+			return
 		}
 		// The bulk insert takes plain values, so the timestamp is resolved here
 		// rather than by a COALESCE at insert time: Docker's own timestamp for

@@ -304,21 +304,42 @@ func TestCollector_WatchesTheCaddyProxy(t *testing.T) {
 	rdb := startMiniredis(t)
 	c := logcollector.New(rt, testQueries, rdb)
 
+	// The proxy is watched for the line hook — that is what carries the reason a
+	// certificate failed to issue — but its lines are deliberately not stored:
+	// Caddy alone was 94% of container_logs with no reader.
+	var mu sync.Mutex
+	var hooked []string
+	c.SetLineHook(func(_ context.Context, srcType, name, message string) {
+		mu.Lock()
+		defer mu.Unlock()
+		if srcType == "system" && name == logcollector.SystemCaddy {
+			hooked = append(hooked, message)
+		}
+	})
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go c.Run(ctx)
 
+	assert.Eventually(t, func() bool {
+		mu.Lock()
+		defer mu.Unlock()
+		return len(hooked) >= 1
+	}, 5*time.Second, 50*time.Millisecond, "collector never attached to the Caddy proxy")
+
+	mu.Lock()
+	assert.Contains(t, hooked[0], "could not get certificate from issuer",
+		"the TLS pipeline must still see the certificate failure reason")
+	mu.Unlock()
+
+	// …and nothing was persisted for it.
 	var caddyID pgtype.UUID
 	require.NoError(t, caddyID.Scan(logcollector.CaddySourceID))
-
-	searchParams := generated.SearchContainerLogsParams{
+	logs, err := testQueries.SearchContainerLogs(context.Background(), generated.SearchContainerLogsParams{
 		SourceType: "system",
 		SourceID:   caddyID,
 		Limit:      10,
-		Offset:     0,
-	}
-	assert.Eventually(t, func() bool {
-		logs, err := testQueries.SearchContainerLogs(context.Background(), searchParams)
-		return err == nil && len(logs) >= 1
-	}, 5*time.Second, 50*time.Millisecond, "collector never attached to the Caddy proxy")
+	})
+	require.NoError(t, err)
+	assert.Empty(t, logs, "system container logs must not be stored")
 }
