@@ -28,13 +28,30 @@ func NewPublisher(rdb *redis.Client, deploymentID string) *Publisher {
 	}
 }
 
-// Publish sends a single log line to the channel.
+// enabled reports whether there is anywhere to publish to. Streaming build logs
+// live is best-effort telemetry layered on top of the deploy — the durable copy
+// is written to deployments.build_logs regardless — so a missing Redis client
+// must degrade to silence rather than take down the deploy that is producing
+// the logs. Before this, a nil client panicked inside the build/pull path and
+// killed the whole task.
+func (p *Publisher) enabled() bool {
+	return p != nil && p.rdb != nil
+}
+
+// Publish sends a single log line to the channel. No-op when disabled.
 func (p *Publisher) Publish(ctx context.Context, line string) error {
+	if !p.enabled() {
+		return nil
+	}
 	return p.rdb.Publish(ctx, p.channel, line).Err()
 }
 
-// Close publishes the done sentinel to signal end of stream.
+// Close publishes the done sentinel to signal end of stream. No-op when
+// disabled — with nothing subscribed there is no stream to terminate.
 func (p *Publisher) Close(ctx context.Context) error {
+	if !p.enabled() {
+		return nil
+	}
 	return p.rdb.Publish(ctx, p.channel, DoneSentinel).Err()
 }
 
