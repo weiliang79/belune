@@ -4,7 +4,7 @@ import { useAuthStore } from "@/lib/stores/auth";
 import { useForm } from "@tanstack/react-form";
 import { z } from "zod";
 import type { ColumnDef } from "@tanstack/react-table";
-import { Lock, Trash2 } from "lucide-react";
+import { Globe, Lock, Trash2 } from "lucide-react";
 import { RouteError } from "@/lib/components/route-error";
 import {
   useCertificates,
@@ -125,7 +125,11 @@ function CertificatesContent() {
           return (
             <div className="flex flex-wrap items-center gap-1">
               {shown.map((s) => (
-                <Badge key={s} variant="secondary" className="font-mono text-xs">
+                <Badge
+                  key={s}
+                  variant="secondary"
+                  className="font-mono text-xs"
+                >
                   {s}
                 </Badge>
               ))}
@@ -212,7 +216,10 @@ function CertificatesContent() {
 
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
-          <CardTitle>Uploaded Certificates</CardTitle>
+          <CardTitle className="flex items-center gap-2">
+            <Lock aria-hidden="true" className="size-4" />
+            Uploaded Certificates
+          </CardTitle>
           <Button size="sm" onClick={() => setUploadOpen(true)}>
             Upload Certificate
           </Button>
@@ -248,16 +255,12 @@ function CertificatesContent() {
 
 const uploadSchema = z.object({
   name: z.string().min(1, "Name is required"),
-  cert_pem: z
-    .string()
-    .includes("BEGIN CERTIFICATE", {
-      message: "Expected a PEM block starting with -----BEGIN CERTIFICATE-----",
-    }),
-  key_pem: z
-    .string()
-    .includes("PRIVATE KEY", {
-      message: "Expected a PEM block containing -----BEGIN PRIVATE KEY-----",
-    }),
+  cert_pem: z.string().includes("BEGIN CERTIFICATE", {
+    message: "Expected a PEM block starting with -----BEGIN CERTIFICATE-----",
+  }),
+  key_pem: z.string().includes("PRIVATE KEY", {
+    message: "Expected a PEM block containing -----BEGIN PRIVATE KEY-----",
+  }),
 });
 
 function UploadCertificateDialog({
@@ -555,7 +558,10 @@ function DomainTLSTable() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Domain TLS</CardTitle>
+        <CardTitle className="flex items-center gap-2">
+          <Globe aria-hidden="true" className="size-4" />
+          Domain TLS
+        </CardTitle>
       </CardHeader>
       <CardContent>
         <DataTable
@@ -564,7 +570,9 @@ function DomainTLSTable() {
           isLoading={isLoading}
           getRowId={(d) => d.id}
           enableSorting
-          renderDetailPanel={({ row }) => <DomainTLSDetail domain={row.original} />}
+          renderDetailPanel={({ row }) => (
+            <DomainTLSDetail domain={row.original} />
+          )}
           emptyMessage="No domains configured yet."
         />
       </CardContent>

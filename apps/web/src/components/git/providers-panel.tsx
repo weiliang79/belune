@@ -1,6 +1,13 @@
 import { useState } from "react";
 import { toast } from "sonner";
-import { Trash2, ExternalLink, Plus, Lock, Users } from "lucide-react";
+import {
+  Trash2,
+  ExternalLink,
+  Plus,
+  Lock,
+  Users,
+  KeyRoundIcon,
+} from "lucide-react";
 import {
   useGitProviderConfigs,
   useDeleteGitProviderConfig,
@@ -44,7 +51,10 @@ export function ProvidersPanel() {
       <Card>
         <CardHeader className="flex flex-row items-start justify-between">
           <div className="space-y-1">
-            <CardTitle>Configured Providers</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              <KeyRoundIcon aria-hidden="true" className="size-4" />
+              Configured Providers
+            </CardTitle>
             <CardDescription>
               Provider apps that let users connect their git accounts.
             </CardDescription>
@@ -72,7 +82,9 @@ export function ProvidersPanel() {
                         provider={c.provider}
                         className="text-foreground size-4"
                       />
-                      <span className="font-medium capitalize">{c.provider}</span>
+                      <span className="font-medium capitalize">
+                        {c.provider}
+                      </span>
                       {c.has_secret ? (
                         <Badge variant="secondary">Configured</Badge>
                       ) : (
@@ -144,8 +156,9 @@ export function ProvidersPanel() {
                           </AlertDialogTitle>
                           <AlertDialogDescription>
                             This deletes the {c.provider} provider configuration
-                            {c.base_url ? ` (${c.base_url})` : ""}. Users will no
-                            longer be able to connect new accounts through it.
+                            {c.base_url ? ` (${c.base_url})` : ""}. Users will
+                            no longer be able to connect new accounts through
+                            it.
                           </AlertDialogDescription>
                         </AlertDialogHeader>
                         <AlertDialogFooter>

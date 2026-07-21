@@ -1,4 +1,4 @@
-import { Plug, Trash2 } from "lucide-react";
+import { GitBranch, LinkIcon, Plug, Trash2 } from "lucide-react";
 import {
   useGitIntegrations,
   useAvailableProviders,
@@ -52,7 +52,10 @@ export function ConnectionsPanel() {
     <div className="space-y-6">
       <Card>
         <CardHeader>
-          <CardTitle>Connect an account</CardTitle>
+          <CardTitle className="flex items-center gap-2">
+            <LinkIcon aria-hidden="true" className="size-4" />
+            Connect an account
+          </CardTitle>
           <CardDescription>
             Link a git account to browse and deploy its repositories.
           </CardDescription>
@@ -108,7 +111,10 @@ export function ConnectionsPanel() {
 
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
-          <CardTitle>Your connections</CardTitle>
+          <CardTitle className="flex items-center gap-2">
+            <GitBranch aria-hidden="true" className="size-4" />
+            Your connections
+          </CardTitle>
           {integrations && integrations.length > 0 && (
             <Badge variant="secondary">{integrations.length}</Badge>
           )}
@@ -136,7 +142,10 @@ export function ConnectionsPanel() {
                       <td className="px-2 py-3">
                         <span className="flex items-center gap-2 font-medium">
                           <span className="bg-muted text-foreground grid size-6 shrink-0 place-items-center rounded">
-                            <ProviderIcon provider={i.provider} className="size-3.5" />
+                            <ProviderIcon
+                              provider={i.provider}
+                              className="size-3.5"
+                            />
                           </span>
                           {PROVIDER_LABELS[i.provider] ?? i.provider}
                         </span>
@@ -145,7 +154,9 @@ export function ConnectionsPanel() {
                         <code className="text-xs">{i.account_login}</code>
                       </td>
                       <td className="text-muted-foreground px-2 py-3 text-xs">
-                        {i.base_url ? i.base_url.replace(/^https?:\/\//, "") : "—"}
+                        {i.base_url
+                          ? i.base_url.replace(/^https?:\/\//, "")
+                          : "—"}
                       </td>
                       <td className="text-muted-foreground px-2 py-3 text-xs">
                         {formatRelativeTime(i.created_at)}

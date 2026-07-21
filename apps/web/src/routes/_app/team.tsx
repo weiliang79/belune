@@ -13,14 +13,24 @@ import {
   useDeleteUser,
   useResetUserPassword,
 } from "@/lib/hooks/use-users";
-import { useInvitations, useInviteUser, useRevokeInvitation } from "@/lib/hooks/use-invitations";
+import {
+  useInvitations,
+  useInviteUser,
+  useRevokeInvitation,
+} from "@/lib/hooks/use-invitations";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page-header";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { ShieldIcon, UserIcon, SearchIcon, UsersIcon } from "lucide-react";
+import {
+  ShieldIcon,
+  UserIcon,
+  SearchIcon,
+  UsersIcon,
+  MailIcon,
+} from "lucide-react";
 import { initialsOf } from "@/lib/utils/initials";
 import { formatDateTime } from "@/lib/utils/format";
 import type { User, Invitation } from "@/lib/types";
@@ -55,7 +65,12 @@ export const Route = createFileRoute("/_app/team")({
   errorComponent: RouteError,
 });
 
-function displayName(user: { first_name?: string; last_name?: string; username?: string; email: string }) {
+function displayName(user: {
+  first_name?: string;
+  last_name?: string;
+  username?: string;
+  email: string;
+}) {
   const full = `${user.first_name ?? ""} ${user.last_name ?? ""}`.trim();
   return full || user.username || user.email.split("@")[0];
 }
@@ -102,7 +117,10 @@ function TeamSettingsPage() {
                 <div className="flex items-center gap-1.5">
                   <span className="truncate font-medium">{name}</span>
                   {user.id === selfId && (
-                    <Badge variant="outline" className="px-1.5 py-0 text-[10px]">
+                    <Badge
+                      variant="outline"
+                      className="px-1.5 py-0 text-[10px]"
+                    >
                       you
                     </Badge>
                   )}
@@ -159,7 +177,9 @@ function TeamSettingsPage() {
               <Button
                 variant="destructive"
                 size="sm"
-                onClick={() => setDeleteUser({ id: user.id, email: user.email })}
+                onClick={() =>
+                  setDeleteUser({ id: user.id, email: user.email })
+                }
               >
                 Delete
               </Button>
@@ -189,7 +209,10 @@ function TeamSettingsPage() {
 
       <Card>
         <CardHeader className="flex flex-row items-center justify-between gap-3">
-          <CardTitle>Active members</CardTitle>
+          <CardTitle className="flex items-center gap-2">
+            <UsersIcon aria-hidden="true" className="size-4" />
+            Active members
+          </CardTitle>
           <div className="flex items-center gap-2">
             <div className="relative hidden sm:block">
               <SearchIcon
@@ -204,7 +227,11 @@ function TeamSettingsPage() {
                 className="w-56 pl-9"
               />
             </div>
-            <Button size="sm" variant="outline" onClick={() => setInviteOpen(true)}>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setInviteOpen(true)}
+            >
               Invite by Email
             </Button>
             <Button size="sm" onClick={() => setCreateOpen(true)}>
@@ -222,7 +249,9 @@ function TeamSettingsPage() {
             globalFilter={search}
             onGlobalFilterChange={setSearch}
             emptyMessage={
-              search.trim() ? "No members match your search." : "No members yet."
+              search.trim()
+                ? "No members match your search."
+                : "No members yet."
             }
           />
         </CardContent>
@@ -489,9 +518,7 @@ function ResetPasswordDialog({
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Reset Password</DialogTitle>
-          <DialogDescription>
-            Set a new password for {email}.
-          </DialogDescription>
+          <DialogDescription>Set a new password for {email}.</DialogDescription>
         </DialogHeader>
         <form
           onSubmit={(e) => {
@@ -656,7 +683,10 @@ function PendingInvitationsCard() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Pending Invitations</CardTitle>
+        <CardTitle className="flex items-center gap-2">
+          <MailIcon aria-hidden="true" className="size-4" />
+          Pending Invitations
+        </CardTitle>
       </CardHeader>
       <CardContent>
         <DataTable
@@ -748,7 +778,9 @@ function InviteUserDialog({
                 <div className="flex gap-2">
                   <Button
                     type="button"
-                    variant={field.state.value === "member" ? "default" : "outline"}
+                    variant={
+                      field.state.value === "member" ? "default" : "outline"
+                    }
                     size="sm"
                     onClick={() => field.handleChange("member")}
                   >
@@ -756,7 +788,9 @@ function InviteUserDialog({
                   </Button>
                   <Button
                     type="button"
-                    variant={field.state.value === "admin" ? "default" : "outline"}
+                    variant={
+                      field.state.value === "admin" ? "default" : "outline"
+                    }
                     size="sm"
                     onClick={() => field.handleChange("admin")}
                   >

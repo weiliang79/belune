@@ -216,7 +216,10 @@ function QuotasPage() {
 
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
-          <CardTitle>Configured Quotas</CardTitle>
+          <CardTitle className="flex items-center gap-2">
+            <GaugeIcon aria-hidden="true" className="size-4" />
+            Configured Quotas
+          </CardTitle>
           <Button size="sm" onClick={() => setCreateOpen(true)}>
             Set Quota
           </Button>

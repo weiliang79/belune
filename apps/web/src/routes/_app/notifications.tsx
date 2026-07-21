@@ -213,7 +213,10 @@ function NotificationsContent() {
 
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
-          <CardTitle>Channels</CardTitle>
+          <CardTitle className="flex items-center gap-2">
+            <BellRing aria-hidden="true" className="size-4" />
+            Channels
+          </CardTitle>
           <Button size="sm" onClick={openCreate}>
             Add Channel
           </Button>

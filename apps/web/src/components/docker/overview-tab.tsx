@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { HardDriveIcon, ServerIcon } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useDockerOverview } from "@/lib/hooks/use-docker";
@@ -35,12 +36,19 @@ export function DockerOverviewTab({ enabled }: { enabled: boolean }) {
         />
         <CountCard title="Images" value={counts.images} />
         <CountCard title="Volumes" value={du ? counts.volumes : null} />
-        <CountCard title="CPUs" value={info.ncpu} subtitle={formatBytes(info.mem_total) + " RAM"} />
+        <CountCard
+          title="CPUs"
+          value={info.ncpu}
+          subtitle={formatBytes(info.mem_total) + " RAM"}
+        />
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle>Daemon</CardTitle>
+          <CardTitle className="flex items-center gap-2">
+            <ServerIcon aria-hidden="true" className="size-4" />
+            Daemon
+          </CardTitle>
         </CardHeader>
         <CardContent className="grid grid-cols-1 gap-x-8 gap-y-3 sm:grid-cols-2">
           <InfoRow label="Docker version" value={info.server_version || "—"} />
@@ -59,7 +67,10 @@ export function DockerOverviewTab({ enabled }: { enabled: boolean }) {
 
       <Card>
         <CardHeader>
-          <CardTitle>Disk usage</CardTitle>
+          <CardTitle className="flex items-center gap-2">
+            <HardDriveIcon aria-hidden="true" className="size-4" />
+            Disk usage
+          </CardTitle>
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto">
@@ -82,10 +93,13 @@ export function DockerOverviewTab({ enabled }: { enabled: boolean }) {
                   </>
                 ) : (
                   <tr>
-                    <td colSpan={4} className="text-muted-foreground py-4 text-center text-xs">
-                      Still measuring — `docker system df` walks every image, container
-                      and volume, which can take a while on a small host. It will appear
-                      here shortly.
+                    <td
+                      colSpan={4}
+                      className="text-muted-foreground py-4 text-center text-xs"
+                    >
+                      Still measuring — `docker system df` walks every image,
+                      container and volume, which can take a while on a small
+                      host. It will appear here shortly.
                     </td>
                   </tr>
                 )}
@@ -93,8 +107,9 @@ export function DockerOverviewTab({ enabled }: { enabled: boolean }) {
             </table>
           </div>
           <p className="text-muted-foreground mt-3 text-xs">
-            Reclaimable space can be freed with the platform cleanup on the Server
-            page (dangling images and unreferenced non-data volumes only).
+            Reclaimable space can be freed with the platform cleanup on the
+            Server page (dangling images and unreferenced non-data volumes
+            only).
           </p>
         </CardContent>
       </Card>
@@ -137,14 +152,22 @@ function InfoRow({
   return (
     <div className="flex items-center justify-between gap-4 border-b py-1 last:border-b-0 sm:border-b-0">
       <span className="text-muted-foreground text-sm">{label}</span>
-      <span className={mono ? "truncate font-mono text-xs" : "truncate text-sm"}>
+      <span
+        className={mono ? "truncate font-mono text-xs" : "truncate text-sm"}
+      >
         {value}
       </span>
     </div>
   );
 }
 
-function UsageRow({ label, entry }: { label: string; entry: DockerDiskUsageEntry }) {
+function UsageRow({
+  label,
+  entry,
+}: {
+  label: string;
+  entry: DockerDiskUsageEntry;
+}) {
   return (
     <tr>
       <td className="py-2">{label}</td>

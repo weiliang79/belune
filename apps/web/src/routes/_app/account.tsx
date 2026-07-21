@@ -1,7 +1,16 @@
 import { useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useTheme } from "next-themes";
-import { CircleUserIcon, MonitorIcon, MoonIcon, SunIcon } from "lucide-react";
+import {
+  BellRingIcon,
+  CircleUserIcon,
+  KeyRoundIcon,
+  MonitorIcon,
+  MoonIcon,
+  PaletteIcon,
+  SunIcon,
+  UserIcon,
+} from "lucide-react";
 import { RouteError } from "@/lib/components/route-error";
 import { toast } from "sonner";
 import { useAuthStore } from "@/lib/stores/auth";
@@ -41,7 +50,10 @@ function SettingsPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Account</CardTitle>
+          <CardTitle className="flex items-center gap-2">
+            <CircleUserIcon aria-hidden="true" className="size-4" />
+            Account
+          </CardTitle>
           <p className="text-muted-foreground text-sm">
             Your identity on this platform. Contact an admin to change your
             email.
@@ -108,7 +120,10 @@ function ProfileCard() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Profile</CardTitle>
+        <CardTitle className="flex items-center gap-2">
+          <UserIcon aria-hidden="true" className="size-4" />
+          Profile
+        </CardTitle>
         <p className="text-muted-foreground text-sm">
           Your public display name on this platform.
         </p>
@@ -197,7 +212,10 @@ function ChangePasswordCard() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Change Password</CardTitle>
+        <CardTitle className="flex items-center gap-2">
+          <KeyRoundIcon aria-hidden="true" className="size-4" />
+          Change Password
+        </CardTitle>
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -283,7 +301,10 @@ function AlertPreferencesCard() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Alert Preferences</CardTitle>
+        <CardTitle className="flex items-center gap-2">
+          <BellRingIcon aria-hidden="true" className="size-4" />
+          Alert Preferences
+        </CardTitle>
       </CardHeader>
       <CardContent>
         {isLoading ? (
@@ -377,12 +398,19 @@ function AppearanceCard() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Appearance</CardTitle>
+        <CardTitle className="flex items-center gap-2">
+          <PaletteIcon aria-hidden="true" className="size-4" />
+          Appearance
+        </CardTitle>
       </CardHeader>
       <CardContent className="space-y-5">
         <div className="space-y-2">
           <Label>Theme</Label>
-          <SegmentedControl fullWidth value={theme ?? ""} onValueChange={setTheme}>
+          <SegmentedControl
+            fullWidth
+            value={theme ?? ""}
+            onValueChange={setTheme}
+          >
             {themes.map(({ value, label, Icon }) => (
               <SegmentedControlItem key={value} value={value}>
                 <Icon aria-hidden="true" className="size-4" />
