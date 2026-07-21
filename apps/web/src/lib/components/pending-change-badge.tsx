@@ -21,9 +21,18 @@ import type { Application } from "@/lib/types";
 export function PendingChangeBadge({
   app,
   className,
+  pulse = true,
 }: {
   app: Application;
   className?: string;
+  /**
+   * Whether the dot pulses. Defaults to true, which suits a form section where
+   * the badge stands alone. Set false anywhere the badge sits beside a
+   * StatusPill: a pulsing amber dot is that component's established signal for a
+   * *transient* state (building/deploying), so pulsing here would make a
+   * standing "config has drifted" notice read as work in progress.
+   */
+  pulse?: boolean;
 }) {
   if (!app.pending_change) return null;
 
@@ -44,7 +53,15 @@ export function PendingChangeBadge({
           : `Configuration changed${since ? ` ${since}` : ""}. Reload recreates the container from the current image, which is enough to apply it.`
       }
     >
-      {isSource ? "Deploy to apply" : "Reload to apply"}
+      {/* Pulsing dot: signals this is a live, outstanding state rather than a
+          static label — it keeps drawing the eye until the change is applied. */}
+      <span aria-hidden="true" className="relative flex size-1.5">
+        {pulse && (
+          <span className="absolute inline-flex size-full animate-ping rounded-full bg-amber-500 opacity-75" />
+        )}
+        <span className="relative inline-flex size-1.5 rounded-full bg-amber-500" />
+      </span>
+      {isSource ? "Redeploy Needed" : "Reload Needed"}
     </Badge>
   );
 }

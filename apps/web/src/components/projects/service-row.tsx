@@ -40,6 +40,7 @@ import { queryKeys } from "@/lib/hooks/query-keys";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { StatusPill } from "@/components/ui/status-pill";
+import { PendingChangeBadge } from "@/lib/components/pending-change-badge";
 import { formatUptime } from "@/lib/utils/format";
 import {
   AlertDialog,
@@ -479,8 +480,19 @@ function StatusCell({
 }) {
   const running = RUNNING.has(item.data.status.toLowerCase());
   return (
-    <div className="flex flex-col items-start gap-0.5">
-      <StatusPill status={item.data.status} />
+    <div className="flex flex-col items-start gap-1">
+      {/* The pill says what the container is doing; the pending badge says the
+          saved config has drifted from it. They are different facts, so they sit
+          side by side rather than one replacing the other. Deliberately not
+          flex-wrap: the column is sized to min-content (w-px), and a wrapping
+          row's min-content is its widest child, which would stack the two.
+          Databases have no deploy/reload cycle, hence apps only. */}
+      <div className="flex items-center gap-1.5">
+        <StatusPill status={item.data.status} />
+        {item.kind === "application" ? (
+          <PendingChangeBadge app={item.data} pulse={false} />
+        ) : null}
+      </div>
       {running && metrics?.uptime_seconds ? (
         <span className="text-text-faint text-xs">
           Up {formatUptime(metrics.uptime_seconds)}
@@ -533,6 +545,10 @@ function buildColumns(
     {
       id: "status",
       header: "Status",
+      // w-px collapses the column to its min-content width in an auto-layout
+      // table, so Status takes only the room its pills need instead of an equal
+      // share; the freed space goes to the name/endpoint columns.
+      meta: { className: "w-px", headerClassName: "w-px" },
       cell: ({ row }) => (
         <StatusCell item={row.original} metrics={metricsFor(row.original)} />
       ),
