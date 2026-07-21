@@ -93,8 +93,11 @@ function AutoDeployValue({ app }: { app: Application }) {
 
   if (active.length === 0) {
     return (
+      // Deployments, not Settings: the Auto Deploy card lives on the
+      // Deployments tab, so pointing at Settings dropped the reader on a page
+      // that has no auto-deploy control at all.
       <Link
-        to="/projects/$projectId/applications/$applicationId/settings"
+        to="/projects/$projectId/applications/$applicationId/deployments"
         params={{ projectId: app.project_id, applicationId: app.id }}
         className="text-muted-foreground hover:text-foreground underline"
       >
