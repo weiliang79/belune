@@ -896,10 +896,17 @@ function HostMetricCard({
         </span>
       }
     >
-      <p className="mt-1 font-mono text-2xl font-semibold">{value}</p>
-      {subline && (
-        <p className="text-text-faint mt-0.5 font-mono text-xs">{subline}</p>
-      )}
+      {/* Baseline row, not a second line: as its own <p> the subline made the
+          card one line taller than its neighbours, so Memory never lined up
+          with CPU and Disk. Still visibly secondary — subdued, small, and
+          labelled — because RAM and swap are two separate figures and must
+          never read as one summed number. */}
+      <div className="mt-1 flex items-baseline gap-2">
+        <p className="font-mono text-2xl font-semibold">{value}</p>
+        {subline && (
+          <span className="text-text-faint font-mono text-xs">{subline}</span>
+        )}
+      </div>
       <Sparkline className="mt-2" height={36} values={values} color={color} />
     </MetricCard>
   );
