@@ -1,14 +1,19 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import {
+  Activity,
   Archive,
   CalendarIcon,
   ClockIcon,
+  ContainerIcon,
   CpuIcon,
   HardDriveIcon,
   LayoutDashboard,
+  MailIcon,
   MemoryStickIcon,
+  PowerIcon,
   ServerIcon,
   Settings,
+  WrenchIcon,
 } from "lucide-react";
 import { RouteError } from "@/lib/components/route-error";
 import { PageTabs, type PageTab } from "@/components/ui/page-tabs";
@@ -102,7 +107,8 @@ function pct(part: number | null, total: number | null) {
 
 /** nominal < 75% · elevated 75–90% · critical ≥ 90%. */
 function loadStatus(percent: number) {
-  if (percent >= 90) return { label: "critical", className: "text-status-error" };
+  if (percent >= 90)
+    return { label: "critical", className: "text-status-error" };
   if (percent >= 75)
     return { label: "elevated", className: "text-status-building" };
   return { label: "nominal", className: "text-status-ready" };
@@ -241,13 +247,17 @@ function ServerSettingsPage() {
 
   const currentInstanceName =
     settings?.find((s) => s.key === "instance_name")?.value ?? "";
-  const [instanceNameDraft, setInstanceNameDraft] = useState<string | null>(null);
+  const [instanceNameDraft, setInstanceNameDraft] = useState<string | null>(
+    null,
+  );
   const instanceNameValue = instanceNameDraft ?? currentInstanceName;
 
   const handleSaveInstanceName = () => {
     toast.promise(
       updateSettings
-        .mutateAsync([{ key: "instance_name", value: instanceNameValue.trim() }])
+        .mutateAsync([
+          { key: "instance_name", value: instanceNameValue.trim() },
+        ])
         .then(() => setInstanceNameDraft(null)),
       {
         loading: "Saving...",
@@ -314,7 +324,10 @@ function ServerSettingsPage() {
         <div className="space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle>Instance</CardTitle>
+              <CardTitle className="flex items-center gap-2">
+                <ServerIcon aria-hidden="true" className="size-4" />
+                Instance
+              </CardTitle>
             </CardHeader>
             <CardContent className="space-y-2">
               <Label htmlFor="instance-name">Instance name</Label>
@@ -336,8 +349,8 @@ function ServerSettingsPage() {
                 </Button>
               </div>
               <p className="text-muted-foreground text-xs">
-                Shown in the sidebar and used as the default GitHub App name when
-                connecting a provider.
+                Shown in the sidebar and used as the default GitHub App name
+                when connecting a provider.
               </p>
 
               <Label htmlFor="server-ip" className="pt-2">
@@ -361,9 +374,9 @@ function ServerSettingsPage() {
                 </Button>
               </div>
               <p className="text-muted-foreground text-xs">
-                The public address domains must point at for a certificate. Leave
-                blank to auto-detect; set it explicitly when the box is behind
-                NAT.
+                The public address domains must point at for a certificate.
+                Leave blank to auto-detect; set it explicitly when the box is
+                behind NAT.
               </p>
 
               <div className="border-t pt-4">
@@ -374,7 +387,10 @@ function ServerSettingsPage() {
 
           <Card>
             <CardHeader>
-              <CardTitle>Metrics Retention</CardTitle>
+              <CardTitle className="flex items-center gap-2">
+                <ClockIcon aria-hidden="true" className="size-4" />
+                Metrics Retention
+              </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <RetentionRow
@@ -400,15 +416,18 @@ function ServerSettingsPage() {
                 />
               ))}
               <p className="text-muted-foreground border-t pt-3 text-xs">
-                Host metrics are stored at 1-second granularity and pruned hourly
-                to the selected window. Logs are pruned daily.
+                Host metrics are stored at 1-second granularity and pruned
+                hourly to the selected window. Logs are pruned daily.
               </p>
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader>
-              <CardTitle>Email (SMTP)</CardTitle>
+              <CardTitle className="flex items-center gap-2">
+                <MailIcon aria-hidden="true" className="size-4" />
+                Email (SMTP)
+              </CardTitle>
             </CardHeader>
             <CardContent>
               <SmtpSection />
@@ -417,7 +436,10 @@ function ServerSettingsPage() {
 
           <Card>
             <CardHeader>
-              <CardTitle>Maintenance</CardTitle>
+              <CardTitle className="flex items-center gap-2">
+                <WrenchIcon aria-hidden="true" className="size-4" />
+                Maintenance
+              </CardTitle>
             </CardHeader>
             <CardContent>
               <MaintenanceSection />
@@ -442,7 +464,10 @@ function ServerSettingsPage() {
           <Card>
             <CardHeader>
               <div className="flex flex-wrap items-center justify-between gap-3">
-                <CardTitle>Host Metrics</CardTitle>
+                <CardTitle className="flex items-center gap-2">
+                  <Activity aria-hidden="true" className="size-4" />
+                  Host Metrics
+                </CardTitle>
                 <div className="flex items-center gap-2">
                   {/* The time filter only applies to Detail; Overview stays live. */}
                   {hostView === "detail" && (
@@ -531,7 +556,9 @@ function ServerSettingsPage() {
                     formatter={(v: number) => formatBytes(v)}
                     domain={[
                       0,
-                      Math.max(...detailMetrics.map((m) => m.memory_total ?? 0)),
+                      Math.max(
+                        ...detailMetrics.map((m) => m.memory_total ?? 0),
+                      ),
                     ]}
                   />
                   {detailMetrics.some((m) => (m.swap_total ?? 0) > 0) && (
@@ -544,7 +571,9 @@ function ServerSettingsPage() {
                       formatter={(v: number) => formatBytes(v)}
                       domain={[
                         0,
-                        Math.max(...detailMetrics.map((m) => m.swap_total ?? 0)),
+                        Math.max(
+                          ...detailMetrics.map((m) => m.swap_total ?? 0),
+                        ),
                       ]}
                     />
                   )}
@@ -585,7 +614,10 @@ function ServerSettingsPage() {
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <Card>
               <CardHeader>
-                <CardTitle>Containers</CardTitle>
+                <CardTitle className="flex items-center gap-2">
+                  <ContainerIcon aria-hidden="true" className="size-4" />
+                  Containers
+                </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="flex items-center gap-4">
@@ -635,7 +667,10 @@ function ServerSettingsPage() {
             <Card>
               <CardHeader>
                 <div className="flex items-center justify-between">
-                  <CardTitle>Services</CardTitle>
+                  <CardTitle className="flex items-center gap-2">
+                    <PowerIcon aria-hidden="true" className="size-4" />
+                    Services
+                  </CardTitle>
                   {services && (
                     <Badge
                       variant={
@@ -717,7 +752,9 @@ function HostRangeControl({
   const handleOpenChange = (next: boolean) => {
     if (next) {
       const now = new Date();
-      const start = value ? new Date(value.from) : new Date(now.getTime() - TEN_MIN_MS);
+      const start = value
+        ? new Date(value.from)
+        : new Date(now.getTime() - TEN_MIN_MS);
       const end = value ? new Date(value.to) : now;
       setFrom(toLocalInputValue(start));
       setTo(toLocalInputValue(end));

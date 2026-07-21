@@ -1,5 +1,6 @@
 import { toast } from "sonner";
 import type { ColumnDef } from "@tanstack/react-table";
+import { Archive, ArchiveRestore, Cloud, HistoryIcon } from "lucide-react";
 import {
   useBackupRuns,
   useBackupStatus,
@@ -115,7 +116,10 @@ export function SystemBackupsPanel() {
         <CardHeader>
           <div className="flex items-center justify-between">
             <div>
-              <CardTitle>System Backup</CardTitle>
+              <CardTitle className="flex items-center gap-2">
+                <Archive aria-hidden="true" className="size-4" />
+                System Backup
+              </CardTitle>
               <CardDescription>
                 Platform database and configuration (control-plane) backups.
               </CardDescription>
@@ -189,7 +193,10 @@ export function SystemBackupsPanel() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Recent runs</CardTitle>
+          <CardTitle className="flex items-center gap-2">
+            <HistoryIcon aria-hidden="true" className="size-4" />
+            Recent runs
+          </CardTitle>
         </CardHeader>
         <CardContent>
           <DataTable
@@ -198,7 +205,9 @@ export function SystemBackupsPanel() {
             isLoading={runsLoading}
             getRowId={(r) => r.id}
             enableSorting
-            emptyMessage={'No backup runs yet. Click "Run Backup Now" to start one.'}
+            emptyMessage={
+              'No backup runs yet. Click "Run Backup Now" to start one.'
+            }
             renderDetailPanel={({ row }) => {
               const run = row.original;
               const { log, error } = run;
@@ -249,7 +258,10 @@ function RestoreHelpCard({ remoteEnabled }: { remoteEnabled: boolean }) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Restoring a backup</CardTitle>
+        <CardTitle className="flex items-center gap-2">
+          <ArchiveRestore aria-hidden="true" className="size-4" />
+          Restoring a backup
+        </CardTitle>
         <p className="text-muted-foreground text-sm">
           Restore is a host operation, not an in-app action — it drops and
           rebuilds the platform database, so it runs from the server shell and
@@ -267,14 +279,15 @@ function RestoreHelpCard({ remoteEnabled }: { remoteEnabled: boolean }) {
             {remoteEnabled ? (
               <>
                 either the local copy under{" "}
-                <code className="font-mono text-xs">{BELUNE_DIR}/backups/</code> or
-                download the object from your remote bucket (the run's{" "}
+                <code className="font-mono text-xs">{BELUNE_DIR}/backups/</code>{" "}
+                or download the object from your remote bucket (the run's{" "}
                 <span className="font-medium">Remote key</span> above).
               </>
             ) : (
               <>
                 under{" "}
-                <code className="font-mono text-xs">{BELUNE_DIR}/backups/</code>.
+                <code className="font-mono text-xs">{BELUNE_DIR}/backups/</code>
+                .
               </>
             )}
           </li>
@@ -344,7 +357,10 @@ function RemoteStorageCard({
       <CardHeader>
         <div className="flex items-center justify-between gap-2">
           <div>
-            <CardTitle>Remote storage</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              <Cloud aria-hidden="true" className="size-4" />
+              Remote storage
+            </CardTitle>
             <CardDescription>
               Off-host destination for control-plane backups.
             </CardDescription>
