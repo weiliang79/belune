@@ -122,7 +122,7 @@ export function MaintenanceSection() {
                 })
               }
             >
-              Run full cleanup
+              Full Clean
             </Button>
             <DropdownMenu>
               <DropdownMenuTrigger
@@ -137,7 +137,10 @@ export function MaintenanceSection() {
               >
                 <ChevronDownIcon aria-hidden="true" />
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
+              {/* min-w-60 here rather than on DropdownMenuContent: the shared
+                  default (min-w-36) is sized for short menus, and widening it
+                  would stretch every dropdown in the app. */}
+              <DropdownMenuContent align="end" className="min-w-60">
                 <DropdownMenuItem
                   onClick={() =>
                     setPendingClean({
