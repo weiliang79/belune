@@ -4,7 +4,6 @@ import {
   ChevronDownIcon,
   FileTextIcon,
   HardDriveIcon,
-  HelpCircleIcon,
   RouteIcon,
   ListChecksIcon,
   PowerIcon,
@@ -19,10 +18,13 @@ import {
 } from "@/components/ui/dialog";
 import { BlobLogViewer } from "@/components/logs/blob-log-viewer";
 import { HostShellBlock } from "@/components/server/host-shell-block";
+import { ButtonGroup } from "@/components/ui/button-group";
 import {
   DropdownMenu,
+  DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
@@ -36,7 +38,6 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Separator } from "@/components/ui/separator";
-import { Switch } from "@/components/ui/switch";
 import { useDockerOverview } from "@/lib/hooks/use-docker";
 import {
   useClearPendingQueue,
@@ -99,17 +100,42 @@ export function MaintenanceSection() {
             <p className="text-muted-foreground mt-1 text-xs">
               Images {formatBytes(du?.images.reclaimable ?? 0)} · Volumes{" "}
               {formatBytes(du?.volumes.reclaimable ?? 0)} · Build cache{" "}
-              {formatBytes(du?.build_cache.reclaimable ?? 0)}. Protects app data,
-              caches in use, and running containers.
+              {formatBytes(du?.build_cache.reclaimable ?? 0)}. Protects app
+              data, caches in use, and running containers.
             </p>
           </div>
-          <div className="flex items-center gap-2">
+          {/* Split button: the whole-job action is the button, everything
+              narrower hangs off the chevron. Replaces a "Clean ▾" and a "Run
+              full cleanup" sitting side by side, which read as two unrelated
+              controls when one is just the broadest case of the other. */}
+          <ButtonGroup>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={runCleanup.isPending}
+              onClick={() =>
+                setPendingClean({
+                  actions: undefined,
+                  label: "everything",
+                  description:
+                    "Runs all cleanup steps: prune old deployments, dangling images, unused volumes, build caches, and orphaned containers.",
+                })
+              }
+            >
+              Run full cleanup
+            </Button>
             <DropdownMenu>
               <DropdownMenuTrigger
-                render={<Button size="sm" variant="outline" />}
+                render={
+                  <Button
+                    size="icon-sm"
+                    variant="outline"
+                    // Icon-only, so it is nameless without this.
+                    aria-label="More cleanup options"
+                  />
+                }
               >
-                Clean
-                <ChevronDownIcon aria-hidden="true" className="size-4" />
+                <ChevronDownIcon aria-hidden="true" />
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
                 <DropdownMenuItem
@@ -160,24 +186,13 @@ export function MaintenanceSection() {
                 >
                   Orphaned containers
                 </DropdownMenuItem>
+                {/* Separated because everything above runs a cleanup once, and
+                    this schedules them. */}
+                <DropdownMenuSeparator />
+                <DailyCleanupMenuItem />
               </DropdownMenuContent>
             </DropdownMenu>
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={runCleanup.isPending}
-              onClick={() =>
-                setPendingClean({
-                  actions: undefined,
-                  label: "everything",
-                  description:
-                    "Runs all cleanup steps: prune old deployments, dangling images, unused volumes, build caches, and orphaned containers.",
-                })
-              }
-            >
-              Run full cleanup
-            </Button>
-          </div>
+          </ButtonGroup>
         </div>
 
         <Separator />
@@ -203,12 +218,9 @@ export function MaintenanceSection() {
         <Separator />
 
         {/* ---- Host Shell ---- */}
+        {/* Daily Automatic Cleanup used to sit here; it now lives in the Disk
+            Cleanup split button's menu, beside the cleanups it schedules. */}
         <HostShellBlock />
-
-        <Separator />
-
-        {/* ---- Daily Automatic Cleanup ---- */}
-        <DailyCleanupToggle />
       </div>
 
       <AlertDialog
@@ -388,8 +400,7 @@ function PlatformLogsBlock() {
   const { data, isFetching, isError, error, refetch } =
     usePlatformLogs(selected);
 
-  const label =
-    PLATFORM_SERVICES.find((s) => s.key === selected)?.label ?? "";
+  const label = PLATFORM_SERVICES.find((s) => s.key === selected)?.label ?? "";
 
   return (
     <>
@@ -400,8 +411,8 @@ function PlatformLogsBlock() {
             <p className="text-sm font-medium">Platform Logs</p>
           </div>
           <p className="text-muted-foreground mt-1 text-xs">
-            Read the last {platformLogTail.toLocaleString()} lines from a platform
-            service, without SSH.
+            Read the last {platformLogTail.toLocaleString()} lines from a
+            platform service, without SSH.
           </p>
         </div>
         <DropdownMenu>
@@ -476,7 +487,8 @@ function QueueBlock() {
     setConfirm(false);
     toast.promise(clear.mutateAsync(), {
       loading: "Clearing stuck jobs…",
-      success: (r) => `Cleared ${r.cleared} stuck job${r.cleared === 1 ? "" : "s"}`,
+      success: (r) =>
+        `Cleared ${r.cleared} stuck job${r.cleared === 1 ? "" : "s"}`,
       error: (err) => err.message,
     });
   };
@@ -561,8 +573,8 @@ function QueueBlock() {
           <AlertDialogHeader>
             <AlertDialogTitle>Cancel {pending} queued jobs?</AlertDialogTitle>
             <AlertDialogDescription>
-              Removes pending (not-yet-started) tasks from all queues. A job that
-              is already running is not affected.
+              Removes pending (not-yet-started) tasks from all queues. A job
+              that is already running is not affected.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -577,7 +589,17 @@ function QueueBlock() {
   );
 }
 
-function DailyCleanupToggle() {
+/**
+ * Daily automatic cleanup, as a menu checkbox item.
+ *
+ * A checkbox item rather than the <Switch> this used to be: a Switch inside a
+ * menu would nest an interactive control inside a menuitem, which is both an
+ * accessibility problem and a click that closes the menu out from under you.
+ * menuitemcheckbox is the menu-native control for a boolean, and it keeps the
+ * project's toggle convention intact — this still applies immediately, with no
+ * submit step.
+ */
+function DailyCleanupMenuItem() {
   const { data: settings } = useSettings();
   const updateSettings = useUpdateSettings();
 
@@ -600,24 +622,15 @@ function DailyCleanupToggle() {
   };
 
   return (
-    <div className="flex items-center justify-between gap-3">
-      <div className="flex items-center gap-1.5">
-        <p className="text-sm font-medium">Daily Automatic Cleanup</p>
-        <HelpCircleIcon
-          className="text-text-faint size-3.5"
-          aria-hidden="true"
-          {...({
-            title:
-              "Runs the full cleanup once a day. When off, disk is only reclaimed when you run cleanup manually.",
-          } as object)}
-        />
-      </div>
-      <Switch
-        aria-label="Daily automatic cleanup"
-        checked={enabled}
-        disabled={updateSettings.isPending}
-        onCheckedChange={handleToggle}
-      />
-    </div>
+    <DropdownMenuCheckboxItem
+      checked={enabled}
+      disabled={updateSettings.isPending}
+      onCheckedChange={handleToggle}
+      // Carries the explanation the help icon used to hold. On the item itself
+      // rather than an aria-hidden icon, so it is actually reachable.
+      title="Runs the full cleanup once a day. When off, disk is only reclaimed when you run cleanup manually."
+    >
+      Daily automatic cleanup
+    </DropdownMenuCheckboxItem>
   );
 }
