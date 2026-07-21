@@ -191,18 +191,13 @@ func (h *Handler) listContainerLogs(w http.ResponseWriter, r *http.Request, sour
 	// Session filter. "none" selects the unassigned (NULL) bucket — logs from
 	// before this feature or from non-deployment containers; a UUID selects that
 	// one deployment's session; absent means all sessions.
-	// A malformed id is rejected rather than ignored: silently dropping the
-	// filter would return every session's logs, quietly showing more than was
-	// asked for.
-	if v := q.Get("deployment_id"); v == "none" {
+	// Sessions are keyed by container generation, so every source type has them —
+	// including databases, which have no deployment. "none" selects the
+	// unassigned bucket of rows collected before sessions existed.
+	if v := q.Get("session"); v == "none" {
 		params.Unassigned = pgtype.Bool{Bool: true, Valid: true}
 	} else if v != "" {
-		var depUUID pgtype.UUID
-		if err := depUUID.Scan(v); err != nil {
-			writeError(w, http.StatusBadRequest, "invalid deployment_id format")
-			return
-		}
-		params.DeploymentID = depUUID
+		params.ContainerID = pgtype.Text{String: v, Valid: true}
 	}
 
 	logs, err := h.queries.SearchContainerLogs(r.Context(), params)

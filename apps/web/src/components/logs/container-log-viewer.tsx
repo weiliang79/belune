@@ -27,16 +27,25 @@ import { formatRelativeTime } from "@/lib/utils/format";
 const SESSION_ALL = "all";
 const SESSION_NONE = "none"; // the unassigned / "earlier logs" bucket
 
-// A short, human-readable label for one session: "#a1b2c3d · rollback · 2h ago".
-// The NULL bucket (no deployment) reads as "Earlier logs".
+// Identity of a session is the container generation. Rows collected before
+// sessions existed have none and fall into the unassigned bucket.
+function sessionKey(s: ContainerLogSession): string {
+  return s.container_id ?? SESSION_NONE;
+}
+
+// A short, human-readable label. An application session is named by the deploy
+// that produced it ("#a1b2c3d · rollback · 2h ago"); a database has no
+// deployment, so its runs are named by when they started ("Run · 2h ago").
 function sessionLabel(s: ContainerLogSession): string {
-  if (!s.deployment_id) return "Earlier logs";
-  const short = s.deployment_id.slice(0, 7);
-  const when = s.started_at ?? s.last_at;
-  const parts = [`#${short}`];
-  if (s.triggered_by) parts.push(s.triggered_by);
-  if (when) parts.push(formatRelativeTime(when));
-  return parts.join(" · ");
+  if (!s.container_id) return "Earlier logs";
+  const when = s.started_at ?? s.first_at ?? s.last_at;
+  if (s.deployment_id) {
+    const parts = [`#${s.deployment_id.slice(0, 7)}`];
+    if (s.triggered_by) parts.push(s.triggered_by);
+    if (when) parts.push(formatRelativeTime(when));
+    return parts.join(" · ");
+  }
+  return when ? `Run · ${formatRelativeTime(when)}` : `Run · ${s.container_id.slice(0, 12)}`;
 }
 
 const MAX_LIVE = 5000;
@@ -89,14 +98,9 @@ export function ContainerLogViewer({
 
   const { data: sessions } = useContainerLogSessions(source, projectId, sourceId);
 
-  // Server-side session filter: a specific deployment, the "none" bucket, or
+  // Server-side session filter: one container generation, the "none" bucket, or
   // (for SESSION_ALL) nothing.
-  const deploymentId =
-    session === SESSION_ALL
-      ? undefined
-      : session === SESSION_NONE
-        ? "none"
-        : session;
+  const sessionParam = session === SESSION_ALL ? undefined : session;
 
   function handleSearchChange(value: string) {
     setInputValue(value);
@@ -120,7 +124,7 @@ export function ContainerLogViewer({
     q: q || undefined,
     level: level || undefined,
     since,
-    deploymentId,
+    session: sessionParam,
   });
 
   // Capture every live line unfiltered; filters are applied at render time so
@@ -132,7 +136,7 @@ export function ContainerLogViewer({
       stream?: string;
       message?: string;
       recorded_at?: string;
-      deployment_id?: string;
+      container_id?: string;
     };
     if (typeof obj.message !== "string") return;
 
@@ -146,8 +150,8 @@ export function ContainerLogViewer({
           stream: obj.stream === "stderr" ? "stderr" : "stdout",
           message: obj.message as string,
           recordedAt: obj.recorded_at ?? new Date().toISOString(),
-          // Empty string from the collector means "no deployment" → null bucket.
-          deploymentId: obj.deployment_id ? obj.deployment_id : null,
+          // Empty string from the collector means no session → unassigned.
+          sessionId: obj.container_id ? obj.container_id : null,
         },
       ].slice(-MAX_LIVE),
     );
@@ -155,12 +159,10 @@ export function ContainerLogViewer({
 
   const { connected } = useChannel(`container-logs:${sourceId}`, handleMessage);
 
-  // Map of deployment_id (or "__none__") → label, for divider rendering.
+  // Map of session key → label, for divider rendering.
   const sessionLabels = useMemo(() => {
     const map = new Map<string, string>();
-    for (const s of sessions ?? []) {
-      map.set(s.deployment_id ?? "__none__", sessionLabel(s));
-    }
+    for (const s of sessions ?? []) map.set(sessionKey(s), sessionLabel(s));
     return map;
   }, [sessions]);
 
@@ -175,14 +177,14 @@ export function ContainerLogViewer({
           stream: e.stream,
           message: e.message,
           recordedAt: e.recorded_at,
-          deploymentId: e.deployment_id,
+          sessionId: e.container_id,
         }))
       : [];
     const live = liveLogs.filter((e) => {
       if (level && e.level !== level) return false;
       if (q && !e.message.toLowerCase().includes(q.toLowerCase())) return false;
       if (session === SESSION_ALL) return true;
-      const key = e.deploymentId ?? null;
+      const key = e.sessionId ?? null;
       if (session === SESSION_NONE) return key === null;
       return key === session;
     });
@@ -195,18 +197,18 @@ export function ContainerLogViewer({
     // Skip dividers entirely when everything in view belongs to a single
     // session (databases, or an app with just one deployment) — a lone divider
     // header would be noise, and "Earlier logs" would misdescribe all of it.
-    const distinctSessions = new Set(merged.map((e) => e.deploymentId ?? null));
+    const distinctSessions = new Set(merged.map((e) => e.sessionId ?? null));
     if (distinctSessions.size < 2) return merged;
 
     const withDividers: LogEntry[] = [];
     let prevKey: string | null | undefined = undefined;
     for (let i = 0; i < merged.length; i++) {
       const e = merged[i];
-      const key = e.deploymentId ?? null;
+      const key = e.sessionId ?? null;
       if (key !== prevKey) {
         const label =
-          sessionLabels.get(e.deploymentId ?? "__none__") ??
-          (e.deploymentId ? `#${e.deploymentId.slice(0, 7)}` : "Earlier logs");
+          sessionLabels.get(e.sessionId ?? SESSION_NONE) ??
+          (e.sessionId ? `Run · ${e.sessionId.slice(0, 12)}` : "Earlier logs");
         withDividers.push({
           id: `divider-${e.id}`,
           level: "info",
@@ -281,12 +283,12 @@ export function ContainerLogViewer({
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value={SESSION_ALL} icon={<LayersIcon />}>
-                  All deployments
+                  All sessions
                 </SelectItem>
                 {sessions.map((s) => (
                   <SelectItem
-                    key={s.deployment_id ?? SESSION_NONE}
-                    value={s.deployment_id ?? SESSION_NONE}
+                    key={sessionKey(s)}
+                    value={sessionKey(s)}
                     icon={<LayersIcon />}
                   >
                     {sessionLabel(s)}

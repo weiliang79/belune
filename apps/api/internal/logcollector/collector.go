@@ -389,12 +389,16 @@ func (c *Collector) watchContainer(ctx context.Context, ctr runtime.ContainerInf
 			ts = time.Now()
 		}
 		batch = append(batch, generated.BulkInsertContainerLogsParams{
-			SourceType:   src.typ,
-			SourceID:     srcUUID,
-			Level:        line.level,
-			Stream:       line.stream,
-			Message:      line.message,
-			RecordedAt:   pgtype.Timestamptz{Time: ts, Valid: true},
+			SourceType: src.typ,
+			SourceID:   srcUUID,
+			Level:      line.level,
+			Stream:     line.stream,
+			Message:    line.message,
+			RecordedAt: pgtype.Timestamptz{Time: ts, Valid: true},
+			// The container generation is the session key: it exists for every
+			// source type, including databases, which have no deployment but are
+			// still replaced by a new container on a version upgrade.
+			ContainerID:  pgtype.Text{String: ctr.ID, Valid: ctr.ID != ""},
 			DeploymentID: deploymentUUID,
 		})
 	}
@@ -484,6 +488,7 @@ func (c *Collector) flush(ctx context.Context, src containerSource, batch []gene
 			"stream":        p.Stream,
 			"message":       p.Message,
 			"recorded_at":   p.RecordedAt.Time.UTC().Format(time.RFC3339Nano),
+			"container_id":  p.ContainerID.String,
 			"deployment_id": src.deployment,
 		})
 		c.rdb.Publish(ctx, channel, string(payload))

@@ -19,6 +19,7 @@ type BulkInsertContainerLogsParams struct {
 	Message      string             `json:"message"`
 	RecordedAt   pgtype.Timestamptz `json:"recorded_at"`
 	DeploymentID pgtype.UUID        `json:"deployment_id"`
+	ContainerID  pgtype.Text        `json:"container_id"`
 }
 
 const deleteOldContainerLogs = `-- name: DeleteOldContainerLogs :exec
@@ -48,8 +49,8 @@ func (q *Queries) GetLatestContainerLogTime(ctx context.Context, arg GetLatestCo
 }
 
 const insertContainerLog = `-- name: InsertContainerLog :exec
-INSERT INTO container_logs (source_type, source_id, level, stream, message, recorded_at, deployment_id)
-VALUES ($1, $2, $3, $4, $5, COALESCE($6::timestamptz, NOW()), $7)
+INSERT INTO container_logs (source_type, source_id, level, stream, message, recorded_at, deployment_id, container_id)
+VALUES ($1, $2, $3, $4, $5, COALESCE($6::timestamptz, NOW()), $7, $8)
 `
 
 type InsertContainerLogParams struct {
@@ -60,6 +61,7 @@ type InsertContainerLogParams struct {
 	Message      string             `json:"message"`
 	RecordedAt   pgtype.Timestamptz `json:"recorded_at"`
 	DeploymentID pgtype.UUID        `json:"deployment_id"`
+	ContainerID  pgtype.Text        `json:"container_id"`
 }
 
 func (q *Queries) InsertContainerLog(ctx context.Context, arg InsertContainerLogParams) error {
@@ -71,12 +73,14 @@ func (q *Queries) InsertContainerLog(ctx context.Context, arg InsertContainerLog
 		arg.Message,
 		arg.RecordedAt,
 		arg.DeploymentID,
+		arg.ContainerID,
 	)
 	return err
 }
 
 const listContainerLogSessions = `-- name: ListContainerLogSessions :many
-SELECT cl.deployment_id,
+SELECT cl.container_id,
+       cl.deployment_id,
        MIN(cl.recorded_at)::timestamptz AS first_at,
        MAX(cl.recorded_at)::timestamptz AS last_at,
        COUNT(*)                         AS line_count,
@@ -87,7 +91,7 @@ SELECT cl.deployment_id,
 FROM container_logs cl
 LEFT JOIN deployments d ON d.id = cl.deployment_id
 WHERE cl.source_type = $1 AND cl.source_id = $2
-GROUP BY cl.deployment_id, d.triggered_by, d.status, d.commit_sha, d.started_at
+GROUP BY cl.container_id, cl.deployment_id, d.triggered_by, d.status, d.commit_sha, d.started_at
 ORDER BY MAX(cl.recorded_at) DESC
 LIMIT $3
 `
@@ -99,6 +103,7 @@ type ListContainerLogSessionsParams struct {
 }
 
 type ListContainerLogSessionsRow struct {
+	ContainerID  pgtype.Text        `json:"container_id"`
 	DeploymentID pgtype.UUID        `json:"deployment_id"`
 	FirstAt      pgtype.Timestamptz `json:"first_at"`
 	LastAt       pgtype.Timestamptz `json:"last_at"`
@@ -109,10 +114,19 @@ type ListContainerLogSessionsRow struct {
 	StartedAt    pgtype.Timestamptz `json:"started_at"`
 }
 
-// One row per deployment (image generation) that has produced log lines for this
-// source, most recent first, enriched with the deployment's own metadata. The
-// LEFT JOIN keeps the NULL "earlier" bucket (and database/system logs, which
-// have no deployment) in the result.
+// One row per container generation that has produced log lines for this source,
+// most recent first.
+//
+// Keyed by container_id rather than deployment_id so every source type gets
+// sessions: a database has no deployment row but is still replaced by a new
+// container on a major-version upgrade (and again if that rolls back), and those
+// runs need separating just as an application's redeploys do.
+//
+// The deployment is joined only for labelling — it is what lets an application's
+// session read "#a1b2c3 · rollback · 2h ago" instead of a bare time range.
+// Grouping by both keys is safe because a container belongs to exactly one
+// deployment. The LEFT JOIN keeps sessions with no deployment (databases) and
+// the NULL "earlier" bucket (rows collected before sessions existed).
 //
 // Bounded: an application accumulates a session per deploy for its whole life,
 // and every row here becomes an entry in the viewer's session picker. The cap
@@ -129,6 +143,7 @@ func (q *Queries) ListContainerLogSessions(ctx context.Context, arg ListContaine
 	for rows.Next() {
 		var i ListContainerLogSessionsRow
 		if err := rows.Scan(
+			&i.ContainerID,
 			&i.DeploymentID,
 			&i.FirstAt,
 			&i.LastAt,
@@ -149,7 +164,7 @@ func (q *Queries) ListContainerLogSessions(ctx context.Context, arg ListContaine
 }
 
 const searchContainerLogs = `-- name: SearchContainerLogs :many
-SELECT id, source_type, source_id, level, stream, message, recorded_at, deployment_id FROM container_logs
+SELECT id, source_type, source_id, level, stream, message, recorded_at, deployment_id, container_id FROM container_logs
 WHERE source_type = $1
   AND source_id = $2
   AND ($3::text IS NULL OR level = $3::text)
@@ -157,12 +172,13 @@ WHERE source_type = $1
   AND ($5::text IS NULL OR message ILIKE '%' || $5::text || '%')
   AND ($6::timestamptz IS NULL OR recorded_at >= $6::timestamptz)
   AND ($7::timestamptz IS NULL OR recorded_at <= $7::timestamptz)
-  -- Session filter: a specific deployment, the unassigned (NULL) bucket, or no
-  -- filter at all. 'unassigned' lets the caller ask for the "earlier" bucket,
-  -- which a nullable deployment_id arg alone could not distinguish from "any".
+  -- Session filter: one container generation, the unassigned (NULL) bucket, or
+  -- no filter at all. 'unassigned' lets the caller ask for the "earlier" bucket
+  -- of rows collected before sessions existed, which a nullable container_id arg
+  -- alone could not distinguish from "any".
   AND (CASE
-    WHEN $8::uuid IS NOT NULL THEN deployment_id = $8::uuid
-    WHEN $9::boolean THEN deployment_id IS NULL
+    WHEN $8::text IS NOT NULL THEN container_id = $8::text
+    WHEN $9::boolean THEN container_id IS NULL
     ELSE TRUE
   END)
 ORDER BY recorded_at DESC
@@ -170,17 +186,17 @@ LIMIT $11 OFFSET $10
 `
 
 type SearchContainerLogsParams struct {
-	SourceType   string             `json:"source_type"`
-	SourceID     pgtype.UUID        `json:"source_id"`
-	Level        pgtype.Text        `json:"level"`
-	Stream       pgtype.Text        `json:"stream"`
-	Q            pgtype.Text        `json:"q"`
-	Since        pgtype.Timestamptz `json:"since"`
-	Until        pgtype.Timestamptz `json:"until"`
-	DeploymentID pgtype.UUID        `json:"deployment_id"`
-	Unassigned   pgtype.Bool        `json:"unassigned"`
-	Offset       int32              `json:"offset"`
-	Limit        int32              `json:"limit"`
+	SourceType  string             `json:"source_type"`
+	SourceID    pgtype.UUID        `json:"source_id"`
+	Level       pgtype.Text        `json:"level"`
+	Stream      pgtype.Text        `json:"stream"`
+	Q           pgtype.Text        `json:"q"`
+	Since       pgtype.Timestamptz `json:"since"`
+	Until       pgtype.Timestamptz `json:"until"`
+	ContainerID pgtype.Text        `json:"container_id"`
+	Unassigned  pgtype.Bool        `json:"unassigned"`
+	Offset      int32              `json:"offset"`
+	Limit       int32              `json:"limit"`
 }
 
 func (q *Queries) SearchContainerLogs(ctx context.Context, arg SearchContainerLogsParams) ([]ContainerLog, error) {
@@ -192,7 +208,7 @@ func (q *Queries) SearchContainerLogs(ctx context.Context, arg SearchContainerLo
 		arg.Q,
 		arg.Since,
 		arg.Until,
-		arg.DeploymentID,
+		arg.ContainerID,
 		arg.Unassigned,
 		arg.Offset,
 		arg.Limit,
@@ -213,6 +229,7 @@ func (q *Queries) SearchContainerLogs(ctx context.Context, arg SearchContainerLo
 			&i.Message,
 			&i.RecordedAt,
 			&i.DeploymentID,
+			&i.ContainerID,
 		); err != nil {
 			return nil, err
 		}

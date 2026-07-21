@@ -300,12 +300,16 @@ export interface ContainerLog {
   stream: "stdout" | "stderr";
   message: string;
   recorded_at: string;
+  container_id: string | null;
   deployment_id: string | null;
 }
 
-// A log "session": one deployment (image generation) that produced log lines,
-// or the NULL bucket (deployment_id null) for earlier/unassigned logs.
+// A log "session": one container generation that produced log lines, or the
+// NULL bucket for rows collected before sessions existed. Keyed by container so
+// databases get sessions too — they have no deployment, but are replaced by a
+// new container on a version upgrade. deployment_id is only for labelling.
 export interface ContainerLogSession {
+  container_id: string | null;
   deployment_id: string | null;
   first_at: string;
   last_at: string;

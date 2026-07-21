@@ -184,6 +184,7 @@ type ContainerLog struct {
 	Message      string             `json:"message"`
 	RecordedAt   pgtype.Timestamptz `json:"recorded_at"`
 	DeploymentID pgtype.UUID        `json:"deployment_id"`
+	ContainerID  pgtype.Text        `json:"container_id"`
 }
 
 type Database struct {

@@ -12,9 +12,9 @@ export interface ContainerLogParams {
   stream?: "stdout" | "stderr" | "";
   since?: string;
   until?: string;
-  // A deployment UUID to isolate one session, or "none" for the unassigned
+  // A container id to isolate one session, or "none" for the unassigned
   // (earlier) bucket. Undefined means all sessions.
-  deploymentId?: string;
+  session?: string;
 }
 
 // Both application and database container logs share the same history endpoint
@@ -42,7 +42,7 @@ export function listContainerLogs(
   if (params?.stream) query.set("stream", params.stream);
   if (params?.since) query.set("since", params.since);
   if (params?.until) query.set("until", params.until);
-  if (params?.deploymentId) query.set("deployment_id", params.deploymentId);
+  if (params?.session) query.set("session", params.session);
   const qs = query.toString();
   return api.get<ContainerLog[]>(
     `${basePath(source, projectId, sourceId)}${qs ? `?${qs}` : ""}`,
