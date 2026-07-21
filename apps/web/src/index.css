@@ -57,6 +57,15 @@
   --status-error-soft: rgba(225, 29, 72, 0.12);
   --status-error-line: rgba(225, 29, 72, 0.36);
 
+  /* Solid red fill for a destructive button that must read as filled — e.g. on
+     a surface already tinted with --status-error-soft, where the soft
+     `destructive` variant has almost no contrast left.
+     Deliberately NOT overridden for dark: the dark --status-error (#f43f5e) is
+     light enough that white text on it measures 3.67:1, under the 4.5:1 needed
+     for body text. This value carries white at 4.70:1 and still separates from
+     the dark card at 4.04:1, so one value serves both themes. */
+  --status-error-strong: #e11d48;
+
   /* Terminal (always dark surface) */
   --terminal-bg: #0a0a0c;
   --terminal-ok: #10b981;
@@ -232,6 +241,7 @@
   --color-status-error: var(--status-error);
   --color-status-error-soft: var(--status-error-soft);
   --color-status-error-line: var(--status-error-line);
+  --color-status-error-strong: var(--status-error-strong);
 
   --color-terminal-bg: var(--terminal-bg);
   --color-terminal-ok: var(--terminal-ok);

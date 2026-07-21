@@ -120,7 +120,7 @@ function ApplicationSettingsPage() {
               </div>
               <Button
                 size="sm"
-                variant="destructive"
+                variant="destructive-solid"
                 onClick={() => setDeleteOpen(true)}
               >
                 Delete Application

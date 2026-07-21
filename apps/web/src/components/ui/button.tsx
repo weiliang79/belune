@@ -19,6 +19,12 @@ const buttonVariants = cva(
           "hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground dark:hover:bg-muted/50",
         destructive:
           "bg-destructive/10 text-destructive hover:bg-destructive/20 focus-visible:border-destructive/40 focus-visible:ring-destructive/20 dark:bg-destructive/20 dark:hover:bg-destructive/30 dark:focus-visible:ring-destructive/40",
+        // Filled counterpart to `destructive`, which is a *tinted* button
+        // (bg-destructive/10–20) and so needs a neutral surface to read
+        // against. Use this where the surface is itself red-tinted, or where an
+        // irreversible action should carry the weight of a solid button.
+        "destructive-solid":
+          "bg-status-error-strong text-white hover:bg-status-error-strong/90 focus-visible:border-destructive/40 focus-visible:ring-destructive/40",
         link: "text-primary underline-offset-4 hover:underline",
       },
       size: {
