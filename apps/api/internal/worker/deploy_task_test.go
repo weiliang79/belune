@@ -7,6 +7,7 @@ import (
 	"os"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -427,4 +428,50 @@ func TestHandleDeployTask_CreateContainerFailureMarksDeployFailed(t *testing.T) 
 	failedApp, err := testQueries.GetApplication(context.Background(), app.ID)
 	require.NoError(t, err)
 	assert.Equal(t, status.ApplicationError, failedApp.Status)
+}
+
+// Regression: loadApplication builds dc.app by copying a subset of columns by
+// hand, and the command health-check fields were left out of that copy — so the
+// HEALTHCHECK never reached the container even though the row had it. This
+// deploys a command-health app and asserts the config actually lands on
+// CreateContainer, which only passes if loadApplication propagates the fields.
+func TestHandleDeployTask_AppliesCommandHealthCheck(t *testing.T) {
+	t.Cleanup(func() { _ = testutil.TruncateAll(context.Background(), testPool) })
+	ctx := context.Background()
+
+	app, dep := seedApp(t)
+	_, err := testQueries.SetApplicationHealthCheck(ctx, generated.SetApplicationHealthCheckParams{
+		ID:                         app.ID,
+		HealthCheckType:            "command",
+		HealthCheckCommand:         pgtype.Text{String: "curl -f localhost/health", Valid: true},
+		HealthCheckIntervalSeconds: pgtype.Int4{Int32: 15, Valid: true},
+	})
+	require.NoError(t, err)
+
+	rt := &testutil.MockContainerRuntime{} // ContainerHealth defaults to "healthy"
+	pm := &testutil.MockProxyManager{}
+	h := newTestHandler(rt, pm)
+
+	// Use a rollback payload — this is the reload path, exactly where the bug
+	// showed up live, and it also skips the image-pull stage (nil Redis in
+	// tests). createAndStart still runs, which is what reads the health fields.
+	payload, err := json.Marshal(map[string]string{
+		"application_id":     uuidString(app.ID),
+		"deployment_id":      uuidString(dep.ID),
+		"rollback_image_tag": "nginx:alpine",
+	})
+	require.NoError(t, err)
+	require.NoError(t, h.HandleDeployTask(ctx, asynq.NewTask("deploy", payload)))
+
+	require.Len(t, rt.CreateCalls, 1)
+	assert.Equal(t, "curl -f localhost/health", rt.CreateCalls[0].HealthCheckCommand,
+		"the command health check must reach the container")
+	assert.Equal(t, 15*time.Second, rt.CreateCalls[0].HealthCheckInterval)
+
+	// The command gate passed (mock reports healthy), so the deploy succeeds
+	// and the probe is recorded as passing, not skipped.
+	final, err := testQueries.GetDeployment(ctx, dep.ID)
+	require.NoError(t, err)
+	assert.Equal(t, status.DeploymentSuccess, final.Status)
+	assert.Equal(t, "passing", final.HealthStatus.String)
 }
