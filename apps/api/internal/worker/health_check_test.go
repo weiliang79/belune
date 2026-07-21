@@ -6,6 +6,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/weiliang79/belune/internal/status"
 	"github.com/weiliang79/belune/internal/store/generated"
 )
 
@@ -61,5 +62,60 @@ func TestHealthCheckRuntimeConfig(t *testing.T) {
 		custom.retries != 2 ||
 		custom.startPeriod != 15*time.Second {
 		t.Errorf("explicit values not honoured: %+v", custom)
+	}
+}
+
+func TestDeployFailureErrorsApp(t *testing.T) {
+	running := generated.Application{Status: status.ApplicationRunning}
+	stopped := generated.Application{Status: status.ApplicationStopped}
+	inactive := generated.Application{Status: status.ApplicationInactive}
+
+	cases := []struct {
+		name string
+		dc   *deployContext
+		want bool
+	}{
+		{
+			// The whole point of the reorder: build fails before cleanup, old
+			// container still serving — keep the app up.
+			"running app, failure before cleanup",
+			&deployContext{app: running, cleanedUp: false},
+			false,
+		},
+		{
+			"running app, failure after cleanup",
+			&deployContext{app: running, cleanedUp: true},
+			true,
+		},
+		{
+			// First-ever deploy has nothing running to preserve; a failure
+			// should surface on the row.
+			"inactive app, failure before cleanup",
+			&deployContext{app: inactive, cleanedUp: false},
+			true,
+		},
+		{
+			"stopped app, failure before cleanup",
+			&deployContext{app: stopped, cleanedUp: false},
+			true,
+		},
+		{
+			// Build-only never touches the container, so it never errors the app.
+			"build-only on a running app",
+			&deployContext{app: running, buildOnly: true},
+			false,
+		},
+		{
+			"build-only on a stopped app",
+			&deployContext{app: stopped, buildOnly: true},
+			false,
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := deployFailureErrorsApp(c.dc); got != c.want {
+				t.Errorf("deployFailureErrorsApp() = %v, want %v", got, c.want)
+			}
+		})
 	}
 }

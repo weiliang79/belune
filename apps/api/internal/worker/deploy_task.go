@@ -54,6 +54,14 @@ type deployContext struct {
 	imageName     string
 	commitSHA     string
 	domains       []generated.Domain
+	// cleanedUp is set once the previous container has been torn down. Before
+	// that point a failed deploy has left the old container serving, so the
+	// application is still up and must not be flagged as errored.
+	cleanedUp bool
+	// buildOnly marks the standalone build task, which produces an image but
+	// never touches the running container — so a failure never changes the
+	// application's status.
+	buildOnly bool
 	// compensators are cleanup functions appended as resources are created.
 	// On any post-creation failure they run in reverse order.
 	compensators []func()
@@ -121,7 +129,7 @@ func (h *TaskHandler) HandleDeployTask(ctx context.Context, t *asynq.Task) error
 	if err := runStage(ctx, "deploy.load_application", func(ctx context.Context) error {
 		return h.loadApplication(ctx, dc)
 	}); err != nil {
-		h.failDeployment(ctx, dc.deploymentID, "deploy", fmt.Sprintf("load application: %v", err))
+		h.failDeployment(ctx, dc, "deploy", fmt.Sprintf("load application: %v", err))
 		recordSpanErr(rootSpan, err)
 		return errors.Join(fmt.Errorf("load application (permanent): %w", err), asynq.SkipRetry)
 	}
@@ -134,14 +142,30 @@ func (h *TaskHandler) HandleDeployTask(ctx context.Context, t *asynq.Task) error
 	if err := runStage(ctx, "deploy.check_quota", func(ctx context.Context) error {
 		return h.checkDeployQuota(ctx, dc)
 	}); err != nil {
-		h.failDeployment(ctx, dc.deploymentID, "deploy", fmt.Sprintf("quota check: %v", err))
+		h.failDeployment(ctx, dc, "deploy", fmt.Sprintf("quota check: %v", err))
 		recordSpanErr(rootSpan, err)
 		return errors.Join(fmt.Errorf("quota check (permanent): %w", err), asynq.SkipRetry)
 	}
 
-	// Stage 2 & 3: idempotent cleanup and network setup — log-only on error
+	// Stage 2: build or pull the image FIRST, while the previous container is
+	// still running. A build can take minutes, and doing it before teardown
+	// means the app keeps serving throughout — and a failed build never takes
+	// the running app down, because cleanup below has not happened yet.
+	if err := runStage(ctx, "deploy.prepare_image", func(ctx context.Context) error {
+		return h.prepareImage(ctx, dc)
+	}); err != nil {
+		h.failDeployment(ctx, dc, "deploy", fmt.Sprintf("%v", err))
+		recordSpanErr(rootSpan, err)
+		return err
+	}
+
+	// Stage 3 & 4: the new image is ready — now tear down the previous container
+	// and set up networking. This is the point of no return: from here a failure
+	// leaves nothing serving, so the app is flagged errored. Both are idempotent
+	// and log-only on error.
 	_ = runStage(ctx, "deploy.cleanup_existing", func(ctx context.Context) error {
 		h.cleanupExisting(ctx, dc)
+		dc.cleanedUp = true
 		return nil
 	})
 	_ = runStage(ctx, "deploy.ensure_networks", func(ctx context.Context) error {
@@ -149,21 +173,12 @@ func (h *TaskHandler) HandleDeployTask(ctx context.Context, t *asynq.Task) error
 		return nil
 	})
 
-	// Stage 4: build or pull image
-	if err := runStage(ctx, "deploy.prepare_image", func(ctx context.Context) error {
-		return h.prepareImage(ctx, dc)
-	}); err != nil {
-		h.failDeployment(ctx, dc.deploymentID, "deploy", fmt.Sprintf("%v", err))
-		recordSpanErr(rootSpan, err)
-		return err
-	}
-
 	// Stage 5: create and start container — appends a compensator on success
 	if err := runStage(ctx, "deploy.create_and_start", func(ctx context.Context) error {
 		return h.createAndStart(ctx, dc)
 	}); err != nil {
 		h.runCompensators(dc)
-		h.failDeployment(ctx, dc.deploymentID, "deploy", fmt.Sprintf("create container: %v", err))
+		h.failDeployment(ctx, dc, "deploy", fmt.Sprintf("create container: %v", err))
 		recordSpanErr(rootSpan, err)
 		return fmt.Errorf("create container: %w", err)
 	}
@@ -173,7 +188,7 @@ func (h *TaskHandler) HandleDeployTask(ctx context.Context, t *asynq.Task) error
 		return h.wireProxy(ctx, dc)
 	}); err != nil {
 		h.runCompensators(dc)
-		h.failDeployment(ctx, dc.deploymentID, "deploy", fmt.Sprintf("wire proxy: %v", err))
+		h.failDeployment(ctx, dc, "deploy", fmt.Sprintf("wire proxy: %v", err))
 		recordSpanErr(rootSpan, err)
 		return fmt.Errorf("wire proxy: %w", err)
 	}
@@ -187,7 +202,7 @@ func (h *TaskHandler) HandleDeployTask(ctx context.Context, t *asynq.Task) error
 		return h.verifyHealth(ctx, dc)
 	}); err != nil {
 		h.runCompensators(dc)
-		h.failDeployment(ctx, dc.deploymentID, "deploy", fmt.Sprintf("health check failed: %v", err))
+		h.failDeployment(ctx, dc, "deploy", fmt.Sprintf("health check failed: %v", err))
 		recordSpanErr(rootSpan, err)
 		return fmt.Errorf("health check: %w", err)
 	}
@@ -1048,7 +1063,29 @@ func (h *TaskHandler) runCompensators(dc *deployContext) {
 	}
 }
 
-func (h *TaskHandler) failDeployment(ctx context.Context, deploymentID pgtype.UUID, kind, errMsg string) {
+// deployFailureErrorsApp reports whether a terminal deploy failure should flag
+// the application as errored.
+//
+// It must not when the application is still serving: a build-only task never
+// touches the running container, and — now that the build runs before teardown
+// — a failure before cleanup leaves the previous container running the old
+// version. Once cleanup has run there is nothing serving, so a failure there is
+// a genuine error; so is a failure on an app that was not running to begin with
+// (a first-ever deploy, or one on a stopped app), which is how the failure
+// stays visible on the row rather than only on the deployment.
+func deployFailureErrorsApp(dc *deployContext) bool {
+	if dc.buildOnly {
+		return false
+	}
+	if dc.cleanedUp {
+		return true
+	}
+	return dc.app.Status != status.ApplicationRunning &&
+		dc.app.Status != status.ApplicationUnhealthy
+}
+
+func (h *TaskHandler) failDeployment(ctx context.Context, dc *deployContext, kind, errMsg string) {
+	deploymentID := dc.deploymentID
 	retried, _ := asynq.GetRetryCount(ctx)
 	maxRetry, _ := asynq.GetMaxRetry(ctx)
 
@@ -1069,15 +1106,9 @@ func (h *TaskHandler) failDeployment(ctx context.Context, deploymentID pgtype.UU
 			ErrorMessage: pgtype.Text{String: safeMsg, Valid: true},
 		})
 
-		// The application is genuinely down: cleanupExisting removes the
-		// previous container at stage 2, before the build, so a terminal
-		// failure at any later stage leaves nothing serving. Without this the
-		// app kept its old status and a first-ever failed deploy still read
-		// "Inactive", hiding the failure everywhere except the deployment row.
-		// The next successful deploy sets it back to running.
-		if dep, err := h.Queries.GetDeployment(ctx, deploymentID); err == nil {
+		if deployFailureErrorsApp(dc) {
 			if _, err := h.Queries.UpdateApplicationStatus(ctx, generated.UpdateApplicationStatusParams{
-				ID:     dep.ApplicationID,
+				ID:     dc.applicationID,
 				Status: status.ApplicationError,
 			}); err != nil {
 				slog.Warn("could not mark application errored", "error", err)

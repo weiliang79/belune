@@ -42,6 +42,15 @@ func (h *TaskHandler) HandleBuildTask(ctx context.Context, t *asynq.Task) error 
 		return errors.Join(fmt.Errorf("invalid deployment_id (permanent): %w", err), asynq.SkipRetry)
 	}
 
+	// A standalone build never touches the running container, so failures here
+	// must never change the application's status — buildOnly tells
+	// failDeployment to leave it alone.
+	dc := &deployContext{
+		applicationID: applicationID,
+		deploymentID:  deploymentID,
+		buildOnly:     true,
+	}
+
 	// Update deployment status to building
 	h.Queries.UpdateDeploymentStatus(ctx, generated.UpdateDeploymentStatusParams{
 		ID:     deploymentID,
@@ -51,7 +60,7 @@ func (h *TaskHandler) HandleBuildTask(ctx context.Context, t *asynq.Task) error 
 	// Fetch application details with project slug
 	appRow, err := h.Queries.GetApplicationWithProjectSlug(ctx, applicationID)
 	if err != nil {
-		h.failDeployment(ctx, deploymentID, "build", fmt.Sprintf("fetch application: %v", err))
+		h.failDeployment(ctx, dc, "build", fmt.Sprintf("fetch application: %v", err))
 		return errors.Join(fmt.Errorf("get application (permanent): %w", err), asynq.SkipRetry)
 	}
 	app := generated.Application{
@@ -61,6 +70,7 @@ func (h *TaskHandler) HandleBuildTask(ctx context.Context, t *asynq.Task) error 
 		CustomBuildpacks: appRow.CustomBuildpacks, Status: appRow.Status,
 		GitCredentialsEncrypted: appRow.GitCredentialsEncrypted,
 	}
+	dc.app = app
 
 	// Image-type applications have nothing to build
 	if app.Type == "image" {
@@ -75,7 +85,7 @@ func (h *TaskHandler) HandleBuildTask(ctx context.Context, t *asynq.Task) error 
 	// Clone the repository
 	tmpDir, err := os.MkdirTemp("", "belune-build-*")
 	if err != nil {
-		h.failDeployment(ctx, deploymentID, "build", fmt.Sprintf("create temp dir: %v", err))
+		h.failDeployment(ctx, dc, "build", fmt.Sprintf("create temp dir: %v", err))
 		return fmt.Errorf("create temp dir: %w", err)
 	}
 	defer func() {
@@ -100,7 +110,7 @@ func (h *TaskHandler) HandleBuildTask(ctx context.Context, t *asynq.Task) error 
 	slog.Info("cloning repository", "repo", app.SourceRepo.String, "dest", tmpDir)
 	cloneResult, err := git.Clone(buildCtx, app.SourceRepo.String, tmpDir, "", gitToken)
 	if err != nil {
-		h.failDeployment(ctx, deploymentID, "build", fmt.Sprintf("git clone: %v", err))
+		h.failDeployment(ctx, dc, "build", fmt.Sprintf("git clone: %v", err))
 		return fmt.Errorf("git clone: %w", err)
 	}
 	slog.Info("cloned repository", "commit", cloneResult.CommitSHA)
@@ -165,7 +175,7 @@ func (h *TaskHandler) HandleBuildTask(ctx context.Context, t *asynq.Task) error 
 	}
 
 	if err != nil {
-		h.failDeployment(ctx, deploymentID, "build", fmt.Sprintf("build: %v", err))
+		h.failDeployment(ctx, dc, "build", fmt.Sprintf("build: %v", err))
 		return fmt.Errorf("build: %w", err)
 	}
 
