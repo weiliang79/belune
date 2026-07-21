@@ -352,7 +352,7 @@ func (c *Collector) watchContainer(ctx context.Context, ctr runtime.ContainerInf
 		stdcopy.StdCopy(stdout, stderr, rc) //nolint:errcheck
 	}()
 
-	var batch []generated.InsertContainerLogParams
+	var batch []generated.BulkInsertContainerLogsParams
 	flushTicker := time.NewTicker(c.flushEvery)
 	defer flushTicker.Stop()
 
@@ -360,17 +360,22 @@ func (c *Collector) watchContainer(ctx context.Context, ctr runtime.ContainerInf
 		if c.lineHook != nil {
 			c.lineHook(ctx, src.typ, src.name, line.message)
 		}
-		var recordedAt pgtype.Timestamptz
-		if !line.ts.IsZero() {
-			recordedAt = pgtype.Timestamptz{Time: line.ts, Valid: true}
+		// The bulk insert takes plain values, so the timestamp is resolved here
+		// rather than by a COALESCE at insert time: Docker's own timestamp for
+		// the line when it parsed, otherwise now — which is when the line was
+		// read, and closer to the truth than the moment the batch happens to be
+		// flushed.
+		ts := line.ts
+		if ts.IsZero() {
+			ts = time.Now()
 		}
-		batch = append(batch, generated.InsertContainerLogParams{
+		batch = append(batch, generated.BulkInsertContainerLogsParams{
 			SourceType:   src.typ,
 			SourceID:     srcUUID,
 			Level:        line.level,
 			Stream:       line.stream,
 			Message:      line.message,
-			RecordedAt:   recordedAt,
+			RecordedAt:   pgtype.Timestamptz{Time: ts, Valid: true},
 			DeploymentID: deploymentUUID,
 		})
 	}
@@ -424,7 +429,7 @@ func (c *Collector) watchContainer(ctx context.Context, ctr runtime.ContainerInf
 	}
 }
 
-func (c *Collector) flush(ctx context.Context, src containerSource, batch []generated.InsertContainerLogParams) {
+func (c *Collector) flush(ctx context.Context, src containerSource, batch []generated.BulkInsertContainerLogsParams) {
 	ctx, span := tracing.Tracer().Start(ctx, "logcollector.flush",
 		trace.WithAttributes(
 			attribute.String("log.source_type", src.typ),
@@ -437,23 +442,29 @@ func (c *Collector) flush(ctx context.Context, src containerSource, batch []gene
 	// All lines in a batch share one source, so the Redis channel is constant.
 	channel := "container-logs:" + src.id
 
-	for _, p := range batch {
-		if err := c.queries.InsertContainerLog(ctx, p); err != nil {
-			span.RecordError(err)
-			slog.Warn("log collector: failed to insert container log", "error", err)
-			continue
-		}
+	// One bulk copy for the whole batch rather than a statement per line.
+	// container_logs is the highest-write table here — a line per container per
+	// output line — and the per-row insert cost a round trip each time.
+	//
+	// The batch is all-or-nothing, unlike the previous loop which could persist
+	// some lines and skip others. Losing a whole batch of best-effort log lines
+	// on a database error is preferable to a silently partial one, and the
+	// stream is resumed from the last stored timestamp on reattach either way.
+	if _, err := c.queries.BulkInsertContainerLogs(ctx, batch); err != nil {
+		span.RecordError(err)
+		slog.Warn("log collector: failed to insert container logs",
+			"source_type", src.typ, "source_id", src.id, "lines", len(batch), "error", err)
+		return
+	}
 
-		// Publish to Redis for live WebSocket consumers.
-		recordedAt := time.Now()
-		if p.RecordedAt.Valid {
-			recordedAt = p.RecordedAt.Time
-		}
+	// Publish to Redis for live WebSocket consumers. Done after the rows are
+	// durable so a live viewer never sees a line that was not stored.
+	for _, p := range batch {
 		payload, _ := json.Marshal(map[string]any{
 			"level":         p.Level,
 			"stream":        p.Stream,
 			"message":       p.Message,
-			"recorded_at":   recordedAt.UTC().Format(time.RFC3339Nano),
+			"recorded_at":   p.RecordedAt.Time.UTC().Format(time.RFC3339Nano),
 			"deployment_id": src.deployment,
 		})
 		c.rdb.Publish(ctx, channel, string(payload))
