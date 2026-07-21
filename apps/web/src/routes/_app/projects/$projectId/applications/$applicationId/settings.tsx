@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
-import { TriangleAlert } from "lucide-react";
+import { TriangleAlert, Trash2 } from "lucide-react";
 import { useApplication } from "@/lib/hooks/use-applications";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -88,7 +88,13 @@ function ApplicationSettingsPage() {
 
       <Separator />
 
-      <Card className="border-destructive/50">
+      {/* ring-, not border-: Card draws its edge with `ring-1` (a box-shadow),
+          and Tailwind's preflight zeroes border-width — so the previous
+          `border-destructive/50` set a colour on a 0px border and never
+          rendered anything. Overriding the ring colour is what actually tints
+          the edge. bg/ring use the status-error soft/line tokens so both
+          themes get a red that was chosen for them. */}
+      <Card className="bg-status-error-soft ring-status-error-line">
         <CardHeader>
           <CardTitle className="text-destructive flex items-center gap-2">
             <TriangleAlert aria-hidden="true" className="size-4" />
@@ -96,9 +102,31 @@ function ApplicationSettingsPage() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <Button variant="destructive" onClick={() => setDeleteOpen(true)}>
-            Delete Application
-          </Button>
+          {/* Row layout mirrors the Server page's Maintenance section: what the
+              action is on the left, the control on the right. space-y-6 +
+              Separator is the shape that section uses, so a second dangerous
+              action drops in without a rewrite. */}
+          <div className="space-y-6">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <Trash2 aria-hidden="true" className="text-destructive size-4" />
+                  <p className="text-sm font-medium">Delete Application</p>
+                </div>
+                <p className="text-muted-foreground mt-1 text-xs">
+                  Stops the running container and permanently deletes this
+                  application. This cannot be undone.
+                </p>
+              </div>
+              <Button
+                size="sm"
+                variant="destructive"
+                onClick={() => setDeleteOpen(true)}
+              >
+                Delete Application
+              </Button>
+            </div>
+          </div>
         </CardContent>
       </Card>
 
