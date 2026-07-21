@@ -191,7 +191,9 @@ function ProjectEnvVarsPage() {
               ))
             )}
           </div>
-          {rows.length > 0 && (
+          {/* Kept visible when the editor is empty but variables are still
+              stored, so removing the last row can actually be saved. */}
+          {(rows.length > 0 || (envVars?.length ?? 0) > 0) && (
             <div className="mt-4">
               <Button onClick={handleSave} disabled={upsert.isPending}>
                 {upsert.isPending ? "Saving..." : "Save Variables"}

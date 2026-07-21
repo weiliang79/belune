@@ -210,7 +210,12 @@ function EnvVarsPage() {
               ))
             )}
           </div>
-          {rows.length > 0 && (
+          {/* Also shown when the editor is empty but variables are still
+              stored, otherwise removing the last row hid the Save button and
+              the deletion could never be committed — the page then read "No
+              environment variables" while one was still stored and still being
+              injected into the container. */}
+          {(rows.length > 0 || (envVars?.length ?? 0) > 0) && (
             <div className="mt-4">
               <Button onClick={handleSave} disabled={upsert.isPending}>
                 {upsert.isPending ? "Saving..." : "Save Variables"}
