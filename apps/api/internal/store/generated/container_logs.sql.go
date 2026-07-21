@@ -11,6 +11,16 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type BulkInsertContainerLogsParams struct {
+	SourceType   string             `json:"source_type"`
+	SourceID     pgtype.UUID        `json:"source_id"`
+	Level        string             `json:"level"`
+	Stream       string             `json:"stream"`
+	Message      string             `json:"message"`
+	RecordedAt   pgtype.Timestamptz `json:"recorded_at"`
+	DeploymentID pgtype.UUID        `json:"deployment_id"`
+}
+
 const deleteOldContainerLogs = `-- name: DeleteOldContainerLogs :exec
 DELETE FROM container_logs WHERE recorded_at < NOW() - ($1 || ' days')::INTERVAL
 `
@@ -79,11 +89,13 @@ LEFT JOIN deployments d ON d.id = cl.deployment_id
 WHERE cl.source_type = $1 AND cl.source_id = $2
 GROUP BY cl.deployment_id, d.triggered_by, d.status, d.commit_sha, d.started_at
 ORDER BY MAX(cl.recorded_at) DESC
+LIMIT $3
 `
 
 type ListContainerLogSessionsParams struct {
 	SourceType string      `json:"source_type"`
 	SourceID   pgtype.UUID `json:"source_id"`
+	Limit      int32       `json:"limit"`
 }
 
 type ListContainerLogSessionsRow struct {
@@ -101,8 +113,14 @@ type ListContainerLogSessionsRow struct {
 // source, most recent first, enriched with the deployment's own metadata. The
 // LEFT JOIN keeps the NULL "earlier" bucket (and database/system logs, which
 // have no deployment) in the result.
+//
+// Bounded: an application accumulates a session per deploy for its whole life,
+// and every row here becomes an entry in the viewer's session picker. The cap
+// keeps both the response and that dropdown finite. Truncation is safe — the
+// viewer falls back to a short id for any session it cannot label, and "All
+// deployments" still reads every line regardless of what the picker lists.
 func (q *Queries) ListContainerLogSessions(ctx context.Context, arg ListContainerLogSessionsParams) ([]ListContainerLogSessionsRow, error) {
-	rows, err := q.db.Query(ctx, listContainerLogSessions, arg.SourceType, arg.SourceID)
+	rows, err := q.db.Query(ctx, listContainerLogSessions, arg.SourceType, arg.SourceID, arg.Limit)
 	if err != nil {
 		return nil, err
 	}

@@ -2,6 +2,18 @@
 INSERT INTO container_logs (source_type, source_id, level, stream, message, recorded_at, deployment_id)
 VALUES ($1, $2, $3, $4, $5, COALESCE(sqlc.narg('recorded_at')::timestamptz, NOW()), sqlc.narg('deployment_id'));
 
+-- name: BulkInsertContainerLogs :copyfrom
+-- Bulk path for the log collector, which flushes batches of lines. Inserting
+-- them one statement at a time cost a round trip per line and dominated the
+-- write cost of the busiest table in the system.
+--
+-- CopyFrom takes plain column values, so recorded_at has no COALESCE fallback
+-- here: the caller always supplies it, using the timestamp Docker reported for
+-- the line and its own clock only when that is missing. That is closer to when
+-- the line was actually observed than evaluating NOW() at flush time anyway.
+INSERT INTO container_logs (source_type, source_id, level, stream, message, recorded_at, deployment_id)
+VALUES ($1, $2, $3, $4, $5, $6, $7);
+
 -- name: SearchContainerLogs :many
 SELECT id, source_type, source_id, level, stream, message, recorded_at, deployment_id FROM container_logs
 WHERE source_type = sqlc.arg('source_type')
@@ -27,6 +39,12 @@ LIMIT sqlc.arg('limit') OFFSET sqlc.arg('offset');
 -- source, most recent first, enriched with the deployment's own metadata. The
 -- LEFT JOIN keeps the NULL "earlier" bucket (and database/system logs, which
 -- have no deployment) in the result.
+--
+-- Bounded: an application accumulates a session per deploy for its whole life,
+-- and every row here becomes an entry in the viewer's session picker. The cap
+-- keeps both the response and that dropdown finite. Truncation is safe — the
+-- viewer falls back to a short id for any session it cannot label, and "All
+-- deployments" still reads every line regardless of what the picker lists.
 SELECT cl.deployment_id,
        MIN(cl.recorded_at)::timestamptz AS first_at,
        MAX(cl.recorded_at)::timestamptz AS last_at,
@@ -39,7 +57,8 @@ FROM container_logs cl
 LEFT JOIN deployments d ON d.id = cl.deployment_id
 WHERE cl.source_type = $1 AND cl.source_id = $2
 GROUP BY cl.deployment_id, d.triggered_by, d.status, d.commit_sha, d.started_at
-ORDER BY MAX(cl.recorded_at) DESC;
+ORDER BY MAX(cl.recorded_at) DESC
+LIMIT sqlc.arg('limit');
 
 -- name: GetLatestContainerLogTime :one
 SELECT MAX(recorded_at)::timestamptz FROM container_logs

@@ -128,10 +128,17 @@ func (h *Handler) ListDatabaseLogSessions(w http.ResponseWriter, r *http.Request
 	h.listContainerLogSessions(w, r, "database", dbUUID)
 }
 
+// maxLogSessions bounds the session picker. A long-lived application gains a
+// session per deploy, and all of them would otherwise be returned and rendered
+// in one dropdown. The most recent are the ones anyone reads; older logs remain
+// reachable through the unfiltered view.
+const maxLogSessions = 50
+
 func (h *Handler) listContainerLogSessions(w http.ResponseWriter, r *http.Request, sourceType string, sourceID pgtype.UUID) {
 	sessions, err := h.queries.ListContainerLogSessions(r.Context(), generated.ListContainerLogSessionsParams{
 		SourceType: sourceType,
 		SourceID:   sourceID,
+		Limit:      maxLogSessions,
 	})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to list log sessions")

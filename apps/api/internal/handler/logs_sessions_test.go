@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/assert"
@@ -101,4 +102,55 @@ func TestContainerLogSessions(t *testing.T) {
 	resp = env.DoRequest(t, "GET", fmt.Sprintf("/api/projects/%s/applications/%s/logs/history?deployment_id=not-a-uuid", projectID, appID), nil, testutil.AuthHeader(adminToken))
 	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
 	resp.Body.Close()
+}
+
+// An application gains a session per deploy for its whole life, and each one
+// becomes an entry in the viewer's session picker, so the listing is capped.
+func TestContainerLogSessions_IsBounded(t *testing.T) {
+	resetDB(t)
+	adminToken := env.SetupAdmin(t, "admin@test.com", "password123")
+
+	project := env.CreateProject(t, adminToken, "Busy Project", "busy-project")
+	projectID := extractID(project["id"])
+	app := env.CreateApplication(t, adminToken, projectID, map[string]any{
+		"name": "Busy App", "type": "image", "build_type": "image",
+		"source_image": "nginx:latest",
+	})
+	appID := extractID(app["id"])
+	var appUUID pgtype.UUID
+	require.NoError(t, appUUID.Scan(appID))
+
+	ctx := context.Background()
+	const sessions = 60 // comfortably past the 50 cap
+
+	for i := 0; i < sessions; i++ {
+		d, err := env.Queries.CreateDeployment(ctx, generated.CreateDeploymentParams{
+			ApplicationID: appUUID, Status: status.DeploymentSuccess, TriggeredBy: "manual",
+		})
+		require.NoError(t, err)
+		require.NoError(t, env.Queries.InsertContainerLog(ctx, generated.InsertContainerLogParams{
+			SourceType: "application", SourceID: appUUID,
+			Level: "info", Stream: "stdout",
+			Message:      fmt.Sprintf("line from session %d", i),
+			DeploymentID: d.ID,
+			// Spread the timestamps so "most recent first" is well defined.
+			RecordedAt: pgtype.Timestamptz{Time: time.Now().Add(time.Duration(i) * time.Minute), Valid: true},
+		}))
+	}
+
+	resp := env.DoRequest(t, "GET", fmt.Sprintf("/api/projects/%s/applications/%s/logs/sessions", projectID, appID), nil, testutil.AuthHeader(adminToken))
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	rows := testutil.ReadJSONArray(t, resp)
+	assert.Len(t, rows, 50, "the session listing must be capped")
+
+	// The cap keeps the newest, which are the ones anyone reads.
+	first := rows[0].(map[string]any)
+	assert.EqualValues(t, 1, first["line_count"])
+
+	// Every line is still reachable unfiltered — capping the picker must not
+	// hide log content.
+	resp = env.DoRequest(t, "GET", fmt.Sprintf("/api/projects/%s/applications/%s/logs/history?limit=1000", projectID, appID), nil, testutil.AuthHeader(adminToken))
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	assert.Len(t, testutil.ReadJSONArray(t, resp), sessions,
+		"all lines remain readable in the unfiltered view")
 }
