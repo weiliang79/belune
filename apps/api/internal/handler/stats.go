@@ -10,6 +10,7 @@ import (
 
 	"github.com/weiliang79/belune/internal/server/middleware"
 	"github.com/weiliang79/belune/internal/service"
+	"github.com/weiliang79/belune/internal/store/generated"
 )
 
 // latestHostStats returns the cached host snapshot written by the metrics
@@ -28,9 +29,24 @@ func (h *Handler) latestHostStats(ctx context.Context) service.HostMetricPoint {
 	return service.CollectHostStats(ctx)
 }
 
+// healthRatio breaks the service fleet down by state. Each state is reported
+// separately rather than as a single "not running" figure: a deliberately
+// stopped service, a crashed one, and one that is up but failing its health
+// check all need different responses, so collapsing them hid the distinction
+// the operator actually cares about.
+//
+// The buckets are exhaustive — they always sum to Total. Busy is deliberately
+// the residual rather than a counted set (databases mid-create/upgrade/backup
+// today): if a new service status is ever introduced it surfaces here instead
+// of silently vanishing from the card.
 type healthRatio struct {
-	Running int64 `json:"running"`
-	Total   int64 `json:"total"`
+	Running   int64 `json:"running"`
+	Errored   int64 `json:"errored"`
+	Stopped   int64 `json:"stopped"`
+	Unhealthy int64 `json:"unhealthy"`
+	Inactive  int64 `json:"inactive"`
+	Busy      int64 `json:"busy"`
+	Total     int64 `json:"total"`
 }
 
 type deploy7dStats struct {
@@ -53,6 +69,28 @@ type statsResponse struct {
 	Deploy7d       deploy7dStats            `json:"deploy_7d"`
 	NeedsAttention needsAttention           `json:"needs_attention"`
 	Host           *service.HostMetricPoint `json:"host"`
+}
+
+// appHealth folds the per-resource counts into the exhaustive fleet breakdown.
+// Databases have no 'unhealthy' or 'inactive' state, so those come from
+// applications alone; everything left over (a database creating, upgrading, or
+// backing up) becomes Busy, which keeps the buckets summing to Total.
+func appHealth(appH generated.CountApplicationHealthRow, dbH generated.CountDatabaseHealthRow, errored int64) healthRatio {
+	h := healthRatio{
+		Running:   appH.Running + dbH.Running,
+		Errored:   errored,
+		Stopped:   appH.Stopped + dbH.Stopped,
+		Unhealthy: appH.Unhealthy,
+		Inactive:  appH.Inactive,
+		Total:     appH.Total + dbH.Total,
+	}
+	// Residual. Clamped at zero so a counting skew can never render a negative
+	// badge; the named buckets are all mutually exclusive, so it should not occur.
+	h.Busy = h.Total - h.Running - h.Errored - h.Stopped - h.Unhealthy - h.Inactive
+	if h.Busy < 0 {
+		h.Busy = 0
+	}
+	return h
 }
 
 // GetStats returns the operator-health stat strip in a single call.
@@ -86,15 +124,19 @@ func (h *Handler) GetStats(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		slog.Warn("stats: count deployments 7d", "error", err)
 	}
+	// Distinct from dep.Failed: that is the 7-day *statistic* behind the deploy
+	// success rate and stays historical. "Needs attention" instead wants what is
+	// still broken now, so it counts applications whose latest deploy failed.
+	unresolvedDeploys, err := h.queries.CountUnresolvedFailedDeploys(ctx, scope)
+	if err != nil {
+		slog.Warn("stats: count unresolved failed deploys", "error", err)
+	}
 
 	errorServices := appH.Errored + dbH.Errored
 
 	resp := statsResponse{
 		IsAdmin: isAdmin,
-		AppHealth: healthRatio{
-			Running: appH.Running + dbH.Running,
-			Total:   appH.Total + dbH.Total,
-		},
+		AppHealth: appHealth(appH, dbH, errorServices),
 		Deploy7d: deploy7dStats{
 			Succeeded:     dep.Succeeded,
 			Failed:        dep.Failed,
@@ -105,7 +147,7 @@ func (h *Handler) GetStats(w http.ResponseWriter, r *http.Request) {
 
 	var failedBackups int64
 	if isAdmin {
-		if failedBackups, err = h.queries.CountFailedBackups7d(ctx); err != nil {
+		if failedBackups, err = h.queries.CountUnresolvedFailedBackup(ctx); err != nil {
 			slog.Warn("stats: count failed backups", "error", err)
 			failedBackups = 0
 		}
@@ -114,10 +156,10 @@ func (h *Handler) GetStats(w http.ResponseWriter, r *http.Request) {
 	}
 
 	resp.NeedsAttention = needsAttention{
-		FailedDeploys: dep.Failed,
+		FailedDeploys: unresolvedDeploys,
 		ErrorServices: errorServices,
 		FailedBackups: failedBackups,
-		Total:         dep.Failed + errorServices + failedBackups,
+		Total:         unresolvedDeploys + errorServices + failedBackups,
 	}
 
 	writeJSON(w, http.StatusOK, resp)

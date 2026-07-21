@@ -549,7 +549,18 @@ export interface HostResources {
 
 export interface Stats {
   is_admin: boolean;
-  app_health: { running: number; total: number };
+  // Exhaustive fleet breakdown — the buckets always sum to total. `busy` is the
+  // residual (a database creating / upgrading / backing up), so a service can
+  // never fall out of the card entirely.
+  app_health: {
+    running: number;
+    errored: number;
+    stopped: number;
+    unhealthy: number;
+    inactive: number;
+    busy: number;
+    total: number;
+  };
   deploy_7d: {
     succeeded: number;
     failed: number;

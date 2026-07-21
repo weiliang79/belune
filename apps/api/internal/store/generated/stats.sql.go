@@ -13,9 +13,12 @@ import (
 
 const countApplicationHealth = `-- name: CountApplicationHealth :one
 
-SELECT count(*)                                      AS total,
-       count(*) FILTER (WHERE a.status = 'running')  AS running,
-       count(*) FILTER (WHERE a.status = 'error')    AS errored
+SELECT count(*)                                       AS total,
+       count(*) FILTER (WHERE a.status = 'running')   AS running,
+       count(*) FILTER (WHERE a.status = 'error')     AS errored,
+       count(*) FILTER (WHERE a.status = 'stopped')   AS stopped,
+       count(*) FILTER (WHERE a.status = 'unhealthy') AS unhealthy,
+       count(*) FILTER (WHERE a.status = 'inactive')  AS inactive
 FROM applications a
 JOIN projects p ON p.id = a.project_id
 WHERE a.parent_application_id IS NULL
@@ -23,9 +26,12 @@ WHERE a.parent_application_id IS NULL
 `
 
 type CountApplicationHealthRow struct {
-	Total   int64 `json:"total"`
-	Running int64 `json:"running"`
-	Errored int64 `json:"errored"`
+	Total     int64 `json:"total"`
+	Running   int64 `json:"running"`
+	Errored   int64 `json:"errored"`
+	Stopped   int64 `json:"stopped"`
+	Unhealthy int64 `json:"unhealthy"`
+	Inactive  int64 `json:"inactive"`
 }
 
 // Operator-health aggregates for the dashboard stat strips. Each is optionally
@@ -35,14 +41,22 @@ type CountApplicationHealthRow struct {
 func (q *Queries) CountApplicationHealth(ctx context.Context, userID pgtype.UUID) (CountApplicationHealthRow, error) {
 	row := q.db.QueryRow(ctx, countApplicationHealth, userID)
 	var i CountApplicationHealthRow
-	err := row.Scan(&i.Total, &i.Running, &i.Errored)
+	err := row.Scan(
+		&i.Total,
+		&i.Running,
+		&i.Errored,
+		&i.Stopped,
+		&i.Unhealthy,
+		&i.Inactive,
+	)
 	return i, err
 }
 
 const countDatabaseHealth = `-- name: CountDatabaseHealth :one
 SELECT count(*)                                       AS total,
        count(*) FILTER (WHERE db.status = 'running')  AS running,
-       count(*) FILTER (WHERE db.status = 'failed')   AS errored
+       count(*) FILTER (WHERE db.status = 'failed')   AS errored,
+       count(*) FILTER (WHERE db.status = 'stopped')  AS stopped
 FROM databases db
 JOIN projects p ON p.id = db.project_id
 WHERE ($1::uuid IS NULL OR p.user_id = $1)
@@ -52,12 +66,18 @@ type CountDatabaseHealthRow struct {
 	Total   int64 `json:"total"`
 	Running int64 `json:"running"`
 	Errored int64 `json:"errored"`
+	Stopped int64 `json:"stopped"`
 }
 
 func (q *Queries) CountDatabaseHealth(ctx context.Context, userID pgtype.UUID) (CountDatabaseHealthRow, error) {
 	row := q.db.QueryRow(ctx, countDatabaseHealth, userID)
 	var i CountDatabaseHealthRow
-	err := row.Scan(&i.Total, &i.Running, &i.Errored)
+	err := row.Scan(
+		&i.Total,
+		&i.Running,
+		&i.Errored,
+		&i.Stopped,
+	)
 	return i, err
 }
 
@@ -99,14 +119,55 @@ func (q *Queries) CountDeployments7d(ctx context.Context, userID pgtype.UUID) (C
 	return i, err
 }
 
-const countFailedBackups7d = `-- name: CountFailedBackups7d :one
+const countUnresolvedFailedBackup = `-- name: CountUnresolvedFailedBackup :one
 SELECT count(*) AS failed
-FROM backup_runs
-WHERE status = 'failed' AND started_at >= now() - interval '7 days'
+FROM (
+    SELECT status
+    FROM backup_runs
+    WHERE status IN ('succeeded', 'failed')
+    ORDER BY started_at DESC
+    LIMIT 1
+) latest
+WHERE latest.status = 'failed'
 `
 
-func (q *Queries) CountFailedBackups7d(ctx context.Context) (int64, error) {
-	row := q.db.QueryRow(ctx, countFailedBackups7d)
+// The platform backup is a single global job (backup_runs has no per-resource
+// key), so "unresolved" is simply whether the most recent finished run failed.
+// Returns 0 or 1; the next successful run clears it. A run still in progress is
+// skipped so it cannot mask the previous failure.
+func (q *Queries) CountUnresolvedFailedBackup(ctx context.Context) (int64, error) {
+	row := q.db.QueryRow(ctx, countUnresolvedFailedBackup)
+	var failed int64
+	err := row.Scan(&failed)
+	return failed, err
+}
+
+const countUnresolvedFailedDeploys = `-- name: CountUnresolvedFailedDeploys :one
+SELECT count(*) AS failed
+FROM (
+    SELECT DISTINCT ON (d.application_id) d.status
+    FROM deployments d
+    JOIN applications a ON a.id = d.application_id
+    JOIN projects p ON p.id = a.project_id
+    WHERE a.parent_application_id IS NULL
+      AND d.status IN ('success', 'failed')
+      AND ($1::uuid IS NULL OR p.user_id = $1)
+    ORDER BY d.application_id, d.started_at DESC
+) latest
+WHERE latest.status = 'failed'
+`
+
+// Applications whose most recent *resolved* deployment failed.
+//
+// This counts the latest outcome per application rather than every failure in a
+// time window, which is what makes the "needs attention" figure actionable: a
+// successful redeploy clears it, and a failure nobody fixed keeps showing
+// instead of silently ageing out after 7 days. In-progress deployments are
+// excluded from the "latest" pick so merely starting a retry cannot mask an
+// unfixed failure before it actually succeeds. Preview children are excluded to
+// match CountApplicationHealth — they are ephemeral and would inflate the count.
+func (q *Queries) CountUnresolvedFailedDeploys(ctx context.Context, userID pgtype.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countUnresolvedFailedDeploys, userID)
 	var failed int64
 	err := row.Scan(&failed)
 	return failed, err

@@ -4,9 +4,12 @@
 -- name: CountApplicationHealth :one
 -- Parent applications only — preview children are ephemeral and would inflate
 -- the health ratio.
-SELECT count(*)                                      AS total,
-       count(*) FILTER (WHERE a.status = 'running')  AS running,
-       count(*) FILTER (WHERE a.status = 'error')    AS errored
+SELECT count(*)                                       AS total,
+       count(*) FILTER (WHERE a.status = 'running')   AS running,
+       count(*) FILTER (WHERE a.status = 'error')     AS errored,
+       count(*) FILTER (WHERE a.status = 'stopped')   AS stopped,
+       count(*) FILTER (WHERE a.status = 'unhealthy') AS unhealthy,
+       count(*) FILTER (WHERE a.status = 'inactive')  AS inactive
 FROM applications a
 JOIN projects p ON p.id = a.project_id
 WHERE a.parent_application_id IS NULL
@@ -15,7 +18,8 @@ WHERE a.parent_application_id IS NULL
 -- name: CountDatabaseHealth :one
 SELECT count(*)                                       AS total,
        count(*) FILTER (WHERE db.status = 'running')  AS running,
-       count(*) FILTER (WHERE db.status = 'failed')   AS errored
+       count(*) FILTER (WHERE db.status = 'failed')   AS errored,
+       count(*) FILTER (WHERE db.status = 'stopped')  AS stopped
 FROM databases db
 JOIN projects p ON p.id = db.project_id
 WHERE (sqlc.narg('user_id')::uuid IS NULL OR p.user_id = sqlc.narg('user_id'));
@@ -38,7 +42,40 @@ JOIN projects p ON p.id = a.project_id
 WHERE d.started_at >= now() - interval '7 days'
   AND (sqlc.narg('user_id')::uuid IS NULL OR p.user_id = sqlc.narg('user_id'));
 
--- name: CountFailedBackups7d :one
+-- name: CountUnresolvedFailedDeploys :one
+-- Applications whose most recent *resolved* deployment failed.
+--
+-- This counts the latest outcome per application rather than every failure in a
+-- time window, which is what makes the "needs attention" figure actionable: a
+-- successful redeploy clears it, and a failure nobody fixed keeps showing
+-- instead of silently ageing out after 7 days. In-progress deployments are
+-- excluded from the "latest" pick so merely starting a retry cannot mask an
+-- unfixed failure before it actually succeeds. Preview children are excluded to
+-- match CountApplicationHealth — they are ephemeral and would inflate the count.
 SELECT count(*) AS failed
-FROM backup_runs
-WHERE status = 'failed' AND started_at >= now() - interval '7 days';
+FROM (
+    SELECT DISTINCT ON (d.application_id) d.status
+    FROM deployments d
+    JOIN applications a ON a.id = d.application_id
+    JOIN projects p ON p.id = a.project_id
+    WHERE a.parent_application_id IS NULL
+      AND d.status IN ('success', 'failed')
+      AND (sqlc.narg('user_id')::uuid IS NULL OR p.user_id = sqlc.narg('user_id'))
+    ORDER BY d.application_id, d.started_at DESC
+) latest
+WHERE latest.status = 'failed';
+
+-- name: CountUnresolvedFailedBackup :one
+-- The platform backup is a single global job (backup_runs has no per-resource
+-- key), so "unresolved" is simply whether the most recent finished run failed.
+-- Returns 0 or 1; the next successful run clears it. A run still in progress is
+-- skipped so it cannot mask the previous failure.
+SELECT count(*) AS failed
+FROM (
+    SELECT status
+    FROM backup_runs
+    WHERE status IN ('succeeded', 'failed')
+    ORDER BY started_at DESC
+    LIMIT 1
+) latest
+WHERE latest.status = 'failed';

@@ -56,7 +56,6 @@ export function OperatorHealthStrip({ className }: { className?: string }) {
 
   const deployRate = pct(deploy_7d.succeeded, deploy_7d.total);
   const attention = needs_attention.total;
-  const notRunning = Math.max(0, app_health.total - app_health.running);
 
   const cols = host ? "lg:grid-cols-4" : "lg:grid-cols-3";
 
@@ -78,9 +77,30 @@ export function OperatorHealthStrip({ className }: { className?: string }) {
         footer={
           app_health.total === 0 ? undefined : (
             <>
+              {/* One badge per state rather than a single "down" count: errored,
+                  unhealthy, stopped and inactive call for completely different
+                  responses. The buckets are exhaustive (busy is the server-side
+                  residual), so every service is accounted for. Each hides at
+                  zero, keeping the card quiet in the healthy case. */}
               <Badge variant="light">{app_health.running} running</Badge>
-              {notRunning > 0 && (
-                <Badge variant="destructive">{notRunning} down</Badge>
+              {app_health.errored > 0 && (
+                <Badge variant="destructive">{app_health.errored} error</Badge>
+              )}
+              {app_health.unhealthy > 0 && (
+                // Up, but failing its health check — a warning, not a failure,
+                // so amber rather than the destructive red used for crashes.
+                <Badge className="border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-400">
+                  {app_health.unhealthy} unhealthy
+                </Badge>
+              )}
+              {app_health.busy > 0 && (
+                <Badge variant="secondary">{app_health.busy} busy</Badge>
+              )}
+              {app_health.stopped > 0 && (
+                <Badge variant="outline">{app_health.stopped} stopped</Badge>
+              )}
+              {app_health.inactive > 0 && (
+                <Badge variant="outline">{app_health.inactive} inactive</Badge>
               )}
             </>
           )
@@ -122,14 +142,19 @@ export function OperatorHealthStrip({ className }: { className?: string }) {
                   {needs_attention.error_services} errored
                 </Badge>
               )}
+              {/* Both counts are "still broken now", not totals over a window:
+                  one per application whose latest deploy failed, and 0-or-1 for
+                  the global platform backup. Hence the singular forms. */}
               {needs_attention.failed_deploys > 0 && (
                 <Badge variant="destructive">
-                  {needs_attention.failed_deploys} failed deploys
+                  {needs_attention.failed_deploys} failed deploy
+                  {needs_attention.failed_deploys === 1 ? "" : "s"}
                 </Badge>
               )}
               {needs_attention.failed_backups > 0 && (
                 <Badge variant="destructive">
-                  {needs_attention.failed_backups} failed backups
+                  {needs_attention.failed_backups} failed backup
+                  {needs_attention.failed_backups === 1 ? "" : "s"}
                 </Badge>
               )}
             </>
