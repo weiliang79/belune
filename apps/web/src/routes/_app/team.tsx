@@ -211,7 +211,7 @@ function TeamSettingsPage() {
         <CardHeader className="flex flex-row items-center justify-between gap-3">
           <CardTitle className="flex items-center gap-2">
             <UsersIcon aria-hidden="true" className="size-4" />
-            Active members
+            Active Members
           </CardTitle>
           <div className="flex items-center gap-2">
             <div className="relative hidden sm:block">

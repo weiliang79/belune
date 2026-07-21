@@ -36,7 +36,7 @@ function ProjectBackupsPage() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Archive aria-hidden="true" className="size-4" />
-            Recent backup activity
+            Recent Backup Activity
           </CardTitle>
           <CardDescription>
             The latest backups across all databases in this project.

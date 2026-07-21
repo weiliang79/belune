@@ -195,7 +195,7 @@ export function SystemBackupsPanel() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <HistoryIcon aria-hidden="true" className="size-4" />
-            Recent runs
+            Recent Runs
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -260,7 +260,7 @@ function RestoreHelpCard({ remoteEnabled }: { remoteEnabled: boolean }) {
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <ArchiveRestore aria-hidden="true" className="size-4" />
-          Restoring a backup
+          Restoring a Backup
         </CardTitle>
         <p className="text-muted-foreground text-sm">
           Restore is a host operation, not an in-app action — it drops and
@@ -359,7 +359,7 @@ function RemoteStorageCard({
           <div>
             <CardTitle className="flex items-center gap-2">
               <Cloud aria-hidden="true" className="size-4" />
-              Remote storage
+              Remote Storage
             </CardTitle>
             <CardDescription>
               Off-host destination for control-plane backups.

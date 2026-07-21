@@ -218,7 +218,7 @@ function CertificatesContent() {
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle className="flex items-center gap-2">
             <Lock aria-hidden="true" className="size-4" />
-            Uploaded Certificates
+            HTTPS Certificates
           </CardTitle>
           <Button size="sm" onClick={() => setUploadOpen(true)}>
             Upload Certificate

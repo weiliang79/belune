@@ -54,7 +54,7 @@ export function ConnectionsPanel() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <LinkIcon aria-hidden="true" className="size-4" />
-            Connect an account
+            Connect an Account
           </CardTitle>
           <CardDescription>
             Link a git account to browse and deploy its repositories.
@@ -113,7 +113,7 @@ export function ConnectionsPanel() {
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle className="flex items-center gap-2">
             <GitBranch aria-hidden="true" className="size-4" />
-            Your connections
+            Your Connections
           </CardTitle>
           {integrations && integrations.length > 0 && (
             <Badge variant="secondary">{integrations.length}</Badge>

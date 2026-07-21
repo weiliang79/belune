@@ -69,7 +69,7 @@ export function DockerOverviewTab({ enabled }: { enabled: boolean }) {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <HardDriveIcon aria-hidden="true" className="size-4" />
-            Disk usage
+            Disk Usage
           </CardTitle>
         </CardHeader>
         <CardContent>
