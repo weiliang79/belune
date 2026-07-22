@@ -2,6 +2,8 @@ package testutil
 
 import (
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 
 	"github.com/alicebob/miniredis/v2"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -34,6 +36,26 @@ type TestEnv struct {
 	RedisSrv   *miniredis.Miniredis
 }
 
+// testBackupScriptPath returns a path that exists, for the backup trigger
+// endpoint's fail-fast check.
+//
+// Without it the config default points at /opt/belune/scripts/backup.sh, so the
+// endpoint returned 400 on any machine that is not a Belune host — the tests
+// were asserting the filesystem layout of production rather than the handler.
+// Nothing executes this file: handler tests enqueue through a mock.
+//
+// The name is fixed rather than random so repeated runs reuse one empty file
+// instead of accumulating them in the temp directory.
+func testBackupScriptPath() string {
+	path := filepath.Join(os.TempDir(), "belune-testutil-backup.sh")
+	if _, err := os.Stat(path); err != nil {
+		if err := os.WriteFile(path, []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
+			panic("testutil: create backup script stub: " + err.Error())
+		}
+	}
+	return path
+}
+
 // SetupTestServer creates a full HTTP test server with real DB and mock external deps.
 // Called from TestMain so does not take *testing.T.
 func SetupTestServer(pool *pgxpool.Pool, queries *generated.Queries) *TestEnv {
@@ -47,6 +69,7 @@ func SetupTestServer(pool *pgxpool.Pool, queries *generated.Queries) *TestEnv {
 		Keyring:             keyring,
 		CaddyAdminURL:       "http://localhost:2019",
 		DisableRateLimiting: true,
+		BackupScriptPath:    testBackupScriptPath(),
 	}
 
 	mockRuntime := &MockContainerRuntime{}
