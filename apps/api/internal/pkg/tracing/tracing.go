@@ -49,6 +49,11 @@ type ShutdownFunc func(context.Context) error
 // When cfg.Endpoint is empty, a no-op provider is installed and the returned
 // shutdown function is a cheap no-op. Callers do not need to branch on this.
 func Init(ctx context.Context, cfg Config) (ShutdownFunc, error) {
+	// Route OTel's own errors through slog before anything can fail. Installed
+	// unconditionally: it costs nothing with no exporter, and forgetting it in
+	// the configured branch is how export failures end up at Info.
+	SetErrorHandler()
+
 	// Always install the W3C propagator so callers can inject/extract even
 	// when no exporter is configured — the context still flows through.
 	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(
