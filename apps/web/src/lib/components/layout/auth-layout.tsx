@@ -7,6 +7,7 @@ import {
 import { BRAND } from "@/lib/brand";
 import { BeluneLogo } from "@/lib/components/belune-logo";
 import { useInstanceName } from "@/lib/hooks/use-features";
+import { useVersion } from "@/lib/hooks/use-version";
 
 const HIGHLIGHTS = [
   { Icon: GitBranchIcon, text: "Deploy from Git or a Docker image" },
@@ -29,6 +30,7 @@ export function AuthLayout({
   children: ReactNode;
 }) {
   const instanceName = useInstanceName();
+  const version = useVersion();
   return (
     <div className="grid min-h-screen lg:grid-cols-2">
       {/* Brand panel */}
@@ -67,7 +69,8 @@ export function AuthLayout({
         </div>
 
         <p className="font-mono text-xs text-white/60">
-          {BRAND.name} • {BRAND.version}
+          {BRAND.name}
+          {version && ` • ${version}`}
         </p>
       </div>
 

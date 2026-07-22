@@ -36,7 +36,9 @@ RUN set -eux; \
     pack version
 
 # ── Stage: frontend ──────────────────────────────────────────────────────────
-FROM node:24-alpine AS frontend
+# Pinned to the BUILD platform: the output is static assets, so there is nothing
+# architecture-specific to produce and no reason to run npm under emulation.
+FROM --platform=$BUILDPLATFORM node:24-alpine AS frontend
 WORKDIR /web
 COPY apps/web/package*.json ./
 RUN npm ci
@@ -46,7 +48,11 @@ RUN npm run build
 # ── Stage: backend ───────────────────────────────────────────────────────────
 # Match the Go version the devcontainer uses (go.mod requires >= 1.25); a stale
 # 1.24 here is what made the prod image silently unbuildable.
-FROM golang:1.26-alpine AS backend
+#
+# Runs on the BUILD platform and cross-compiles to $TARGETARCH. CGO_ENABLED=0
+# makes that free, and it keeps multi-arch releases off QEMU, where compiling
+# this module for arm64 is slow enough to be a CI liability.
+FROM --platform=$BUILDPLATFORM golang:1.26-alpine AS backend
 WORKDIR /app
 # Install git for go mod download (private modules)
 RUN apk add --no-cache git
@@ -55,9 +61,17 @@ RUN go mod download
 COPY apps/api/ ./
 # Copy compiled frontend into the Go embed directory
 COPY --from=frontend /web/build ./web/dist/
+# Provided by buildx; default keeps a plain `docker build` working.
+ARG TARGETARCH
+# VERSION must be declared to be readable here: an undeclared ${VERSION} is a
+# shell expansion that is always empty, which is how every image built so far
+# shipped reporting "dev".
+ARG VERSION=dev
 # CGO_ENABLED=0 → fully static binary, runs on any base (Alpine or Debian).
-RUN CGO_ENABLED=0 GOOS=linux go build \
-    -ldflags="-s -w -X main.Version=${VERSION:-dev}" \
+# The -X path must be the real symbol; the linker silently ignores -X for a
+# symbol that does not exist, which is the other half of the same bug.
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build \
+    -ldflags="-s -w -X github.com/weiliang79/belune/internal/version.Version=${VERSION}" \
     -o /belune ./cmd/server
 
 # ── Stage: prod runtime ──────────────────────────────────────────────────────

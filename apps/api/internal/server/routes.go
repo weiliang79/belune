@@ -57,6 +57,7 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService,
 		r.With(withTimeout(handlerTimeout)).Get("/api/auth/setup", h.Setup)
 		r.With(withTimeout(handlerTimeout)).Post("/api/auth/setup", h.Setup)
 		r.With(withTimeout(handlerTimeout)).Get("/api/features", h.GetFeatures)
+		r.With(withTimeout(handlerTimeout)).Get("/api/version", h.GetVersion)
 
 		// Refresh: cookie-driven, no Auth middleware — but CSRF and rate
 		// limit still apply. 30 req/min per IP is generous enough for normal
