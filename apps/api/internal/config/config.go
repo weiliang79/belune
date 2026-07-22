@@ -49,6 +49,10 @@ type Config struct {
 	SecureCookies       bool
 	TLS                 bool   // when true, send HSTS headers
 	LogLevel            string // debug, info, warn, error (default: info)
+	// LogFormat selects the console encoding: "console" (human-readable,
+	// default) or "json". JSON is worth keeping for anything that parses the
+	// stream; the console format is for reading a terminal.
+	LogFormat           string // console, json (default: console)
 	DisableRateLimiting bool   // set true in tests to avoid per-IP counter accumulation
 
 	// Timeouts
@@ -157,6 +161,7 @@ func Load() (*Config, error) {
 		SecureCookies:      getEnvBool("SECURE_COOKIES", false),
 		TLS:                getEnvBool("TLS_ENABLED", false),
 		LogLevel:           getEnv("LOG_LEVEL", "info"),
+		LogFormat:          getEnv("LOG_FORMAT", "console"),
 
 		BuildTimeoutMinutes:     getEnvInt("BUILD_TIMEOUT_MINUTES", 30),
 		TaskTimeoutMinutes:      getEnvInt("TASK_TIMEOUT_MINUTES", 45),

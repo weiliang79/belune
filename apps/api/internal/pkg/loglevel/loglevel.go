@@ -35,6 +35,17 @@ const (
 // matches an intentional prefix, not the word appearing mid-message.
 var tagRe = regexp.MustCompile(`^\s*\[(DEBUG|INFO|WARN|WARNING|ERROR)\]\s?`)
 
+// consoleRe matches Belune's own console format, written by
+// logger.ConsoleHandler:
+//
+//	2026-07-22 10:00:04 INFO  [worker.deploy] message
+//
+// Anchored and shape-checked, so it is the producer's own statement of
+// severity rather than a guess. Without this tier such a line falls through to
+// the keyword scan below, where an INFO line reading "health check failed"
+// matches errRe on "failed" and is shown as an error.
+var consoleRe = regexp.MustCompile(`^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} (DEBUG|INFO|WARN|WARNING|ERROR)\b`)
+
 // keywordRe finds a severity keyword as a whole word anywhere in the message.
 // Checked in Error > Warning > Debug > Info priority by inspecting the match.
 // Failure words are part of the error set because severity now has to come from
@@ -89,12 +100,17 @@ func Detect(message, stream string) Level {
 		return Normalize(m[1])
 	}
 
-	// 2. Structured JSON with a level/severity field.
+	// 2. Our own console format, which states its level explicitly.
+	if m := consoleRe.FindStringSubmatch(message); m != nil {
+		return Normalize(m[1])
+	}
+
+	// 3. Structured JSON with a level/severity field.
 	if lvl, ok := jsonLevel(message); ok {
 		return lvl
 	}
 
-	// 3. Colon-delimited severity prefix (Postgres/MySQL and many app loggers).
+	// 4. Colon-delimited severity prefix (Postgres/MySQL and many app loggers).
 	if m := dbSeverityRe.FindStringSubmatch(message); m != nil {
 		// LOG/DETAIL/HINT/CONTEXT/STATEMENT normalize to Info.
 		switch strings.ToLower(m[1]) {
@@ -105,7 +121,7 @@ func Detect(message, stream string) Level {
 		}
 	}
 
-	// 4. Explicit status glyphs. These are producer intent — as deliberate as a
+	// 5. Explicit status glyphs. These are producer intent — as deliberate as a
 	// "[LEVEL]" tag — so they outrank the inferred keywords below. Without this
 	// ordering a line the tool itself marked as a warning, e.g.
 	// "⚠ Failed to get package versions", would be forced to Error by the word
@@ -117,7 +133,7 @@ func Detect(message, stream string) Level {
 		return Warning
 	}
 
-	// 5. Inferred keyword scan, highest severity wins.
+	// 6. Inferred keyword scan, highest severity wins.
 	switch {
 	case errRe.MatchString(message):
 		return Error
@@ -129,7 +145,7 @@ func Detect(message, stream string) Level {
 		return Info
 	}
 
-	// 6. Fallback.
+	// 7. Fallback.
 	//
 	// stderr is deliberately NOT treated as Error. It is a stream, not a
 	// severity: Go's standard log package, Python's logging, and many CLIs send

@@ -49,6 +49,18 @@ export function parseLogBlob(blob: string, idPrefix = "blob"): LogEntry[] {
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i].replace(/\r$/, "");
     if (!line) continue;
+
+    // The console handler puts a record's attributes on an indented
+    // continuation line. Fold it into the entry above rather than emitting a
+    // second row, which would otherwise appear as a stray Info line detached
+    // from the error it belongs to.
+    const { rest } = splitDockerTimestamp(line);
+    const prev = out[out.length - 1];
+    if (prev && /^\s+\S/.test(rest)) {
+      prev.message += "\n" + rest.trimEnd();
+      continue;
+    }
+
     out.push(parseLine(line, `${idPrefix}-${i}`));
   }
   return out;
@@ -79,6 +91,16 @@ function splitDockerTimestamp(line: string): {
   return { ts: null, rest: line };
 }
 
+// Belune's own console format, written by logger.ConsoleHandler:
+//
+//   2026-07-22 10:00:04 INFO  [worker.deploy] deploy finished
+//
+// Mirrors consoleRe in apps/api/internal/pkg/loglevel/loglevel.go. Without this
+// branch every platform log line falls to the flat `level: "info"` default
+// below — errors included — because the fallback does no detection at all.
+const CONSOLE_RE =
+  /^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) +(DEBUG|INFO|WARN|WARNING|ERROR) +(.*)$/;
+
 function parseLine(line: string, id: string): LogEntry {
   const { ts: dockerTs, rest } = splitDockerTimestamp(line);
   try {
@@ -96,5 +118,21 @@ function parseLine(line: string, id: string): LogEntry {
   } catch {
     // not JSON — fall through
   }
+
+  const m = CONSOLE_RE.exec(rest);
+  if (m) {
+    return {
+      id,
+      level: normalizeLevel(m[2]),
+      // Keep "[module] …" in the message: which subsystem spoke is the point
+      // of that field, and the viewer has no column of its own for it.
+      message: m[3],
+      // Read as UTC when Docker gave us nothing better. Containers run UTC, and
+      // the platform viewer always requests Docker timestamps, so this fallback
+      // only applies to stored blobs.
+      recordedAt: dockerTs ?? new Date(m[1].replace(" ", "T") + "Z").toISOString(),
+    };
+  }
+
   return { id, level: "info", message: rest, recordedAt: dockerTs };
 }

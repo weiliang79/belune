@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -25,8 +26,17 @@ func main() {
 	if err := logLevel.UnmarshalText([]byte(cfg.LogLevel)); err != nil {
 		logLevel = slog.LevelInfo
 	}
-	jsonHandler := slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: logLevel})
-	slog.SetDefault(slog.New(logger.NewRedactHandler(jsonHandler)))
+	// Console by default — the JSON handler is unreadable in a terminal. Both
+	// stay wrapped in RedactHandler, which strips secrets (deploy hook tokens
+	// and friends) from messages and attributes: dropping that wrapper would
+	// print them.
+	var base slog.Handler
+	if strings.EqualFold(cfg.LogFormat, "json") {
+		base = slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: logLevel})
+	} else {
+		base = logger.NewConsoleHandler(os.Stdout, &slog.HandlerOptions{Level: logLevel})
+	}
+	slog.SetDefault(slog.New(logger.NewRedactHandler(base)))
 
 	traceShutdown, err := tracing.Init(context.Background(), tracing.Config{
 		Endpoint:       cfg.OTLPEndpoint,
