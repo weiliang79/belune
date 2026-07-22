@@ -2,6 +2,7 @@ package logger_test
 
 import (
 	"bytes"
+	"log"
 	"log/slog"
 	"regexp"
 	"strings"
@@ -227,4 +228,25 @@ func TestConsoleHandler_ColoredContinuationStaysIndented(t *testing.T) {
 	require.Len(t, lines, 2)
 	assert.True(t, strings.HasPrefix(lines[1], " "),
 		"continuation must start with whitespace, got %q", lines[1])
+}
+
+// slog.SetDefault also routes the standard log package through this handler,
+// and those records carry no program counter. They must not be labelled "app",
+// which is a real package: "[app] traces export: ... no such host" reads as
+// though Belune's own startup code raised it, when it is OpenTelemetry's
+// exporter logging via log.Printf.
+func TestConsoleHandler_StdlogBridgeIsNotMistakenForAppPackage(t *testing.T) {
+	buf := &bytes.Buffer{}
+	prev := slog.Default()
+	t.Cleanup(func() { slog.SetDefault(prev) })
+	slog.SetDefault(slog.New(logger.NewConsoleHandlerWithColor(
+		buf, &slog.HandlerOptions{Level: slog.LevelDebug}, false)))
+
+	log.Printf("traces export: no such host")
+
+	out := buf.String()
+	assert.Contains(t, out, "[stdlog]",
+		"records with no call site should be attributed to the stdlib bridge")
+	assert.NotContains(t, out, "[app]",
+		"the fallback must not collide with the internal/app package")
 }

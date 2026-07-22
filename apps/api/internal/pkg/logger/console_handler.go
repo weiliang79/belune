@@ -253,6 +253,16 @@ func levelLabel(l slog.Level) string {
 	return s
 }
 
+// stdlogModule labels records with no usable call site. slog.SetDefault also
+// routes the standard log package through this handler, and those records carry
+// PC 0 — so this is what third-party libraries logging via log.Printf get,
+// OpenTelemetry's exporter errors among them.
+//
+// Deliberately not "app": that would be indistinguishable from internal/app,
+// and reading "[app] traces export: ... no such host" as though Belune's own
+// startup code raised it sends you looking in the wrong place.
+const stdlogModule = "stdlog"
+
 // moduleCache memoises PC -> module. Every call site resolves to the same
 // module forever, so the frame lookup is done once rather than per line.
 var moduleCache sync.Map // uintptr -> string
@@ -260,7 +270,7 @@ var moduleCache sync.Map // uintptr -> string
 // ModuleFor resolves a record's program counter to a short module label.
 func ModuleFor(pc uintptr) string {
 	if pc == 0 {
-		return "app"
+		return stdlogModule
 	}
 	if v, ok := moduleCache.Load(pc); ok {
 		return v.(string)
@@ -282,14 +292,14 @@ func ModuleFor(pc uintptr) string {
 // file in internal/worker carries it and it distinguishes nothing.
 func moduleFromFile(file string) string {
 	if file == "" {
-		return "app"
+		return stdlogModule
 	}
 	dir := filepath.Base(filepath.Dir(file))
 	stem := strings.TrimSuffix(filepath.Base(file), ".go")
 	stem = strings.TrimSuffix(stem, "_task")
 	switch {
 	case dir == "" || dir == "." || dir == string(filepath.Separator):
-		return "app"
+		return stdlogModule
 	case stem == "" || stem == dir,
 		strings.HasPrefix(dir, stem),
 		strings.HasSuffix(dir, stem):

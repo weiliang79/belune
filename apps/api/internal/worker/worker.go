@@ -72,6 +72,9 @@ func New(redisOpt asynq.RedisConnOpt, handler *TaskHandler) *Worker {
 	srv := asynq.NewServer(
 		redisOpt,
 		asynq.Config{
+			// Route asynq's own output through slog so it shares the level
+			// filter, format and module label with everything else.
+			Logger:      asynqLogger{},
 			Concurrency: 5,
 			Queues: map[string]int{
 				"critical": 6,
@@ -149,7 +152,9 @@ func (w *Worker) Start() error {
 func (w *Worker) StartScheduler() (*asynq.Scheduler, error) {
 	scheduler := asynq.NewScheduler(
 		w.redisOpt,
-		nil,
+		// Not nil: the scheduler has its own logger, and defaulting it would put
+		// "asynq: pid=... Scheduler starting" back outside our format.
+		&asynq.SchedulerOpts{Logger: asynqLogger{}},
 	)
 
 	// Scheduled=true so HandleCleanupTask honours the daily_cleanup_enabled toggle
