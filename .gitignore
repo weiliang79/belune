@@ -18,6 +18,14 @@ apps/api/frontend/**/*
 # Node
 node_modules/
 dist/
+# ...except the placeholder that keeps apps/api/web/dist/ in the tree. The Go
+# binary embeds that directory with //go:embed, and an embed of a directory that
+# does not exist is a compile error — so without this file a fresh clone cannot
+# build at all. Git will not track an empty directory, and it will not re-include
+# a file whose parent directory is excluded, hence the three-step dance.
+!apps/api/web/dist/
+apps/api/web/dist/*
+!apps/api/web/dist/.gitkeep
 .svelte-kit/
 
 # Environment
