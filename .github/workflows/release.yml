@@ -32,9 +32,12 @@ jobs:
 
       - name: Backend vet and tests
         working-directory: apps/api
+        # -short matches ci.yml: the integration suites need a Docker daemon and
+        # live services, and are gated behind their own env vars. Running the
+        # full suite here would block releases on tests CI never ran.
         run: |
           go vet ./...
-          go test ./...
+          go test -short -count=1 ./...
 
       - uses: actions/setup-node@v4
         with:
@@ -42,10 +45,11 @@ jobs:
           cache: npm
           cache-dependency-path: apps/web/package-lock.json
 
-      - name: Frontend build
+      - name: Frontend tests and build
         working-directory: apps/web
         run: |
           npm ci
+          npm run test
           npm run build
 
   publish:
