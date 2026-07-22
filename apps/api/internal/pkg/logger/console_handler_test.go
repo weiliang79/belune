@@ -154,3 +154,77 @@ func TestConsoleHandler_OutputIsLevelDetectable(t *testing.T) {
 		})
 	}
 }
+
+func TestConsoleHandler_ColorOffByDefaultForNonTerminal(t *testing.T) {
+	// A bytes.Buffer is not a terminal, which is the same situation as Docker
+	// capturing the container's stdout through a pipe.
+	buf, log := newConsole(slog.LevelDebug)
+	log.Error("boom", "k", "v")
+	assert.NotContains(t, buf.String(), "\x1b[",
+		"escape codes must never reach a captured stream")
+}
+
+func TestConsoleHandler_ColorLayout(t *testing.T) {
+	buf := &bytes.Buffer{}
+	log := slog.New(logger.NewConsoleHandlerWithColor(
+		buf, &slog.HandlerOptions{Level: slog.LevelDebug}, true))
+	log.Error("reconcile failed", "k", "v")
+
+	out := buf.String()
+	assert.Contains(t, out, "\x1b[37m", "timestamp should be white")
+	assert.Contains(t, out, "\x1b[95m[", "module should be violet")
+	assert.Contains(t, out, "\x1b[31m", "an error line should be red")
+
+	// Every opened colour is closed, or the terminal bleeds into later output.
+	assert.Equal(t, strings.Count(out, "\x1b[0m"),
+		strings.Count(out, "\x1b[")-strings.Count(out, "\x1b[0m"),
+		"unbalanced colour start/reset pairs in %q", out)
+}
+
+func TestConsoleHandler_ColorPerLevel(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		emit func(*slog.Logger)
+		want string
+	}{
+		{"debug", func(l *slog.Logger) { l.Debug("x") }, "\x1b[36m"},
+		{"info", func(l *slog.Logger) { l.Info("x") }, "\x1b[32m"},
+		{"warn", func(l *slog.Logger) { l.Warn("x") }, "\x1b[33m"},
+		{"error", func(l *slog.Logger) { l.Error("x") }, "\x1b[31m"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			buf := &bytes.Buffer{}
+			l := slog.New(logger.NewConsoleHandlerWithColor(
+				buf, &slog.HandlerOptions{Level: slog.LevelDebug}, true))
+			tc.emit(l)
+			assert.Contains(t, buf.String(), tc.want)
+		})
+	}
+}
+
+// Colour must not cost us the level: a coloured line still has to be readable
+// by the viewer, in case anyone forces LOG_COLOR=always somewhere captured.
+func TestConsoleHandler_ColoredLineStillLevelDetectable(t *testing.T) {
+	buf := &bytes.Buffer{}
+	log := slog.New(logger.NewConsoleHandlerWithColor(
+		buf, &slog.HandlerOptions{Level: slog.LevelDebug}, true))
+	log.Info("health check failed, retrying")
+
+	line := strings.SplitN(strings.TrimRight(buf.String(), "\n"), "\n", 2)[0]
+	assert.Equal(t, loglevel.Info, loglevel.Detect(line, "stdout"),
+		"coloured line lost its level: %q", line)
+}
+
+// The continuation line is identified by leading whitespace, so its indent must
+// not be preceded by an escape sequence.
+func TestConsoleHandler_ColoredContinuationStaysIndented(t *testing.T) {
+	buf := &bytes.Buffer{}
+	log := slog.New(logger.NewConsoleHandlerWithColor(
+		buf, &slog.HandlerOptions{Level: slog.LevelDebug}, true))
+	log.Error("boom", "app_id", "abc")
+
+	lines := strings.Split(strings.TrimRight(buf.String(), "\n"), "\n")
+	require.Len(t, lines, 2)
+	assert.True(t, strings.HasPrefix(lines[1], " "),
+		"continuation must start with whitespace, got %q", lines[1])
+}

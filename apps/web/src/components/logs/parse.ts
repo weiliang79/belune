@@ -101,8 +101,16 @@ function splitDockerTimestamp(line: string): {
 const CONSOLE_RE =
   /^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) +(DEBUG|INFO|WARN|WARNING|ERROR) +(.*)$/;
 
+// SGR escape sequences. Colour is meant to be off wherever output is captured,
+// but build tools (railpack, pack) colour their output regardless, and a forced
+// LOG_COLOR=always would too. Stripping keeps "[32m" out of the rendered text
+// and keeps CONSOLE_RE — which anchors on the timestamp — matching.
+// eslint-disable-next-line no-control-regex
+const ANSI_RE = /\x1b\[[0-9;]*m/g;
+
 function parseLine(line: string, id: string): LogEntry {
-  const { ts: dockerTs, rest } = splitDockerTimestamp(line);
+  const { ts: dockerTs, rest: raw } = splitDockerTimestamp(line);
+  const rest = raw.replace(ANSI_RE, "");
   try {
     const obj = JSON.parse(rest) as RawEntry;
     if (obj && typeof obj.msg === "string") {

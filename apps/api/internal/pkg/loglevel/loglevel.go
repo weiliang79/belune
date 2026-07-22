@@ -44,7 +44,10 @@ var tagRe = regexp.MustCompile(`^\s*\[(DEBUG|INFO|WARN|WARNING|ERROR)\]\s?`)
 // severity rather than a guess. Without this tier such a line falls through to
 // the keyword scan below, where an INFO line reading "health check failed"
 // matches errRe on "failed" and is shown as an error.
-var consoleRe = regexp.MustCompile(`^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} (DEBUG|INFO|WARN|WARNING|ERROR)\b`)
+// The optional escape sequences tolerate a coloured line. Colour is meant to
+// be off whenever output is captured rather than displayed, but a stray
+// LOG_COLOR=always should degrade the text, not the severity.
+var consoleRe = regexp.MustCompile(`^(?:\x1b\[[0-9;]*m)*\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(?:\x1b\[[0-9;]*m)* (?:\x1b\[[0-9;]*m)*(DEBUG|INFO|WARN|WARNING|ERROR)\b`)
 
 // keywordRe finds a severity keyword as a whole word anywhere in the message.
 // Checked in Error > Warning > Debug > Info priority by inspecting the match.

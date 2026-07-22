@@ -85,3 +85,23 @@ describe("parseLogBlob — JSON format still works", () => {
     expect(entry.message).toBe("some plain line from another container");
   });
 });
+
+// Colour is disabled whenever output is captured, but build tools colour
+// theirs regardless — and a forced LOG_COLOR=always would too. Escape codes
+// must not reach the rendered text or hide the level.
+describe("parseLogBlob — ANSI colour", () => {
+  it("strips colour and still reads the level", () => {
+    const line =
+      "\x1b[37m2026-07-22 10:00:09\x1b[0m \x1b[31mERROR\x1b[0m " +
+      "\x1b[95m[proxy.caddy]\x1b[0m \x1b[31mreconcile failed\x1b[0m";
+    const [entry] = parseLogBlob(line);
+    expect(entry.level).toBe("error");
+    expect(entry.message).toBe("[proxy.caddy] reconcile failed");
+    expect(entry.message).not.toContain("\x1b");
+  });
+
+  it("strips colour from unrecognised lines too", () => {
+    const [entry] = parseLogBlob("\x1b[32m=> building image\x1b[0m");
+    expect(entry.message).toBe("=> building image");
+  });
+});

@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"log/slog"
+	"os"
 	"path/filepath"
 	"runtime"
 	"strconv"
@@ -50,11 +51,37 @@ type ConsoleHandler struct {
 	mu     *sync.Mutex
 	attrs  []slog.Attr
 	groups []string
+	color  bool
 }
 
-// NewConsoleHandler returns a handler writing to w. A nil opts means Info.
+// ANSI colours. Violet for the module so it stays legible against every level
+// colour; the timestamp is white and the rest takes the level's colour.
+const (
+	ansiReset  = "\x1b[0m"
+	ansiWhite  = "\x1b[37m"
+	ansiViolet = "\x1b[95m"
+	ansiRed    = "\x1b[31m"
+	ansiYellow = "\x1b[33m"
+	ansiGreen  = "\x1b[32m"
+	ansiCyan   = "\x1b[36m"
+)
+
+// NewConsoleHandler returns a handler writing to w, colourised only when w is a
+// terminal. A nil opts means Info.
 func NewConsoleHandler(w io.Writer, opts *slog.HandlerOptions) *ConsoleHandler {
-	h := &ConsoleHandler{out: w, mu: &sync.Mutex{}}
+	return NewConsoleHandlerWithColor(w, opts, isTerminal(w) && os.Getenv("NO_COLOR") == "")
+}
+
+// NewConsoleHandlerWithColor forces colour on or off.
+//
+// Colour is off by default anywhere the stream is captured rather than shown.
+// Docker gives the container a pipe (no compose file sets tty:), and escape
+// codes written into that stream would be stored verbatim: the platform log
+// viewer would print "[37m" as text, and the level-detection regexes — which
+// anchor on the timestamp — would stop matching, so every line would fall back
+// to Info. Terminals get colour; log pipelines get clean text.
+func NewConsoleHandlerWithColor(w io.Writer, opts *slog.HandlerOptions, color bool) *ConsoleHandler {
+	h := &ConsoleHandler{out: w, mu: &sync.Mutex{}, color: color}
 	if opts != nil {
 		h.opts = *opts
 	}
@@ -62,6 +89,33 @@ func NewConsoleHandler(w io.Writer, opts *slog.HandlerOptions) *ConsoleHandler {
 		h.opts.Level = slog.LevelInfo
 	}
 	return h
+}
+
+// isTerminal reports whether w is a character device. Avoids a dependency on
+// x/term for what is a single stat call.
+func isTerminal(w io.Writer) bool {
+	f, ok := w.(*os.File)
+	if !ok {
+		return false
+	}
+	fi, err := f.Stat()
+	if err != nil {
+		return false
+	}
+	return fi.Mode()&os.ModeCharDevice != 0
+}
+
+func levelColor(l slog.Level) string {
+	switch {
+	case l < slog.LevelInfo:
+		return ansiCyan
+	case l < slog.LevelWarn:
+		return ansiGreen
+	case l < slog.LevelError:
+		return ansiYellow
+	default:
+		return ansiRed
+	}
 }
 
 func (h *ConsoleHandler) Enabled(_ context.Context, l slog.Level) bool {
@@ -94,6 +148,7 @@ func (h *ConsoleHandler) clone() *ConsoleHandler {
 		opts:   h.opts,
 		out:    h.out,
 		mu:     h.mu,
+		color:  h.color,
 		attrs:  h.attrs[:len(h.attrs):len(h.attrs)],
 		groups: h.groups[:len(h.groups):len(h.groups)],
 	}
@@ -102,14 +157,23 @@ func (h *ConsoleHandler) clone() *ConsoleHandler {
 func (h *ConsoleHandler) Handle(_ context.Context, r slog.Record) error {
 	var b strings.Builder
 
-	b.WriteString(r.Time.Format(ConsoleTimeFormat))
+	// paint wraps s when colour is on and is a no-op otherwise, so the plain
+	// and coloured layouts cannot drift apart.
+	paint := func(color, s string) string {
+		if !h.color {
+			return s
+		}
+		return color + s + ansiReset
+	}
+	lc := levelColor(r.Level)
+
+	b.WriteString(paint(ansiWhite, r.Time.Format(ConsoleTimeFormat)))
 	b.WriteByte(' ')
-	b.WriteString(levelLabel(r.Level))
+	b.WriteString(paint(lc, levelLabel(r.Level)))
 	b.WriteByte(' ')
-	b.WriteByte('[')
-	b.WriteString(ModuleFor(r.PC))
-	b.WriteString("] ")
-	b.WriteString(r.Message)
+	b.WriteString(paint(ansiViolet, "["+ModuleFor(r.PC)+"]"))
+	b.WriteByte(' ')
+	b.WriteString(paint(lc, r.Message))
 
 	prefix := ""
 	if len(h.groups) > 0 {
@@ -125,8 +189,10 @@ func (h *ConsoleHandler) Handle(_ context.Context, r slog.Record) error {
 	})
 	if len(kv) > 0 {
 		b.WriteByte('\n')
+		// Indent is written uncoloured: the continuation line is detected by
+		// leading whitespace, so an escape code in front of it would hide that.
 		b.WriteString(continuationIndent)
-		b.WriteString(strings.Join(kv, " "))
+		b.WriteString(paint(lc, strings.Join(kv, " ")))
 	}
 	b.WriteByte('\n')
 

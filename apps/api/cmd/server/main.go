@@ -34,7 +34,15 @@ func main() {
 	if strings.EqualFold(cfg.LogFormat, "json") {
 		base = slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: logLevel})
 	} else {
-		base = logger.NewConsoleHandler(os.Stdout, &slog.HandlerOptions{Level: logLevel})
+		opts := &slog.HandlerOptions{Level: logLevel}
+		switch strings.ToLower(cfg.LogColor) {
+		case "always":
+			base = logger.NewConsoleHandlerWithColor(os.Stdout, opts, true)
+		case "never":
+			base = logger.NewConsoleHandlerWithColor(os.Stdout, opts, false)
+		default: // auto — colour only when stdout is a terminal
+			base = logger.NewConsoleHandler(os.Stdout, opts)
+		}
 	}
 	slog.SetDefault(slog.New(logger.NewRedactHandler(base)))
 

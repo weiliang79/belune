@@ -53,6 +53,8 @@ type Config struct {
 	// default) or "json". JSON is worth keeping for anything that parses the
 	// stream; the console format is for reading a terminal.
 	LogFormat           string // console, json (default: console)
+	// LogColor: auto (colour only when stdout is a terminal) | always | never.
+	LogColor            string // auto, always, never (default: auto)
 	DisableRateLimiting bool   // set true in tests to avoid per-IP counter accumulation
 
 	// Timeouts
@@ -162,6 +164,7 @@ func Load() (*Config, error) {
 		TLS:                getEnvBool("TLS_ENABLED", false),
 		LogLevel:           getEnv("LOG_LEVEL", "info"),
 		LogFormat:          getEnv("LOG_FORMAT", "console"),
+		LogColor:           getEnv("LOG_COLOR", "auto"),
 
 		BuildTimeoutMinutes:     getEnvInt("BUILD_TIMEOUT_MINUTES", 30),
 		TaskTimeoutMinutes:      getEnvInt("TASK_TIMEOUT_MINUTES", 45),
