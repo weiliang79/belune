@@ -5,7 +5,14 @@ set -euo pipefail
 
 INSTALL_DIR="${BELUNE_DIR:-/opt/belune}"
 GITHUB_REPO="weiliang79/belune"
-IMAGE="ghcr.io/${GITHUB_REPO}:latest"
+
+# The version to install. Defaults to the latest published release; set
+# BELUNE_VERSION=v0.1.0 to install a specific one.
+#
+# Installs are pinned rather than tracking :latest, so a routine `docker compose
+# pull` can never move an install across a migration boundary on its own. Moving
+# to a new version is update.sh's job, and it takes a backup first.
+BELUNE_VERSION="${BELUNE_VERSION:-}"
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -45,9 +52,23 @@ info "Creating install directory at ${INSTALL_DIR}..."
 mkdir -p "${INSTALL_DIR}/infra/caddy/sites" "${INSTALL_DIR}/infra/systemd"
 cd "${INSTALL_DIR}"
 
+# ── Resolve the version to install ────────────────────────────────────────────
+
+if [[ -z "${BELUNE_VERSION}" ]]; then
+  info "Resolving the latest release..."
+  BELUNE_VERSION=$(curl -sSfL "https://api.github.com/repos/${GITHUB_REPO}/releases/latest" \
+    | grep '"tag_name"' | head -1 | cut -d'"' -f4 || true)
+  [[ -n "${BELUNE_VERSION}" ]] || die "Could not resolve the latest release. Set BELUNE_VERSION=vX.Y.Z and retry."
+fi
+
+IMAGE="ghcr.io/${GITHUB_REPO}:${BELUNE_VERSION}"
+info "Installing ${BELUNE_VERSION}"
+
 # ── Download Compose + Caddy configs ──────────────────────────────────────────
 
-RAW_URL="https://raw.githubusercontent.com/${GITHUB_REPO}/main"
+# Fetched from the release tag, not main: config files must match the image
+# being installed, and main moves on between releases.
+RAW_URL="https://raw.githubusercontent.com/${GITHUB_REPO}/${BELUNE_VERSION}"
 
 info "Downloading docker-compose.yml..."
 curl -sSfL "${RAW_URL}/infra/docker-compose.prod.yml" -o docker-compose.yml
@@ -101,8 +122,8 @@ fi
 
 # ── Pull and start ─────────────────────────────────────────────────────────────
 
-info "Pulling latest image..."
-docker pull "${IMAGE}" 2>/dev/null || info "Image pull failed — will attempt local build."
+info "Pulling ${IMAGE}..."
+docker pull "${IMAGE}" || die "Could not pull ${IMAGE}. Check the version exists and the host can reach ghcr.io."
 
 info "Starting services..."
 docker compose up -d
