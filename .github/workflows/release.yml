@@ -1,0 +1,168 @@
+name: Release
+
+# Publishes a release when a version tag is pushed:
+#   git tag -a v0.1.0 -m "v0.1.0" && git push origin v0.1.0
+#
+# Produces a multi-architecture image on GHCR and a GitHub Release whose notes
+# are built from the conventional-commit log. install.sh pins the version it
+# installs, so :latest exists for humans rather than for the installer — and it
+# only moves for stable tags, never for a prerelease like v0.1.0-rc1.
+
+on:
+  push:
+    tags: ["v*"]
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  # A tag must not publish a broken image. CI runs on branch pushes, not tags,
+  # so the core checks run again here.
+  verify:
+    name: Verify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: apps/api/go.mod
+          cache-dependency-path: apps/api/go.sum
+
+      - name: Backend vet and tests
+        working-directory: apps/api
+        # -short matches ci.yml: the integration suites need a Docker daemon and
+        # live services, and are gated behind their own env vars. Running the
+        # full suite here would block releases on tests CI never ran.
+        run: |
+          go vet ./...
+          go test -short -count=1 ./...
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+
+      - name: Frontend tests and build
+        working-directory: apps/web
+        run: |
+          npm ci
+          npm run test
+          npm run build
+
+  publish:
+    name: Build and publish image
+    runs-on: ubuntu-latest
+    needs: verify
+    permissions:
+      contents: write # create the GitHub Release
+      packages: write # push to GHCR
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # full history so release notes can diff against the previous tag
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Derive image tags
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest,enable=${{ !contains(github.ref_name, '-') }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          target: prod
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          # The Go and frontend stages cross-compile from the build platform, so
+          # only the small runtime stage touches emulation.
+          build-args: |
+            VERSION=${{ github.ref_name }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build release notes
+        id: notes
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          PREV=$(git describe --tags --abbrev=0 "${TAG}^" 2>/dev/null || true)
+          RANGE="${TAG}"
+          [ -n "$PREV" ] && RANGE="${PREV}..${TAG}"
+
+          {
+            echo "## What's changed"
+            echo
+            emit() { # $1 = conventional prefix, $2 = heading
+              body=$(git log --no-merges --pretty=format:'- %s' "$RANGE" \
+                       | grep -E "^- $1(\(.+\))?!?: " || true)
+              if [ -n "$body" ]; then
+                echo "### $2"
+                echo
+                # Strip the type prefix; keep any scope for context.
+                echo "$body" | sed -E "s/^- $1(\((.+)\))?!?: /- \2: /; s/^- : /- /"
+                echo
+              fi
+            }
+            emit feat "Features"
+            emit fix "Fixes"
+            emit perf "Performance"
+            emit refactor "Internal"
+            emit docs "Documentation"
+
+            echo "### Install"
+            echo
+            echo '```bash'
+            echo "curl -sSL https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${TAG}/scripts/install.sh | bash"
+            echo '```'
+            echo
+            echo "Upgrading an existing install: run \`update.sh\` from your install"
+            echo "directory. **Take a backup first** — 0.x minor releases may contain"
+            echo "breaking changes."
+            echo
+            if [ -n "$PREV" ]; then
+              echo "**Full changelog**: https://github.com/${GITHUB_REPOSITORY}/compare/${PREV}...${TAG}"
+            fi
+          } > release-notes.md
+
+          echo "Generated notes for ${RANGE}:"
+          cat release-notes.md
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          PRERELEASE=""
+          case "$TAG" in *-*) PRERELEASE="--prerelease" ;; esac
+          gh release create "$TAG" \
+            --title "$TAG" \
+            --notes-file release-notes.md \
+            $PRERELEASE \
+            scripts/install.sh \
+            scripts/update.sh

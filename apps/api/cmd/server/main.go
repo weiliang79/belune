@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -17,6 +18,14 @@ import (
 )
 
 func main() {
+	// Answered before anything else is loaded, so it works on a host with no
+	// config, no database, and no network — which is exactly when someone is
+	// asking "what is actually running here?".
+	if len(os.Args) > 1 && (os.Args[1] == "--version" || os.Args[1] == "-v") {
+		fmt.Println(version.Version)
+		return
+	}
+
 	cfg, err := config.Load()
 	if err != nil {
 		slog.Error("failed to load config", "error", err)

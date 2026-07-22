@@ -25,6 +25,7 @@ import { logout } from "@/lib/api/auth";
 import { BRAND } from "@/lib/brand";
 import { BeluneLogo } from "@/lib/components/belune-logo";
 import { useInstanceName } from "@/lib/hooks/use-features";
+import { useVersion } from "@/lib/hooks/use-version";
 import { initialsOf } from "@/lib/utils/initials";
 import { cn } from "@/lib/utils";
 
@@ -70,6 +71,7 @@ export function Sidebar({ mobileOpen, onMobileClose }: SidebarProps) {
   const currentPath = routerState.location.pathname;
   const isAdmin = user?.role === "admin";
   const instanceName = useInstanceName();
+  const version = useVersion();
   const [isLoggingOut, setIsLoggingOut] = useState(false);
 
   // On mobile the drawer is always full-width with labels; on desktop the
@@ -169,7 +171,8 @@ export function Sidebar({ mobileOpen, onMobileClose }: SidebarProps) {
           <div className="flex min-w-0 flex-col leading-tight">
             <span className="truncate text-sm font-semibold">{instanceName}</span>
             <span className="text-text-faint font-mono text-[11px]">
-              {BRAND.name} • {BRAND.version}
+              {BRAND.name}
+              {version && ` • ${version}`}
             </span>
           </div>
         )}

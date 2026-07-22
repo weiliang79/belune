@@ -2,10 +2,13 @@
  * Server branding shown in the sidebar identity block.
  *
  * Single-tenant: one install = one server, so this is static branding, not an
- * org switcher. `version` is a constant for now — wire it to a build-time define
- * or a backend `/version` field when available.
+ * org switcher.
+ *
+ * The version is deliberately NOT here. It used to be a hand-edited literal,
+ * which meant a release that forgot to bump it shipped a UI confidently
+ * reporting the previous version. It now comes from the running binary via
+ * `useVersion()` (GET /api/version), which cannot go stale.
  */
 export const BRAND = {
   name: "Belune",
-  version: "v0.0.36-alpha",
 } as const;

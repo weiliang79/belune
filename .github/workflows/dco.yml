@@ -1,0 +1,63 @@
+name: DCO
+
+# Every commit in a pull request must carry a Signed-off-by trailer, certifying
+# the Developer Certificate of Origin (https://developercertificate.org/).
+# See CONTRIBUTING.md. Implemented inline rather than with a third-party action
+# so the check has no external dependency to pin or audit.
+
+on:
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  dco:
+    name: Signed-off-by
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check sign-off on every commit
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+
+          missing=0
+          # --no-merges: merge commits are often created by GitHub itself and
+          # carry no authored content to certify.
+          for sha in $(git rev-list --no-merges "$BASE_SHA".."$HEAD_SHA"); do
+            short=$(git rev-parse --short "$sha")
+            # Commit subjects are untrusted input: strip control characters and
+            # neuter "::" so a crafted message cannot forge workflow commands
+            # in the log.
+            subject=$(git show -s --format='%s' "$sha" \
+                        | tr -d '\000-\037' | sed 's/::/;;/g' | cut -c1-100)
+            if git show -s --format='%B' "$sha" \
+                 | grep -qiE '^ *Signed-off-by: .+ <.+@.+>'; then
+              printf '  ok       %s  %s\n' "$short" "$subject"
+            else
+              printf '  MISSING  %s  %s\n' "$short" "$subject"
+              echo "::error::Commit $short is missing its Signed-off-by line"
+              missing=$((missing + 1))
+            fi
+          done
+
+          if [ "$missing" -gt 0 ]; then
+            echo
+            echo "$missing commit(s) are not signed off."
+            echo
+            echo "Fix the most recent commit with:"
+            echo "    git commit --amend -s --no-edit && git push --force-with-lease"
+            echo
+            echo "Fix every commit on the branch with:"
+            echo "    git rebase --signoff ${GITHUB_BASE_REF:-main} && git push --force-with-lease"
+            echo
+            echo "See CONTRIBUTING.md for what the sign-off certifies."
+            exit 1
+          fi
+
+          echo "All commits signed off."

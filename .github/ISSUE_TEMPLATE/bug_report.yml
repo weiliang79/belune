@@ -1,0 +1,86 @@
+name: Bug report
+description: Something in Belune behaves incorrectly
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a report.
+
+        **Please do not report security vulnerabilities here** — use
+        [private disclosure](https://github.com/weiliang79/belune/security/advisories/new)
+        instead.
+
+        For "how do I…" and setup help, [Discussions](https://github.com/weiliang79/belune/discussions/categories/q-a)
+        is a better fit than an issue.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What did you expect, and what happened instead?
+      placeholder: |
+        I clicked Deploy on a git application and…
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: The smallest sequence that triggers it.
+      placeholder: |
+        1. Create an application from …
+        2. Set …
+        3. Deploy
+        4. See error
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Belune version
+      description: Shown at the bottom of the sidebar, and on the Server page.
+      placeholder: v0.0.36-alpha
+    validations:
+      required: true
+
+  - type: dropdown
+    id: install-method
+    attributes:
+      label: How was Belune installed?
+      options:
+        - install.sh on a fresh host
+        - Docker Compose (manual)
+        - Built from source
+        - Development environment (devcontainer / task dev)
+        - Other (describe below)
+    validations:
+      required: true
+
+  - type: input
+    id: host
+    attributes:
+      label: Host
+      description: OS, architecture, and anything unusual about the environment.
+      placeholder: Ubuntu 24.04, amd64, 2 vCPU / 4 GB, behind Cloudflare
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      description: |
+        Platform logs live at **Server → Maintenance → Platform Logs**; application
+        logs are on the app's **Logs** tab; build output is on the deployment.
+
+        **Redact secrets** — tokens, passwords, certificates, and deploy hook URLs.
+      render: text
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: Anything else?
+      description: Screenshots, related issues, or things you have already tried.

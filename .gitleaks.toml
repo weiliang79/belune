@@ -1,0 +1,34 @@
+# gitleaks configuration for Belune.
+#
+# Run the full-history audit with:
+#     gitleaks git . --redact
+#
+# The allowlists below cover test fixtures and documentation placeholders that
+# match secret-shaped patterns but are not credentials. Every entry was reviewed
+# during the pre-publication audit (2026-07-22, 425 commits). Add to this file
+# only after confirming a match is genuinely synthetic — never to silence a real
+# finding.
+
+title = "Belune"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Reviewed test fixtures and documentation placeholders"
+
+paths = [
+  # Test fixtures: encryption keys, tokens and credentials in tests are
+  # deliberately fixed, obviously-patterned values.
+  '''_test\.go$''',
+  '''internal/testutil/''',
+]
+
+regexes = [
+  # Synthetic AES key fixtures — repeating hex patterns, never real keys.
+  '''0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef''',
+  '''fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210''',
+  '''aaaabbbbccccddddeeeeffff0000111122223333444455556666777788889999''',
+  # Truncated age public key used as an example in backup docs and scripts.
+  '''age1ql3z7hjy54pw\.\.\.''',
+]
