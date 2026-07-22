@@ -1,0 +1,53 @@
+name: Feature request
+description: Suggest a capability Belune does not have yet
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Belune is pre-1.0 and maintained by one person, so the bar for new
+        features is "does this serve most self-hosters?" rather than "is this
+        useful?". Being clear about the underlying problem helps enormously —
+        there is often a simpler answer than the feature first imagined.
+
+        Not sure yet? [Ideas discussions](https://github.com/weiliang79/belune/discussions/categories/ideas)
+        are the place to think out loud.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you trying to accomplish?
+      description: |
+        Describe the goal or the problem, not the solution. What are you doing
+        today, and where does it break down?
+      placeholder: |
+        I run a staging and a production copy of the same app and I want…
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What would you like Belune to do?
+      description: Your proposed solution, if you have one in mind.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: What have you tried or considered?
+      description: |
+        Workarounds you are using now, or how another tool solves this.
+
+  - type: dropdown
+    id: scale
+    attributes:
+      label: How are you running Belune?
+      options:
+        - Personal / homelab
+        - Side projects or freelance client work
+        - Small team or company
+        - Evaluating, not running it yet
+    validations:
+      required: true

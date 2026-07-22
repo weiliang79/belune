@@ -43,10 +43,15 @@ belune/
 ├── docs/
 │   ├── architecture.md
 │   ├── api.md
-│   └── contributing.md
+│   ├── configuration.md
+│   └── runbooks/            # Operator guides (install, TLS, backups, …)
 ├── Taskfile.yml              # Task runner (replaces Makefile)
 ├── .env.example
 ├── .gitignore
+├── LICENSE                   # Apache-2.0
+├── NOTICE
+├── CONTRIBUTING.md           # Dev setup, DCO sign-off, adding templates
+├── SECURITY.md               # Private vulnerability disclosure
 └── README.md
 ```
 
