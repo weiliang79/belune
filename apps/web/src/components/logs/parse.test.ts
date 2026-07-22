@@ -105,3 +105,34 @@ describe("parseLogBlob — ANSI colour", () => {
     expect(entry.message).toBe("=> building image");
   });
 });
+
+// The console handler pads continuation lines out to the width of the timestamp
+// and level so they align in a terminal. The viewer renders timestamp and level
+// as separate columns with whitespace-pre-wrap, so carrying that padding across
+// threw the attributes ~26 characters into the message column.
+describe("parseLogBlob — continuation indent", () => {
+  it("re-indents a folded line instead of keeping the terminal padding", () => {
+    const blob = [
+      "2026-07-22 14:12:44 INFO  [store.db] database migrations applied",
+      "                          version=56 dirty=false",
+    ].join("\n");
+
+    const [entry] = parseLogBlob(blob);
+    const [, continuation] = entry.message.split("\n");
+    expect(continuation).toBe("  version=56 dirty=false");
+    expect(continuation.length).toBeLessThan(30);
+  });
+
+  it("normalises indent regardless of what the producer used", () => {
+    // postgres and friends indent with a tab, not 26 spaces.
+    const [entry] = parseLogBlob(["ERROR:  syntax error", "\t\tat character 8"].join("\n"));
+    expect(entry.message.split("\n")[1]).toBe("  at character 8");
+  });
+
+  it("still keeps the continuation visually subordinate", () => {
+    const [entry] = parseLogBlob(
+      ["2026-07-22 14:12:44 ERROR [app] boom", "        error=nope"].join("\n"),
+    );
+    expect(entry.message.split("\n")[1].startsWith("  ")).toBe(true);
+  });
+});

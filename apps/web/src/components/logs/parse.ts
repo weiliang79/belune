@@ -57,7 +57,15 @@ export function parseLogBlob(blob: string, idPrefix = "blob"): LogEntry[] {
     const { rest } = splitDockerTimestamp(line);
     const prev = out[out.length - 1];
     if (prev && /^\s+\S/.test(rest)) {
-      prev.message += "\n" + rest.trimEnd();
+      // Re-indent to a fixed two spaces rather than keeping the source's own
+      // indent. The console handler pads continuation lines out to the width of
+      // "<timestamp> <LEVEL> " so they line up in a terminal, where those are
+      // part of the same text line — but here timestamp and level are separate
+      // columns, so the message column starts at zero and that padding threw the
+      // attributes ~26 characters to the right. Other producers indent by
+      // different amounts again (postgres uses a tab), so normalising beats
+      // preserving.
+      prev.message += "\n  " + rest.trim();
       continue;
     }
 
