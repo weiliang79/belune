@@ -10,6 +10,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"go.opentelemetry.io/otel"
@@ -29,15 +30,49 @@ const TracerName = "belune/api"
 
 // Config controls exporter wiring. Zero value is safe — tracing remains no-op.
 type Config struct {
-	// Endpoint is an OTLP/HTTP endpoint (e.g. "otel-collector:4318"). Empty = no-op.
+	// Endpoint is an OTLP/HTTP endpoint. Accepts either a bare host:port
+	// ("otel-collector:4318") or a full URL ("https://api.honeycomb.io"), which
+	// is the form the OpenTelemetry specification defines. Empty = no-op.
 	Endpoint string
-	// Insecure skips TLS when talking to the collector. Leave true for
-	// loopback-only collectors; flip for external endpoints.
+	// Insecure skips TLS when talking to the collector. Applies only to the bare
+	// host:port form — with a URL the scheme decides, and this is ignored.
 	Insecure bool
 	// ServiceName is reported as the resource service.name attribute.
 	ServiceName string
 	// ServiceVersion is reported as the resource service.version attribute.
 	ServiceVersion string
+}
+
+// exporterOptions turns the configured endpoint into exporter options,
+// accepting both the form this project has always used and the form the
+// OpenTelemetry specification defines.
+//
+// OTEL_EXPORTER_OTLP_ENDPOINT is a standard variable and the spec says its value
+// is a URL with a scheme. We passed it to WithEndpoint, which takes a bare
+// "host:port" — so anyone following a vendor's own documentation and setting
+// "https://api.honeycomb.io" had the string treated as a hostname. Every hosted
+// collector was unreachable as a result.
+//
+// Both forms now work, so nothing configured against the old behaviour breaks:
+//
+//   - "jaeger:4318"              -> WithEndpoint, TLS decided by Insecure
+//   - "https://api.honeycomb.io" -> WithEndpointURL, TLS decided by the scheme
+//
+// With a URL the scheme is authoritative and Insecure is not applied at all.
+// Otherwise an explicit "https://" plus the default
+// OTEL_EXPORTER_OTLP_INSECURE=true would silently downgrade a hosted endpoint to
+// plaintext. That flag exists for bare host:port collectors on the loopback; it
+// should not be able to override a scheme the operator wrote out.
+func exporterOptions(cfg Config) []otlptracehttp.Option {
+	if strings.Contains(cfg.Endpoint, "://") {
+		return []otlptracehttp.Option{otlptracehttp.WithEndpointURL(cfg.Endpoint)}
+	}
+
+	opts := []otlptracehttp.Option{otlptracehttp.WithEndpoint(cfg.Endpoint)}
+	if cfg.Insecure {
+		opts = append(opts, otlptracehttp.WithInsecure())
+	}
+	return opts
 }
 
 // ShutdownFunc flushes buffered spans and releases exporter resources.
@@ -67,14 +102,7 @@ func Init(ctx context.Context, cfg Config) (ShutdownFunc, error) {
 		return func(context.Context) error { return nil }, nil
 	}
 
-	opts := []otlptracehttp.Option{
-		otlptracehttp.WithEndpoint(cfg.Endpoint),
-	}
-	if cfg.Insecure {
-		opts = append(opts, otlptracehttp.WithInsecure())
-	}
-
-	exporter, err := otlptrace.New(ctx, otlptracehttp.NewClient(opts...))
+	exporter, err := otlptrace.New(ctx, otlptracehttp.NewClient(exporterOptions(cfg)...))
 	if err != nil {
 		return nil, fmt.Errorf("create OTLP exporter: %w", err)
 	}
@@ -102,7 +130,14 @@ func Init(ctx context.Context, cfg Config) (ShutdownFunc, error) {
 	)
 	otel.SetTracerProvider(tp)
 
-	slog.Info("tracing: OTLP exporter configured", "endpoint", cfg.Endpoint, "insecure", cfg.Insecure)
+	// Report the transport actually in use rather than the flag. With a URL the
+	// scheme decides, so echoing insecure=true beside an https:// endpoint would
+	// state the opposite of what the exporter is doing.
+	if strings.Contains(cfg.Endpoint, "://") {
+		slog.Info("tracing: OTLP exporter configured", "endpoint", cfg.Endpoint)
+	} else {
+		slog.Info("tracing: OTLP exporter configured", "endpoint", cfg.Endpoint, "insecure", cfg.Insecure)
+	}
 
 	return func(shutdownCtx context.Context) error {
 		return tp.Shutdown(shutdownCtx)

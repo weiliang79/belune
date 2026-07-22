@@ -142,12 +142,19 @@ database and win over the environment. See [runbooks/smtp.md](runbooks/smtp.md).
 | Variable | Default | Notes |
 |---|---|---|
 | `METRICS_BIND` | *empty* | Empty serves `/metrics` on the main router behind admin auth. Setting it (e.g. `127.0.0.1:9090`) starts a separate listener with **no authentication** — bind it to loopback |
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | *empty* | Empty installs a no-op tracer. Currently takes `host:port` (OTLP/**HTTP**, port 4318) |
-| `OTEL_EXPORTER_OTLP_INSECURE` | `true` | Disables TLS. Correct for a loopback collector, **wrong for anything off-box** |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | *empty* | Empty installs a no-op tracer. Accepts either `host:port` (`jaeger:4318`) or a full URL (`https://api.honeycomb.io`). OTLP/**HTTP**, so a bare host:port means port 4318 |
+| `OTEL_EXPORTER_OTLP_INSECURE` | `true` | Disables TLS — but only for the bare `host:port` form. Give a URL and its scheme decides, so `https://` stays encrypted whatever this is set to |
 
 The exporter also honours the standard `OTEL_EXPORTER_OTLP_HEADERS`,
 `_TIMEOUT`, `_COMPRESSION` and `_CERTIFICATE` variables, so authenticating to a
 hosted collector needs no extra configuration from Belune.
+
+Point it at a hosted collector with a URL and an API key header:
+
+```
+OTEL_EXPORTER_OTLP_ENDPOINT=https://api.honeycomb.io
+OTEL_EXPORTER_OTLP_HEADERS=x-honeycomb-team=YOUR_KEY
+```
 
 The bundled Prometheus, Grafana and Jaeger stack is opt-in via
 `infra/compose.observability.yml` and is not started by the main stack. Point
