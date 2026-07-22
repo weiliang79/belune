@@ -55,8 +55,8 @@ curl -sSfL "${RAW_URL}/infra/docker-compose.prod.yml" -o docker-compose.yml
 info "Downloading Caddyfile..."
 curl -sSfL "${RAW_URL}/infra/caddy/Caddyfile.template" -o infra/caddy/Caddyfile.template
 
-info "Downloading .env.defaults reference..."
-curl -sSfL "${RAW_URL}/.env.defaults" -o .env.defaults
+info "Downloading .env.example reference..."
+curl -sSfL "${RAW_URL}/.env.example" -o .env.example
 
 info "Downloading systemd unit..."
 curl -sSfL "${RAW_URL}/infra/systemd/belune.service" -o infra/systemd/belune.service
@@ -84,7 +84,6 @@ DATABASE_URL=postgres://belune:${PG_PASS}@postgres:5432/belune?sslmode=disable
 REDIS_URL=redis://redis:6379
 
 JWT_SECRET=${JWT_SECRET}
-JWT_EXPIRY_HOURS=24
 
 ENCRYPTION_KEY=${ENC_KEY}
 
@@ -199,5 +198,6 @@ echo ""
 echo "  Next steps (DNS, TLS, first deploy):"
 echo "    https://github.com/${GITHUB_REPO}/blob/main/docs/runbooks/install.md"
 echo ""
-echo "  Full config reference: ${INSTALL_DIR}/.env.defaults"
+echo "  Options you can set:    ${INSTALL_DIR}/.env.example"
+echo "  Full reference:         https://github.com/${GITHUB_REPO}/blob/main/docs/configuration.md"
 echo ""

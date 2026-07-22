@@ -13,6 +13,7 @@ import (
 	"github.com/weiliang79/belune/internal/config"
 	"github.com/weiliang79/belune/internal/pkg/logger"
 	"github.com/weiliang79/belune/internal/pkg/tracing"
+	"github.com/weiliang79/belune/internal/version"
 )
 
 func main() {
@@ -50,7 +51,7 @@ func main() {
 		Endpoint:       cfg.OTLPEndpoint,
 		Insecure:       cfg.OTLPInsecure,
 		ServiceName:    "belune-api",
-		ServiceVersion: "v0.0.11-alpha",
+		ServiceVersion: version.Version,
 	})
 	if err != nil {
 		slog.Error("failed to init tracing", "error", err)

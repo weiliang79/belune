@@ -37,7 +37,7 @@ IP address, over plain HTTP. That is expected: you set a domain from inside the
 dashboard in step 5, and HTTPS follows. The API is not published on a public port;
 it is reached through Caddy.
 
-> Reference for every other config option: `.env.defaults` in the repo.
+> Reference for every other config option: [`docs/configuration.md`](../configuration.md).
 
 ---
 

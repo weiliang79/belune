@@ -11,8 +11,8 @@ command -v task >/dev/null 2>&1 || { echo "Task (taskfile.dev) is required but n
 
 # Copy .env if not exists
 if [ ! -f .env ]; then
-    cp .env.example .env
-    echo "==> Created .env from .env.example — please update with real values"
+    cp .env.example.dev .env
+    echo "==> Created .env from .env.example.dev — please update with real values"
 fi
 
 # Install Go dependencies

@@ -12,7 +12,7 @@ curl -sSL https://raw.githubusercontent.com/weiliang79/belune/main/scripts/insta
 
 Then follow [`docs/runbooks/install.md`](docs/runbooks/install.md) for DNS,
 TLS, the systemd unit, and a smoke-test deploy. The full config reference
-lives in [`.env.defaults`](.env.defaults).
+lives in [`docs/configuration.md`](docs/configuration.md).
 
 ## Prerequisites (development)
 

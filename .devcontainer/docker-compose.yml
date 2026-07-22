@@ -33,8 +33,11 @@ services:
       TMPDIR: /var/tmp/belune-builds
       PORT: "8080"
       METRICS_BIND: 0.0.0.0:9090
-      OTEL_EXPORTER_OTLP_ENDPOINT: jaeger:4318
-      OTEL_EXPORTER_OTLP_INSECURE: true
+      # No OTEL_EXPORTER_OTLP_* here on purpose. Jaeger lives in
+      # infra/compose.observability.yml, which this stack does not start, so
+      # pointing at it made the exporter retry a host that never resolves —
+      # every 10s, forever. Empty endpoint installs the no-op tracer, matching
+      # .env.example. Set it in .env when running the observability profile.
     env_file:
       - ../.env
     networks:

@@ -1,0 +1,182 @@
+# Configuration reference
+
+Every environment variable Belune reads. This page is the canonical list — the
+`.env.example` files are seeds, not references, and a test asserts that
+everything below stays in step with the code.
+
+Belune reads configuration once at startup. Values that can also be changed from
+the dashboard (SMTP, server IP, retention, daily cleanup, host shell) are stored
+in the database and **take precedence over the environment**; the variable is the
+install-time seed.
+
+- **Required** — no safe default. `scripts/install.sh` generates these.
+- **Internal** — set by Docker Compose or derived from another value. Overriding
+  them usually breaks something; they are listed for completeness, not for use.
+
+---
+
+## Core server
+
+| Variable | Default | Notes |
+|---|---|---|
+| `PORT` | `8080` | HTTP listener port |
+| `DATABASE_URL` | `postgres://belune:belune@localhost:5432/belune?sslmode=disable` | **Required** in production |
+| `REDIS_URL` | `redis://localhost:6379` | Job broker (asynq) |
+| `CORS_ORIGINS` | `http://localhost:5173` | Comma-separated. Add your dashboard hostname |
+| `SECURE_COOKIES` | `false` | Only needed behind a proxy that terminates TLS without setting `X-Forwarded-Proto` — cookies are marked Secure automatically over HTTPS |
+| `TLS_ENABLED` | `false` | Sends HSTS headers; also gates custom-certificate routing in Caddy |
+| `PUBLIC_BASE_URL` | *empty* | Public dashboard URL. Required once SMTP is configured, so links in email resolve |
+| `WEBHOOK_PUBLIC_URL` | *empty* | Public URL git providers call back on |
+| `BELUNE_PUBLIC_IP` | *auto-detect* | Address domains must point at. Overridden by the Server IP setting in the dashboard |
+| `BELUNE_SKIP_MIGRATIONS` | `false` | **Development only.** Booting against an unmigrated schema fails in confusing ways |
+
+## Logging
+
+| Variable | Default | Notes |
+|---|---|---|
+| `LOG_LEVEL` | `info` | `debug` · `info` · `warn` · `error` |
+| `LOG_FORMAT` | `console` | `console` for humans, `json` for anything that parses the stream |
+| `LOG_COLOR` | `auto` | `auto` colours only when stdout is a terminal. Set `always` if your runner pipes output (`air` does); `never` disables it |
+| `NO_COLOR` | *unset* | Cross-tool convention, honoured under `LOG_COLOR=auto` |
+
+Console output looks like this, with attributes on an indented continuation line
+and the module derived from the calling package:
+
+```
+2026-07-22 03:14:10 INFO  [worker.deploy] deploy finished
+                          app_id=10d7ec5f dur=4.2s
+```
+
+Colour is off whenever the stream is captured rather than displayed. Docker gives
+the container a pipe, so escape codes would otherwise be stored verbatim and
+break the level detection the log viewer relies on.
+
+## Authentication and encryption
+
+| Variable | Default | Notes |
+|---|---|---|
+| `JWT_SECRET` | *empty* | **Required.** Generated at install |
+| `JWT_EXPIRY_HOURS` | `1` | Access token lifetime. Short on purpose — the refresh token covers the session |
+| `JWT_REFRESH_HOURS` | `168` | Refresh token lifetime (7 days) |
+| `ENCRYPTION_KEY` | *empty* | **Required.** Generated at install. Encrypts stored secrets |
+| `ENCRYPTION_KEYS` | *empty* | Multi-key form for rotation, `v1:hex,v2:hex` |
+| `ENCRYPTION_KEY_CURRENT` | *empty* | Which key ID new writes use |
+
+Rotation is a procedure, not a setting — see
+[runbooks/key-rotation.md](runbooks/key-rotation.md).
+
+## Proxy and networking
+
+| Variable | Default | Notes |
+|---|---|---|
+| `CADDY_ADMIN_URL` | `http://localhost:2019` | Caddy admin API |
+| `CADDY_CONTAINER_NAME` | `infra-caddy-1` | *Internal* |
+| `CADDY_TLS_PROBE_ADDR` | `caddy:443` | *Internal* — where the TLS status probe dials |
+| `DASHBOARD_UPSTREAM` | `belune:8080` | *Internal* — set by Compose and the Caddyfile template |
+| `API_CONTAINER_NAME` | *self-detect* | *Internal* — overriding risks attaching to the wrong container |
+| `ACCESS_LOG_PATH` | `../../infra/caddy/logs/access.log` | *Internal* — Caddy access log the request-log tailer reads |
+
+## Build and deploy
+
+| Variable | Default | Notes |
+|---|---|---|
+| `BUILDKIT_HOST` | *empty* | *Internal* — set by Compose to the BuildKit service |
+| `BUILD_TIMEOUT_MINUTES` | `30` | |
+| `IMAGE_PULL_TIMEOUT_MINUTES` | `10` | |
+| `TASK_TIMEOUT_MINUTES` | `45` | Overall worker task ceiling |
+| `PREVIEW_IDLE_DAYS` | `7` | Idle preview environments are reaped after this. The preview UI is unlinked until the feature ships |
+
+## Paths
+
+| Variable | Default | Notes |
+|---|---|---|
+| `BELUNE_DIR` | `/opt/belune` | Install root. Owned by the install, backup, restore and update scripts |
+| `FILE_MOUNTS_DIR` | *derived* | *Internal* — from `BELUNE_DIR` |
+| `BACKUP_SCRIPT_PATH` | *derived* | *Internal* — from `BELUNE_DIR` |
+| `DATABASE_BACKUP_DIR` | *derived* | *Internal* — from `BELUNE_DIR` |
+
+## Platform backups
+
+Control-plane backups: the Belune database and Caddy certificates. Distinct from
+per-database backups below.
+
+| Variable | Default | Notes |
+|---|---|---|
+| `BACKUP_REMOTE_ENABLED` | `false` | |
+| `BACKUP_RETAIN_COUNT` | `14` | |
+| `BACKUP_RETAIN_DAYS` | `30` | |
+| `BACKUP_S3_BUCKET` | *empty* | |
+| `BACKUP_S3_ENDPOINT` | *empty* | For S3-compatible providers |
+| `BACKUP_S3_REGION` | `us-east-1` | |
+| `BACKUP_S3_PREFIX` | `belune/` | |
+| `BACKUP_S3_ACCESS_KEY` | *empty* | Secret |
+| `BACKUP_S3_SECRET_KEY` | *empty* | Secret |
+| `BACKUP_S3_USE_SSL` | `true` | |
+
+## Database backups
+
+| Variable | Default | Notes |
+|---|---|---|
+| `DATABASE_BACKUP_HELPER_IMAGE` | `alpine:3.20` | *Internal* |
+| `DATABASE_BACKUP_RETAIN_COUNT` | `7` | *Internal* — per-database local retention |
+
+Destinations and schedules are configured per project in the dashboard, not here.
+
+## Email
+
+Configurable from **Server → Configuration**; those values are stored in the
+database and win over the environment. See [runbooks/smtp.md](runbooks/smtp.md).
+
+| Variable | Default |
+|---|---|
+| `SMTP_HOST` | *empty* |
+| `SMTP_PORT` | `587` |
+| `SMTP_USER` | *empty* |
+| `SMTP_PASSWORD` | *empty* (secret) |
+| `SMTP_FROM_EMAIL` | *empty* |
+| `SMTP_FROM_NAME` | `Belune` |
+| `SMTP_TLS_MODE` | `starttls` — `none` · `starttls` · `tls` |
+
+## Observability
+
+| Variable | Default | Notes |
+|---|---|---|
+| `METRICS_BIND` | *empty* | Empty serves `/metrics` on the main router behind admin auth. Setting it (e.g. `127.0.0.1:9090`) starts a separate listener with **no authentication** — bind it to loopback |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | *empty* | Empty installs a no-op tracer. Currently takes `host:port` (OTLP/**HTTP**, port 4318) |
+| `OTEL_EXPORTER_OTLP_INSECURE` | `true` | Disables TLS. Correct for a loopback collector, **wrong for anything off-box** |
+
+The exporter also honours the standard `OTEL_EXPORTER_OTLP_HEADERS`,
+`_TIMEOUT`, `_COMPRESSION` and `_CERTIFICATE` variables, so authenticating to a
+hosted collector needs no extra configuration from Belune.
+
+The bundled Prometheus, Grafana and Jaeger stack is opt-in via
+`infra/compose.observability.yml` and is not started by the main stack. Point
+`OTEL_EXPORTER_OTLP_ENDPOINT` at it only when it is running — an endpoint that
+does not resolve makes the exporter retry every ten seconds.
+
+## Limits
+
+| Variable | Default |
+|---|---|
+| `MAX_WEBSOCKET_CONNS_PER_USER` | `20` |
+| `MAX_TERMINAL_SESSIONS_PER_USER` | `5` |
+
+## Host shell
+
+| Variable | Default | Notes |
+|---|---|---|
+| `SERVER_SSH_HOST` | *resolved server IP* | Shown in the database tunnel command. Set it when SSH lands on a different box, such as a bastion |
+| `SERVER_SSH_USER` | *empty* | Shown in the same command |
+
+The host shell itself is enabled from **Server → Configuration**, not here.
+
+## Compose and scripts
+
+Not read by the Go binary — consumed by Docker Compose and the install scripts.
+
+| Variable | Notes |
+|---|---|
+| `BELUNE_IMAGE` | Image tag the stack runs |
+| `DOCKER_GID` | Host docker group ID, so the container can reach the socket |
+| `POSTGRES_USER` · `POSTGRES_DB` | Database bootstrap |
+| `POSTGRES_PASSWORD` | Secret. Generated at install |
