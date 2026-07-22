@@ -46,6 +46,10 @@ func newThrottledHandler(window time.Duration, now func() time.Time) *throttledH
 	return &throttledHandler{window: window, now: now}
 }
 
+// The error's own text is the message rather than an attribute of a generic
+// one: "otel error" beside an ERROR level and a tracing module said the word
+// "error" four times over and none of them said what happened, leaving the only
+// useful content — which endpoint, which failure — in an attribute.
 func (h *throttledHandler) Handle(err error) {
 	if err == nil {
 		return
@@ -61,7 +65,7 @@ func (h *throttledHandler) Handle(err error) {
 	if msg != h.lastMsg {
 		h.flushLocked()
 		h.lastMsg, h.lastAt, h.suppressed = msg, now, 0
-		slog.Error("otel error", "error", msg)
+		slog.Error(msg)
 		return
 	}
 
@@ -73,17 +77,17 @@ func (h *throttledHandler) Handle(err error) {
 	repeats := h.suppressed
 	h.lastAt, h.suppressed = now, 0
 	if repeats > 0 {
-		slog.Error("otel error", "error", msg, "repeated", repeats)
+		slog.Error(msg, "repeated", repeats)
 		return
 	}
-	slog.Error("otel error", "error", msg)
+	slog.Error(msg)
 }
 
 // flushLocked reports anything held back for the previous message, so a
 // suppressed run is never silently dropped when the error changes.
 func (h *throttledHandler) flushLocked() {
 	if h.suppressed > 0 && h.lastMsg != "" {
-		slog.Error("otel error", "error", h.lastMsg, "repeated", h.suppressed)
+		slog.Error(h.lastMsg, "repeated", h.suppressed)
 	}
 	h.suppressed = 0
 }

@@ -58,7 +58,7 @@ func TestThrottledHandler_SuppressesRepeatsWithinWindow(t *testing.T) {
 		now = now.Add(10 * time.Second) // stays inside the window for the first 6
 	}
 
-	got := strings.Count(buf.String(), "otel error")
+	got := strings.Count(buf.String(), "traces export: no such host")
 	assert.Less(t, got, 15, "50 identical failures should not produce 50 lines")
 	assert.Greater(t, got, 1, "the error should still be reported periodically")
 }
@@ -116,4 +116,19 @@ func TestThrottledHandler_NilErrorIsIgnored(t *testing.T) {
 	buf := captureLogs(t)
 	newThrottledHandler(time.Minute, time.Now).Handle(nil)
 	assert.Empty(t, buf.String())
+}
+
+// The detail belongs on the message line, not tucked into an attribute of a
+// generic message: which endpoint failed and how is the whole content of the
+// line, and "otel error" beside an ERROR level says nothing.
+func TestThrottledHandler_MessageCarriesTheDetail(t *testing.T) {
+	buf := captureLogs(t)
+	newThrottledHandler(time.Minute, time.Now).Handle(
+		errors.New(`traces export: Post "http://jaeger:4318/v1/traces": no such host`))
+
+	first := strings.SplitN(strings.TrimRight(buf.String(), "\n"), "\n", 2)[0]
+	assert.Contains(t, first, "no such host",
+		"the failure should be readable without expanding attributes: %q", first)
+	assert.NotContains(t, first, "otel error",
+		"a placeholder message adds a word and no information")
 }
