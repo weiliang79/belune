@@ -45,6 +45,10 @@ DASHBOARD_HOST=smoke.belune.internal
 APP_HOST=app.smoke.internal
 CADDY_URL=http://127.0.0.1:18080
 ADMIN_URL=http://127.0.0.1:12019
+# Belune reached directly, bypassing Caddy. Some checks must not go through the
+# proxy: an app or dashboard hostname force-redirects HTTP→HTTPS (correct for a
+# login form), which would mask what the check is actually about.
+BELUNE_URL=http://127.0.0.1:18081
 
 PASS=0
 FAIL=0
@@ -168,13 +172,19 @@ else
   fail "/healthz does not show a healthy Docker check" "$hz"
 fi
 
-info "3. Caddy serves the dashboard"
+info "3. Caddy's catch-all reaches Belune"
 # Caught: the catch-all route dialled localhost:8080 — which is Caddy itself, not
 # Belune — so the dashboard was a connection refused behind a working proxy.
-body="$(curl -fsS -H "Host: $DASHBOARD_HOST" "$CADDY_URL/" 2>/dev/null || true)"
+#
+# An UNKNOWN host, so the request lands on the catch-all rather than a named
+# route. The dashboard's own hostname now force-redirects HTTP→HTTPS (a login
+# form has no business on plain HTTP once it has a certificate), which is a 301,
+# not the proxied page this check is about. The catch-all carries no such
+# redirect, so it still exercises the reverse_proxy to belune:8080.
+body="$(curl -fsS -H "Host: unrouted.smoke.internal" "$CADDY_URL/" 2>/dev/null || true)"
 grep -q 'id="root"' <<<"$body" \
-  && pass "the SPA is served through Caddy (the catch-all reaches belune:8080)" \
-  || fail "Caddy did not serve the dashboard" "the catch-all upstream is probably wrong"
+  && pass "the catch-all reaches belune:8080 and serves the SPA" \
+  || fail "Caddy's catch-all did not serve the SPA" "the catch-all upstream is probably wrong"
 
 info "4. The served page has no inline script"
 # Caught: an inline <script> in index.html was blocked outright by the API's own
@@ -206,21 +216,25 @@ else
   pass "no certificate-sync errors against a stock Caddy"
 fi
 
-info "7. Caddy's own logs are being collected"
+info "7. Caddy is watched so certificate errors can be captured"
 # Caught: the log collector only watched containers labelled managed-by=belune,
 # and Caddy is not one (that label marks containers the cleanup worker may reap).
 # So Caddy was never watched — and Caddy's log is where ACME failure reasons live.
 # A domain whose certificate failed showed no reason at all.
-deadline=$((SECONDS + 60))
-sys=0
-while [[ $SECONDS -lt $deadline ]]; do
-  sys="$(psql "SELECT count(*) FROM container_logs WHERE source_type = 'system'")"
-  [[ "${sys:-0}" -gt 0 ]] && break
-  sleep 3
-done
-[[ "${sys:-0}" -gt 0 ]] \
-  && pass "Caddy's logs reach container_logs ($sys rows) — ACME reasons can land" \
-  || fail "no system logs collected" "the collector is not watching the Caddy container"
+#
+# The proxy's lines are deliberately NOT persisted (they were 94% of
+# container_logs with no reader). They feed the TLS status pipeline live through
+# the collector's line hook instead. So the contract is two-sided: the collector
+# attaches to the Caddy container as a system source, and stores nothing for it.
+if belune_logs | grep 'source_type=system' | grep -qi caddy; then
+  pass "the collector is watching Caddy (system source attached) — ACME reasons can reach the TLS pipeline"
+else
+  fail "the collector is not watching the Caddy container" "$(belune_logs | grep -m1 -i 'collector' || echo 'no collector log line')"
+fi
+sys="$(psql "SELECT count(*) FROM container_logs WHERE source_type = 'system'")"
+[[ "${sys:-0}" -eq 0 ]] \
+  && pass "proxy logs are not persisted — they feed the TLS pipeline, not the busiest table" \
+  || fail "system logs are being persisted ($sys rows)" "perf(logs): stop persisting proxy logs looks reverted"
 
 info "8. Request logging is alive"
 # Caught twice. First, ACCESS_LOG_PATH defaulted to a repo-relative dev path that
@@ -261,8 +275,12 @@ info "10. Deep links and refreshes work"
 #   /projects/x/applications/y → ./ → /projects/x/applications/ → ./ → …
 # which the browser reports as TOO_MANY_REDIRECTS. Vite hides this in dev by
 # doing the fallback itself.
+# Probed directly against Belune, not through Caddy. Through the proxy the
+# dashboard hostname force-redirects HTTP→HTTPS (a 301 that is correct, and a
+# different one than this guards against). The fallback bug lives in Belune's own
+# handler, so that is where the shell must appear.
 for route in /server /projects/abc-123/applications/def-456 /docker; do
-  code="$(curl -s -o /dev/null -w '%{http_code}' -H "Host: $DASHBOARD_HOST" "$CADDY_URL$route")"
+  code="$(curl -s -o /dev/null -w '%{http_code}' "$BELUNE_URL$route")"
   if [[ "$code" == "200" ]]; then
     pass "GET $route → 200 (no redirect)"
   else
@@ -270,8 +288,8 @@ for route in /server /projects/abc-123/applications/def-456 /docker; do
   fi
 done
 # ...and a real asset must still be served as itself, not swallowed by the fallback.
-asset="$(curl -s -H "Host: $DASHBOARD_HOST" "$CADDY_URL/" | grep -o '/assets/[^"]*\.js' | head -1)"
-ctype="$(curl -s -o /dev/null -w '%{content_type}' -H "Host: $DASHBOARD_HOST" "$CADDY_URL$asset")"
+asset="$(curl -s "$BELUNE_URL/" | grep -o '/assets/[^"]*\.js' | head -1)"
+ctype="$(curl -s -o /dev/null -w '%{content_type}' "$BELUNE_URL$asset")"
 [[ "$ctype" == *javascript* ]] \
   && pass "assets are still served as assets ($asset)" \
   || fail "asset served as '$ctype'" "the fallback is swallowing real files"
