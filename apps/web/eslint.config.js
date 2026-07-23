@@ -21,9 +21,28 @@ export default defineConfig([
     },
   },
   {
-    files: ["src/routes/**/*.{ts,tsx}"],
+    // Route modules and shadcn UI primitives legitimately export more than a
+    // single component — TanStack Router's `Route`, and the `*Variants` helpers
+    // shadcn generates alongside each component. only-export-components is a
+    // Fast Refresh (dev HMR) convenience rule with no runtime meaning, so it is
+    // off here rather than worked around.
+    files: ["src/routes/**/*.{ts,tsx}", "src/components/ui/**/*.{ts,tsx}"],
     rules: {
       "react-refresh/only-export-components": "off",
+    },
+  },
+  {
+    // eslint-plugin-react-hooks v7 folded the React Compiler's ruleset in as
+    // errors. Belune does not use the React Compiler, so these are not blocking
+    // requirements — but they are genuine "rules of React" (a pure render, refs
+    // untouched during render, no cascading setState from an effect), so they
+    // stay as warnings to guard new code rather than being switched off. Clear
+    // the existing baseline in a dedicated pass, not piecemeal.
+    files: ["**/*.{ts,tsx}"],
+    rules: {
+      "react-hooks/set-state-in-effect": "warn",
+      "react-hooks/purity": "warn",
+      "react-hooks/refs": "warn",
     },
   },
 ]);
