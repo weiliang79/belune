@@ -49,7 +49,7 @@ info "Docker version: ${DOCKER_VERSION}"
 # ── Create install directory ───────────────────────────────────────────────────
 
 info "Creating install directory at ${INSTALL_DIR}..."
-mkdir -p "${INSTALL_DIR}/infra/caddy/sites" "${INSTALL_DIR}/infra/systemd"
+mkdir -p "${INSTALL_DIR}/infra/caddy/sites" "${INSTALL_DIR}/infra/systemd" "${INSTALL_DIR}/scripts"
 cd "${INSTALL_DIR}"
 
 # ── Resolve the version to install ────────────────────────────────────────────
@@ -79,8 +79,25 @@ curl -sSfL "${RAW_URL}/infra/caddy/Caddyfile.template" -o infra/caddy/Caddyfile.
 info "Downloading .env.example reference..."
 curl -sSfL "${RAW_URL}/.env.example" -o .env.example
 
-info "Downloading systemd unit..."
+info "Downloading systemd units..."
 curl -sSfL "${RAW_URL}/infra/systemd/belune.service" -o infra/systemd/belune.service
+# belune-backup.{service,timer} are copied into /etc/systemd/system below; the
+# service's ExecStart runs scripts/backup.sh from the install dir. All three were
+# referenced by the systemd step but never fetched, so a root+systemd install
+# died on the missing file — after the stack was already up.
+curl -sSfL "${RAW_URL}/infra/systemd/belune-backup.service" -o infra/systemd/belune-backup.service
+curl -sSfL "${RAW_URL}/infra/systemd/belune-backup.timer" -o infra/systemd/belune-backup.timer
+
+info "Downloading host scripts..."
+# backup.sh is run by belune-backup.service (and by update.sh before it moves the
+# version); restore.sh is the disaster-recovery entry point the runbook invokes as
+# /opt/belune/scripts/restore.sh; update.sh performs a version move with a backup.
+# None were installed before, so the whole host-side backup/restore/update path
+# was absent on a real install.
+for s in backup.sh restore.sh update.sh; do
+  curl -sSfL "${RAW_URL}/scripts/${s}" -o "scripts/${s}"
+  chmod +x "scripts/${s}"
+done
 
 # ── Generate .env ──────────────────────────────────────────────────────────────
 
