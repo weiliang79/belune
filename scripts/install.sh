@@ -24,8 +24,34 @@ require_cmd() {
   command -v "$1" >/dev/null 2>&1 || die "'$1' is required but not installed. $2"
 }
 
+# 32 random bytes as hex. openssl first because it is on essentially every
+# server; xxd comes from vim-common and is genuinely absent from minimal cloud
+# images, so requiring it outright turned a fresh VPS into a package hunt.
 random_hex() {
-  head -c 32 /dev/urandom | xxd -p | tr -d '\n'
+  if command -v openssl >/dev/null 2>&1; then
+    openssl rand -hex 32
+  elif command -v xxd >/dev/null 2>&1; then
+    head -c 32 /dev/urandom | xxd -p | tr -d '\n'
+  else
+    od -An -tx1 -N32 /dev/urandom | tr -d ' \n'
+  fi
+}
+
+# Docker's official convenience script. Every comparable installer uses it: it
+# handles the per-distro repository setup and ships the Compose v2 plugin, which
+# a distro's own docker.io package does not.
+install_docker() {
+  info "Installing Docker via https://get.docker.com ..."
+  local tmp
+  tmp="$(mktemp)"
+  curl -fsSL https://get.docker.com -o "${tmp}" \
+    || die "Could not download the Docker install script. Install Docker manually: https://docs.docker.com/engine/install/"
+  sh "${tmp}" \
+    || { rm -f "${tmp}"; die "Docker installation failed. Install it manually: https://docs.docker.com/engine/install/"; }
+  rm -f "${tmp}"
+  if [[ -d /run/systemd/system ]]; then
+    systemctl enable --now docker >/dev/null 2>&1 || true
+  fi
 }
 
 # ── Pre-flight checks ──────────────────────────────────────────────────────────
@@ -35,12 +61,44 @@ echo "  Belune — Installer"
 echo "  =============================="
 echo ""
 
-require_cmd docker   "Install Docker: https://docs.docker.com/engine/install/"
-require_cmd curl     "Install curl via your package manager."
-require_cmd xxd      "Install xxd (package: vim-common or util-linux)."
+require_cmd curl "Install curl via your package manager."
+
+# Docker is installed rather than demanded. A fresh VPS almost never has it, and
+# stopping to say so just sends the operator away to run someone else's install
+# script and come back. Set BELUNE_SKIP_DOCKER_INSTALL=1 to manage Docker
+# yourself and have this only check.
+if ! command -v docker >/dev/null 2>&1; then
+  if [[ "${BELUNE_SKIP_DOCKER_INSTALL:-0}" == "1" ]]; then
+    die "Docker is not installed (BELUNE_SKIP_DOCKER_INSTALL=1). Install it: https://docs.docker.com/engine/install/"
+  fi
+  if [[ "$(uname -s)" != "Linux" ]]; then
+    die "Docker is not installed. On macOS install Docker Desktop or OrbStack, then re-run."
+  fi
+  if [[ ${EUID:-$(id -u)} -ne 0 ]]; then
+    die "Docker is not installed, and installing it needs root. Re-run with sudo, or install Docker first: https://docs.docker.com/engine/install/"
+  fi
+  info "Docker is not installed."
+  install_docker
+  command -v docker >/dev/null 2>&1 || die "Docker still not found after installation."
+  success "Docker installed."
+fi
+
+# Installed but not running is its own failure: the next docker command fails
+# with something far less obvious than "the daemon is stopped".
+if ! docker info >/dev/null 2>&1; then
+  if [[ -d /run/systemd/system ]] && [[ ${EUID:-$(id -u)} -eq 0 ]]; then
+    info "Docker is installed but not running — starting it..."
+    systemctl start docker >/dev/null 2>&1 || true
+  fi
+  docker info >/dev/null 2>&1 \
+    || die "Docker is installed but the daemon is not reachable. Start it (sudo systemctl start docker) and re-run."
+fi
 
 if ! docker compose version >/dev/null 2>&1; then
-  die "Docker Compose v2 is required. Update Docker Desktop or install the compose plugin."
+  die "Docker Compose v2 is required but not available.
+          If Docker came from a distro package (docker.io), add the plugin:
+            sudo apt-get install -y docker-compose-plugin
+          Or install Docker from https://get.docker.com, which includes it."
 fi
 
 DOCKER_VERSION=$(docker version --format '{{.Server.Version}}' 2>/dev/null || echo "unknown")
