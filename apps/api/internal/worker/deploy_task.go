@@ -269,6 +269,10 @@ func (h *TaskHandler) loadApplication(ctx context.Context, dc *deployContext) er
 		BuilderImage: appRow.BuilderImage, CustomBuildpacks: appRow.CustomBuildpacks,
 		Status:   appRow.Status,
 		CpuLimit: appRow.CpuLimit, MemoryLimit: appRow.MemoryLimit,
+		// Without this the connected-account clone path is silently skipped: the
+		// deploy falls back to an unauthenticated clone and fails on a private repo
+		// with "could not read Username". CloneToken is never even reached.
+		GitIntegrationID:              appRow.GitIntegrationID,
 		GitCredentialsEncrypted:       appRow.GitCredentialsEncrypted,
 		HealthCheckPath:               appRow.HealthCheckPath,
 		HealthCheckTimeoutSeconds:     appRow.HealthCheckTimeoutSeconds,
