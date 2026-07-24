@@ -32,8 +32,12 @@ IMAGE="${BELUNE_IMAGE:-belune:smoke}"
 # Fixed path, not a temp file: infra/docker-compose.smoke.yml has to reference
 # it statically in env_file, which cannot interpolate a random name.
 ENV_FILE=".env.smoke"
+# --project-directory pins relative paths in the compose files to the repo root.
+# Without it Compose infers it from the first -f, i.e. infra/, and the drill stops
+# testing the layout a real install actually has.
 COMPOSE=(docker compose
   -p "$PROJECT"
+  --project-directory .
   -f infra/docker-compose.prod.yml
   -f infra/docker-compose.smoke.yml
   --env-file "$ENV_FILE")
@@ -61,7 +65,7 @@ cleanup() {
   local code=$?
   if [[ "${KEEP:-0}" == "1" ]]; then
     info "KEEP=1 — leaving the stack up. Tear down with:"
-    echo "  docker compose -p $PROJECT -f infra/docker-compose.prod.yml -f infra/docker-compose.smoke.yml --env-file $ENV_FILE down -v"
+    echo "  docker compose -p $PROJECT --project-directory . -f infra/docker-compose.prod.yml -f infra/docker-compose.smoke.yml --env-file $ENV_FILE down -v"
     exit $code
   fi
   info "Tearing down"
@@ -100,7 +104,6 @@ JWT_SECRET=$(openssl rand -hex 32)
 ENCRYPTION_KEY=$(openssl rand -hex 32)
 
 CADDY_ADMIN_URL=http://caddy:2019
-CADDY_CONTAINER_NAME=${PROJECT}-caddy-1
 BUILDKIT_HOST=tcp://buildkit:1234
 SECURE_COOKIES=false
 EOF
@@ -293,6 +296,24 @@ ctype="$(curl -s -o /dev/null -w '%{content_type}' "$BELUNE_URL$asset")"
 [[ "$ctype" == *javascript* ]] \
   && pass "assets are still served as assets ($asset)" \
   || fail "asset served as '$ctype'" "the fallback is swallowing real files"
+
+info "11. Belune finds the Caddy container without being told its name"
+# Caught on the first real install. Compose names containers after the project,
+# which is the directory holding the compose file: infra/ in this repo, but the
+# install directory (belune-caddy-1) on a real install. CADDY_CONTAINER_NAME was
+# baked to the repo's guess, so every real install missed — and missing is silent,
+# because failing to attach Caddy to a project network only logs a warning. The
+# symptom is every app domain answering 502 on a stack that looks perfectly
+# healthy. This drill used to set the variable itself, which is precisely why it
+# never caught it; the variable is now deliberately absent from the drill's env.
+expected="${PROJECT}-caddy-1"
+if belune_logs | grep -q "discovered Caddy container.*${expected}"; then
+  pass "Caddy resolved by the belune-system label → ${expected}"
+elif belune_logs | grep -q "no container carries belune-system=caddy"; then
+  fail "Caddy was not discovered" "the belune-system=caddy label is missing from the proxy — app networks will never be joined"
+else
+  fail "no Caddy discovery log line" "$(belune_logs | grep -m1 -i caddy || echo 'nothing mentioning caddy')"
+fi
 
 # --- result ------------------------------------------------------------------
 

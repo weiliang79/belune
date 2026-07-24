@@ -253,13 +253,13 @@ existing log keeps its old permissions, so a one-time fix is needed on an
 existing install:
 
 ```bash
-docker exec infra-caddy-1 chmod 644 /var/log/caddy/access.log
+docker exec belune-caddy-1 chmod 644 /var/log/caddy/access.log
 ```
 
 Fresh installs need nothing. Verify with:
 
 ```bash
-docker exec infra-postgres-1 psql -U belune -d belune -tAc "select count(*) from request_logs"
+docker exec belune-postgres-1 psql -U belune -d belune -tAc "select count(*) from request_logs"
 ```
 
 A count that climbs after a few page loads means the tailer is reading.

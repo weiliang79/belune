@@ -70,7 +70,7 @@ Rotation is a procedure, not a setting — see
 | Variable | Default | Notes |
 |---|---|---|
 | `CADDY_ADMIN_URL` | `http://localhost:2019` | Caddy admin API |
-| `CADDY_CONTAINER_NAME` | `infra-caddy-1` | *Internal* |
+| `CADDY_CONTAINER_NAME` | *auto-detect* | *Internal* — found by the `belune-system=caddy` label; only set it if you run Caddy outside the Compose stack |
 | `CADDY_TLS_PROBE_ADDR` | `caddy:443` | *Internal* — where the TLS status probe dials |
 | `DASHBOARD_UPSTREAM` | `belune:8080` | *Internal* — set by Compose and the Caddyfile template |
 | `API_CONTAINER_NAME` | *self-detect* | *Internal* — overriding risks attaching to the wrong container |

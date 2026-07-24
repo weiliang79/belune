@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/hibiken/asynq"
@@ -88,6 +89,8 @@ func New(cfg *config.Config) (*App, error) {
 		db.Close()
 		return nil, fmt.Errorf("create docker client: %w", err)
 	}
+
+	resolveCaddyContainer(cfg, dockerClient)
 
 	caddyClient := caddy.New(cfg.CaddyAdminURL)
 
@@ -334,6 +337,48 @@ func (a *App) Run(ctx context.Context) error {
 	})
 
 	return g.Wait()
+}
+
+// resolveCaddyContainer fills in the Caddy container's real name by looking for
+// the belune-system=caddy label, unless the operator named it explicitly.
+//
+// Compose derives container names from the project, and the project defaults to
+// the directory holding the compose file: infra/ in this repo, but the install
+// directory (belune-caddy-1 for /opt/belune) on a real install. The old baked-in
+// default was the repo's name, so every real install missed — and the miss is
+// silent, because attaching Caddy to a project network only warns. The visible
+// symptom is every app domain answering 502 with a healthy-looking stack.
+func resolveCaddyContainer(cfg *config.Config, dc *docker.Client) {
+	if os.Getenv("CADDY_CONTAINER_NAME") != "" {
+		return
+	}
+
+	// Retried briefly: on a cold `compose up` the proxy is created alongside this
+	// container rather than before it, so the first look can legitimately come up
+	// empty. Bounded, because a stack that runs Caddy elsewhere must still boot.
+	for attempt := range 5 {
+		if attempt > 0 {
+			time.Sleep(time.Second)
+		}
+
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		containers, err := dc.ListSystemContainers(ctx)
+		cancel()
+		if err != nil {
+			slog.Warn("could not list system containers to find Caddy", "error", err, "assuming", cfg.CaddyContainerName)
+			return
+		}
+
+		for _, c := range containers {
+			if c.Labels["belune-system"] == logcollector.SystemCaddy && c.Name != "" {
+				slog.Info("discovered Caddy container", "name", c.Name)
+				cfg.CaddyContainerName = c.Name
+				return
+			}
+		}
+	}
+	slog.Warn("no container carries belune-system=caddy — app domains will not be routable until Caddy joins their networks",
+		"assuming", cfg.CaddyContainerName)
 }
 
 // Shutdown releases remaining resources after Run has returned. It should be
