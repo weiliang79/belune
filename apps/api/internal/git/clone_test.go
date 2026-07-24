@@ -33,6 +33,18 @@ func TestBuildCloneURL_Generic(t *testing.T) {
 	assert.Equal(t, "https://mytoken@gitea.example.com/user/repo.git", url)
 }
 
+func TestBuildCloneURL_Gitea(t *testing.T) {
+	// Gitea validates the credential as the password, so the token must sit after
+	// the colon with the account login as the username — not in the username slot.
+	url := BuildCloneURL("gitea", "gto_token123", "spacebar", "https://gitea.example.com/user/repo.git")
+	assert.Equal(t, "https://spacebar:gto_token123@gitea.example.com/user/repo.git", url)
+}
+
+func TestBuildCloneURL_GiteaDefaultUsername(t *testing.T) {
+	url := BuildCloneURL("gitea", "gto_token123", "", "https://gitea.example.com/user/repo.git")
+	assert.Equal(t, "https://oauth2:gto_token123@gitea.example.com/user/repo.git", url)
+}
+
 func TestBuildCloneURL_NoToken(t *testing.T) {
 	url := BuildCloneURL("github", "", "", "https://github.com/user/repo.git")
 	assert.Equal(t, "https://github.com/user/repo.git", url)

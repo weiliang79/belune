@@ -12,6 +12,38 @@ import (
 	"strings"
 )
 
+// gitCmd builds a git subprocess that authenticates only from the URL: it never
+// prompts, and never consults an inherited credential helper. Belune passes
+// credentials in the clone URL, so anything else the environment offers only
+// gets in the way — a global credential.helper on the host, or (in dev) the
+// VS Code git askpass leaked into the server's environment via GIT_ASKPASS /
+// VSCODE_GIT_* which hijacks the non-interactive clone and makes it fail with a
+// credential-helper error instead of using the token it was given.
+func gitCmd(ctx context.Context, args ...string) *exec.Cmd {
+	// -c credential.helper= (empty) overrides any helper configured in git config.
+	full := append([]string{"-c", "credential.helper="}, args...)
+	cmd := exec.CommandContext(ctx, "git", full...)
+
+	drop := map[string]bool{
+		"GIT_ASKPASS": true, "SSH_ASKPASS": true,
+		"VSCODE_GIT_ASKPASS_NODE": true, "VSCODE_GIT_ASKPASS_MAIN": true,
+		"VSCODE_GIT_ASKPASS_EXTRA_ARGS": true, "VSCODE_GIT_IPC_HANDLE": true,
+	}
+	env := make([]string, 0, len(os.Environ())+3)
+	for _, kv := range os.Environ() {
+		if k, _, ok := strings.Cut(kv, "="); ok && drop[k] {
+			continue
+		}
+		env = append(env, kv)
+	}
+	cmd.Env = append(env,
+		"GIT_TERMINAL_PROMPT=0", // never block a build waiting on a prompt
+		"GIT_ASKPASS=",          // disable any external password helper
+		"GIT_CONFIG_NOSYSTEM=1", // ignore /etc/gitconfig, which may set a helper
+	)
+	return cmd
+}
+
 // CloneResult contains the result of a git clone operation.
 type CloneResult struct {
 	CommitSHA string
@@ -189,7 +221,16 @@ func BuildCloneURL(provider, token, username, repoURL string) string {
 			username = "x-token-auth"
 		}
 		return strings.Replace(repoURL, "https://", "https://"+username+":"+token+"@", 1)
-	default: // gitea, generic PAT
+	case "gitea":
+		// Gitea validates the credential as the *password*; a token in the
+		// username slot with an empty password is rejected (remote: Unauthorized).
+		// The username may be anything for token auth, but the account login is
+		// the natural choice; "oauth2" is a safe placeholder when it is absent.
+		if username == "" {
+			username = "oauth2"
+		}
+		return strings.Replace(repoURL, "https://", "https://"+username+":"+token+"@", 1)
+	default: // generic PAT: token as username works for a raw personal access token
 		return strings.Replace(repoURL, "https://", "https://"+token+"@", 1)
 	}
 }
@@ -222,13 +263,13 @@ func Clone(ctx context.Context, repoURL, destDir, branch, token string) (*CloneR
 	}
 	args = append(args, cloneURL, destDir)
 
-	cmd := exec.CommandContext(ctx, "git", args...)
+	cmd := gitCmd(ctx, args...)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return nil, fmt.Errorf("git clone: %s: %w", redactToken(string(output), token), redactError(err, token))
 	}
 
-	shaCmd := exec.CommandContext(ctx, "git", "-C", destDir, "rev-parse", "HEAD")
+	shaCmd := gitCmd(ctx, "-C", destDir, "rev-parse", "HEAD")
 	shaOutput, err := shaCmd.Output()
 	if err != nil {
 		return nil, fmt.Errorf("git rev-parse: %w", err)
@@ -276,7 +317,7 @@ func CloneCommit(ctx context.Context, repoURL, destDir, commitSHA, token string)
 // shallowFetchCommit initialises destDir and shallow-fetches a single commit.
 func shallowFetchCommit(ctx context.Context, cloneURL, destDir, commitSHA string) error {
 	run := func(args ...string) error {
-		out, err := exec.CommandContext(ctx, "git", args...).CombinedOutput()
+		out, err := gitCmd(ctx, args...).CombinedOutput()
 		if err != nil {
 			return fmt.Errorf("%s: %w", strings.TrimSpace(string(out)), err)
 		}
@@ -296,11 +337,11 @@ func shallowFetchCommit(ctx context.Context, cloneURL, destDir, commitSHA string
 
 // fullCloneCheckout clones the full history then checks out the commit.
 func fullCloneCheckout(ctx context.Context, cloneURL, destDir, commitSHA, token string) error {
-	out, err := exec.CommandContext(ctx, "git", "clone", "--no-checkout", cloneURL, destDir).CombinedOutput()
+	out, err := gitCmd(ctx, "clone", "--no-checkout", cloneURL, destDir).CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("git clone: %s: %w", redactToken(string(out), token), redactError(err, token))
 	}
-	out, err = exec.CommandContext(ctx, "git", "-C", destDir, "checkout", "-q", commitSHA).CombinedOutput()
+	out, err = gitCmd(ctx, "-C", destDir, "checkout", "-q", commitSHA).CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("git checkout %s: %s: %w", commitSHA, strings.TrimSpace(string(out)), err)
 	}
@@ -309,7 +350,7 @@ func fullCloneCheckout(ctx context.Context, cloneURL, destDir, commitSHA, token 
 
 // resolveHead returns the checked-out commit SHA of a working tree.
 func resolveHead(ctx context.Context, destDir string) (*CloneResult, error) {
-	shaOutput, err := exec.CommandContext(ctx, "git", "-C", destDir, "rev-parse", "HEAD").Output()
+	shaOutput, err := gitCmd(ctx, "-C", destDir, "rev-parse", "HEAD").Output()
 	if err != nil {
 		return nil, fmt.Errorf("git rev-parse: %w", err)
 	}

@@ -133,21 +133,22 @@ func (s *GitIntegrationService) resolve(ctx context.Context, id pgtype.UUID) (ge
 // CloneToken mints a clone token for a connection, persisting refreshed OAuth
 // tokens. repoURL is the clone target; the token is only minted when repoURL is
 // on the provider's expected host, so a malicious source_repo cannot exfiltrate
-// the credential to an arbitrary host. Returns the token and the provider name
-// (for BuildCloneURL).
-func (s *GitIntegrationService) CloneToken(ctx context.Context, id pgtype.UUID, repoURL string) (string, string, error) {
+// the credential to an arbitrary host. Returns the token, the provider name, and
+// the account login — all three feed BuildCloneURL, which for some providers
+// (gitea, bitbucket) must put a username alongside the token.
+func (s *GitIntegrationService) CloneToken(ctx context.Context, id pgtype.UUID, repoURL string) (token, provider, username string, err error) {
 	row, integ, cfg, conn, err := s.resolve(ctx, id)
 	if err != nil {
-		return "", "", err
+		return "", "", "", err
 	}
 	expected := providerHost(row.Provider, row.BaseUrl)
 	got := repoHost(repoURL)
 	if expected == "" || got == "" || got != expected {
-		return "", "", fmt.Errorf("source repo host %q does not match provider host %q", got, expected)
+		return "", "", "", fmt.Errorf("source repo host %q does not match provider host %q", got, expected)
 	}
 	token, changed, err := conn.CloneToken(ctx, cfg, &integ)
 	if err != nil {
-		return "", "", err
+		return "", "", "", err
 	}
 	if changed {
 		if encrypted, encErr := s.encryptIntegration(integ); encErr == nil {
@@ -157,7 +158,7 @@ func (s *GitIntegrationService) CloneToken(ctx context.Context, id pgtype.UUID, 
 			})
 		}
 	}
-	return token, row.Provider, nil
+	return token, row.Provider, row.AccountLogin, nil
 }
 
 // ListRepos / ListBranches back the application repo/branch pickers.
