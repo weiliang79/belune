@@ -48,6 +48,12 @@ if [[ -z "${TARGET_VERSION}" ]]; then
   [[ -n "${TARGET_VERSION}" ]] || die "Could not resolve the latest release. Pass a version: bash update.sh v0.2.0"
 fi
 
+# Git tags carry a leading v, image tags do not (see install.sh). CURRENT_VERSION
+# is read back off an image reference, so it never has one — without normalising
+# here, "already on this version" could not match even when it was true, and the
+# pull below would ask for a tag that was never published.
+TARGET_VERSION="${TARGET_VERSION#v}"
+
 TARGET_IMAGE="ghcr.io/${GITHUB_REPO}:${TARGET_VERSION}"
 
 info "Currently installed: ${CURRENT_VERSION}"

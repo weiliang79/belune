@@ -137,7 +137,11 @@ jobs:
             echo "### Install"
             echo
             echo '```bash'
-            echo "curl -sSL https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${TAG}/scripts/install.sh | bash"
+            # Pinned to this release: without it the installer resolves the
+            # newest non-prerelease, so a release candidate's own notes would
+            # install something else — or nothing, when no stable release exists.
+            echo "curl -sSL https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${TAG}/scripts/install.sh \\"
+            echo "  | BELUNE_VERSION=${TAG} bash"
             echo '```'
             echo
             echo "Upgrading an existing install: run \`update.sh\` from your install"

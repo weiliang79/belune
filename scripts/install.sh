@@ -119,14 +119,23 @@ if [[ -z "${BELUNE_VERSION}" ]]; then
   [[ -n "${BELUNE_VERSION}" ]] || die "Could not resolve the latest release. Set BELUNE_VERSION=vX.Y.Z and retry."
 fi
 
+# A release has two names, and they are not the same string. The git tag keeps
+# the leading v (v0.1.0) because that is the tag convention; the image tag drops
+# it (0.1.0) because docker/metadata-action normalises the semver and Docker tags
+# conventionally have no v — postgres:16, not postgres:v16. Conflating them pulls
+# a reference that was never published. Either form is accepted here.
+BELUNE_VERSION="${BELUNE_VERSION#v}"
+GIT_REF="v${BELUNE_VERSION}"
+
 IMAGE="ghcr.io/${GITHUB_REPO}:${BELUNE_VERSION}"
-info "Installing ${BELUNE_VERSION}"
+info "Installing ${GIT_REF}"
 
 # ── Download Compose + Caddy configs ──────────────────────────────────────────
 
 # Fetched from the release tag, not main: config files must match the image
-# being installed, and main moves on between releases.
-RAW_URL="https://raw.githubusercontent.com/${GITHUB_REPO}/${BELUNE_VERSION}"
+# being installed, and main moves on between releases. This one wants the git
+# ref, so it keeps the v.
+RAW_URL="https://raw.githubusercontent.com/${GITHUB_REPO}/${GIT_REF}"
 
 info "Downloading docker-compose.yml..."
 curl -sSfL "${RAW_URL}/infra/docker-compose.prod.yml" -o docker-compose.yml
