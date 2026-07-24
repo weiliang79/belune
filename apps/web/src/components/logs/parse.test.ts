@@ -1,5 +1,18 @@
 import { describe, expect, it } from "vitest";
-import { parseLogBlob } from "./parse";
+import { parseLogBlob, stripAnsi } from "./parse";
+
+describe("stripAnsi", () => {
+  it("removes SGR colour sequences, keeping the visible text", () => {
+    // A NestJS/winston-style line: green tag, reset, grey query marker.
+    const line =
+      "\x1b[32mNestWinston\x1b[39m \x1b[90mquery\x1b[39m listening on port 3000";
+    expect(stripAnsi(line)).toBe("NestWinston query listening on port 3000");
+  });
+
+  it("leaves a line with no escape sequences untouched", () => {
+    expect(stripAnsi("plain log line")).toBe("plain log line");
+  });
+});
 
 // Belune's console handler (apps/api/internal/pkg/logger/console_handler.go)
 // emits "<date> <time> <LEVEL> [module] <message>", with attributes on an

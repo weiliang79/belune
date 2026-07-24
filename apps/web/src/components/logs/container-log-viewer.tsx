@@ -2,7 +2,7 @@ import { ClockIcon, LayersIcon, ListIcon } from "lucide-react";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { LevelFilter, type LevelFilterValue } from "@/components/logs/level-filter";
 import { LogView } from "@/components/logs/log-view";
-import type { LogEntry } from "@/components/logs/parse";
+import { stripAnsi, type LogEntry } from "@/components/logs/parse";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -148,7 +148,7 @@ export function ContainerLogViewer({
           id: `live-${liveIdRef.current}`,
           level: normalizeLevel(obj.level ?? "info"),
           stream: obj.stream === "stderr" ? "stderr" : "stdout",
-          message: obj.message as string,
+          message: stripAnsi(obj.message as string),
           recordedAt: obj.recorded_at ?? new Date().toISOString(),
           // Empty string from the collector means no session → unassigned.
           sessionId: obj.container_id ? obj.container_id : null,
@@ -175,7 +175,7 @@ export function ContainerLogViewer({
           id: e.id,
           level: normalizeLevel(e.level),
           stream: e.stream,
-          message: e.message,
+          message: stripAnsi(e.message),
           recordedAt: e.recorded_at,
           sessionId: e.container_id,
         }))

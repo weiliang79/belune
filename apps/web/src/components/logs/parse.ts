@@ -65,7 +65,7 @@ export function parseLogBlob(blob: string, idPrefix = "blob"): LogEntry[] {
       // attributes ~26 characters to the right. Other producers indent by
       // different amounts again (postgres uses a tab), so normalising beats
       // preserving.
-      prev.message += "\n  " + rest.trim();
+      prev.message += "\n  " + stripAnsi(rest.trim());
       continue;
     }
 
@@ -116,9 +116,19 @@ const CONSOLE_RE =
 // eslint-disable-next-line no-control-regex
 const ANSI_RE = /\x1b\[[0-9;]*m/g;
 
+/**
+ * Remove ANSI SGR (colour) escape sequences from a log line. Apps that colourise
+ * their output — NestJS/winston, many CLIs — emit `\x1b[32m…\x1b[39m`; the ESC is
+ * a non-printing control byte, so a viewer that prints the line verbatim shows
+ * the leftover `[32m` bodies as garbage. Strip the whole sequence instead.
+ */
+export function stripAnsi(s: string): string {
+  return s.replace(ANSI_RE, "");
+}
+
 function parseLine(line: string, id: string): LogEntry {
   const { ts: dockerTs, rest: raw } = splitDockerTimestamp(line);
-  const rest = raw.replace(ANSI_RE, "");
+  const rest = stripAnsi(raw);
   try {
     const obj = JSON.parse(rest) as RawEntry;
     if (obj && typeof obj.msg === "string") {
