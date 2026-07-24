@@ -15,7 +15,7 @@
 # nothing to do with the code. Resource ceilings are not what this drill tests.
 #
 # env_file is replaced, not appended. This is the subtle one, and the drill found
-# it on its first run: docker-compose.prod.yml hardcodes `env_file: ../.env`, so a
+# it on its first run: docker-compose.prod.yml hardcodes `env_file: ./.env`, so a
 # container's environment comes from the repo's own .env regardless of what
 # --env-file says — --env-file only feeds ${...} interpolation. The drill booted
 # against a developer's stale DATABASE_URL and tried to reach postgres on
@@ -25,7 +25,7 @@ services:
     ports: !override
       - "127.0.0.1:18081:8080"
     env_file: !override
-      - ../.env.smoke
+      - ./.env.smoke
     deploy:
       resources:
         limits:

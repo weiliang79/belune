@@ -41,8 +41,8 @@ rsync -az --delete \
 
 ## 3. Create `.env`
 
-`docker-compose.prod.yml` reads `../.env`, so this goes at the repo root
-(`/opt/belune/.env`). Generate real secrets — do not reuse the dev ones:
+`docker-compose.prod.yml` reads `./.env` relative to the project directory, so
+this goes at the repo root (`/opt/belune/.env`). Generate real secrets — do not reuse the dev ones:
 
 ```sh
 cd /opt/belune
@@ -86,15 +86,17 @@ the first run.
 ## 5. Build and start
 
 ```sh
-cd /opt/belune/infra
-docker compose --env-file ../.env -f docker-compose.prod.yml up -d
-docker compose --env-file ../.env -f docker-compose.prod.yml ps
+cd /opt/belune
+docker compose --project-directory . --env-file .env -f infra/docker-compose.prod.yml up -d
+docker compose --project-directory . --env-file .env -f infra/docker-compose.prod.yml ps
 ```
 
-**`--env-file ../.env` is not optional.** Compose resolves `${BELUNE_IMAGE}` and
-`${DOCKER_GID}` from the project directory (`infra/`), not from the `env_file:`
-entry — those only reach the container's environment. Omit it and both fall back
-to their defaults; worse, an unresolved image makes Compose *build from source*
+**Neither flag is optional.** `--project-directory .` is what makes the compose
+file's relative paths (`./.env`, `./infra/caddy`, `./infra/buildkit`) resolve
+against the repo root instead of `infra/`. And `--env-file` is what resolves
+`${BELUNE_IMAGE}` and `${DOCKER_GID}` — the `env_file:` entry only reaches the
+container's environment, never the interpolation. Omit it and both fall back to
+their defaults; worse, an unresolved image makes Compose *build from source*
 rather than fail, which on a small VPS looks like a hang.
 
 The API is deliberately **not** published on a public port — Caddy serves it on
@@ -127,7 +129,7 @@ certificate. Watch the badge under the field:
 Follow along from the box if you want the detail:
 
 ```sh
-docker compose --env-file ../.env -f docker-compose.prod.yml logs -f caddy | grep -i "tls\|acme"
+docker compose --project-directory . --env-file .env -f infra/docker-compose.prod.yml logs -f caddy | grep -i "tls\|acme"
 ```
 
 ## 7. Switch to production Let's Encrypt
@@ -137,10 +139,10 @@ Once staging issues cleanly, take the training wheels off. Remove the
 certificates** so Caddy issues fresh ones from the real CA:
 
 ```sh
-cd /opt/belune/infra
-docker compose --env-file ../.env -f docker-compose.prod.yml down
-docker volume rm infra_caddydata      # staging certs live here
-docker compose --env-file ../.env -f docker-compose.prod.yml up -d
+cd /opt/belune
+docker compose --project-directory . --env-file .env -f infra/docker-compose.prod.yml down
+docker volume rm belune_caddydata      # staging certs live here
+docker compose --project-directory . --env-file .env -f infra/docker-compose.prod.yml up -d
 ```
 
 Reload the dashboard on `https://belune.example.com`. A real browser padlock —

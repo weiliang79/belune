@@ -1,19 +1,26 @@
-# IMPORTANT: run compose with `--env-file ../.env`.
+# Every relative path below is resolved against the PROJECT DIRECTORY, which is
+# the repo root here and the install directory (/opt/belune) on a real install —
+# install.sh lands this file at the install root and mirrors infra/ beneath it.
+# From the repo, that means passing --project-directory explicitly:
 #
-#   docker compose --env-file ../.env -f docker-compose.prod.yml up -d
+#   docker compose --project-directory . --env-file .env -f infra/docker-compose.prod.yml up -d
+#
+# Without it Compose takes the project directory from this file's own location
+# (infra/), and `.env`, `./infra/caddy`, and `./infra/buildkit` all resolve one
+# level too deep.
 #
 # `env_file:` below passes variables *into the container*, but ${VAR} substitution
-# in this file is resolved by Compose from the project directory (infra/), not
-# from env_file. Without --env-file, BELUNE_IMAGE and DOCKER_GID silently fall
-# back to their defaults — and because a `build:` section exists, an unresolved
-# image makes Compose build from source instead of erroring. On a small box that
-# looks like a hang, not a misconfiguration.
+# in this file is resolved by Compose from the project directory, not from
+# env_file. Without --env-file, BELUNE_IMAGE and DOCKER_GID silently fall back to
+# their defaults — and because a `build:` section exists, an unresolved image
+# makes Compose build from source instead of erroring. On a small box that looks
+# like a hang, not a misconfiguration.
 
 services:
   belune:
     image: ${BELUNE_IMAGE:-ghcr.io/weiliang79/belune:latest}
     build:
-      context: ..
+      context: .
       dockerfile: Dockerfile
     ports:
       # Bound to loopback: Caddy serves the dashboard on :80/:443 and reaches the
@@ -21,7 +28,7 @@ services:
       # login page — and every API route — in plaintext, bypassing TLS entirely.
       - "127.0.0.1:8080:8080"
     env_file:
-      - ../.env
+      - ./.env
     environment:
       # railpack (and pack) build via this BuildKit daemon on the internal network.
       BUILDKIT_HOST: tcp://buildkit:1234
@@ -121,7 +128,7 @@ services:
     command: --addr tcp://0.0.0.0:1234 --config /etc/buildkit/buildkitd.toml
     volumes:
       - buildkitcache:/var/lib/buildkit
-      - ./buildkit/buildkitd.toml:/etc/buildkit/buildkitd.toml:ro
+      - ./infra/buildkit/buildkitd.toml:/etc/buildkit/buildkitd.toml:ro
     restart: unless-stopped
     logging:
       driver: json-file
@@ -136,8 +143,8 @@ services:
       - "443:443"
       - "127.0.0.1:2019:2019"
     volumes:
-      - ./caddy/Caddyfile.template:/etc/caddy/Caddyfile
-      - ./caddy/sites:/etc/caddy/sites
+      - ./infra/caddy/Caddyfile.template:/etc/caddy/Caddyfile
+      - ./infra/caddy/sites:/etc/caddy/sites
       - caddydata:/data
       - caddyconfig:/config
       - caddylogs:/var/log/caddy

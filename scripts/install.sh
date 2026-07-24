@@ -106,8 +106,12 @@ info "Docker version: ${DOCKER_VERSION}"
 
 # ── Create install directory ───────────────────────────────────────────────────
 
+# The layout mirrors the repo's, because docker-compose.prod.yml's relative
+# volume paths (./infra/caddy, ./infra/buildkit) resolve against whichever
+# directory holds the compose file — here, the install root.
 info "Creating install directory at ${INSTALL_DIR}..."
-mkdir -p "${INSTALL_DIR}/infra/caddy/sites" "${INSTALL_DIR}/infra/systemd" "${INSTALL_DIR}/scripts"
+mkdir -p "${INSTALL_DIR}/infra/caddy/sites" "${INSTALL_DIR}/infra/buildkit" \
+         "${INSTALL_DIR}/infra/systemd" "${INSTALL_DIR}/scripts"
 cd "${INSTALL_DIR}"
 
 # ── Resolve the version to install ────────────────────────────────────────────
@@ -143,6 +147,13 @@ curl -sSfL "${RAW_URL}/infra/docker-compose.prod.yml" -o docker-compose.yml
 info "Downloading Caddyfile..."
 curl -sSfL "${RAW_URL}/infra/caddy/Caddyfile.template" -o infra/caddy/Caddyfile.template
 
+# The buildkit daemon is started with --config pointing at this file. When it is
+# absent Docker helpfully creates a *directory* at the bind source, and buildkit
+# exits — taking every git-based deploy with it, on a stack that otherwise looks
+# healthy.
+info "Downloading BuildKit config..."
+curl -sSfL "${RAW_URL}/infra/buildkit/buildkitd.toml" -o infra/buildkit/buildkitd.toml
+
 info "Downloading .env.example reference..."
 curl -sSfL "${RAW_URL}/.env.example" -o .env.example
 
@@ -170,6 +181,19 @@ done
 
 if [[ -f ".env" ]]; then
   info ".env already exists — skipping secret generation."
+
+  # Secrets are kept, but the pinned image is not silently kept as well: it is
+  # what Compose actually starts, so an install that pulls one version and boots
+  # another is worse than a refusal. Moving an existing install across versions
+  # is update.sh's job — it backs up first, which this script does not.
+  EXISTING_IMAGE=$(grep '^BELUNE_IMAGE=' .env | head -1 | cut -d= -f2- || true)
+  if [[ -n "${EXISTING_IMAGE}" && "${EXISTING_IMAGE}" != "${IMAGE}" ]]; then
+    die "This install is already pinned to ${EXISTING_IMAGE}, but you asked for ${IMAGE}.
+          To move an existing install to a new version (takes a backup first):
+            cd ${INSTALL_DIR} && sudo bash scripts/update.sh ${GIT_REF}
+          To start over and discard its data:
+            docker compose -f ${INSTALL_DIR}/docker-compose.yml down -v && rm -rf ${INSTALL_DIR}"
+  fi
 else
   info "Generating secure .env..."
 
@@ -202,6 +226,28 @@ BELUNE_IMAGE=${IMAGE}
 EOF
 
   success ".env written with generated secrets."
+fi
+
+# ── Docker socket group ────────────────────────────────────────────────────────
+
+# Belune runs as a non-root user, so mounting the Docker socket is not enough:
+# the container must also be in the group that OWNS the socket, and that GID
+# differs per host (Debian/Ubuntu usually 999, but not always — a real VPS came
+# up 988). Compose falls back to 999, and when the guess is wrong Belune starts,
+# serves the UI, and can do nothing at all: every deploy fails and /healthz
+# reports 503 because the Docker check cannot connect.
+#
+# Written outside the block above so an existing .env from an earlier install
+# gets it too.
+if ! grep -q '^DOCKER_GID=' .env 2>/dev/null; then
+  DOCKER_GID=$(stat -c '%g' /var/run/docker.sock 2>/dev/null || true)
+  [[ -n "${DOCKER_GID}" ]] || DOCKER_GID=$(getent group docker 2>/dev/null | cut -d: -f3 || true)
+  if [[ -n "${DOCKER_GID}" ]]; then
+    printf '\n# GID owning /var/run/docker.sock on this host.\nDOCKER_GID=%s\n' "${DOCKER_GID}" >> .env
+    info "Detected Docker socket group ${DOCKER_GID}."
+  else
+    info "Could not detect the Docker socket group — falling back to 999."
+  fi
 fi
 
 # ── Pull and start ─────────────────────────────────────────────────────────────
