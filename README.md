@@ -26,7 +26,7 @@
 One command on a fresh Linux host with Docker:
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/weiliang79/belune/main/scripts/install.sh | bash
+curl -sSL https://raw.githubusercontent.com/weiliang79/belune/refs/heads/main/scripts/install.sh | bash
 ```
 
 Then follow the [install runbook](docs/runbooks/install.md) for DNS, TLS, the
