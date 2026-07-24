@@ -165,6 +165,34 @@ func (h *Handler) secureCookies(r *http.Request) bool {
 	return strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https")
 }
 
+// publicBaseURL returns the externally reachable origin — scheme://host, no
+// trailing slash — for building absolute URLs a browser or third party will use:
+// an OAuth redirect_uri, a provider callback, a post-callback UI redirect.
+//
+// PUBLIC_BASE_URL wins when set (the operator's declared canonical origin).
+// Otherwise it is derived from the request as it reached Caddy. That derivation
+// is trustworthy for the same reason secureCookies trusts X-Forwarded-Proto: the
+// API is only reachable through the proxy (8080 is loopback-bound), so the
+// forwarded Host and Proto are the proxy's, not a client's. Deriving it means
+// OAuth connect works on a fresh install before anyone edits .env — and because
+// both the authorize step and the token-exchange callback arrive through the
+// proxy with the same Host, the redirect_uri they build matches, which OAuth2
+// requires.
+func (h *Handler) publicBaseURL(r *http.Request) string {
+	if h.cfg.PublicBaseURL != "" {
+		return strings.TrimRight(h.cfg.PublicBaseURL, "/")
+	}
+	scheme := "http"
+	if r.TLS != nil || strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https") {
+		scheme = "https"
+	}
+	host := r.Header.Get("X-Forwarded-Host")
+	if host == "" {
+		host = r.Host
+	}
+	return scheme + "://" + host
+}
+
 // setSessionCookies emits the access, refresh, and CSRF cookies for a
 // successful login or refresh. The refresh cookie is scoped to /api/auth so
 // it is never sent to non-auth endpoints — defence-in-depth in case of a

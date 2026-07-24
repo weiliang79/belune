@@ -173,7 +173,7 @@ func (h *Handler) StartGitIntegrationConnect(w http.ResponseWriter, r *http.Requ
 		MaxAge:   int(connectStateTTL.Seconds()),
 	})
 
-	redirectURI := h.cfg.PublicBaseURL + "/api/git/integrations/callback"
+	redirectURI := h.publicBaseURL(r) + "/api/git/integrations/callback"
 	authURL, err := h.gitIntegrationSvc.AuthURL(r.Context(), provider, baseURL, redirectURI, state)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
@@ -221,12 +221,16 @@ func (h *Handler) HandleGitIntegrationCallback(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	redirectURI := h.cfg.PublicBaseURL + "/api/git/integrations/callback"
+	// Must match the redirect_uri sent at the authorize step byte-for-byte, which
+	// is why both sides go through publicBaseURL rather than one reading the env
+	// var and the other the request.
+	base := h.publicBaseURL(r)
+	redirectURI := base + "/api/git/integrations/callback"
 	if _, err := h.gitIntegrationSvc.Connect(ctx, st.Provider, st.BaseURL, redirectURI, r.URL.Query(), userID); err != nil {
-		http.Redirect(w, r, h.cfg.PublicBaseURL+"/git?tab=connections&error="+st.Provider, http.StatusFound)
+		http.Redirect(w, r, base+"/git?tab=connections&error="+st.Provider, http.StatusFound)
 		return
 	}
-	http.Redirect(w, r, h.cfg.PublicBaseURL+"/git?tab=connections&connected="+st.Provider, http.StatusFound)
+	http.Redirect(w, r, base+"/git?tab=connections&connected="+st.Provider, http.StatusFound)
 }
 
 // DeleteGitIntegration disconnects a connected account.
