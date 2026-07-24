@@ -8,6 +8,9 @@
 FROM debian:trixie-slim AS build-base
 ARG RAILPACK_VERSION=0.30.1
 ARG PACK_VERSION=0.35.1
+# Client only. Talks to the host daemon over the mounted socket; version need not
+# match the host's exactly (the Docker CLI is compatible across daemon versions).
+ARG DOCKER_CLI_VERSION=27.5.1
 RUN apt-get update && apt-get install -y --no-install-recommends \
         ca-certificates git tzdata curl \
     && rm -rf /var/lib/apt/lists/*
@@ -34,6 +37,22 @@ RUN set -eux; \
     curl -fsSL "https://github.com/buildpacks/pack/releases/download/v${PACK_VERSION}/${passet}" \
       | tar -C /usr/local/bin --no-same-owner -xz pack; \
     pack version
+# docker CLI (pinned) — client only, no daemon. railpack builds against the
+# remote BuildKit daemon but loads the finished image into the host Docker via
+# `docker load`, and it has no flag to do otherwise. Without this binary the
+# build completes and then hangs at "sending tarball" forever, because nothing
+# drains the image out of BuildKit. The daemon is the host's, reached over the
+# mounted socket; only the client belongs in this image.
+RUN set -eux; \
+    arch="$(dpkg --print-architecture)"; \
+    case "$arch" in \
+      amd64) darch="x86_64" ;; \
+      arm64) darch="aarch64" ;; \
+      *) echo "unsupported arch: $arch" >&2; exit 1 ;; \
+    esac; \
+    curl -fsSL "https://download.docker.com/linux/static/stable/${darch}/docker-${DOCKER_CLI_VERSION}.tgz" \
+      | tar -C /usr/local/bin --no-same-owner --strip-components=1 -xz docker/docker; \
+    docker --version
 
 # ── Stage: frontend ──────────────────────────────────────────────────────────
 # Pinned to the BUILD platform: the output is static assets, so there is nothing
