@@ -13,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"golang.org/x/crypto/bcrypt"
 
+	"github.com/weiliang79/belune/internal/proxy"
 	"github.com/weiliang79/belune/internal/server/middleware"
 	"github.com/weiliang79/belune/internal/service"
 	"github.com/weiliang79/belune/internal/store/generated"
@@ -169,28 +170,29 @@ func (h *Handler) secureCookies(r *http.Request) bool {
 // trailing slash — for building absolute URLs a browser or third party will use:
 // an OAuth redirect_uri, a provider callback, a post-callback UI redirect.
 //
-// PUBLIC_BASE_URL wins when set (the operator's declared canonical origin).
-// Otherwise it is derived from the request as it reached Caddy. That derivation
-// is trustworthy for the same reason secureCookies trusts X-Forwarded-Proto: the
-// API is only reachable through the proxy (8080 is loopback-bound), so the
-// forwarded Host and Proto are the proxy's, not a client's. Deriving it means
-// OAuth connect works on a fresh install before anyone edits .env — and because
-// both the authorize step and the token-exchange callback arrive through the
-// proxy with the same Host, the redirect_uri they build matches, which OAuth2
-// requires.
-func (h *Handler) publicBaseURL(r *http.Request) string {
+// It deliberately does NOT read the request's Host or X-Forwarded-Host. The API
+// is fronted by a Caddy catch-all that forwards any Host to it, so those headers
+// are attacker-controllable; using them to build an OAuth redirect_uri or a
+// Location header is a host-header-injection / open-redirect hole. Both sources
+// here are operator-configured instead:
+//
+//  1. PUBLIC_BASE_URL when set — the declared canonical origin.
+//  2. otherwise the stored dashboard domain (Settings → Dashboard domain), which
+//     the admin sets and Caddy serves over HTTPS via ACME. That is also what an
+//     OAuth provider requires a redirect_uri to be, so https is the right scheme.
+//
+// Neither configured → an error, so the caller fails loudly with something the
+// operator can act on rather than emitting a spoofable or relative URL.
+func (h *Handler) publicBaseURL(r *http.Request) (string, error) {
 	if h.cfg.PublicBaseURL != "" {
-		return strings.TrimRight(h.cfg.PublicBaseURL, "/")
+		return strings.TrimRight(h.cfg.PublicBaseURL, "/"), nil
 	}
-	scheme := "http"
-	if r.TLS != nil || strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https") {
-		scheme = "https"
+	if s, err := h.queries.GetSetting(r.Context(), proxy.SettingDashboardDomain); err == nil {
+		if domain := strings.TrimSpace(s.Value); domain != "" {
+			return "https://" + domain, nil
+		}
 	}
-	host := r.Header.Get("X-Forwarded-Host")
-	if host == "" {
-		host = r.Host
-	}
-	return scheme + "://" + host
+	return "", errors.New("PUBLIC_BASE_URL is not set and no dashboard domain is configured — set one before connecting a git provider")
 }
 
 // setSessionCookies emits the access, refresh, and CSRF cookies for a

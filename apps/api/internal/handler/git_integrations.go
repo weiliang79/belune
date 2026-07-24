@@ -173,7 +173,12 @@ func (h *Handler) StartGitIntegrationConnect(w http.ResponseWriter, r *http.Requ
 		MaxAge:   int(connectStateTTL.Seconds()),
 	})
 
-	redirectURI := h.publicBaseURL(r) + "/api/git/integrations/callback"
+	base, err := h.publicBaseURL(r)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	redirectURI := base + "/api/git/integrations/callback"
 	authURL, err := h.gitIntegrationSvc.AuthURL(r.Context(), provider, baseURL, redirectURI, state)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
@@ -222,9 +227,13 @@ func (h *Handler) HandleGitIntegrationCallback(w http.ResponseWriter, r *http.Re
 	}
 
 	// Must match the redirect_uri sent at the authorize step byte-for-byte, which
-	// is why both sides go through publicBaseURL rather than one reading the env
-	// var and the other the request.
-	base := h.publicBaseURL(r)
+	// is why both sides resolve it the same way. It cannot have changed between the
+	// two: the source is operator config, not the request.
+	base, err := h.publicBaseURL(r)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "cannot resolve callback base URL")
+		return
+	}
 	redirectURI := base + "/api/git/integrations/callback"
 	if _, err := h.gitIntegrationSvc.Connect(ctx, st.Provider, st.BaseURL, redirectURI, r.URL.Query(), userID); err != nil {
 		http.Redirect(w, r, base+"/git?tab=connections&error="+st.Provider, http.StatusFound)
