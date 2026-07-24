@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { FolderIcon, GitBranchIcon, Link2Icon } from "lucide-react";
 import { Label } from "@/components/ui/label";
@@ -22,6 +22,15 @@ interface Props {
     cloneUrl: string;
     branch: string;
   }) => void;
+  /**
+   * Pre-selects an existing app's account, repository, and branch when editing
+   * (the create flow leaves these unset). repoFullName is the "owner/repo" the
+   * app already points at; the branch is kept as-is rather than reset to the
+   * repo default.
+   */
+  initialIntegrationId?: string;
+  initialRepoFullName?: string;
+  initialBranch?: string;
 }
 
 const PROVIDER_LABELS: Record<string, string> = {
@@ -31,11 +40,21 @@ const PROVIDER_LABELS: Record<string, string> = {
   gitea: "Gitea",
 };
 
-export function IntegrationRepoPicker({ onSelect }: Props) {
+export function IntegrationRepoPicker({
+  onSelect,
+  initialIntegrationId = "",
+  initialRepoFullName = "",
+  initialBranch = "",
+}: Props) {
   const { data: integrations } = useGitIntegrations();
-  const [integrationId, setIntegrationId] = useState("");
-  const [repoFullName, setRepoFullName] = useState("");
-  const [branch, setBranch] = useState("");
+  const [integrationId, setIntegrationId] = useState(initialIntegrationId);
+  const [repoFullName, setRepoFullName] = useState(initialRepoFullName);
+  const [branch, setBranch] = useState(initialBranch);
+
+  // The "reset branch to the repo default" effect below must not fire for the
+  // pre-selected repo — that would discard the app's actual branch on mount.
+  // Skip exactly the first run when we started from an existing selection.
+  const skipInitialBranchReset = useRef(Boolean(initialRepoFullName));
 
   const { data: repos } = useIntegrationRepos(integrationId || undefined);
   const { data: branches } = useIntegrationBranches(
@@ -57,8 +76,13 @@ export function IntegrationRepoPicker({ onSelect }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [integrationId, repoFullName, branch]);
 
-  // Default the branch to the repo's default branch when repo changes.
+  // Default the branch to the repo's default branch when the repo changes —
+  // except on the initial pre-selected repo, whose branch we must preserve.
   useEffect(() => {
+    if (skipInitialBranchReset.current) {
+      skipInitialBranchReset.current = false;
+      return;
+    }
     if (selectedRepo) setBranch(selectedRepo.default_branch || "");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [repoFullName]);

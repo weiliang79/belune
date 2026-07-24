@@ -52,6 +52,18 @@ type FormValues = {
   branch: string;
 };
 
+// Derive the "owner/repo" a connected-account picker keys on from the stored
+// clone URL (https://host/owner/repo.git). Returns "" for a blank/unparseable
+// URL so the picker falls back to an empty selection.
+function repoFullNameFromCloneUrl(cloneUrl: string | null): string {
+  if (!cloneUrl) return "";
+  try {
+    return new URL(cloneUrl).pathname.replace(/^\/+/, "").replace(/\.git$/, "");
+  } catch {
+    return "";
+  }
+}
+
 export function ApplicationSettingsForm({
   projectId,
   applicationId,
@@ -336,6 +348,11 @@ export function ApplicationSettingsForm({
                     }
                   />
                   <IntegrationRepoPicker
+                    initialIntegrationId={application.git_integration_id ?? ""}
+                    initialRepoFullName={repoFullNameFromCloneUrl(
+                      application.source_repo,
+                    )}
+                    initialBranch={application.branch ?? ""}
                     onSelect={({ integrationId, cloneUrl, branch }) => {
                       setGitIntegrationId(integrationId);
                       form.setFieldValue("source_repo", cloneUrl);
