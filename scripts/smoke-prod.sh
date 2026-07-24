@@ -306,8 +306,11 @@ info "11. Belune finds the Caddy container without being told its name"
 # symptom is every app domain answering 502 on a stack that looks perfectly
 # healthy. This drill used to set the variable itself, which is precisely why it
 # never caught it; the variable is now deliberately absent from the drill's env.
+# The console log format puts the message and its structured fields on separate
+# lines, so the name= field lands one line below "discovered Caddy container".
+# grep -A1 spans the wrap; matching them on one line never can.
 expected="${PROJECT}-caddy-1"
-if belune_logs | grep -q "discovered Caddy container.*${expected}"; then
+if belune_logs | grep -A1 "discovered Caddy container" | grep -q "${expected}"; then
   pass "Caddy resolved by the belune-system label → ${expected}"
 elif belune_logs | grep -q "no container carries belune-system=caddy"; then
   fail "Caddy was not discovered" "the belune-system=caddy label is missing from the proxy — app networks will never be joined"
