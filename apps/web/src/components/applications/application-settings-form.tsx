@@ -393,24 +393,29 @@ export function ApplicationSettingsForm({
                   )}
                 />
               )}
-              <form.Field
-                name="branch"
-                children={(field) => (
-                  <div className="space-y-2">
-                    <Label>Branch</Label>
-                    <Input
-                      value={field.state.value}
-                      onBlur={field.handleBlur}
-                      onChange={(e) => field.handleChange(e.target.value)}
-                      placeholder="Default branch"
-                    />
-                    <p className="text-muted-foreground text-xs">
-                      The branch to build, and the one whose pushes deploy.
-                      Leave empty to track the repository's default branch.
-                    </p>
-                  </div>
-                )}
-              />
+              {/* Connected-account mode has its own branch dropdown inside the
+                  picker above (it writes this same form field via onSelect), so
+                  the free-text branch input is only for the public-URL path. */}
+              {gitSource === "url" && (
+                <form.Field
+                  name="branch"
+                  children={(field) => (
+                    <div className="space-y-2">
+                      <Label>Branch</Label>
+                      <Input
+                        value={field.state.value}
+                        onBlur={field.handleBlur}
+                        onChange={(e) => field.handleChange(e.target.value)}
+                        placeholder="Default branch"
+                      />
+                      <p className="text-muted-foreground text-xs">
+                        The branch to build, and the one whose pushes deploy.
+                        Leave empty to track the repository's default branch.
+                      </p>
+                    </div>
+                  )}
+                />
+              )}
               {gitSource === "url" && (
                 <form.Field
                   name="git_token"
