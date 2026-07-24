@@ -250,6 +250,27 @@ if ! grep -q '^DOCKER_GID=' .env 2>/dev/null; then
   fi
 fi
 
+# ── CPU limits ─────────────────────────────────────────────────────────────────
+
+# The compose file caps each service's CPU. Docker rejects a hard cpus cap that
+# exceeds the host's core count outright — "range of CPUs is from 0.01 to 1.00,
+# as there are only 1 CPUs available" — so the default 2.0 cap on belune could
+# not even create the container on a 1-vCPU VPS. Clamp each cap to nproc: a small
+# box gets a fitting ceiling, a large box keeps the headroom.
+if ! grep -q '^BELUNE_CPU_LIMIT=' .env 2>/dev/null; then
+  NPROC=$(nproc 2>/dev/null || getconf _NPROCESSORS_ONLN 2>/dev/null || echo 1)
+  clamp_cpu() { awk -v d="$1" -v n="$2" 'BEGIN{ print (d < n ? d : n) }'; }
+  {
+    echo ""
+    echo "# CPU ceilings, clamped to this host's ${NPROC} core(s) at install time."
+    echo "BELUNE_CPU_LIMIT=$(clamp_cpu 2.0 "${NPROC}")"
+    echo "POSTGRES_CPU_LIMIT=$(clamp_cpu 1.0 "${NPROC}")"
+    echo "REDIS_CPU_LIMIT=$(clamp_cpu 0.5 "${NPROC}")"
+    echo "CADDY_CPU_LIMIT=$(clamp_cpu 1.0 "${NPROC}")"
+  } >> .env
+  info "Clamped CPU limits to ${NPROC} core(s)."
+fi
+
 # ── Pull and start ─────────────────────────────────────────────────────────────
 
 info "Pulling ${IMAGE}..."
