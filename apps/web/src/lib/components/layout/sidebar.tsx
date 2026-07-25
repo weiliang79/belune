@@ -158,15 +158,16 @@ export function Sidebar({ mobileOpen, onMobileClose }: SidebarProps) {
           !expanded && "justify-center px-0",
         )}
       >
-        <div
-          aria-hidden="true"
-          className="grid size-8 shrink-0 place-items-center rounded-lg text-white shadow-sm"
+        <Link
+          to="/about"
+          aria-label="About Belune"
+          className="grid size-8 shrink-0 place-items-center rounded-lg text-white shadow-sm transition-opacity hover:opacity-90"
           style={{
             background: "linear-gradient(140deg, var(--brand), var(--brand-press))",
           }}
         >
-          <BeluneLogo className="size-6" />
-        </div>
+          <BeluneLogo className="size-6" aria-hidden="true" />
+        </Link>
         {expanded && (
           <div className="flex min-w-0 flex-col leading-tight">
             <span className="truncate text-sm font-semibold">{instanceName}</span>

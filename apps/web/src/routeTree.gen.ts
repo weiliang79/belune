@@ -27,6 +27,7 @@ import { Route as AppDashboardRouteImport } from './routes/_app/dashboard'
 import { Route as AppCertificatesRouteImport } from './routes/_app/certificates'
 import { Route as AppAuditRouteImport } from './routes/_app/audit'
 import { Route as AppAccountRouteImport } from './routes/_app/account'
+import { Route as AppAboutRouteImport } from './routes/_app/about'
 import { Route as AppRequestsIndexRouteImport } from './routes/_app/requests/index'
 import { Route as AppProjectsIndexRouteImport } from './routes/_app/projects/index'
 import { Route as AppDeploymentsIndexRouteImport } from './routes/_app/deployments/index'
@@ -136,6 +137,11 @@ const AppAuditRoute = AppAuditRouteImport.update({
 const AppAccountRoute = AppAccountRouteImport.update({
   id: '/account',
   path: '/account',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppAboutRoute = AppAboutRouteImport.update({
+  id: '/about',
+  path: '/about',
   getParentRoute: () => AppRoute,
 } as any)
 const AppRequestsIndexRoute = AppRequestsIndexRouteImport.update({
@@ -266,6 +272,7 @@ export interface FileRoutesByFullPath {
   '/login': typeof LoginRoute
   '/reset-password': typeof ResetPasswordRoute
   '/setup': typeof SetupRoute
+  '/about': typeof AppAboutRoute
   '/account': typeof AppAccountRoute
   '/audit': typeof AppAuditRoute
   '/certificates': typeof AppCertificatesRoute
@@ -306,6 +313,7 @@ export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/reset-password': typeof ResetPasswordRoute
   '/setup': typeof SetupRoute
+  '/about': typeof AppAboutRoute
   '/account': typeof AppAccountRoute
   '/audit': typeof AppAuditRoute
   '/certificates': typeof AppCertificatesRoute
@@ -346,6 +354,7 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/reset-password': typeof ResetPasswordRoute
   '/setup': typeof SetupRoute
+  '/_app/about': typeof AppAboutRoute
   '/_app/account': typeof AppAccountRoute
   '/_app/audit': typeof AppAuditRoute
   '/_app/certificates': typeof AppCertificatesRoute
@@ -388,6 +397,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/reset-password'
     | '/setup'
+    | '/about'
     | '/account'
     | '/audit'
     | '/certificates'
@@ -428,6 +438,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/reset-password'
     | '/setup'
+    | '/about'
     | '/account'
     | '/audit'
     | '/certificates'
@@ -467,6 +478,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/reset-password'
     | '/setup'
+    | '/_app/about'
     | '/_app/account'
     | '/_app/audit'
     | '/_app/certificates'
@@ -637,6 +649,13 @@ declare module '@tanstack/react-router' {
       path: '/account'
       fullPath: '/account'
       preLoaderRoute: typeof AppAccountRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/about': {
+      id: '/_app/about'
+      path: '/about'
+      fullPath: '/about'
+      preLoaderRoute: typeof AppAboutRouteImport
       parentRoute: typeof AppRoute
     }
     '/_app/requests/': {
@@ -855,6 +874,7 @@ const AppProjectsProjectIdRouteWithChildren =
   AppProjectsProjectIdRoute._addFileChildren(AppProjectsProjectIdRouteChildren)
 
 interface AppRouteChildren {
+  AppAboutRoute: typeof AppAboutRoute
   AppAccountRoute: typeof AppAccountRoute
   AppAuditRoute: typeof AppAuditRoute
   AppCertificatesRoute: typeof AppCertificatesRoute
@@ -874,6 +894,7 @@ interface AppRouteChildren {
 }
 
 const AppRouteChildren: AppRouteChildren = {
+  AppAboutRoute: AppAboutRoute,
   AppAccountRoute: AppAccountRoute,
   AppAuditRoute: AppAuditRoute,
   AppCertificatesRoute: AppCertificatesRoute,
