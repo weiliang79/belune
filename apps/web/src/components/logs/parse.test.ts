@@ -12,6 +12,20 @@ describe("stripAnsi", () => {
   it("leaves a line with no escape sequences untouched", () => {
     expect(stripAnsi("plain log line")).toBe("plain log line");
   });
+
+  it("strips ANSI from an NDJSON build-log line (escaped ESC survives JSON.parse)", () => {
+    // A build log is stored as NDJSON: JSON.stringify escapes the ESC to a
+    // six-character \\u001b, which the raw-string strip cannot see; only
+    // JSON.parse revives it to a real escape inside the message.
+    const line = JSON.stringify({
+      ts: "2026-07-25T01:04:03Z",
+      level: "info",
+      msg: "\x1b[46m\x1b[1m TSC \x1b[22m\x1b[39m Initializing...",
+    });
+    const [entry] = parseLogBlob(line);
+    expect(entry.message).toBe(" TSC  Initializing...");
+    expect(entry.message).not.toContain("[46m");
+  });
 });
 
 // Belune's console handler (apps/api/internal/pkg/logger/console_handler.go)

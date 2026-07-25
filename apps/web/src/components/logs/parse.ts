@@ -135,7 +135,10 @@ function parseLine(line: string, id: string): LogEntry {
       return {
         id,
         level: normalizeLevel(obj.level ?? "info"),
-        message: obj.msg,
+        // Strip here, not only on `rest`: a build log is NDJSON, which escapes
+        // the ESC as a six-character sequence the raw-string strip above cannot
+        // match. JSON.parse has only now revived it to a real escape in obj.msg.
+        message: stripAnsi(obj.msg),
         // Docker's timestamp wins when present: it is uniform across services,
         // whereas the in-payload field is whatever that particular logger chose.
         recordedAt: dockerTs ?? normalizeTs(obj.ts),
