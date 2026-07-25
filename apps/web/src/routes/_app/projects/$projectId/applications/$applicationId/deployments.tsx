@@ -29,7 +29,7 @@ import {
 import { useState, useCallback, useRef } from "react";
 import { useChannel } from "@/lib/hooks/use-websocket";
 import { BlobLogViewer } from "@/components/logs/blob-log-viewer";
-import { parseLogBlob, type LogEntry } from "@/components/logs/parse";
+import { parseLogBlob, stripAnsi, type LogEntry } from "@/components/logs/parse";
 import { normalizeLevel } from "@/lib/logs/level";
 
 export const Route = createFileRoute(
@@ -94,7 +94,9 @@ function useBuildLogStream(
           {
             id: `build-${idRef.current}`,
             level: normalizeLevel(obj.level ?? "info"),
-            message: obj.msg as string,
+            // Live build output (railpack/npm/etc.) is colourised; the completed
+            // blob path is stripped by parseLogBlob, so strip the live one to match.
+            message: stripAnsi(obj.msg as string),
             recordedAt: obj.ts ?? null,
           },
         ];
