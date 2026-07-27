@@ -48,6 +48,18 @@ export function ProjectHeader({ project, applications, databases }: Props) {
             {total > 0 && (
               <StatusPill
                 status="running"
+                // Colour reflects the running ratio, not the word "running":
+                // all up → brand, none up → red, and anything in between → the
+                // amber (status-building) tone as a degraded signal.
+                tone={
+                  running === total
+                    ? "ready"
+                    : running === 0
+                      ? "error"
+                      : "building"
+                }
+                // Steady dot: this is a settled count, not an in-progress state.
+                pulse={false}
                 label={`${running}/${total} running`}
               />
             )}

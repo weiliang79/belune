@@ -3,11 +3,12 @@ import { cn } from "@/lib/utils";
 /**
  * Status categories mapped onto the design-system status tokens.
  * - ready    → brand accent (running / healthy / succeeded)
- * - building → amber, with a pulsing dot (transient, in-progress states)
+ * - building → amber (transient, in-progress states — and any partial/degraded
+ *              count that reuses the same amber via a `tone` override)
  * - error    → red (failed / crashed / unhealthy)
  * - neutral  → muted (stopped / inactive / unknown)
  */
-type StatusTone = "ready" | "building" | "error" | "neutral";
+export type StatusTone = "ready" | "building" | "error" | "neutral";
 
 const TONE_BY_STATUS: Record<string, StatusTone> = {
   // ready / positive
@@ -68,11 +69,29 @@ export interface StatusPillProps {
   status: string;
   /** Override the displayed label (defaults to the status, title-cased). */
   label?: string;
+  /**
+   * Override the tone derived from `status`. Use when the colour reflects a
+   * computed condition (e.g. a running/total ratio) rather than the status word.
+   */
+  tone?: StatusTone;
+  /**
+   * Whether the dot pulses. Defaults to on for the `building` tone (a transient,
+   * in-progress state) and off for all others. Set explicitly to force a steady
+   * dot on an amber pill that represents a settled state, not progress.
+   */
+  pulse?: boolean;
   className?: string;
 }
 
-export function StatusPill({ status, label, className }: StatusPillProps) {
-  const tone = toneOf(status);
+export function StatusPill({
+  status,
+  label,
+  tone: toneOverride,
+  pulse,
+  className,
+}: StatusPillProps) {
+  const tone = toneOverride ?? toneOf(status);
+  const showPulse = pulse ?? tone === "building";
   const text = label ?? status.charAt(0).toUpperCase() + status.slice(1);
   return (
     <span
@@ -83,7 +102,7 @@ export function StatusPill({ status, label, className }: StatusPillProps) {
       )}
     >
       <span className="relative flex size-1.5">
-        {tone === "building" && (
+        {showPulse && (
           <span
             aria-hidden="true"
             className={cn(
