@@ -453,6 +453,15 @@ func exitStatus(exitCode string) string {
 	return status.ApplicationError
 }
 
+// isTransitionalDBStatus reports whether a database is in a state owned by a
+// running task (provision/reload/reconfigure/upgrade/backup), during which
+// container lifecycle events must not overwrite the status the task set.
+func isTransitionalDBStatus(s string) bool {
+	return s == status.DatabaseCreating ||
+		s == status.DatabaseUpgrading ||
+		s == status.DatabaseBackingUp
+}
+
 // databaseStatusForEvent maps a Docker container event to a database status,
 // returning ok=false for events that should not change status.
 func databaseStatusForEvent(event runtime.ContainerEvent) (newStatus string, ok bool) {
@@ -486,6 +495,20 @@ func (w *Watcher) handleDatabaseEvent(ctx context.Context, event runtime.Contain
 	if !ok {
 		return
 	}
+
+	// A database in a transitional state is owned by a running task
+	// (provision/reload/reconfigure/upgrade/backup), which recreates the
+	// container — removing the old one and starting a new one. The die/stop/start
+	// events that recreate emits would otherwise clobber the task's `creating`
+	// status with a transient stopped/failed, and the task's own terminal write
+	// races them. The task sets the final status itself, so ignore container
+	// events while it is in flight. Mirrors the reconcile loop's transient skip.
+	if current, err := w.queries.GetDatabase(ctx, dbUUID); err == nil && isTransitionalDBStatus(current.Status) {
+		slog.Debug("eventwatcher: keeping transitional database status",
+			"database_id", dbID, "keeping", current.Status, "ignored", newStatus)
+		return
+	}
+
 	if event.Status == "oom" {
 		slog.Warn("eventwatcher: database container killed by OOM", "database_id", dbID, "container", event.ContainerName)
 	}

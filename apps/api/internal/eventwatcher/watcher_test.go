@@ -85,6 +85,31 @@ func TestDatabaseStatusForEvent(t *testing.T) {
 	}
 }
 
+func TestIsTransitionalDBStatus(t *testing.T) {
+	// These are owned by a running task that recreates the container, so
+	// handleDatabaseEvent must ignore container events while in them — otherwise
+	// the old container's die/stop clobbers the task's `creating` with a
+	// transient stopped/failed and the "Reload Needed" badge sticks.
+	transitional := []string{
+		status.DatabaseCreating,
+		status.DatabaseUpgrading,
+		status.DatabaseBackingUp,
+	}
+	for _, s := range transitional {
+		assert.True(t, isTransitionalDBStatus(s), "%q should be transitional", s)
+	}
+
+	// Steady states: events apply normally.
+	steady := []string{
+		status.DatabaseRunning,
+		status.DatabaseStopped,
+		status.DatabaseFailed,
+	}
+	for _, s := range steady {
+		assert.False(t, isTransitionalDBStatus(s), "%q should not be transitional", s)
+	}
+}
+
 func TestHandleEvent_DispatchesByLabel(t *testing.T) {
 	// Application label takes the application path; database label the DB path;
 	// neither label is a no-op. We assert dispatch via label precedence here.
