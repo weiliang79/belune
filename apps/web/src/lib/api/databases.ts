@@ -135,3 +135,11 @@ export function restartDatabase(projectId: string, databaseId: string) {
     `/projects/${projectId}/databases/${databaseId}/restart`,
   );
 }
+
+// Recreate the container from the stored record (image, env, volume, network).
+// Unlike restart, this recovers a container that has drifted or been deleted.
+export function reloadDatabase(projectId: string, databaseId: string) {
+  return api.post<{ status: string }>(
+    `/projects/${projectId}/databases/${databaseId}/reload`,
+  );
+}

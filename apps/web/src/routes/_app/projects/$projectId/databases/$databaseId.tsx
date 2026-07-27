@@ -45,6 +45,7 @@ import {
   useStopDatabase,
   useStartDatabase,
   useRestartDatabase,
+  useReloadDatabase,
 } from "@/lib/hooks/use-databases";
 import { useProject } from "@/lib/hooks/use-projects";
 import {
@@ -59,13 +60,19 @@ import {
   LayoutDashboard,
   ScrollText,
   Archive,
-  Wrench,
+  Settings,
+  RotateCcwIcon,
+  RefreshCwIcon,
+  SquareIcon,
+  PlayIcon,
 } from "lucide-react";
+import { ButtonGroup } from "@/components/ui/button-group";
 import { IconAction } from "@/components/ui/icon-action";
 import { PageTabs, type PageTab } from "@/components/ui/page-tabs";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useBreadcrumbLabel } from "@/lib/hooks/use-breadcrumb";
 import { StatusBadge } from "@/lib/components/status-badge";
+import { DatabaseReloadBadge } from "@/lib/components/database-reload-badge";
 import { ProvenanceNote } from "@/lib/components/provenance-note";
 import { CopyButton } from "@/lib/components/copy-button";
 import { formatBytes } from "@/lib/utils/format";
@@ -92,13 +99,13 @@ function dbUpgradable(db: Database): boolean {
   return db.type === "postgres" || db.type === "mysql" || db.type === "mongo";
 }
 
-type DbTab = "overview" | "logs" | "backups" | "advanced";
+type DbTab = "overview" | "logs" | "backups" | "settings";
 
 const DB_TABS: PageTab<DbTab>[] = [
   { value: "overview", label: "Overview", icon: LayoutDashboard },
   { value: "logs", label: "Logs", icon: ScrollText },
   { value: "backups", label: "Backups", icon: Archive },
-  { value: "advanced", label: "Advanced", icon: Wrench },
+  { value: "settings", label: "Settings", icon: Settings },
 ];
 
 export const Route = createFileRoute(
@@ -108,7 +115,7 @@ export const Route = createFileRoute(
   validateSearch: (search: Record<string, unknown>): { tab?: DbTab } =>
     search.tab === "logs" ||
     search.tab === "backups" ||
-    search.tab === "advanced"
+    search.tab === "settings"
       ? { tab: search.tab as DbTab }
       : {},
 });
@@ -123,6 +130,7 @@ function DatabaseDetailPage() {
   const stop = useStopDatabase(projectId, databaseId);
   const start = useStartDatabase(projectId, databaseId);
   const restart = useRestartDatabase(projectId, databaseId);
+  const reload = useReloadDatabase(projectId, databaseId);
 
   const activeTab: DbTab = tab ?? "overview";
   const setTab = (next: DbTab) =>
@@ -157,6 +165,21 @@ function DatabaseDetailPage() {
     );
   }
 
+  // Transitional states own their container via a running task; Reload must not
+  // race them. Restart/Start already guard on these separately.
+  const transitional =
+    db.status === "creating" ||
+    db.status === "upgrading" ||
+    db.status === "backing_up";
+
+  const handleReload = () => {
+    toast.promise(reload.mutateAsync(), {
+      loading: "Reloading…",
+      success: "Reload started — recreating the container",
+      error: (err) => err.message,
+    });
+  };
+
   const handleDelete = () => {
     toast.promise(
       deleteDb.mutateAsync(databaseId).then(() => {
@@ -190,6 +213,7 @@ function DatabaseDetailPage() {
                 {imageLabel(db)}
               </Badge>
               <StatusBadge status={db.status} />
+              <DatabaseReloadBadge db={db} />
             </div>
             <p className="text-text-faint flex flex-wrap items-center gap-x-2 truncate text-sm">
               <span className="truncate font-mono">{db.slug}</span>
@@ -197,7 +221,11 @@ function DatabaseDetailPage() {
             </p>
           </div>
         </div>
-        <div className="flex gap-2">
+        {/* One segmented cluster of lifecycle actions, mirroring the App
+            Details header. Restart stops/starts the existing container; Reload
+            recreates it from the record (recovering a drifted or deleted
+            container); Stop/Start toggles the current one. */}
+        <ButtonGroup aria-label="Database actions">
           <Button
             size="sm"
             variant="outline"
@@ -209,8 +237,20 @@ function DatabaseDetailPage() {
               });
             }}
             disabled={restart.isPending || db.status !== "running"}
+            title="Restart the existing container in place"
           >
+            <RotateCcwIcon aria-hidden="true" />
             Restart
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={handleReload}
+            disabled={reload.isPending || transitional}
+            title="Recreate the container from the stored configuration — recovers a missing or drifted container. The data volume is preserved."
+          >
+            <RefreshCwIcon aria-hidden="true" />
+            Reload
           </Button>
           {db.status === "running" ? (
             <AlertDialog>
@@ -219,6 +259,7 @@ function DatabaseDetailPage() {
                   <Button size="sm" variant="outline" disabled={stop.isPending} />
                 }
               >
+                <SquareIcon aria-hidden="true" />
                 {stop.isPending ? "Stopping..." : "Stop"}
               </AlertDialogTrigger>
               <AlertDialogContent>
@@ -257,18 +298,51 @@ function DatabaseDetailPage() {
                   error: (err) => err.message,
                 });
               }}
-              disabled={
-                start.isPending ||
-                db.status === "creating" ||
-                db.status === "upgrading" ||
-                db.status === "backing_up"
-              }
+              disabled={start.isPending || transitional}
             >
+              <PlayIcon aria-hidden="true" />
               {start.isPending ? "Starting..." : "Start"}
             </Button>
           )}
-        </div>
+        </ButtonGroup>
       </div>
+
+      {/* The container was deleted out from under us (drift), but the record and
+          data volume are intact. Restart/Start can't recover this — only a
+          recreate can — so nudge Reload contextually, in addition to the always-
+          available header button. */}
+      {db.container_missing && !transitional && (
+        <Card className="bg-status-error-soft ring-status-error-line">
+          <CardContent className="flex flex-wrap items-center justify-between gap-3 py-4">
+            <div className="flex min-w-0 items-start gap-3">
+              <AlertTriangleIcon
+                aria-hidden="true"
+                className="text-destructive mt-0.5 size-4 shrink-0"
+              />
+              <div className="min-w-0 space-y-1">
+                <p className="text-sm font-medium">
+                  The database container is missing
+                </p>
+                <p className="text-muted-foreground text-sm">
+                  Its container was removed from the host, but the database and
+                  its data volume are intact. Reload to recreate the container
+                  from the stored configuration.
+                </p>
+              </div>
+            </div>
+            <Button
+              size="sm"
+              onClick={handleReload}
+              disabled={reload.isPending}
+              className="shrink-0"
+              variant="destructive-solid"
+            >
+              <RefreshCwIcon aria-hidden="true" className="mr-1 size-4" />
+              Reload
+            </Button>
+          </CardContent>
+        </Card>
+      )}
 
       {(db.status === "creating" ||
         db.status === "upgrading" ||
@@ -306,7 +380,7 @@ function DatabaseDetailPage() {
               A failed provision or reconfigure usually leaves the data volume
               intact. If an upgrade was interrupted, recover from the most
               recent pre-upgrade backup. Otherwise remove the database from the
-              Danger Zone (Advanced tab) if you no longer need it.
+              Danger Zone (Settings tab) if you no longer need it.
             </p>
           </CardContent>
         </Card>
@@ -417,28 +491,40 @@ function DatabaseDetailPage() {
         </div>
       )}
 
-      {activeTab === "advanced" && (
+      {activeTab === "settings" && (
         <div className="space-y-6">
           {db.status === "running" && <AdvancedCard db={db} />}
 
-          <Card>
+          {/* ring-, not border-: Card draws its edge with `ring-1`, and Tailwind
+              preflight zeroes border-width, so a `border-*` colour never renders.
+              bg/ring use the status-error soft/line tokens so both themes get a
+              red chosen for them. Mirrors the App Details Danger Zone. */}
+          <Card className="bg-status-error-soft ring-status-error-line">
             <CardHeader>
-              <CardTitle className="text-destructive">Danger Zone</CardTitle>
+              <CardTitle className="text-destructive flex items-center gap-2">
+                <AlertTriangleIcon aria-hidden="true" className="size-4" />
+                Danger Zone
+              </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium">Delete this database</p>
-                  <p className="text-muted-foreground text-xs">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <Trash2
+                      aria-hidden="true"
+                      className="text-destructive size-4"
+                    />
+                    <p className="text-sm font-medium">Delete this database</p>
+                  </div>
+                  <p className="text-muted-foreground mt-1 text-xs">
                     This will permanently delete the database, its data, and
                     container.
                   </p>
                 </div>
                 <AlertDialog>
                   <AlertDialogTrigger
-                    render={<Button variant="destructive" size="sm" />}
+                    render={<Button variant="destructive-solid" size="sm" />}
                   >
-                    <Trash2 className="mr-1 size-4" />
                     Delete
                   </AlertDialogTrigger>
                   <AlertDialogContent>

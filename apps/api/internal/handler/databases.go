@@ -84,6 +84,11 @@ type databaseResponse struct {
 	ConnectionString string              `json:"connection_string,omitempty"`
 	Volume           *volumeInfo         `json:"volume,omitempty"`
 	ExternalAccess   *externalAccessInfo `json:"external_access,omitempty"`
+	// ContainerMissing is true when the managed container has been removed out
+	// from under us (deleted on the host) while the record still exists — the
+	// case Restart/Start can't recover from. The UI surfaces Reload to recreate
+	// it. Only computed in the steady non-running states; see GetDatabase.
+	ContainerMissing bool `json:"container_missing"`
 }
 
 func (h *Handler) CreateDatabase(w http.ResponseWriter, r *http.Request) {
@@ -343,7 +348,22 @@ func (h *Handler) ListDatabases(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, databases)
+	// Surface container_missing so the project services table can flag a database
+	// whose container was deleted (the "Reload Needed" badge). Same gating as
+	// GetDatabase: only the steady non-running states are inspected, so a table of
+	// running databases costs zero Docker calls.
+	resp := make([]databaseResponse, 0, len(databases))
+	for _, db := range databases {
+		item := databaseResponse{Database: db}
+		if db.Status == status.DatabaseStopped || db.Status == status.DatabaseFailed {
+			if exists, err := h.runtime.ContainerExists(r.Context(), db.Slug); err == nil {
+				item.ContainerMissing = !exists
+			}
+		}
+		resp = append(resp, item)
+	}
+
+	writeJSON(w, http.StatusOK, resp)
 }
 
 func (h *Handler) GetDatabase(w http.ResponseWriter, r *http.Request) {
@@ -401,6 +421,17 @@ func (h *Handler) GetDatabase(w http.ResponseWriter, r *http.Request) {
 		HostPort: db.HostPort.Int32,
 		SSHHost:  sshHost,
 		SSHUser:  h.cfg.ServerSSHUser,
+	}
+
+	// Flag a genuinely-removed container so the UI can offer Reload to recreate
+	// it. Only meaningful in the steady non-running states: during creating/
+	// upgrading/backing_up the container is legitimately absent mid-task, and a
+	// running database's container is present by definition. A stopped container
+	// is still present, so it does not trip this — only a deleted one does.
+	if db.Status == status.DatabaseStopped || db.Status == status.DatabaseFailed {
+		if exists, err := h.runtime.ContainerExists(r.Context(), db.Slug); err == nil {
+			resp.ContainerMissing = !exists
+		}
 	}
 
 	writeJSON(w, http.StatusOK, resp)
@@ -1056,6 +1087,65 @@ func (h *Handler) RestartDatabase(w http.ResponseWriter, r *http.Request) {
 
 	h.audit(r, "restart_database", "database", databaseID, nil)
 	writeJSON(w, http.StatusOK, databaseResponse{Database: updated})
+}
+
+// ReloadDatabase recreates the managed database container from its stored record
+// (image + pinned digest, env, port, volume, network, resource limits), reattaching
+// the data volume so nothing is lost. Unlike Restart — which stops and starts the
+// existing container — Reload works when the container has drifted from the record
+// or been deleted entirely, making it the recovery path for a missing container.
+// The recreate runs as an async task; the database is marked transitional so the
+// UI reflects the brief downtime. External-access (loopback host port) state is
+// preserved.
+func (h *Handler) ReloadDatabase(w http.ResponseWriter, r *http.Request) {
+	databaseID := chi.URLParam(r, "databaseId")
+	var dbUUID pgtype.UUID
+	if err := dbUUID.Scan(databaseID); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid database id")
+		return
+	}
+
+	if !h.canAccessDatabase(r, dbUUID) {
+		writeError(w, http.StatusForbidden, "access denied")
+		return
+	}
+
+	db, err := h.queries.GetDatabase(r.Context(), dbUUID)
+	if err != nil {
+		writeError(w, http.StatusNotFound, "database not found")
+		return
+	}
+
+	// Refuse to reload mid-task: a recreate now would race the owning worker
+	// (provision/upgrade/backup) over the same container and volume.
+	switch db.Status {
+	case status.DatabaseCreating, status.DatabaseUpgrading, status.DatabaseBackingUp:
+		writeError(w, http.StatusConflict, "database is busy — try again once the current operation finishes")
+		return
+	}
+
+	// Mark transitional before the async recreate so the UI shows progress and
+	// the reconcile loop leaves it alone while the container is momentarily absent.
+	if _, err := h.queries.UpdateDatabaseStatus(r.Context(), generated.UpdateDatabaseStatusParams{
+		ID:     dbUUID,
+		Status: status.DatabaseCreating,
+	}); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to update database")
+		return
+	}
+
+	payload, err := json.Marshal(map[string]string{"database_id": databaseID})
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to create reload task")
+		return
+	}
+	if _, err := h.asynq.Enqueue(asynq.NewTask("reload_db", payload), asynq.Queue("critical")); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to enqueue reload task")
+		return
+	}
+
+	h.audit(r, "reload_database", "database", databaseID, nil)
+	writeJSON(w, http.StatusAccepted, map[string]string{"status": status.DatabaseCreating})
 }
 
 func (h *Handler) DeleteDatabase(w http.ResponseWriter, r *http.Request) {

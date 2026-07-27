@@ -6,6 +6,7 @@ const (
 	TypeCleanup             = "cleanup"
 	TypeProvisionDB         = "provision_db"
 	TypeReconfigureDB       = "reconfigure_db"
+	TypeReloadDB            = "reload_db"
 	TypeBackupDB            = "backup_db"
 	TypeRestoreDB           = "restore_db"
 	TypeUpgradeDB           = "upgrade_db"

@@ -30,6 +30,12 @@ type reconfigureDBPayload struct {
 	Enable     bool   `json:"enable"`
 }
 
+// reloadDBPayload recreates a database container from its stored record without
+// changing its configuration.
+type reloadDBPayload struct {
+	DatabaseID string `json:"database_id"`
+}
+
 func (h *TaskHandler) HandleProvisionDBTask(ctx context.Context, t *asynq.Task) error {
 	var payload provisionDBPayload
 	if err := json.Unmarshal(t.Payload(), &payload); err != nil {
@@ -135,6 +141,57 @@ func (h *TaskHandler) HandleReconfigureDBTask(ctx context.Context, t *asynq.Task
 	}
 
 	slog.Info("database reconfigured", "database_id", payload.DatabaseID, "external_access", payload.Enable, "host_port", hostPort)
+	return nil
+}
+
+// HandleReloadDBTask recreates a database container from its stored record,
+// reattaching the data volume and preserving the current external-access
+// (loopback host-port) binding. It is the recovery path when the container has
+// drifted from the record or been removed entirely: removeDBContainer is
+// best-effort (a missing container is not an error), and provisionDBContainer
+// recreates the container and stamps the row running on success.
+func (h *TaskHandler) HandleReloadDBTask(ctx context.Context, t *asynq.Task) error {
+	var payload reloadDBPayload
+	if err := json.Unmarshal(t.Payload(), &payload); err != nil {
+		return fmt.Errorf("unmarshal reload_db payload: %w", err)
+	}
+
+	slog.Info("handling reload_db task", "database_id", payload.DatabaseID)
+
+	dbID, err := parseUUID(payload.DatabaseID)
+	if err != nil {
+		return errors.Join(fmt.Errorf("invalid database_id (permanent): %w", err), asynq.SkipRetry)
+	}
+
+	db, err := h.Queries.GetDatabase(ctx, dbID)
+	if err != nil {
+		return fmt.Errorf("get database: %w", err)
+	}
+
+	creds, err := h.decryptDBCredentials(db)
+	if err != nil {
+		h.failDatabase(ctx, dbID, fmt.Sprintf("credentials: %v", err))
+		return fmt.Errorf("credentials: %w", err)
+	}
+
+	// Preserve the current external-access binding: reload recreates the same
+	// configuration, it does not toggle the loopback host port.
+	var hostPort int32
+	if db.HostPort.Valid {
+		hostPort = db.HostPort.Int32
+	}
+
+	// Remove any existing/drifted container first (the volume persists), then
+	// recreate. provisionDBContainer also removes by name, so a container that is
+	// already gone just falls through to a fresh create.
+	h.removeDBContainer(ctx, db.Slug)
+
+	if err := h.provisionDBContainer(ctx, db, creds, hostPort); err != nil {
+		h.failDatabase(ctx, dbID, err.Error())
+		return err
+	}
+
+	slog.Info("database reloaded", "database_id", payload.DatabaseID, "container", db.Slug)
 	return nil
 }
 

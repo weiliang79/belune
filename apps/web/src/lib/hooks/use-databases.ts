@@ -114,6 +114,12 @@ export function useRestartDatabase(projectId: string, databaseId: string) {
   );
 }
 
+export function useReloadDatabase(projectId: string, databaseId: string) {
+  return useDatabaseLifecycle(projectId, databaseId, () =>
+    databasesApi.reloadDatabase(projectId, databaseId),
+  );
+}
+
 export function useUpdateDatabase(projectId: string, databaseId: string) {
   const qc = useQueryClient();
   return useMutation({

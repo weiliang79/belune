@@ -41,6 +41,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { StatusPill } from "@/components/ui/status-pill";
 import { PendingChangeBadge } from "@/lib/components/pending-change-badge";
+import { DatabaseReloadBadge } from "@/lib/components/database-reload-badge";
 import { formatUptime } from "@/lib/utils/format";
 import {
   AlertDialog,
@@ -481,17 +482,20 @@ function StatusCell({
   const running = RUNNING.has(item.data.status.toLowerCase());
   return (
     <div className="flex flex-col items-start gap-1">
-      {/* The pill says what the container is doing; the pending badge says the
-          saved config has drifted from it. They are different facts, so they sit
+      {/* The pill says what the container is doing; the second badge says the
+          saved state has drifted from it. They are different facts, so they sit
           side by side rather than one replacing the other. Deliberately not
           flex-wrap: the column is sized to min-content (w-px), and a wrapping
           row's min-content is its widest child, which would stack the two.
-          Databases have no deploy/reload cycle, hence apps only. */}
+          Applications flag config/source drift; databases flag a container that
+          was deleted (Reload recreates it). */}
       <div className="flex items-center gap-1.5">
         <StatusPill status={item.data.status} />
         {item.kind === "application" ? (
           <PendingChangeBadge app={item.data} pulse={false} />
-        ) : null}
+        ) : (
+          <DatabaseReloadBadge db={item.data} pulse={false} />
+        )}
       </div>
       {running && metrics?.uptime_seconds ? (
         <span className="text-text-faint text-xs">

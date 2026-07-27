@@ -389,6 +389,7 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService,
 			r.Post("/api/projects/{projectId}/databases/{databaseId}/stop", h.StopDatabase)
 			r.Post("/api/projects/{projectId}/databases/{databaseId}/start", h.StartDatabase)
 			r.Post("/api/projects/{projectId}/databases/{databaseId}/restart", h.RestartDatabase)
+			r.Post("/api/projects/{projectId}/databases/{databaseId}/reload", h.ReloadDatabase)
 			r.Get("/api/projects/{projectId}/databases/{databaseId}/backups", h.ListDatabaseBackups)
 			r.Post("/api/projects/{projectId}/databases/{databaseId}/backups", h.BackupDatabase)
 			r.Delete("/api/projects/{projectId}/databases/{databaseId}/backups/{backupId}", h.DeleteDatabaseBackup)

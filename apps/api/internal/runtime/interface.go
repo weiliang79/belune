@@ -84,6 +84,11 @@ type ContainerRuntime interface {
 	StartContainer(ctx context.Context, id string) error
 	StopContainer(ctx context.Context, id string) error
 	RemoveContainer(ctx context.Context, id string) error
+	// ContainerExists reports whether a container with the given name (or ID) is
+	// present on the host, running or stopped. A missing container is (false,
+	// nil); other failures are surfaced as errors. Lets callers tell a genuinely
+	// removed container apart from a merely-stopped one (e.g. to offer Reload).
+	ContainerExists(ctx context.Context, name string) (bool, error)
 	// RestartContainer restarts a container in place, giving it `timeout` seconds
 	// to stop gracefully before it is killed.
 	RestartContainer(ctx context.Context, id string, timeout int) error

@@ -352,6 +352,10 @@ export interface Database {
     ssh_host?: string;
     ssh_user?: string;
   };
+  // True when the managed container has been removed from the host while the
+  // record still exists — the case Restart/Start can't recover from. Only set in
+  // the steady non-running states; the UI surfaces Reload to recreate it.
+  container_missing?: boolean;
 }
 
 export interface DatabaseBackup {

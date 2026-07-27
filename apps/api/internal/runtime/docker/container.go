@@ -145,6 +145,27 @@ func (c *Client) RemoveContainer(ctx context.Context, id string) (err error) {
 	return c.cli.ContainerRemove(ctx, id, container.RemoveOptions{Force: true})
 }
 
+// ContainerExists reports whether a container with the given name (or ID) is
+// present on the host, running or stopped. A "no such container" inspect is
+// reported as (false, nil); any other error is surfaced so a transient Docker
+// failure is not mistaken for a missing container. Used to tell a genuinely
+// removed container apart from a merely-stopped one.
+func (c *Client) ContainerExists(ctx context.Context, name string) (exists bool, err error) {
+	defer func() { metrics.RecordDockerOp("container_exists", err) }()
+
+	_, err = c.cli.ContainerInspect(ctx, name)
+	if err != nil {
+		// Docker returns a 404 whose message contains "No such container" when the
+		// container is absent. A plain string match (as ImageExists does for "No
+		// such image") avoids pulling in errdefs for one check.
+		if strings.Contains(err.Error(), "No such container") {
+			return false, nil
+		}
+		return false, fmt.Errorf("inspect container %s: %w", name, err)
+	}
+	return true, nil
+}
+
 // RestartContainer restarts a container in place (stop, then start the same
 // container). Docker gives it up to `timeout` seconds to stop gracefully before
 // killing it.

@@ -108,6 +108,7 @@ func (w *Worker) Start() error {
 	mux.HandleFunc(TypeCleanup, w.handler.HandleCleanupTask)
 	mux.HandleFunc(TypeProvisionDB, w.handler.HandleProvisionDBTask)
 	mux.HandleFunc(TypeReconfigureDB, w.handler.HandleReconfigureDBTask)
+	mux.HandleFunc(TypeReloadDB, w.handler.HandleReloadDBTask)
 	mux.HandleFunc(TypeBackupDB, w.handler.HandleBackupDBTask)
 	mux.HandleFunc(TypeRestoreDB, w.handler.HandleRestoreDBTask)
 	mux.HandleFunc(TypeUpgradeDB, w.handler.HandleUpgradeDBTask)

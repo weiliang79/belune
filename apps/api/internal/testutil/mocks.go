@@ -15,17 +15,18 @@ import (
 
 // MockContainerRuntime implements runtime.ContainerRuntime for testing.
 type MockContainerRuntime struct {
-	mu              sync.Mutex
-	StopCalls       []string
-	RemoveCalls     []string
-	RestartCalls    []string
-	RestartErr      error
-	StartCalls      []string
-	CreateCalls     []runtime.ContainerConfig
-	PullCalls       []string // image tags passed to PullImage
-	HealthStatus_   string   // returned by ContainerHealth (empty → "healthy")
-	ImageMissing_   bool     // when true, ImageExists reports false
-	ListContainers_ []runtime.ContainerInfo
+	mu                sync.Mutex
+	StopCalls         []string
+	RemoveCalls       []string
+	RestartCalls      []string
+	RestartErr        error
+	StartCalls        []string
+	CreateCalls       []runtime.ContainerConfig
+	PullCalls         []string // image tags passed to PullImage
+	HealthStatus_     string   // returned by ContainerHealth (empty → "healthy")
+	ImageMissing_     bool     // when true, ImageExists reports false
+	ContainerMissing_ bool     // when true, ContainerExists reports false
+	ListContainers_   []runtime.ContainerInfo
 
 	// Read-only admin Docker inspect fixtures (nil → empty result).
 	ListAllContainers_    []runtime.ContainerInfo
@@ -213,6 +214,13 @@ func (m *MockContainerRuntime) ContainerStats(_ context.Context, _ string) (*run
 // deleted image.
 func (m *MockContainerRuntime) ImageExists(_ context.Context, _ string) (bool, error) {
 	return !m.ImageMissing_, nil
+}
+
+// ContainerExists returns ContainerMissing_ inverted: it reports true (present)
+// by default so existing tests are unaffected; set ContainerMissing_ to simulate
+// a deleted container.
+func (m *MockContainerRuntime) ContainerExists(_ context.Context, _ string) (bool, error) {
+	return !m.ContainerMissing_, nil
 }
 
 // ContainerHealth returns HealthStatus_, defaulting to "healthy" so the deploy
