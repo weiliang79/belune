@@ -54,6 +54,45 @@ install_docker() {
   fi
 }
 
+# is_public_ipv4 reports whether a string is a globally-routable IPv4 address —
+# not a private (RFC1918), loopback, link-local, CGNAT (100.64/10), or reserved
+# range. Guards against baking a useless 10./172./192.168. address into .env,
+# which would be worse than leaving it blank.
+is_public_ipv4() {
+  local ip="$1"
+  [[ "${ip}" =~ ^([0-9]{1,3})\.([0-9]{1,3})\.([0-9]{1,3})\.([0-9]{1,3})$ ]] || return 1
+  local o1="${BASH_REMATCH[1]}" o2="${BASH_REMATCH[2]}" o
+  for o in "${BASH_REMATCH[@]:1:4}"; do
+    (( o <= 255 )) || return 1
+  done
+  case "${o1}" in
+    0|10|127|255) return 1 ;;
+    169) (( o2 == 254 )) && return 1 ;;
+    172) (( o2 >= 16 && o2 <= 31 )) && return 1 ;;
+    192) (( o2 == 168 )) && return 1 ;;
+    100) (( o2 >= 64 && o2 <= 127 )) && return 1 ;;
+  esac
+  return 0
+}
+
+# detect_public_ip prints the server's public IPv4, or nothing. It tries the
+# host's own egress address first (no outbound call — correct on the many VPS
+# whose public IP sits directly on the interface), then falls back to a couple of
+# external echo services for hosts behind NAT. install-time only, so a one-off
+# outbound call is unremarkable (this script already fetches from GitHub/ghcr).
+detect_public_ip() {
+  local ip url
+  if command -v ip >/dev/null 2>&1; then
+    ip=$(ip -4 route get 1.1.1.1 2>/dev/null | grep -oE 'src [0-9.]+' | awk '{print $2}' | head -1)
+    if [[ -n "${ip}" ]] && is_public_ipv4 "${ip}"; then echo "${ip}"; return 0; fi
+  fi
+  for url in https://api.ipify.org https://ifconfig.me/ip https://icanhazip.com; do
+    ip=$(curl -fsS --max-time 3 "${url}" 2>/dev/null | tr -d '[:space:]')
+    if [[ -n "${ip}" ]] && is_public_ipv4 "${ip}"; then echo "${ip}"; return 0; fi
+  done
+  return 1
+}
+
 # ── Pre-flight checks ──────────────────────────────────────────────────────────
 
 echo ""
@@ -271,6 +310,29 @@ if ! grep -q '^BELUNE_CPU_LIMIT=' .env 2>/dev/null; then
   info "Clamped CPU limits to ${NPROC} core(s)."
 fi
 
+# ── Public IP ──────────────────────────────────────────────────────────────────
+
+# Detect the server's public IP once, here on the host, and bake it into .env as
+# BELUNE_PUBLIC_IP — the default address the dashboard, SSH-tunnel hints, and TLS
+# DNS precheck point at. Doing it at install time avoids the running container
+# ever making an outbound "what's my IP" call: inside the compose bridge network
+# its own egress address is a private 172.x, so the app can't self-detect.
+#
+# Guarded so a re-run never clobbers a value the operator set (here or in the
+# dashboard, which overrides this via the public_ip setting). Left blank when no
+# public IP is found — the app degrades to today's behaviour and the operator can
+# set it later.
+if ! grep -q '^BELUNE_PUBLIC_IP=' .env 2>/dev/null; then
+  info "Detecting public IP..."
+  PUBLIC_IP=$(detect_public_ip || true)
+  if [[ -n "${PUBLIC_IP}" ]]; then
+    printf '\n# Public IP detected at install time — the default address for DNS/TLS\n# hints. Change it here or in the dashboard (Server IP) if the server moves.\nBELUNE_PUBLIC_IP=%s\n' "${PUBLIC_IP}" >> .env
+    success "Detected public IP ${PUBLIC_IP}."
+  else
+    info "Could not detect a public IP — set BELUNE_PUBLIC_IP in .env (or the dashboard) later."
+  fi
+fi
+
 # ── Pull and start ─────────────────────────────────────────────────────────────
 
 info "Pulling ${IMAGE}..."
@@ -357,14 +419,23 @@ fi
 
 # ── Done ──────────────────────────────────────────────────────────────────────
 
+# Show the URLs an operator on another machine can actually open: the detected
+# public IP when we have one, else localhost (a local/dev install). /healthz is
+# reached through Caddy on :80 — the API's own 8080 is bound to loopback and is
+# not remotely reachable, so it is deliberately not shown as a URL.
+# The trailing `|| true` matters under set -e + pipefail: a missing key (grep
+# exits 1) or a SIGPIPE from head would otherwise abort right before the summary.
+DASHBOARD_HOST=$(grep '^BELUNE_PUBLIC_IP=' .env 2>/dev/null | head -1 | cut -d= -f2- | tr -d '[:space:]' || true)
+[[ -n "${DASHBOARD_HOST}" ]] || DASHBOARD_HOST="localhost"
+
 echo ""
 success "Installation complete!"
 echo ""
-echo "  Dashboard : http://localhost"
-echo "  API health: http://localhost:8080/healthz"
+echo "  Dashboard : http://${DASHBOARD_HOST}"
+echo "  API health: http://${DASHBOARD_HOST}/healthz"
 echo "  Install dir: ${INSTALL_DIR}"
 echo ""
-echo "  Open http://localhost in your browser to finish setup."
+echo "  Open http://${DASHBOARD_HOST} in your browser to finish setup."
 echo "  Logs: cd ${INSTALL_DIR} && docker compose logs -f"
 echo ""
 echo "  Next steps (DNS, TLS, first deploy):"
