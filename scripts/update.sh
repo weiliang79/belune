@@ -7,9 +7,17 @@
 #
 # An update is a deliberate version move, never a drift: it resolves a target
 # version, takes a backup before touching anything, rewrites the pinned image in
-# .env, and tells you exactly how to roll back if the new version does not come
+# .env, reconciles the version-pinned infra files (compose, Caddy, BuildKit,
+# systemd, scripts) so a release that changes a service definition actually takes
+# effect, and tells you exactly how to roll back if the new version does not come
 # up. Migrations run automatically at boot and are not reversible, which is why
 # the backup happens first.
+#
+# The infra files are a matched set with the image: they are fetched from the
+# target release's git ref — never main/latest — exactly as install.sh does, so
+# updating to a version yields the same files every time and rollback can restore
+# the set that ran with the old image. Because a changed compose can touch any
+# service (not just belune), the restart is a full `docker compose up -d`.
 set -euo pipefail
 
 INSTALL_DIR="${BELUNE_DIR:-/opt/belune}"
@@ -69,6 +77,49 @@ fi
 info "Pulling ${TARGET_IMAGE}..."
 docker pull "${TARGET_IMAGE}" || die "Could not pull ${TARGET_IMAGE}. Does that version exist?"
 
+# ── Fetch version-pinned infra files ───────────────────────────────────────────
+
+# Git tags keep the leading v; image tags drop it. TARGET_VERSION was normalised
+# without one above, so re-add it for the git ref — same construction install.sh
+# uses so the two stay in lockstep.
+GIT_REF="v${TARGET_VERSION}"
+RAW_URL="https://raw.githubusercontent.com/${GITHUB_REPO}/${GIT_REF}"
+
+# "<local path under install dir>|<path in repo>". The local docker-compose.yml is
+# the repo's infra/docker-compose.prod.yml; everything else keeps its path. This
+# is exactly the set install.sh lays down, so a fresh install and an updated one
+# converge on the same files.
+INFRA_FILES=(
+  "docker-compose.yml|infra/docker-compose.prod.yml"
+  "infra/caddy/Caddyfile.template|infra/caddy/Caddyfile.template"
+  "infra/buildkit/buildkitd.toml|infra/buildkit/buildkitd.toml"
+  ".env.example|.env.example"
+  "infra/systemd/belune.service|infra/systemd/belune.service"
+  "infra/systemd/belune-backup.service|infra/systemd/belune-backup.service"
+  "infra/systemd/belune-backup.timer|infra/systemd/belune-backup.timer"
+  "scripts/backup.sh|scripts/backup.sh"
+  "scripts/restore.sh|scripts/restore.sh"
+  "scripts/update.sh|scripts/update.sh"
+)
+# Paths that must stay executable after the swap.
+EXEC_FILES=" scripts/backup.sh scripts/restore.sh scripts/update.sh "
+
+# Download everything to a staging dir first: a failed fetch must abort before a
+# single file on disk is touched, so a transient network error can never leave a
+# half-updated infra set. Cleaned up on any exit.
+info "Fetching infra files for ${TARGET_VERSION}..."
+STAGE_DIR="$(mktemp -d)"
+trap 'rm -rf "${STAGE_DIR}"' EXIT
+for entry in "${INFRA_FILES[@]}"; do
+  local_path="${entry%%|*}"
+  repo_path="${entry#*|}"
+  dest="${STAGE_DIR}/${local_path}"
+  mkdir -p "$(dirname "${dest}")"
+  curl -sSfL "${RAW_URL}/${repo_path}" -o "${dest}" \
+    || die "Could not fetch ${repo_path} for ${TARGET_VERSION}. Nothing has changed."
+done
+success "Infra files fetched."
+
 # ── Back up before migrating ───────────────────────────────────────────────────
 
 # 0.x minor releases may contain breaking changes, and migrations are
@@ -100,6 +151,25 @@ else
 fi
 success "Pinned to ${TARGET_VERSION}."
 
+# Swap in the new infra files, keeping a per-version copy of the old ones so the
+# rollback can restore the exact set that ran with the previous image. The backup
+# preserves each file's path under the install dir.
+INFRA_BACKUP="${INSTALL_DIR}/.infra-backup-${CURRENT_VERSION}"
+mkdir -p "${INFRA_BACKUP}"
+for entry in "${INFRA_FILES[@]}"; do
+  local_path="${entry%%|*}"
+  if [[ -f "${local_path}" ]]; then
+    mkdir -p "${INFRA_BACKUP}/$(dirname "${local_path}")"
+    cp "${local_path}" "${INFRA_BACKUP}/${local_path}"
+  fi
+  mkdir -p "$(dirname "${local_path}")"
+  cp "${STAGE_DIR}/${local_path}" "${local_path}"
+  case "${EXEC_FILES}" in
+    *" ${local_path} "*) chmod +x "${local_path}" ;;
+  esac
+done
+success "Infra files updated (previous set saved in ${INFRA_BACKUP})."
+
 # ── Restart (migrations run automatically on startup) ──────────────────────────
 
 rollback_hint() {
@@ -108,15 +178,23 @@ rollback_hint() {
   echo ""
   echo "      cd ${INSTALL_DIR}"
   echo "      sed -i 's|^BELUNE_IMAGE=.*|BELUNE_IMAGE=${CURRENT_IMAGE}|' .env"
-  echo "      docker compose up -d --no-deps belune"
+  echo "      cp -a ${INFRA_BACKUP}/. ."
+  echo "      docker compose up -d"
+  echo ""
+  echo "  The cp restores the previous version's compose and infra files; the"
+  echo "  full 'up -d' reverts any service the new compose had changed."
   echo ""
   echo "  If the new version already applied migrations, restore the pre-update"
   echo "  backup as well — see docs/runbooks/disaster-recovery.md."
   echo ""
 }
 
-info "Restarting belune..."
-if ! docker compose up -d --no-deps belune; then
+# Full reconcile, not --no-deps belune: the refreshed compose may change any
+# service (a new dependency, a Caddy/Redis/BuildKit tweak), and only `up -d` over
+# the whole project applies those. Compose recreates only what actually changed,
+# so an image-only update still just replaces the belune container.
+info "Reconciling the stack (docker compose up -d)..."
+if ! docker compose up -d; then
   rollback_hint
   die "Failed to start ${TARGET_VERSION}."
 fi
@@ -152,4 +230,21 @@ done
 echo ""
 success "Updated ${CURRENT_VERSION} → ${TARGET_VERSION}"
 info "Previous .env saved as .env.backup-${CURRENT_VERSION}"
+info "Previous infra files saved in ${INFRA_BACKUP}"
+
+# The systemd units are refreshed in the install dir, but the active copies live
+# in /etc/systemd/system (install.sh puts them there for a root+systemd install).
+# Only tell the operator to re-copy when they actually differ, so a Docker-only
+# install never sees an irrelevant instruction.
+if [[ -d /etc/systemd/system ]] && [[ -f /etc/systemd/system/belune.service ]]; then
+  for unit in belune.service belune-backup.service belune-backup.timer; do
+    if ! cmp -s "infra/systemd/${unit}" "/etc/systemd/system/${unit}" 2>/dev/null; then
+      echo ""
+      warn "systemd units changed in this release. To apply them:"
+      echo "      sudo cp infra/systemd/*.service infra/systemd/*.timer /etc/systemd/system/"
+      echo "      sudo systemctl daemon-reload"
+      break
+    fi
+  done
+fi
 echo ""
