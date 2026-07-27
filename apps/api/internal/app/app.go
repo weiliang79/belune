@@ -94,6 +94,14 @@ func New(cfg *config.Config) (*App, error) {
 
 	caddyClient := caddy.New(cfg.CaddyAdminURL)
 
+	// Route go-redis's own logs through slog before any client is created (the
+	// logger is process-global and covers asynq's internal go-redis too). By
+	// default go-redis writes pool/pubsub teardown noise straight to stderr with
+	// its own timestamp and no level; on a redis restart that surfaces as
+	// unfiltered "discarding bad PubSub connection: EOF" lines. redisSlogLogger
+	// drops that transient churn to Debug and routes anything else to Warn.
+	redis.SetLogger(redisSlogLogger{})
+
 	redisOpt, err := asynq.ParseRedisURI(cfg.RedisURL)
 	if err != nil {
 		dockerClient.Close()
