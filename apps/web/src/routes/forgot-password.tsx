@@ -1,8 +1,8 @@
-import { createFileRoute, Link, redirect } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useForm } from "@tanstack/react-form";
 import { z } from "zod";
 import { forgotPassword } from "@/lib/api/auth";
-import { useAuthStore } from "@/lib/stores/auth";
+import { redirectIfAuthenticated } from "@/lib/utils/auth-guard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -13,11 +13,7 @@ export const Route = createFileRoute("/forgot-password")({
   component: ForgotPasswordPage,
   // Signed-in users don't reset from here (they use the profile page); bounce
   // them to the dashboard instead of showing the logged-out reset form.
-  beforeLoad: () => {
-    if (useAuthStore.getState().isAuthenticated) {
-      throw redirect({ to: "/projects" });
-    }
-  },
+  beforeLoad: () => redirectIfAuthenticated("/projects"),
 });
 
 function ForgotPasswordPage() {

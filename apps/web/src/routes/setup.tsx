@@ -1,12 +1,9 @@
-import {
-  createFileRoute,
-  useNavigate,
-  redirect,
-} from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useForm } from "@tanstack/react-form";
 import { z } from "zod";
 import { setup, login, getMe } from "@/lib/api/auth";
 import { useAuthStore } from "@/lib/stores/auth";
+import { redirectIfAuthenticated } from "@/lib/utils/auth-guard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -16,11 +13,8 @@ import { useState } from "react";
 export const Route = createFileRoute("/setup")({
   component: SetupPage,
   // A signed-in user has already completed setup; don't show the first-run form.
-  beforeLoad: () => {
-    if (useAuthStore.getState().isAuthenticated) {
-      throw redirect({ to: "/projects" });
-    }
-  },
+  // The root route skips its auth check on /setup, so probe the session directly.
+  beforeLoad: () => redirectIfAuthenticated("/projects"),
 });
 
 function SetupPage() {

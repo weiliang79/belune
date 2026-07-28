@@ -1,15 +1,11 @@
-import {
-  createFileRoute,
-  useNavigate,
-  Link,
-  redirect,
-} from "@tanstack/react-router";
+import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useForm } from "@tanstack/react-form";
 import { z } from "zod";
 import { login, getMe } from "@/lib/api/auth";
 import { ApiError } from "@/lib/api/client";
 import { useAuthStore } from "@/lib/stores/auth";
 import { safeRedirectPath } from "@/lib/utils/redirect";
+import { redirectIfAuthenticated } from "@/lib/utils/auth-guard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -27,12 +23,9 @@ export const Route = createFileRoute("/login")({
   },
   // Already signed in? Don't show a login form that would just re-authenticate —
   // send the user on, honouring a carried redirect target (validated above) or
-  // the project list. Mirrors the _app guard that bounces the logged-out here.
-  beforeLoad: ({ search }) => {
-    if (useAuthStore.getState().isAuthenticated) {
-      throw redirect({ to: (search.redirect ?? "/projects") as never });
-    }
-  },
+  // the project list. The root route skips its auth check on /login, so this
+  // must probe the session itself rather than read the (empty) store.
+  beforeLoad: ({ search }) => redirectIfAuthenticated(search.redirect ?? "/projects"),
 });
 
 function LoginPage() {
