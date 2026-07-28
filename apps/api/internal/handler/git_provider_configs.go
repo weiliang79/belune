@@ -166,10 +166,20 @@ func (h *Handler) DeleteGitProviderConfig(w http.ResponseWriter, r *http.Request
 // submits the manifest form to GitHub, which creates the App and redirects to
 // our public callback with a temporary code.
 func (h *Handler) GetGitHubAppManifest(w http.ResponseWriter, r *http.Request) {
-	base := h.cfg.PublicBaseURL
-	if u, err := url.Parse(base); err != nil || u.Scheme == "" || u.Host == "" {
+	// Resolve the public origin the same way the OAuth connect flow does:
+	// PUBLIC_BASE_URL when set, otherwise the configured dashboard domain (over
+	// https). A production install rarely sets PUBLIC_BASE_URL — it configures a
+	// dashboard domain instead — so requiring the env var here made GitHub App
+	// creation impossible on a normal VPS. GitHub still needs a valid absolute URL
+	// for the manifest's redirect/callback URLs, so validate whatever we resolved.
+	base, err := h.publicBaseURL(r)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if u, perr := url.Parse(base); perr != nil || u.Scheme == "" || u.Host == "" {
 		writeError(w, http.StatusBadRequest,
-			"PUBLIC_BASE_URL must be set to an absolute URL (e.g. http://localhost:5173) before creating a GitHub App")
+			"the configured public URL is not a valid absolute URL — set PUBLIC_BASE_URL, or the dashboard domain, correctly before creating a GitHub App")
 		return
 	}
 
