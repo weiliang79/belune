@@ -128,14 +128,17 @@ export function ApplicationFormDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      {/* Cap the height and let only the body scroll (grid rows pin the header
+          and footer): connected-account mode adds account + repo + branch fields,
+          which otherwise grew the dialog past the viewport with no way to scroll. */}
+      <DialogContent className="grid-rows-[auto_minmax(0,1fr)_auto] max-h-[85vh]">
         <DialogHeader>
           <DialogTitle>New Application</DialogTitle>
           <DialogDescription>
             Add an application to your project.
           </DialogDescription>
         </DialogHeader>
-        <div className="space-y-4 py-2">
+        <div className="space-y-4 overflow-y-auto py-2">
           {appError && (
             <div className="bg-destructive/10 text-destructive rounded-md px-3 py-2 text-sm">
               {appError}
@@ -205,6 +208,7 @@ export function ApplicationFormDialog({
                     setGitSource(v as "connection" | "url");
                     setSourceRepo("");
                     setGitIntegrationId("");
+                    setBranch("");
                   }}
                 >
                   <SegmentedControlItem value="connection">
@@ -217,9 +221,10 @@ export function ApplicationFormDialog({
               </div>
               {gitSource === "connection" ? (
                 <IntegrationRepoPicker
-                  onSelect={({ integrationId, cloneUrl }) => {
+                  onSelect={({ integrationId, cloneUrl, branch }) => {
                     setGitIntegrationId(integrationId);
                     setSourceRepo(cloneUrl);
+                    setBranch(branch);
                   }}
                 />
               ) : (
@@ -260,19 +265,24 @@ export function ApplicationFormDialog({
                     </Alert>
                   )}
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="app-branch">Branch</Label>
-                <Input
-                  id="app-branch"
-                  value={branch}
-                  onChange={(e) => setBranch(e.target.value)}
-                  placeholder="Default branch"
-                />
-                <p className="text-muted-foreground text-xs">
-                  The branch to build, and the one whose pushes deploy. Leave
-                  empty to track the repository's default branch.
-                </p>
-              </div>
+              {/* Connected-account mode has its own branch dropdown inside the
+                  picker above (it writes this same `branch` state via onSelect),
+                  so the free-text branch input is only for the public-URL path. */}
+              {gitSource === "url" && (
+                <div className="space-y-2">
+                  <Label htmlFor="app-branch">Branch</Label>
+                  <Input
+                    id="app-branch"
+                    value={branch}
+                    onChange={(e) => setBranch(e.target.value)}
+                    placeholder="Default branch"
+                  />
+                  <p className="text-muted-foreground text-xs">
+                    The branch to build, and the one whose pushes deploy. Leave
+                    empty to track the repository's default branch.
+                  </p>
+                </div>
+              )}
               {buildType === "dockerfile" && (
                 <div className="space-y-2">
                   <Label htmlFor="dockerfile-path">Dockerfile Path</Label>
