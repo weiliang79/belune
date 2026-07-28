@@ -1,4 +1,9 @@
-import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
+import {
+  createFileRoute,
+  useNavigate,
+  Link,
+  redirect,
+} from "@tanstack/react-router";
 import { useForm } from "@tanstack/react-form";
 import { z } from "zod";
 import { login, getMe } from "@/lib/api/auth";
@@ -19,6 +24,14 @@ export const Route = createFileRoute("/login")({
   ): { redirect?: string } => {
     const redirect = safeRedirectPath(search.redirect);
     return redirect ? { redirect } : {};
+  },
+  // Already signed in? Don't show a login form that would just re-authenticate —
+  // send the user on, honouring a carried redirect target (validated above) or
+  // the project list. Mirrors the _app guard that bounces the logged-out here.
+  beforeLoad: ({ search }) => {
+    if (useAuthStore.getState().isAuthenticated) {
+      throw redirect({ to: (search.redirect ?? "/projects") as never });
+    }
   },
 });
 

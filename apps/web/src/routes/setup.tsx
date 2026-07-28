@@ -1,4 +1,8 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import {
+  createFileRoute,
+  useNavigate,
+  redirect,
+} from "@tanstack/react-router";
 import { useForm } from "@tanstack/react-form";
 import { z } from "zod";
 import { setup, login, getMe } from "@/lib/api/auth";
@@ -11,6 +15,12 @@ import { useState } from "react";
 
 export const Route = createFileRoute("/setup")({
   component: SetupPage,
+  // A signed-in user has already completed setup; don't show the first-run form.
+  beforeLoad: () => {
+    if (useAuthStore.getState().isAuthenticated) {
+      throw redirect({ to: "/projects" });
+    }
+  },
 });
 
 function SetupPage() {
