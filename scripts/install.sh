@@ -338,6 +338,25 @@ fi
 info "Pulling ${IMAGE}..."
 docker pull "${IMAGE}" || die "Could not pull ${IMAGE}. Check the version exists and the host can reach ghcr.io."
 
+# ── File-mounts directory ──────────────────────────────────────────────────────
+
+# Per-app file/config mounts are written to <install>/filemounts on the host and
+# bind-mounted read-only into app containers (docker-compose shares it into the
+# API at the same path). It must be writable by the non-root `belune` user inside
+# the container, so create it and chown it to that uid/gid — detected from the
+# image rather than hard-coded, since the image assigns it with `useradd -r`.
+# Without this, the container can't create the dir and every file mount fails.
+info "Preparing the file-mounts directory..."
+mkdir -p "${INSTALL_DIR}/filemounts"
+FM_UID=$(docker run --rm --entrypoint id "${IMAGE}" -u 2>/dev/null || true)
+FM_GID=$(docker run --rm --entrypoint id "${IMAGE}" -g 2>/dev/null || true)
+if [[ -n "${FM_UID}" && -n "${FM_GID}" ]]; then
+  chown "${FM_UID}:${FM_GID}" "${INSTALL_DIR}/filemounts"
+  success "File-mounts directory ready (owner ${FM_UID}:${FM_GID})."
+else
+  info "Could not detect the belune container uid — set ${INSTALL_DIR}/filemounts writable by it if file mounts fail."
+fi
+
 info "Starting services..."
 docker compose up -d
 

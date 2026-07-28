@@ -189,6 +189,17 @@ rollback_hint() {
   echo ""
 }
 
+# Ensure the file-mounts directory exists and is owned by the belune container's
+# uid before the reconcile brings the (possibly newly-added) bind mount up. An
+# install from before this dir was managed won't have it; create + chown it here
+# so file mounts work after updating, matching install.sh. Idempotent.
+mkdir -p "${INSTALL_DIR}/filemounts"
+FM_UID=$(docker run --rm --entrypoint id "${TARGET_IMAGE}" -u 2>/dev/null || true)
+FM_GID=$(docker run --rm --entrypoint id "${TARGET_IMAGE}" -g 2>/dev/null || true)
+if [[ -n "${FM_UID}" && -n "${FM_GID}" ]]; then
+  chown "${FM_UID}:${FM_GID}" "${INSTALL_DIR}/filemounts"
+fi
+
 # Full reconcile, not --no-deps belune: the refreshed compose may change any
 # service (a new dependency, a Caddy/Redis/BuildKit tweak), and only `up -d` over
 # the whole project applies those. Compose recreates only what actually changed,

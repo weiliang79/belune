@@ -48,6 +48,13 @@ services:
       # Persist managed-database logical dumps (DATABASE_BACKUP_DIR=/data/backups/databases)
       # so local restore works across container recreation.
       - belunedata:/data
+      # Per-app file/config mounts are materialised as host files here, then
+      # bind-mounted read-only into app containers. Because Docker resolves those
+      # binds on the HOST, this must be shared into the API at the SAME path
+      # (FileMountsDir defaults to /opt/belune/filemounts) — otherwise the API
+      # writes into its own ephemeral fs and the app-container bind finds nothing.
+      # install.sh/update.sh create this dir owned by the belune container's uid.
+      - ./filemounts:/opt/belune/filemounts
     # The image runs as the non-root `belune` user, so mounting the socket is not
     # enough — it must also be in the group that owns it on the host. The GID
     # differs per distro (Debian/Ubuntu usually 999), hence the override:
