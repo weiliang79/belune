@@ -7,6 +7,7 @@ import {
   Clock,
   Cloud,
   HistoryIcon,
+  type LucideIcon,
 } from "lucide-react";
 import {
   useBackupRuns,
@@ -28,6 +29,7 @@ import { BlobLogViewer } from "@/components/logs/blob-log-viewer";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Separator } from "@/components/ui/separator";
 import { StatusPill } from "@/components/ui/status-pill";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
@@ -206,9 +208,7 @@ export function SystemBackupsPanel() {
         </CardContent>
       </Card>
 
-      <BackupScheduleCard />
-
-      <RemoteStorageCard status={status} loading={statusLoading} />
+      <BackupScheduleAndRemoteCard status={status} loading={statusLoading} />
 
       <Card>
         <CardHeader>
@@ -267,13 +267,52 @@ export function SystemBackupsPanel() {
   );
 }
 
-// BackupScheduleCard configures the in-app cron sweep that replaced
+// SectionHeader is the shared title row for both sections of
+// BackupScheduleAndRemoteCard: an icon + title + one-line description on the
+// left, the section's on/off switch on the same line on the right.
+function SectionHeader({
+  icon: Icon,
+  title,
+  description,
+  checked,
+  onCheckedChange,
+  disabled,
+  switchLabel,
+}: {
+  icon: LucideIcon;
+  title: string;
+  description: string;
+  checked: boolean;
+  onCheckedChange: (next: boolean) => void;
+  disabled?: boolean;
+  switchLabel: string;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-2">
+      <div>
+        <div className="flex items-center gap-2 text-base leading-snug font-medium">
+          <Icon aria-hidden="true" className="size-4" />
+          {title}
+        </div>
+        <p className="text-muted-foreground mt-0.5 text-sm">{description}</p>
+      </div>
+      <Switch
+        checked={checked}
+        disabled={disabled}
+        onCheckedChange={onCheckedChange}
+        aria-label={switchLabel}
+      />
+    </div>
+  );
+}
+
+// BackupScheduleSection configures the in-app cron sweep that replaced
 // belune-backup.timer — the worker checks this schedule once a minute
 // (backup_schedule_task.go) and enqueues the same "Run Backup Now" task a
 // manual click would. Backed by the generic settings table (no dedicated
 // endpoint), so the toggle applies immediately but the schedule text needs an
 // explicit Save (it's free text, not a click).
-function BackupScheduleCard() {
+function BackupScheduleSection() {
   const { data: settings, isLoading } = useSettings();
   const updateSettings = useUpdateSettings();
 
@@ -318,55 +357,47 @@ function BackupScheduleCard() {
   };
 
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex items-center justify-between gap-2">
-          <div>
-            <CardTitle className="flex items-center gap-2">
-              <Clock aria-hidden="true" className="size-4" />
-              Schedule
-            </CardTitle>
-            <CardDescription>
-              Automatic control-plane backups, on top of any manual runs.
-            </CardDescription>
+    <div className="space-y-3">
+      <SectionHeader
+        icon={Clock}
+        title="Schedule"
+        description="Automatic control-plane backups, on top of any manual runs."
+        checked={enabled}
+        disabled={isLoading || updateSettings.isPending}
+        onCheckedChange={handleToggle}
+        switchLabel="Scheduled backups"
+      />
+      {enabled && (
+        <div className="space-y-2">
+          <Label htmlFor="backup-schedule" className="text-sm">
+            Cron schedule
+          </Label>
+          <div className="flex items-center gap-2">
+            <Input
+              id="backup-schedule"
+              value={schedule}
+              onChange={(e) => setDraft(e.target.value)}
+              disabled={isLoading}
+              className="max-w-xs font-mono text-sm"
+              placeholder={DEFAULT_BACKUP_SCHEDULE}
+            />
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={handleSave}
+              disabled={draft === null || updateSettings.isPending}
+            >
+              Save
+            </Button>
           </div>
-          <Switch
-            checked={enabled}
-            disabled={isLoading || updateSettings.isPending}
-            onCheckedChange={handleToggle}
-            aria-label="Scheduled backups"
-          />
+          <p className="text-text-faint text-xs">
+            Standard 5-field cron (minute hour day-of-month month weekday),
+            evaluated in the server's local time. Default: daily at 02:00 (
+            <code className="font-mono">{DEFAULT_BACKUP_SCHEDULE}</code>).
+          </p>
         </div>
-      </CardHeader>
-      <CardContent className="space-y-2">
-        <Label htmlFor="backup-schedule" className="text-sm">
-          Cron schedule
-        </Label>
-        <div className="flex items-center gap-2">
-          <Input
-            id="backup-schedule"
-            value={schedule}
-            onChange={(e) => setDraft(e.target.value)}
-            disabled={!enabled || isLoading}
-            className="max-w-xs font-mono text-sm"
-            placeholder={DEFAULT_BACKUP_SCHEDULE}
-          />
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={handleSave}
-            disabled={draft === null || updateSettings.isPending}
-          >
-            Save
-          </Button>
-        </div>
-        <p className="text-text-faint text-xs">
-          Standard 5-field cron (minute hour day-of-month month weekday),
-          evaluated in the server's local time. Default: daily at 02:00 (
-          <code className="font-mono">{DEFAULT_BACKUP_SCHEDULE}</code>).
-        </p>
-      </CardContent>
-    </Card>
+      )}
+    </div>
   );
 }
 
@@ -451,18 +482,14 @@ function RestoreHelpCard({ remoteEnabled }: { remoteEnabled: boolean }) {
   );
 }
 
-// RemoteStorageCard shows the off-host (S3-compatible) destination for
-// control-plane backups. It is read-only: this destination is configured via
-// BACKUP_S3_* env vars in .env (kept out of the database so a total-loss
-// restore can still find where its own backups live). A "Test connection"
-// button verifies reachability without mutating anything.
-// RemoteStorageCard hosts the editable form once status has loaded. Split
-// out so the form's useState initializers can read real data on mount
-// instead of racing the query — the "loading" key forces exactly one remount
-// when the query transitions from pending to loaded, not on every refetch
-// afterward (a save's own refetch should not blow away what the operator is
-// mid-typing).
-function RemoteStorageCard({
+// BackupScheduleAndRemoteCard combines "when" (Schedule) and "where"
+// (Remote Storage) for control-plane backups into a single card, split by a
+// Separator instead of two full Cards. Remote Storage's form is split out so
+// its useState initializers can read real data on mount instead of racing
+// the query — the "loaded" key forces exactly one remount when the query
+// transitions from pending to loaded, not on every refetch afterward (a
+// save's own refetch should not blow away what the operator is mid-typing).
+function BackupScheduleAndRemoteCard({
   status,
   loading,
 }: {
@@ -471,30 +498,28 @@ function RemoteStorageCard({
 }) {
   return (
     <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Cloud aria-hidden="true" className="size-4" />
-          Remote Storage
-        </CardTitle>
-        <CardDescription>
-          Off-host destination for control-plane backups.
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
+      <CardContent className="space-y-6">
+        <BackupScheduleSection />
+        <Separator />
         {loading ? (
           <div className="space-y-2">
             <Skeleton className="h-4 w-48" />
             <Skeleton className="h-4 w-40" />
           </div>
         ) : (
-          <RemoteStorageForm key="loaded" remote={status?.remote ?? null} />
+          <RemoteStorageSection key="loaded" remote={status?.remote ?? null} />
         )}
       </CardContent>
     </Card>
   );
 }
 
-function RemoteStorageForm({ remote }: { remote: BackupRemoteConfig | null }) {
+// RemoteStorageSection configures the off-host (S3-compatible) destination
+// for control-plane backups: saved to backup-remote.env on the server,
+// separate from .env (kept out of the database so a total-loss restore can
+// still find where its own backups live), read fresh on every backup — no
+// restart needed.
+function RemoteStorageSection({ remote }: { remote: BackupRemoteConfig | null }) {
   const update = useUpdateBackupRemote();
   const test = useTestBackupRemote();
 
@@ -507,8 +532,8 @@ function RemoteStorageForm({ remote }: { remote: BackupRemoteConfig | null }) {
   const [accessKey, setAccessKey] = useState("");
   const [secretKey, setSecretKey] = useState("");
 
-  const buildData = () => ({
-    enabled,
+  const buildData = (enabledOverride: boolean = enabled) => ({
+    enabled: enabledOverride,
     endpoint: endpoint.trim(),
     region: region.trim() || "us-east-1",
     bucket: bucket.trim(),
@@ -520,7 +545,7 @@ function RemoteStorageForm({ remote }: { remote: BackupRemoteConfig | null }) {
   });
 
   const handleSave = () => {
-    if (enabled && !bucket.trim()) {
+    if (!bucket.trim()) {
       toast.error("Bucket is required to enable remote storage");
       return;
     }
@@ -545,119 +570,136 @@ function RemoteStorageForm({ remote }: { remote: BackupRemoteConfig | null }) {
     });
   };
 
+  // Turning it off is a complete, valid state on its own (no fields needed),
+  // so it saves immediately. Turning it on just reveals the form — that
+  // needs a bucket and credentials, so it stays a draft until Save.
+  const handleToggle = (next: boolean) => {
+    setEnabled(next);
+    if (next) return;
+    toast.promise(
+      update.mutateAsync(buildData(false)).then(() => {
+        setAccessKey("");
+        setSecretKey("");
+      }),
+      {
+        loading: "Disabling…",
+        success: "Remote storage disabled",
+        error: (err) => err.message ?? "Failed to save",
+      },
+    );
+  };
+
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between gap-2">
-        <div className="space-y-0.5">
-          <Label htmlFor="remote-enabled" className="text-sm font-medium">
-            Enabled
-          </Label>
-          <p className="text-muted-foreground text-xs">
-            Upload every control-plane backup off-host in addition to the
-            local copy.
+      <SectionHeader
+        icon={Cloud}
+        title="Remote Storage"
+        description="Off-host destination for control-plane backups."
+        checked={enabled}
+        disabled={update.isPending}
+        onCheckedChange={handleToggle}
+        switchLabel="Remote storage enabled"
+      />
+
+      {enabled && (
+        <>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="remote-bucket">Bucket</Label>
+              <Input
+                id="remote-bucket"
+                value={bucket}
+                onChange={(e) => setBucket(e.target.value)}
+                placeholder="my-belune-backups"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="remote-region">Region</Label>
+              <Input
+                id="remote-region"
+                value={region}
+                onChange={(e) => setRegion(e.target.value)}
+                placeholder="us-east-1"
+              />
+            </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="remote-endpoint">Endpoint</Label>
+            <Input
+              id="remote-endpoint"
+              value={endpoint}
+              onChange={(e) => setEndpoint(e.target.value)}
+              placeholder="Empty = AWS S3. Set for MinIO/R2/B2/Wasabi (host:port, no scheme)"
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="remote-prefix">Prefix</Label>
+            <Input
+              id="remote-prefix"
+              value={prefix}
+              onChange={(e) => setPrefix(e.target.value)}
+              placeholder="belune/"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="remote-access-key">Access key</Label>
+              <Input
+                id="remote-access-key"
+                value={accessKey}
+                onChange={(e) => setAccessKey(e.target.value)}
+                placeholder={remote ? "•••• (unchanged)" : ""}
+                className="font-mono"
+                autoComplete="off"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="remote-secret-key">Secret key</Label>
+              <Input
+                id="remote-secret-key"
+                type="password"
+                value={secretKey}
+                onChange={(e) => setSecretKey(e.target.value)}
+                placeholder={remote ? "•••• (unchanged)" : ""}
+                className="font-mono"
+                autoComplete="off"
+              />
+            </div>
+          </div>
+
+          <label className="flex items-center gap-2 text-sm">
+            <Checkbox checked={useSSL} onCheckedChange={setUseSSL} />
+            Use SSL (HTTPS)
+          </label>
+
+          <div className="flex items-center justify-between gap-2 pt-1">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={handleTest}
+              disabled={test.isPending}
+            >
+              {test.isPending ? "Testing…" : "Test connection"}
+            </Button>
+            <Button size="sm" onClick={handleSave} disabled={update.isPending}>
+              {update.isPending ? "Saving…" : "Save"}
+            </Button>
+          </div>
+
+          <p className="text-text-faint text-xs">
+            Saved to <code className="font-mono">backup-remote.env</code> on
+            the server, separate from{" "}
+            <code className="font-mono">.env</code> — takes effect on the
+            next backup, no restart needed. Kept out of the database so a
+            full restore can still locate its backups. Per-database backups
+            use project destinations instead.
           </p>
-        </div>
-        <Switch
-          id="remote-enabled"
-          checked={enabled}
-          onCheckedChange={setEnabled}
-        />
-      </div>
-
-      <div className="grid grid-cols-2 gap-3">
-        <div className="space-y-1.5">
-          <Label htmlFor="remote-bucket">Bucket</Label>
-          <Input
-            id="remote-bucket"
-            value={bucket}
-            onChange={(e) => setBucket(e.target.value)}
-            placeholder="my-belune-backups"
-          />
-        </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="remote-region">Region</Label>
-          <Input
-            id="remote-region"
-            value={region}
-            onChange={(e) => setRegion(e.target.value)}
-            placeholder="us-east-1"
-          />
-        </div>
-      </div>
-
-      <div className="space-y-1.5">
-        <Label htmlFor="remote-endpoint">Endpoint</Label>
-        <Input
-          id="remote-endpoint"
-          value={endpoint}
-          onChange={(e) => setEndpoint(e.target.value)}
-          placeholder="Empty = AWS S3. Set for MinIO/R2/B2/Wasabi (host:port, no scheme)"
-        />
-      </div>
-
-      <div className="space-y-1.5">
-        <Label htmlFor="remote-prefix">Prefix</Label>
-        <Input
-          id="remote-prefix"
-          value={prefix}
-          onChange={(e) => setPrefix(e.target.value)}
-          placeholder="belune/"
-        />
-      </div>
-
-      <div className="grid grid-cols-2 gap-3">
-        <div className="space-y-1.5">
-          <Label htmlFor="remote-access-key">Access key</Label>
-          <Input
-            id="remote-access-key"
-            value={accessKey}
-            onChange={(e) => setAccessKey(e.target.value)}
-            placeholder={remote ? "•••• (unchanged)" : ""}
-            className="font-mono"
-            autoComplete="off"
-          />
-        </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="remote-secret-key">Secret key</Label>
-          <Input
-            id="remote-secret-key"
-            type="password"
-            value={secretKey}
-            onChange={(e) => setSecretKey(e.target.value)}
-            placeholder={remote ? "•••• (unchanged)" : ""}
-            className="font-mono"
-            autoComplete="off"
-          />
-        </div>
-      </div>
-
-      <label className="flex items-center gap-2 text-sm">
-        <Checkbox checked={useSSL} onCheckedChange={setUseSSL} />
-        Use SSL (HTTPS)
-      </label>
-
-      <div className="flex items-center justify-between gap-2 pt-1">
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={handleTest}
-          disabled={test.isPending}
-        >
-          {test.isPending ? "Testing…" : "Test connection"}
-        </Button>
-        <Button size="sm" onClick={handleSave} disabled={update.isPending}>
-          {update.isPending ? "Saving…" : "Save"}
-        </Button>
-      </div>
-
-      <p className="text-text-faint text-xs">
-        Saved to <code className="font-mono">backup-remote.env</code> on the
-        server, separate from <code className="font-mono">.env</code> — takes
-        effect on the next backup, no restart needed. Kept out of the database
-        so a full restore can still locate its backups. Per-database backups
-        use project destinations instead.
-      </p>
+        </>
+      )}
     </div>
   );
 }
