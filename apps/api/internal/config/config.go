@@ -128,8 +128,12 @@ type Config struct {
 	SMTPFromName  string // default "Belune"
 	SMTPTLSMode   string // none | starttls | tls (default: starttls)
 
-	// Backup remote storage. When BackupRemoteEnabled is false all BACKUP_S3_*
-	// fields are ignored and backup.sh writes local archives only.
+	// Backup remote storage. These are the FALLBACK values, read once from .env
+	// at startup — service/backup.LoadRemoteConfig() prefers
+	// BackupRemoteConfigPath (dashboard-managed, re-read on every backup) and
+	// falls back to these per-field when a key is absent from that file. When
+	// neither source enables remote storage, backup.sh writes local archives
+	// only.
 	BackupRemoteEnabled bool
 	BackupS3Endpoint    string // empty = AWS; set for MinIO/B2/R2/Wasabi
 	BackupS3Region      string // default "us-east-1"
@@ -140,9 +144,14 @@ type Config struct {
 	BackupS3UseSSL      bool   // default true
 	BackupRetainDays    int    // delete objects older than N days (default 30)
 	BackupRetainCount   int    // always keep the N most-recent objects (default 14)
-	// Path to backup.sh reachable from the API process. Defaults to
-	// $BELUNE_DIR/scripts/backup.sh (falls back to /opt/belune/scripts/backup.sh).
-	BackupScriptPath string
+	// BackupRemoteConfigPath is the dashboard-managed remote-storage config —
+	// flat KEY=value, same shape as BACKUP_S3_*/BACKUP_REMOTE_ENABLED in .env,
+	// but separate from it (never let the dashboard write bootstrap secrets
+	// like ENCRYPTION_KEY) and writable via the Remote Storage card. Read fresh
+	// by both the worker's S3 client and scripts/backup.sh/belune-backup-upload
+	// on every backup — no restart needed after an edit. Defaults to
+	// $BELUNE_DIR/backup-remote.env.
+	BackupRemoteConfigPath string
 	// Local directory where managed-database logical dumps are written before
 	// (optional) upload to S3. Defaults to $BELUNE_DIR/backups/databases.
 	DatabaseBackupDir string
@@ -237,9 +246,9 @@ func Load() (*Config, error) {
 		BackupS3SecretKey:         getEnv("BACKUP_S3_SECRET_KEY", ""),
 		BackupS3Prefix:            getEnv("BACKUP_S3_PREFIX", "belune/"),
 		BackupS3UseSSL:            getEnvBool("BACKUP_S3_USE_SSL", true),
+		BackupRemoteConfigPath:    getEnv("BACKUP_REMOTE_CONFIG_PATH", beluneDir()+"/backup-remote.env"),
 		BackupRetainDays:          getEnvInt("BACKUP_RETAIN_DAYS", 30),
 		BackupRetainCount:         getEnvInt("BACKUP_RETAIN_COUNT", 14),
-		BackupScriptPath:          getEnv("BACKUP_SCRIPT_PATH", beluneDir()+"/scripts/backup.sh"),
 		DatabaseBackupDir:         getEnv("DATABASE_BACKUP_DIR", beluneDir()+"/backups/databases"),
 		FileMountsDir:             getEnv("FILE_MOUNTS_DIR", beluneDir()+"/filemounts"),
 		DatabaseBackupHelperImage: getEnv("DATABASE_BACKUP_HELPER_IMAGE", "alpine:3.20"),

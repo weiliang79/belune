@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/minio/minio-go/v7"
@@ -24,12 +25,18 @@ type BackupObject struct {
 	LastModified time.Time
 }
 
-// Service uploads and manages backup archives in an S3-compatible bucket.
-// It is safe for concurrent use. The minio client is constructed lazily on
-// first use so a misconfigured (or disabled) service never dials on startup.
+// Service uploads and manages backup archives in an S3-compatible bucket. It
+// is safe for concurrent use. Remote config (LoadRemoteConfig) is re-resolved
+// on every call — cheap, and it's what lets a dashboard-edited Remote Storage
+// card take effect on the very next backup without an API restart. The minio
+// client is rebuilt only when the resolved config actually changed since the
+// last call, not on every call.
 type Service struct {
-	cfg    *config.Config
-	client *minio.Client // nil until init()
+	cfg *config.Config
+
+	mu     sync.Mutex
+	client *minio.Client // nil until the first call that needs one
+	built  RemoteConfig  // the config the cached client was built from
 }
 
 // New creates a backup service. The client is not dialled until the first
@@ -40,13 +47,15 @@ func New(cfg *config.Config) *Service {
 
 // Enabled reports whether remote backup is configured.
 func (s *Service) Enabled() bool {
-	return s.cfg.BackupRemoteEnabled && s.cfg.BackupS3Bucket != ""
+	rc := LoadRemoteConfig(s.cfg)
+	return rc.Enabled && rc.Bucket != ""
 }
 
 // Upload uploads localPath to the configured bucket and returns the remote key.
 // The remote key is derived from the filename: <prefix><basename>.
 func (s *Service) Upload(ctx context.Context, localPath string) (string, error) {
-	if err := s.init(); err != nil {
+	rc, err := s.resolveClient()
+	if err != nil {
 		return "", err
 	}
 
@@ -61,13 +70,13 @@ func (s *Service) Upload(ctx context.Context, localPath string) (string, error) 
 		return "", fmt.Errorf("stat backup file: %w", err)
 	}
 
-	key := s.cfg.BackupS3Prefix + filepath.Base(localPath)
+	key := rc.Prefix + filepath.Base(localPath)
 	contentType := "application/gzip"
 	if strings.HasSuffix(localPath, ".age") {
 		contentType = "application/octet-stream"
 	}
 
-	_, err = s.client.PutObject(ctx, s.cfg.BackupS3Bucket, key, f, info.Size(),
+	_, err = s.client.PutObject(ctx, rc.Bucket, key, f, info.Size(),
 		minio.PutObjectOptions{ContentType: contentType})
 	if err != nil {
 		return "", fmt.Errorf("upload to s3: %w", err)
@@ -78,13 +87,14 @@ func (s *Service) Upload(ctx context.Context, localPath string) (string, error) 
 // Download fetches the object at key into localPath, creating parent dirs as
 // needed. Used to restore a managed-database backup from S3.
 func (s *Service) Download(ctx context.Context, key, localPath string) error {
-	if err := s.init(); err != nil {
+	rc, err := s.resolveClient()
+	if err != nil {
 		return err
 	}
 	if err := os.MkdirAll(filepath.Dir(localPath), 0o755); err != nil {
 		return fmt.Errorf("create download dir: %w", err)
 	}
-	if err := s.client.FGetObject(ctx, s.cfg.BackupS3Bucket, key, localPath,
+	if err := s.client.FGetObject(ctx, rc.Bucket, key, localPath,
 		minio.GetObjectOptions{}); err != nil {
 		return fmt.Errorf("download from s3: %w", err)
 	}
@@ -93,13 +103,14 @@ func (s *Service) Download(ctx context.Context, key, localPath string) error {
 
 // List returns all backup objects under the configured prefix, sorted oldest-first.
 func (s *Service) List(ctx context.Context) ([]BackupObject, error) {
-	if err := s.init(); err != nil {
+	rc, err := s.resolveClient()
+	if err != nil {
 		return nil, err
 	}
 
 	var objects []BackupObject
-	for obj := range s.client.ListObjects(ctx, s.cfg.BackupS3Bucket,
-		minio.ListObjectsOptions{Prefix: s.cfg.BackupS3Prefix, Recursive: true}) {
+	for obj := range s.client.ListObjects(ctx, rc.Bucket,
+		minio.ListObjectsOptions{Prefix: rc.Prefix, Recursive: true}) {
 		if obj.Err != nil {
 			return nil, fmt.Errorf("list objects: %w", obj.Err)
 		}
@@ -118,7 +129,8 @@ func (s *Service) List(ctx context.Context) ([]BackupObject, error) {
 
 // Delete removes the given keys from the bucket. Missing keys are silently ignored.
 func (s *Service) Delete(ctx context.Context, keys []string) error {
-	if err := s.init(); err != nil {
+	rc, err := s.resolveClient()
+	if err != nil {
 		return err
 	}
 
@@ -129,7 +141,7 @@ func (s *Service) Delete(ctx context.Context, keys []string) error {
 	close(objectsCh)
 
 	var errs []string
-	for result := range s.client.RemoveObjects(ctx, s.cfg.BackupS3Bucket, objectsCh, minio.RemoveObjectsOptions{}) {
+	for result := range s.client.RemoveObjects(ctx, rc.Bucket, objectsCh, minio.RemoveObjectsOptions{}) {
 		if result.Err != nil {
 			errs = append(errs, fmt.Sprintf("%s: %v", result.ObjectName, result.Err))
 		}
@@ -154,42 +166,41 @@ func (s *Service) LatestKey(ctx context.Context) (string, time.Time, error) {
 	return latest.Key, latest.LastModified, nil
 }
 
-// EnsureBucket creates the configured bucket if it does not already exist.
-// This is used in tests and can be called during initial provisioning.
 // Check verifies the remote storage is reachable and the configured bucket
 // exists, without mutating anything. Used by the admin "Test connection"
 // action. Returns an error describing the failure (unreachable, bad
 // credentials, or missing bucket).
 func (s *Service) Check(ctx context.Context) error {
-	if !s.Enabled() {
-		return fmt.Errorf("remote backup storage is not configured")
-	}
-	if err := s.init(); err != nil {
+	rc, err := s.resolveClient()
+	if err != nil {
 		return err
 	}
-	exists, err := s.client.BucketExists(ctx, s.cfg.BackupS3Bucket)
+	exists, err := s.client.BucketExists(ctx, rc.Bucket)
 	if err != nil {
 		return fmt.Errorf("reach bucket: %w", err)
 	}
 	if !exists {
-		return fmt.Errorf("bucket %q does not exist", s.cfg.BackupS3Bucket)
+		return fmt.Errorf("bucket %q does not exist", rc.Bucket)
 	}
 	return nil
 }
 
+// EnsureBucket creates the configured bucket if it does not already exist.
+// This is used in tests and can be called during initial provisioning.
 func (s *Service) EnsureBucket(ctx context.Context) error {
-	if err := s.init(); err != nil {
+	rc, err := s.resolveClient()
+	if err != nil {
 		return err
 	}
-	exists, err := s.client.BucketExists(ctx, s.cfg.BackupS3Bucket)
+	exists, err := s.client.BucketExists(ctx, rc.Bucket)
 	if err != nil {
 		return fmt.Errorf("check bucket: %w", err)
 	}
 	if exists {
 		return nil
 	}
-	if err := s.client.MakeBucket(ctx, s.cfg.BackupS3Bucket,
-		minio.MakeBucketOptions{Region: s.cfg.BackupS3Region}); err != nil {
+	if err := s.client.MakeBucket(ctx, rc.Bucket,
+		minio.MakeBucketOptions{Region: rc.Region}); err != nil {
 		return fmt.Errorf("create bucket: %w", err)
 	}
 	return nil
@@ -205,10 +216,7 @@ func SelectForDeletion(objects []BackupObject, now time.Time, retainDays, retain
 	}
 
 	// keepFrom is the index of the first object in the "always keep" tail.
-	keepFrom := len(objects) - retainCount
-	if keepFrom < 0 {
-		keepFrom = 0
-	}
+	keepFrom := max(len(objects)-retainCount, 0)
 
 	cutoff := now.AddDate(0, 0, -retainDays)
 
@@ -232,6 +240,8 @@ func (s *Service) Rotate(ctx context.Context) ([]string, error) {
 		return nil, err
 	}
 
+	// Retention day/count knobs stay env-only (BACKUP_RETAIN_DAYS/COUNT) — not
+	// part of the dashboard-managed remote config, so no fresh reload needed.
 	keys := SelectForDeletion(objects, time.Now(), s.cfg.BackupRetainDays, s.cfg.BackupRetainCount)
 	if len(keys) == 0 {
 		return nil, nil
@@ -243,20 +253,26 @@ func (s *Service) Rotate(ctx context.Context) ([]string, error) {
 	return keys, nil
 }
 
-// init lazily constructs the minio client on first use.
-func (s *Service) init() error {
-	if s.client != nil {
-		return nil
-	}
-	if !s.Enabled() {
-		return fmt.Errorf("remote backup is not enabled (BACKUP_REMOTE_ENABLED=false or BACKUP_S3_BUCKET empty)")
+// resolveClient resolves the current remote config and returns a ready
+// s.client, rebuilding it only when the resolved config changed since the
+// last call (RemoteConfig is a flat comparable struct, so this is a cheap
+// ==) — every public method starts with `rc, err := s.resolveClient()`.
+func (s *Service) resolveClient() (RemoteConfig, error) {
+	rc := LoadRemoteConfig(s.cfg)
+	if !rc.Enabled || rc.Bucket == "" {
+		return rc, fmt.Errorf("remote backup is not enabled (BACKUP_REMOTE_ENABLED=false or bucket empty)")
 	}
 
-	client, err := newMinioClient(s.cfg.BackupS3Endpoint, s.cfg.BackupS3Region,
-		s.cfg.BackupS3AccessKey, s.cfg.BackupS3SecretKey, s.cfg.BackupS3UseSSL)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.client != nil && s.built == rc {
+		return rc, nil
+	}
+	client, err := newMinioClient(rc.Endpoint, rc.Region, rc.AccessKey, rc.SecretKey, rc.UseSSL)
 	if err != nil {
-		return fmt.Errorf("create s3 client: %w", err)
+		return rc, fmt.Errorf("create s3 client: %w", err)
 	}
 	s.client = client
-	return nil
+	s.built = rc
+	return rc, nil
 }

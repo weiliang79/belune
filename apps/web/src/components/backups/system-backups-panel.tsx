@@ -13,6 +13,7 @@ import {
   useBackupStatus,
   useTriggerBackup,
   useTestBackupRemote,
+  useUpdateBackupRemote,
 } from "@/lib/hooks/use-backups";
 import { useSettings, useUpdateSettings } from "@/lib/hooks/use-settings";
 import {
@@ -24,6 +25,7 @@ import {
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { BlobLogViewer } from "@/components/logs/blob-log-viewer";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { StatusPill } from "@/components/ui/status-pill";
@@ -37,7 +39,7 @@ import {
   formatDateTime,
   formatDateTimeShort,
 } from "@/lib/utils/format";
-import type { BackupRun, BackupStatus } from "@/lib/types";
+import type { BackupRemoteConfig, BackupRun, BackupStatus } from "@/lib/types";
 
 // Matches config.DefaultControlPlaneBackupSchedule on the API — daily at
 // 02:00, the cadence the retired belune-backup.timer used to run at.
@@ -454,6 +456,12 @@ function RestoreHelpCard({ remoteEnabled }: { remoteEnabled: boolean }) {
 // BACKUP_S3_* env vars in .env (kept out of the database so a total-loss
 // restore can still find where its own backups live). A "Test connection"
 // button verifies reachability without mutating anything.
+// RemoteStorageCard hosts the editable form once status has loaded. Split
+// out so the form's useState initializers can read real data on mount
+// instead of racing the query — the "loading" key forces exactly one remount
+// when the query transitions from pending to loaded, not on every refetch
+// afterward (a save's own refetch should not blow away what the operator is
+// mid-typing).
 function RemoteStorageCard({
   status,
   loading,
@@ -461,8 +469,73 @@ function RemoteStorageCard({
   status: BackupStatus | undefined;
   loading: boolean;
 }) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Cloud aria-hidden="true" className="size-4" />
+          Remote Storage
+        </CardTitle>
+        <CardDescription>
+          Off-host destination for control-plane backups.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        {loading ? (
+          <div className="space-y-2">
+            <Skeleton className="h-4 w-48" />
+            <Skeleton className="h-4 w-40" />
+          </div>
+        ) : (
+          <RemoteStorageForm key="loaded" remote={status?.remote ?? null} />
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function RemoteStorageForm({ remote }: { remote: BackupRemoteConfig | null }) {
+  const update = useUpdateBackupRemote();
   const test = useTestBackupRemote();
-  const remote = status?.remote ?? null;
+
+  const [enabled, setEnabled] = useState(!!remote);
+  const [endpoint, setEndpoint] = useState(remote?.endpoint ?? "");
+  const [region, setRegion] = useState(remote?.region ?? "us-east-1");
+  const [bucket, setBucket] = useState(remote?.bucket ?? "");
+  const [prefix, setPrefix] = useState(remote?.prefix ?? "belune/");
+  const [useSSL, setUseSSL] = useState(remote?.use_ssl ?? true);
+  const [accessKey, setAccessKey] = useState("");
+  const [secretKey, setSecretKey] = useState("");
+
+  const buildData = () => ({
+    enabled,
+    endpoint: endpoint.trim(),
+    region: region.trim() || "us-east-1",
+    bucket: bucket.trim(),
+    prefix: prefix.trim(),
+    use_ssl: useSSL,
+    // Blank preserves the stored secret — never redisplayed once saved.
+    access_key: accessKey || undefined,
+    secret_key: secretKey || undefined,
+  });
+
+  const handleSave = () => {
+    if (enabled && !bucket.trim()) {
+      toast.error("Bucket is required to enable remote storage");
+      return;
+    }
+    toast.promise(
+      update.mutateAsync(buildData()).then(() => {
+        setAccessKey("");
+        setSecretKey("");
+      }),
+      {
+        loading: "Saving…",
+        success: "Remote storage saved",
+        error: (err) => err.message ?? "Failed to save",
+      },
+    );
+  };
 
   const handleTest = () => {
     toast.promise(test.mutateAsync(), {
@@ -473,62 +546,119 @@ function RemoteStorageCard({
   };
 
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex items-center justify-between gap-2">
-          <div>
-            <CardTitle className="flex items-center gap-2">
-              <Cloud aria-hidden="true" className="size-4" />
-              Remote Storage
-            </CardTitle>
-            <CardDescription>
-              Off-host destination for control-plane backups.
-            </CardDescription>
-          </div>
-          {remote && (
-            <Button
-              onClick={handleTest}
-              disabled={test.isPending}
-              variant="outline"
-              size="sm"
-            >
-              {test.isPending ? "Testing…" : "Test connection"}
-            </Button>
-          )}
-        </div>
-      </CardHeader>
-      <CardContent>
-        {loading ? (
-          <div className="space-y-2">
-            <Skeleton className="h-4 w-48" />
-            <Skeleton className="h-4 w-40" />
-          </div>
-        ) : remote ? (
-          <div className="grid grid-cols-2 gap-4 text-sm md:grid-cols-4">
-            <StatusItem
-              label="Endpoint"
-              value={remote.endpoint || "AWS S3 (regional)"}
-            />
-            <StatusItem label="Region" value={remote.region || "—"} />
-            <StatusItem label="Bucket" value={remote.bucket || "—"} />
-            <StatusItem label="Prefix" value={remote.prefix || "—"} />
-          </div>
-        ) : (
-          <p className="text-muted-foreground text-sm">
-            Remote storage is disabled — control-plane backups are kept on-host
-            only.
+    <div className="space-y-4">
+      <div className="flex items-center justify-between gap-2">
+        <div className="space-y-0.5">
+          <Label htmlFor="remote-enabled" className="text-sm font-medium">
+            Enabled
+          </Label>
+          <p className="text-muted-foreground text-xs">
+            Upload every control-plane backup off-host in addition to the
+            local copy.
           </p>
-        )}
-        <p className="text-text-faint mt-4 text-xs">
-          Configured via{" "}
-          <code className="font-mono">BACKUP_REMOTE_ENABLED</code> and{" "}
-          <code className="font-mono">BACKUP_S3_*</code> in{" "}
-          <code className="font-mono">.env</code> on the server (restart the API
-          to apply). Kept out of the database so a full restore can still locate
-          its backups. Per-database backups use project destinations instead.
-        </p>
-      </CardContent>
-    </Card>
+        </div>
+        <Switch
+          id="remote-enabled"
+          checked={enabled}
+          onCheckedChange={setEnabled}
+        />
+      </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-1.5">
+          <Label htmlFor="remote-bucket">Bucket</Label>
+          <Input
+            id="remote-bucket"
+            value={bucket}
+            onChange={(e) => setBucket(e.target.value)}
+            placeholder="my-belune-backups"
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="remote-region">Region</Label>
+          <Input
+            id="remote-region"
+            value={region}
+            onChange={(e) => setRegion(e.target.value)}
+            placeholder="us-east-1"
+          />
+        </div>
+      </div>
+
+      <div className="space-y-1.5">
+        <Label htmlFor="remote-endpoint">Endpoint</Label>
+        <Input
+          id="remote-endpoint"
+          value={endpoint}
+          onChange={(e) => setEndpoint(e.target.value)}
+          placeholder="Empty = AWS S3. Set for MinIO/R2/B2/Wasabi (host:port, no scheme)"
+        />
+      </div>
+
+      <div className="space-y-1.5">
+        <Label htmlFor="remote-prefix">Prefix</Label>
+        <Input
+          id="remote-prefix"
+          value={prefix}
+          onChange={(e) => setPrefix(e.target.value)}
+          placeholder="belune/"
+        />
+      </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-1.5">
+          <Label htmlFor="remote-access-key">Access key</Label>
+          <Input
+            id="remote-access-key"
+            value={accessKey}
+            onChange={(e) => setAccessKey(e.target.value)}
+            placeholder={remote ? "•••• (unchanged)" : ""}
+            className="font-mono"
+            autoComplete="off"
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="remote-secret-key">Secret key</Label>
+          <Input
+            id="remote-secret-key"
+            type="password"
+            value={secretKey}
+            onChange={(e) => setSecretKey(e.target.value)}
+            placeholder={remote ? "•••• (unchanged)" : ""}
+            className="font-mono"
+            autoComplete="off"
+          />
+        </div>
+      </div>
+
+      <label className="flex items-center gap-2 text-sm">
+        <Checkbox checked={useSSL} onCheckedChange={setUseSSL} />
+        Use SSL (HTTPS)
+      </label>
+
+      <div className="flex items-center justify-between gap-2 pt-1">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={handleTest}
+          disabled={test.isPending}
+        >
+          {test.isPending ? "Testing…" : "Test connection"}
+        </Button>
+        <Button size="sm" onClick={handleSave} disabled={update.isPending}>
+          {update.isPending ? "Saving…" : "Save"}
+        </Button>
+      </div>
+
+      <p className="text-text-faint text-xs">
+        Saved to <code className="font-mono">backup-remote.env</code> on the
+        server, separate from <code className="font-mono">.env</code> — takes
+        effect on the next backup, no restart needed. Kept out of the database
+        so a full restore can still locate its backups. Per-database backups
+        use project destinations instead.
+      </p>
+    </div>
   );
 }
 

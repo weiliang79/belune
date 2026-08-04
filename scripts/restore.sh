@@ -110,10 +110,11 @@ BACKUP_DIR=$(find "${WORK_DIR}" -mindepth 1 -maxdepth 1 -type d | head -1)
 
 # ── Manifest: show what this archive contains ──────────────────────────────────
 
-have_env=false; have_pg=false; have_caddy=false
-[[ -f "${BACKUP_DIR}/.env" ]]              && have_env=true
-[[ -f "${BACKUP_DIR}/postgres.sql" ]]      && have_pg=true
-[[ -f "${BACKUP_DIR}/caddy-data.tar.gz" ]] && have_caddy=true
+have_env=false; have_pg=false; have_caddy=false; have_remote=false
+[[ -f "${BACKUP_DIR}/.env" ]]               && have_env=true
+[[ -f "${BACKUP_DIR}/postgres.sql" ]]       && have_pg=true
+[[ -f "${BACKUP_DIR}/caddy-data.tar.gz" ]]  && have_caddy=true
+[[ -f "${BACKUP_DIR}/backup-remote.env" ]]  && have_remote=true
 
 pg_size="—"; pg_lines="—"
 if ${have_pg}; then
@@ -124,9 +125,10 @@ fi
 echo ""
 echo "  Archive contents"
 echo "  ----------------"
-printf "  %-18s %s\n" ".env"          "$(${have_env}   && echo "present" || echo "MISSING")"
-printf "  %-18s %s\n" "postgres.sql"  "$(${have_pg}    && echo "present (${pg_size}, ${pg_lines} lines)" || echo "MISSING")"
-printf "  %-18s %s\n" "caddy-data"    "$(${have_caddy} && echo "present" || echo "absent (no TLS data)")"
+printf "  %-18s %s\n" ".env"              "$(${have_env}    && echo "present" || echo "MISSING")"
+printf "  %-18s %s\n" "postgres.sql"      "$(${have_pg}     && echo "present (${pg_size}, ${pg_lines} lines)" || echo "MISSING")"
+printf "  %-18s %s\n" "caddy-data"        "$(${have_caddy}  && echo "present" || echo "absent (no TLS data)")"
+printf "  %-18s %s\n" "backup-remote.env" "$(${have_remote} && echo "present" || echo "absent (no dashboard remote-storage config)")"
 echo ""
 
 ${have_pg} || die "Archive has no postgres.sql — refusing to restore an archive with no database dump."
@@ -144,9 +146,10 @@ fi
 # ── Confirm the destructive action ─────────────────────────────────────────────
 
 echo "  This will OVERWRITE the current install at ${INSTALL_DIR}:"
-${have_pg}    && echo "    • DROP and recreate the Postgres database"
-${have_env}   && echo "    • Overwrite .env"
-${have_caddy} && echo "    • Overwrite Caddy TLS data (certificates + config)"
+${have_pg}     && echo "    • DROP and recreate the Postgres database"
+${have_env}    && echo "    • Overwrite .env"
+${have_caddy}  && echo "    • Overwrite Caddy TLS data (certificates + config)"
+${have_remote} && echo "    • Overwrite backup-remote.env (dashboard remote-storage config)"
 echo "    • Restart the belune service"
 echo ""
 
@@ -165,6 +168,13 @@ if ${have_env}; then
   info "Restoring .env..."
   cp "${BACKUP_DIR}/.env" .env
   success ".env restored."
+fi
+
+if ${have_remote}; then
+  info "Restoring backup-remote.env..."
+  cp "${BACKUP_DIR}/backup-remote.env" backup-remote.env
+  chmod 600 backup-remote.env
+  success "backup-remote.env restored."
 fi
 
 # ── Restore Postgres ──────────────────────────────────────────────────────────

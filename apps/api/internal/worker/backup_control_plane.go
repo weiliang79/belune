@@ -110,6 +110,17 @@ func (h *TaskHandler) buildControlPlaneArchive(ctx context.Context, lg *runLog) 
 	}
 	lg.step(".env backed up")
 
+	// Dashboard-managed remote-storage config, if the operator has ever saved
+	// one (install.sh/update.sh always touch the file, but on a stock install
+	// it's just never been written to). Best-effort — an absent or unreadable
+	// file just means the archive has one less thing to restore, not a failed
+	// backup.
+	if err := copyFile(h.Config.BackupRemoteConfigPath, filepath.Join(workDir, "backup-remote.env")); err != nil {
+		lg.warn("backup-remote.env not included: %v", err)
+	} else {
+		lg.step("backup-remote.env backed up")
+	}
+
 	archivePath = filepath.Join(backupDir, name+".tar.gz")
 	lg.step("Creating archive %s...", archivePath)
 	if err := tarGzDir(workDir, name, archivePath); err != nil {

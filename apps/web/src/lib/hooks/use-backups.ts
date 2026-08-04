@@ -4,6 +4,7 @@ import {
   getBackupStatus,
   triggerBackupRun,
   testBackupRemote,
+  updateBackupRemote,
 } from "@/lib/api/backups";
 import { queryKeys } from "./query-keys";
 
@@ -43,4 +44,13 @@ export function useTriggerBackup() {
 
 export function useTestBackupRemote() {
   return useMutation({ mutationFn: testBackupRemote });
+}
+
+export function useUpdateBackupRemote() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: updateBackupRemote,
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: queryKeys.backups.status }),
+  });
 }

@@ -3,8 +3,11 @@
 //
 // Usage: backup-upload <local-path>
 //
-// Exits 0 on success, 1 on any error. Reads all BACKUP_* and other required
-// config from environment variables (same as the API server).
+// Exits 0 on success, 1 on any error. Remote storage config resolves the same
+// way the API does — BackupRemoteConfigPath (backup-remote.env, dashboard-
+// managed) if present, falling back per-key to BACKUP_S3_*/BACKUP_REMOTE_ENABLED
+// in the environment (populated from .env by the caller). JWT_SECRET must
+// also be set — config.Load() requires it even though this binary never uses it.
 //
 // The helper is copied out of the API container image to ${INSTALL_DIR}/bin/
 // by install.sh and update.sh so it runs on the host, outside Docker.
@@ -35,7 +38,7 @@ func main() {
 
 	svc := backup.New(cfg)
 	if !svc.Enabled() {
-		slog.Error("remote backup is not enabled", "hint", "set BACKUP_REMOTE_ENABLED=true and BACKUP_S3_BUCKET")
+		slog.Error("remote backup is not enabled", "hint", "enable it from the dashboard's Remote Storage card, or set BACKUP_REMOTE_ENABLED=true and BACKUP_S3_BUCKET in .env")
 		os.Exit(1)
 	}
 

@@ -371,6 +371,23 @@ else
   info "Could not detect the belune container uid — set ${INSTALL_DIR}/backups writable by it if in-app backups fail."
 fi
 
+# ── Remote-storage config file ──────────────────────────────────────────────
+
+# Dashboard-managed control-plane remote-storage config (Server → Backups →
+# Remote Storage). This is a FILE bind mount, not a directory — `touch` it
+# (rather than mkdir) so it exists before the container starts, then chown it
+# to the belune uid. The container can then overwrite the file's contents but
+# never needs to create a new directory entry in the root-owned install dir.
+info "Preparing the remote-storage config file..."
+touch "${INSTALL_DIR}/backup-remote.env"
+chmod 600 "${INSTALL_DIR}/backup-remote.env"
+if [[ -n "${FM_UID}" && -n "${FM_GID}" ]]; then
+  chown "${FM_UID}:${FM_GID}" "${INSTALL_DIR}/backup-remote.env"
+  success "Remote-storage config file ready (owner ${FM_UID}:${FM_GID})."
+else
+  info "Could not detect the belune container uid — set ${INSTALL_DIR}/backup-remote.env writable by it if editing remote storage from the dashboard fails."
+fi
+
 info "Starting services..."
 docker compose up -d
 

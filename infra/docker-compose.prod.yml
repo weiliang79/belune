@@ -67,6 +67,16 @@ services:
       # itself). install.sh/update.sh create ./backups owned by the belune
       # container's uid, same pattern as filemounts.
       - ./.env:/opt/belune/.env:ro
+      # Dashboard-managed remote-storage config (BACKUP_S3_*/BACKUP_REMOTE_ENABLED),
+      # separate from .env so the dashboard never writes bootstrap secrets like
+      # ENCRYPTION_KEY. Read-write: the Remote Storage card saves here.
+      # install.sh/update.sh `touch` (not mkdir — this is a file, not a dir) and
+      # chown it to the belune container's uid; the file must already exist
+      # before the container starts, since the container can write the file's
+      # contents but can't create a new directory entry in the root-owned
+      # install dir. scripts/backup.sh and belune-backup-upload read the same
+      # file for the host/CLI backup path.
+      - ./backup-remote.env:/opt/belune/backup-remote.env
     # The image runs as the non-root `belune` user, so mounting the socket is not
     # enough — it must also be in the group that owns it on the host. The GID
     # differs per distro (Debian/Ubuntu usually 999), hence the override:

@@ -94,6 +94,7 @@ Rotation is a procedure, not a setting — see
 | `FILE_MOUNTS_DIR` | *derived* | *Internal* — from `BELUNE_DIR` |
 | `CONTROL_PLANE_BACKUP_DIR` | *derived* | *Internal* — from `BELUNE_DIR`. Where the worker writes control-plane archives; same directory `scripts/backup.sh`/`restore.sh` use |
 | `ENV_FILE_PATH` | *derived* | *Internal* — from `BELUNE_DIR`. Where the worker reads `.env` to copy into a control-plane archive |
+| `BACKUP_REMOTE_CONFIG_PATH` | *derived* | *Internal* — from `BELUNE_DIR` (`backup-remote.env`). Dashboard-managed remote-storage config — see below |
 | `DATABASE_BACKUP_DIR` | *derived* | *Internal* — from `BELUNE_DIR` |
 
 ## Platform backups
@@ -105,19 +106,30 @@ produce the same archive format and record every run — there is no longer a
 systemd timer; the daily trigger is the in-app schedule (`control_plane_backup_schedule`
 setting, default `0 2 * * *`). Distinct from per-database backups below.
 
+**Remote storage is dashboard-managed** (Server → Backups → Remote Storage):
+edits save to `BACKUP_REMOTE_CONFIG_PATH` (`backup-remote.env`, mode `0600`),
+a flat `KEY=value` file separate from `.env` so the dashboard never touches
+bootstrap secrets like `ENCRYPTION_KEY`. It's read fresh on every backup — no
+API restart needed — and both `scripts/backup.sh` and the `belune-backup-upload`
+helper read the same file. The variables below are the fallback: any key
+missing from `backup-remote.env` (including "the file doesn't exist yet")
+falls back to it per-key, so setting these in `.env` still works on a stock
+install that has never touched the Remote Storage card. Retention
+(`BACKUP_RETAIN_*`) stays env-only — it's not part of the dashboard-managed file.
+
 | Variable | Default | Notes |
 |---|---|---|
-| `BACKUP_REMOTE_ENABLED` | `false` | |
+| `BACKUP_REMOTE_ENABLED` | `false` | Fallback only — prefer the dashboard |
 | `BACKUP_RETAIN_COUNT` | `14` | Applies to local archives too, not just the remote bucket |
 | `BACKUP_RETAIN_DAYS` | `30` | |
-| `BACKUP_S3_BUCKET` | *empty* | |
-| `BACKUP_S3_ENDPOINT` | *empty* | For S3-compatible providers |
-| `BACKUP_S3_REGION` | `us-east-1` | |
-| `BACKUP_S3_PREFIX` | `belune/` | |
-| `BACKUP_S3_ACCESS_KEY` | *empty* | Secret |
-| `BACKUP_S3_SECRET_KEY` | *empty* | Secret |
-| `BACKUP_S3_USE_SSL` | `true` | |
-| `BACKUP_ENCRYPTION_KEY` | *empty* | age public key (or path to a file containing one); encrypts the archive as `.tar.gz.age` |
+| `BACKUP_S3_BUCKET` | *empty* | Fallback only — prefer the dashboard |
+| `BACKUP_S3_ENDPOINT` | *empty* | For S3-compatible providers. Fallback only |
+| `BACKUP_S3_REGION` | `us-east-1` | Fallback only |
+| `BACKUP_S3_PREFIX` | `belune/` | Fallback only |
+| `BACKUP_S3_ACCESS_KEY` | *empty* | Secret. Fallback only |
+| `BACKUP_S3_SECRET_KEY` | *empty* | Secret. Fallback only |
+| `BACKUP_S3_USE_SSL` | `true` | Fallback only |
+| `BACKUP_ENCRYPTION_KEY` | *empty* | age public key (or path to a file containing one); encrypts the archive as `.tar.gz.age`. Stays `.env`-only — not part of `backup-remote.env` |
 
 ## Database backups
 

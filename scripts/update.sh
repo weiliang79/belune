@@ -208,6 +208,17 @@ if [[ -n "${FM_UID}" && -n "${FM_GID}" ]]; then
   chown "${FM_UID}:${FM_GID}" "${INSTALL_DIR}/backups"
 fi
 
+# Same for the remote-storage config file (Q1): a FILE bind mount, so `touch`
+# it (not mkdir) before the reconcile brings the newly-added mount up, then
+# chown it — an install predating this has no such file, and the container
+# needs to already own it since it can't create a new directory entry in the
+# root-owned install dir.
+touch "${INSTALL_DIR}/backup-remote.env"
+chmod 600 "${INSTALL_DIR}/backup-remote.env"
+if [[ -n "${FM_UID}" && -n "${FM_GID}" ]]; then
+  chown "${FM_UID}:${FM_GID}" "${INSTALL_DIR}/backup-remote.env"
+fi
+
 # Full reconcile, not --no-deps belune: the refreshed compose may change any
 # service (a new dependency, a Caddy/Redis/BuildKit tweak), and only `up -d` over
 # the whole project applies those. Compose recreates only what actually changed,

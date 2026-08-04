@@ -1,8 +1,10 @@
 package handler
 
 import (
+	"encoding/json"
 	"errors"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/hibiken/asynq"
@@ -24,14 +26,25 @@ type backupRunView struct {
 }
 
 // backupRemoteView exposes the non-secret remote-storage config so the admin UI
-// can show where control-plane backups are uploaded. Credentials are never
-// returned — remote storage is configured via BACKUP_S3_* env vars in .env.
+// can show where control-plane backups are uploaded, and edit it. Credentials
+// (access_key/secret_key) are never returned — write-only, same convention as
+// project backup destinations.
 type backupRemoteView struct {
 	Endpoint string `json:"endpoint"`
 	Region   string `json:"region"`
 	Bucket   string `json:"bucket"`
 	Prefix   string `json:"prefix"`
 	UseSSL   bool   `json:"use_ssl"`
+}
+
+func toBackupRemoteView(rc backup.RemoteConfig) backupRemoteView {
+	return backupRemoteView{
+		Endpoint: rc.Endpoint,
+		Region:   rc.Region,
+		Bucket:   rc.Bucket,
+		Prefix:   rc.Prefix,
+		UseSSL:   rc.UseSSL,
+	}
 }
 
 type backupStatusView struct {
@@ -78,21 +91,17 @@ func (h *Handler) ListBackupRuns(w http.ResponseWriter, r *http.Request) {
 
 // GetBackupStatus returns a summary of the most recent backup activity.
 func (h *Handler) GetBackupStatus(w http.ResponseWriter, r *http.Request) {
+	rc := backup.LoadRemoteConfig(h.cfg)
 	status := backupStatusView{
-		RemoteEnabled: h.cfg.BackupRemoteEnabled,
+		RemoteEnabled: rc.Enabled,
 		Retention: map[string]any{
 			"days":  h.cfg.BackupRetainDays,
 			"count": h.cfg.BackupRetainCount,
 		},
 	}
-	if h.cfg.BackupRemoteEnabled {
-		status.Remote = &backupRemoteView{
-			Endpoint: h.cfg.BackupS3Endpoint,
-			Region:   h.cfg.BackupS3Region,
-			Bucket:   h.cfg.BackupS3Bucket,
-			Prefix:   h.cfg.BackupS3Prefix,
-			UseSSL:   h.cfg.BackupS3UseSSL,
-		}
+	if rc.Enabled {
+		v := toBackupRemoteView(rc)
+		status.Remote = &v
 	}
 
 	if last, err := h.queries.GetLastBackupRun(r.Context()); err == nil {
@@ -142,13 +151,14 @@ func (h *Handler) TriggerBackupRun(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusAccepted, map[string]string{"status": "queued"})
 }
 
-// TestBackupRemote verifies the env-configured remote storage is reachable and
-// the bucket exists, without mutating anything. Read-only diagnostic for the
-// admin Backups tab.
+// TestBackupRemote verifies the currently configured remote storage
+// (dashboard-managed file, falling back to .env) is reachable and the bucket
+// exists, without mutating anything. Read-only diagnostic for the admin
+// Backups tab.
 func (h *Handler) TestBackupRemote(w http.ResponseWriter, r *http.Request) {
-	if !h.cfg.BackupRemoteEnabled {
+	if !backup.LoadRemoteConfig(h.cfg).Enabled {
 		writeError(w, http.StatusBadRequest,
-			"remote storage is disabled — set BACKUP_REMOTE_ENABLED and BACKUP_S3_* in .env")
+			"remote storage is disabled — enable it from the Remote Storage card")
 		return
 	}
 	if err := backup.New(h.cfg).Check(r.Context()); err != nil {
@@ -156,4 +166,65 @@ func (h *Handler) TestBackupRemote(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+type updateBackupRemoteRequest struct {
+	Enabled   *bool  `json:"enabled"`
+	Endpoint  string `json:"endpoint"`
+	Region    string `json:"region"`
+	Bucket    string `json:"bucket"`
+	Prefix    string `json:"prefix"`
+	UseSSL    *bool  `json:"use_ssl"`
+	AccessKey string `json:"access_key"`
+	SecretKey string `json:"secret_key"`
+}
+
+// UpdateBackupRemote saves the dashboard-managed control-plane remote-storage
+// config to cfg.BackupRemoteConfigPath (mode 0600), read fresh by the worker's
+// S3 client and by scripts/backup.sh/belune-backup-upload on the next backup —
+// no restart needed. Endpoint/region/bucket/prefix/use_ssl/enabled always
+// reflect the submitted form state; a blank access_key or secret_key preserves
+// the currently stored one (same convention as project backup destinations),
+// so the dashboard never has to redisplay a saved secret to let the operator
+// edit unrelated fields.
+func (h *Handler) UpdateBackupRemote(w http.ResponseWriter, r *http.Request) {
+	var req updateBackupRemoteRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	enabled := req.Enabled != nil && *req.Enabled
+	bucket := strings.TrimSpace(req.Bucket)
+	if enabled && bucket == "" {
+		writeError(w, http.StatusBadRequest, "bucket is required to enable remote storage")
+		return
+	}
+
+	current := backup.LoadRemoteConfig(h.cfg)
+	next := backup.RemoteConfig{
+		Enabled:   enabled,
+		Endpoint:  strings.TrimSpace(req.Endpoint),
+		Region:    strings.TrimSpace(req.Region),
+		Bucket:    bucket,
+		Prefix:    strings.TrimSpace(req.Prefix),
+		UseSSL:    req.UseSSL == nil || *req.UseSSL,
+		AccessKey: current.AccessKey,
+		SecretKey: current.SecretKey,
+	}
+	if req.AccessKey != "" {
+		next.AccessKey = req.AccessKey
+	}
+	if req.SecretKey != "" {
+		next.SecretKey = req.SecretKey
+	}
+
+	if err := backup.SaveRemoteConfig(h.cfg.BackupRemoteConfigPath, next); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to save remote storage config")
+		return
+	}
+
+	h.audit(r, "update_backup_remote", "backup", "", nil)
+	v := toBackupRemoteView(next)
+	writeJSON(w, http.StatusOK, map[string]any{"status": "saved", "remote": v})
 }

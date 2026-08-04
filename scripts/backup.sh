@@ -27,6 +27,22 @@ TIMESTAMP=$(date -u +"%Y%m%dT%H%M%SZ")
 BACKUP_NAME="belune-backup-${TIMESTAMP}"
 WORK_DIR="${BACKUP_DIR}/${BACKUP_NAME}"
 LOCK_FILE="${BACKUP_DIR}/.lock"
+# Dashboard-managed remote-storage config (Server → Backups → Remote Storage).
+# Takes precedence over BACKUP_S3_*/BACKUP_REMOTE_ENABLED in .env, matching
+# service/backup.LoadRemoteConfig's per-key fallback — see read_remote_config().
+REMOTE_CONFIG_FILE="${INSTALL_DIR}/backup-remote.env"
+
+# read_remote_config reads KEY from REMOTE_CONFIG_FILE if it exists and sets
+# it, falling back to the same key in .env — the bash-side mirror of
+# service/backup.LoadRemoteConfig's per-key precedence.
+read_remote_config() {
+  local key="$1" v
+  if [[ -f "${REMOTE_CONFIG_FILE}" ]]; then
+    v=$(grep "^${key}=" "${REMOTE_CONFIG_FILE}" 2>/dev/null | tail -1 | cut -d= -f2- | tr -d '"')
+    [[ -n "${v}" ]] && { echo "${v}"; return; }
+  fi
+  grep "^${key}=" "${INSTALL_DIR}/.env" 2>/dev/null | tail -1 | cut -d= -f2- | tr -d '"'
+}
 
 # Resolve encryption key from env or .env file
 BACKUP_ENCRYPTION_KEY="${BACKUP_ENCRYPTION_KEY:-}"
@@ -139,6 +155,11 @@ info "Copying .env..."
 cp .env "${WORK_DIR}/.env"
 success ".env backed up."
 
+if [[ -f "${REMOTE_CONFIG_FILE}" ]]; then
+  cp "${REMOTE_CONFIG_FILE}" "${WORK_DIR}/backup-remote.env"
+  success "backup-remote.env backed up."
+fi
+
 # ── Archive ────────────────────────────────────────────────────────────────────
 
 ARCHIVE="${BACKUP_DIR}/${BACKUP_NAME}.tar.gz"
@@ -170,24 +191,23 @@ fi
 
 # ── Remote upload (optional) ──────────────────────────────────────────────────
 
-BACKUP_REMOTE_ENABLED="${BACKUP_REMOTE_ENABLED:-}"
-if [[ -z "${BACKUP_REMOTE_ENABLED}" && -f "${INSTALL_DIR}/.env" ]]; then
-  BACKUP_REMOTE_ENABLED=$(grep '^BACKUP_REMOTE_ENABLED=' "${INSTALL_DIR}/.env" 2>/dev/null \
-    | cut -d= -f2- | tr -d '"' || true)
-fi
-
 REMOTE_KEY=""
-if [[ "${BACKUP_REMOTE_ENABLED}" == "true" ]]; then
+if [[ "$(read_remote_config BACKUP_REMOTE_ENABLED)" == "true" ]]; then
   UPLOAD_BIN="${INSTALL_DIR}/bin/belune-backup-upload"
   if [[ ! -x "${UPLOAD_BIN}" ]]; then
     die "belune-backup-upload not found at ${UPLOAD_BIN}. Re-run update.sh to extract it."
   fi
   info "Uploading ${ARCHIVE} to remote storage..."
-  # Source .env so all BACKUP_S3_* variables are available to the helper.
+  # belune-backup-upload resolves BACKUP_S3_*/BACKUP_REMOTE_ENABLED itself
+  # (backup-remote.env, falling back to .env) via the same config.Load() +
+  # LoadRemoteConfig path the API uses — so it needs JWT_SECRET (required by
+  # config.Load()) from .env, and BELUNE_DIR pointed at the same install this
+  # script is running against, in case $1 overrode the *output* dir above.
   set -a
   # shellcheck source=/dev/null
   [[ -f "${INSTALL_DIR}/.env" ]] && source "${INSTALL_DIR}/.env"
   set +a
+  export BELUNE_DIR="${INSTALL_DIR}"
   UPLOAD_OUTPUT=$("${UPLOAD_BIN}" "${ARCHIVE}")
   echo "${UPLOAD_OUTPUT}"
   REMOTE_KEY="${UPLOAD_OUTPUT#uploaded: }"

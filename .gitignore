@@ -32,6 +32,7 @@ apps/api/web/dist/*
 .env
 .env.local
 .env.*.local
+backup-remote.env
 
 # IDE
 .vscode/

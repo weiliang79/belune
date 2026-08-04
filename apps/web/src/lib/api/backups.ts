@@ -1,4 +1,4 @@
-import type { BackupRun, BackupStatus } from "@/lib/types";
+import type { BackupRemoteConfig, BackupRun, BackupStatus } from "@/lib/types";
 import { api } from "./client";
 
 export function listBackupRuns() {
@@ -15,4 +15,23 @@ export function triggerBackupRun() {
 
 export function testBackupRemote() {
   return api.post<{ status: string }>("/backups/test");
+}
+
+export interface UpdateBackupRemoteData {
+  enabled: boolean;
+  endpoint: string;
+  region: string;
+  bucket: string;
+  prefix: string;
+  use_ssl: boolean;
+  /** Blank preserves the currently stored secret. */
+  access_key?: string;
+  secret_key?: string;
+}
+
+export function updateBackupRemote(data: UpdateBackupRemoteData) {
+  return api.put<{ status: string; remote: BackupRemoteConfig }>(
+    "/backups/remote",
+    data,
+  );
 }
