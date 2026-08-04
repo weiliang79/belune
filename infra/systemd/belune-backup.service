@@ -1,5 +1,5 @@
 [Unit]
-Description=Belune — nightly backup
+Description=Belune — manual/CLI control-plane backup (daily backups run in-app; see Server → Backups)
 Documentation=https://github.com/weiliang79/belune/blob/main/docs/runbooks/backup-storage.md
 After=docker.service belune.service
 Requires=docker.service

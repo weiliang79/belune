@@ -18,8 +18,12 @@ These targets assume a recent backup exists and a replacement host is available.
 
 ## Backup strategy
 
-The platform runs `scripts/backup.sh` on a built-in daily schedule (default
-02:00 UTC) with automatic rotation. Archives contain:
+The platform runs a built-in daily schedule (default 02:00 UTC, configurable
+under **Server → Backups**) with automatic rotation. The scheduled and manual
+"Run Backup Now" backups execute natively in the worker; `scripts/backup.sh`
+is the host/CLI equivalent (used for manual runs and by `update.sh` before a
+version move) and produces the identical archive format — both record every
+run in the dashboard. Archives contain:
 - Full Postgres SQL dump
 - Caddy TLS data (certificates + config)
 - `.env` file

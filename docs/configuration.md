@@ -92,18 +92,23 @@ Rotation is a procedure, not a setting — see
 |---|---|---|
 | `BELUNE_DIR` | `/opt/belune` | Install root. Owned by the install, backup, restore and update scripts |
 | `FILE_MOUNTS_DIR` | *derived* | *Internal* — from `BELUNE_DIR` |
-| `BACKUP_SCRIPT_PATH` | *derived* | *Internal* — from `BELUNE_DIR` |
+| `CONTROL_PLANE_BACKUP_DIR` | *derived* | *Internal* — from `BELUNE_DIR`. Where the worker writes control-plane archives; same directory `scripts/backup.sh`/`restore.sh` use |
+| `ENV_FILE_PATH` | *derived* | *Internal* — from `BELUNE_DIR`. Where the worker reads `.env` to copy into a control-plane archive |
 | `DATABASE_BACKUP_DIR` | *derived* | *Internal* — from `BELUNE_DIR` |
 
 ## Platform backups
 
-Control-plane backups: the Belune database and Caddy certificates. Distinct from
-per-database backups below.
+Control-plane backups: the Belune database and Caddy certificates. Both the
+in-app schedule/manual trigger (Server → Backups) and `scripts/backup.sh`
+(host CLI, used for manual/DR runs and by `update.sh` before a version move)
+produce the same archive format and record every run — there is no longer a
+systemd timer; the daily trigger is the in-app schedule (`control_plane_backup_schedule`
+setting, default `0 2 * * *`). Distinct from per-database backups below.
 
 | Variable | Default | Notes |
 |---|---|---|
 | `BACKUP_REMOTE_ENABLED` | `false` | |
-| `BACKUP_RETAIN_COUNT` | `14` | |
+| `BACKUP_RETAIN_COUNT` | `14` | Applies to local archives too, not just the remote bucket |
 | `BACKUP_RETAIN_DAYS` | `30` | |
 | `BACKUP_S3_BUCKET` | *empty* | |
 | `BACKUP_S3_ENDPOINT` | *empty* | For S3-compatible providers |
@@ -112,6 +117,7 @@ per-database backups below.
 | `BACKUP_S3_ACCESS_KEY` | *empty* | Secret |
 | `BACKUP_S3_SECRET_KEY` | *empty* | Secret |
 | `BACKUP_S3_USE_SSL` | `true` | |
+| `BACKUP_ENCRYPTION_KEY` | *empty* | age public key (or path to a file containing one); encrypts the archive as `.tar.gz.age` |
 
 ## Database backups
 

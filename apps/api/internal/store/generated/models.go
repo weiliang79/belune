@@ -159,6 +159,7 @@ type BackupRun struct {
 	SizeBytes  int64              `json:"size_bytes"`
 	Error      pgtype.Text        `json:"error"`
 	Log        string             `json:"log"`
+	Trigger    string             `json:"trigger"`
 }
 
 type Certificate struct {

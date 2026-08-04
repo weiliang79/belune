@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/robfig/cron/v3"
 	"strings"
 
 	"github.com/weiliang79/belune/internal/config"
@@ -119,6 +120,18 @@ func (h *Handler) UpdateSettings(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			req[i].Value = ip
+
+		case config.SettingControlPlaneBackupSchedule:
+			// Blank falls back to config.DefaultControlPlaneBackupSchedule (see the
+			// worker sweep) — only validate when the operator sets one explicitly.
+			sched := strings.TrimSpace(s.Value)
+			if sched != "" {
+				if _, err := cron.ParseStandard(sched); err != nil {
+					writeError(w, http.StatusBadRequest, "invalid cron schedule")
+					return
+				}
+			}
+			req[i].Value = sched
 		}
 	}
 

@@ -12,7 +12,7 @@ import (
 )
 
 const getLastBackupRun = `-- name: GetLastBackupRun :one
-SELECT id, started_at, finished_at, status, remote_key, size_bytes, error, log
+SELECT id, started_at, finished_at, status, remote_key, size_bytes, error, log, trigger
 FROM backup_runs
 ORDER BY started_at DESC
 LIMIT 1
@@ -30,12 +30,13 @@ func (q *Queries) GetLastBackupRun(ctx context.Context) (BackupRun, error) {
 		&i.SizeBytes,
 		&i.Error,
 		&i.Log,
+		&i.Trigger,
 	)
 	return i, err
 }
 
 const getLastSucceededBackupRun = `-- name: GetLastSucceededBackupRun :one
-SELECT id, started_at, finished_at, status, remote_key, size_bytes, error, log
+SELECT id, started_at, finished_at, status, remote_key, size_bytes, error, log, trigger
 FROM backup_runs
 WHERE status = 'succeeded'
 ORDER BY finished_at DESC
@@ -54,17 +55,19 @@ func (q *Queries) GetLastSucceededBackupRun(ctx context.Context) (BackupRun, err
 		&i.SizeBytes,
 		&i.Error,
 		&i.Log,
+		&i.Trigger,
 	)
 	return i, err
 }
 
 const insertBackupRun = `-- name: InsertBackupRun :one
-INSERT INTO backup_runs DEFAULT VALUES
-RETURNING id, started_at, finished_at, status, remote_key, size_bytes, error, log
+INSERT INTO backup_runs (trigger)
+VALUES ($1)
+RETURNING id, started_at, finished_at, status, remote_key, size_bytes, error, log, trigger
 `
 
-func (q *Queries) InsertBackupRun(ctx context.Context) (BackupRun, error) {
-	row := q.db.QueryRow(ctx, insertBackupRun)
+func (q *Queries) InsertBackupRun(ctx context.Context, trigger string) (BackupRun, error) {
+	row := q.db.QueryRow(ctx, insertBackupRun, trigger)
 	var i BackupRun
 	err := row.Scan(
 		&i.ID,
@@ -75,12 +78,13 @@ func (q *Queries) InsertBackupRun(ctx context.Context) (BackupRun, error) {
 		&i.SizeBytes,
 		&i.Error,
 		&i.Log,
+		&i.Trigger,
 	)
 	return i, err
 }
 
 const listBackupRuns = `-- name: ListBackupRuns :many
-SELECT id, started_at, finished_at, status, remote_key, size_bytes, error, log
+SELECT id, started_at, finished_at, status, remote_key, size_bytes, error, log, trigger
 FROM backup_runs
 ORDER BY started_at DESC
 LIMIT $1
@@ -104,6 +108,7 @@ func (q *Queries) ListBackupRuns(ctx context.Context, limit int32) ([]BackupRun,
 			&i.SizeBytes,
 			&i.Error,
 			&i.Log,
+			&i.Trigger,
 		); err != nil {
 			return nil, err
 		}

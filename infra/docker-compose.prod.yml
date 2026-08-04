@@ -55,6 +55,18 @@ services:
       # writes into its own ephemeral fs and the app-container bind finds nothing.
       # install.sh/update.sh create this dir owned by the belune container's uid.
       - ./filemounts:/opt/belune/filemounts
+      # Control-plane backups (Postgres dump + Caddy TLS data + .env), written
+      # natively by the worker (ControlPlaneBackupDir defaults to
+      # /opt/belune/backups). Must be the SAME host path scripts/backup.sh and
+      # restore.sh use — restore.sh is host-CLI-only by design (must work when
+      # the dashboard/DB are down), so the archive has to land on the host, not
+      # in a named volume the host can't read directly.
+      - ./backups:/opt/belune/backups
+      # Read-only copy of .env so a control-plane backup can include it verbatim
+      # (env_file: above injects variables into the process but not the file
+      # itself). install.sh/update.sh create ./backups owned by the belune
+      # container's uid, same pattern as filemounts.
+      - ./.env:/opt/belune/.env:ro
     # The image runs as the non-root `belune` user, so mounting the socket is not
     # enough — it must also be in the group that owns it on the host. The GID
     # differs per distro (Debian/Ubuntu usually 999), hence the override:

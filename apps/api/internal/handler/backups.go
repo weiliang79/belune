@@ -3,7 +3,6 @@ package handler
 import (
 	"errors"
 	"net/http"
-	"os"
 	"time"
 
 	"github.com/hibiken/asynq"
@@ -130,18 +129,6 @@ func (h *Handler) TriggerBackupRun(w http.ResponseWriter, r *http.Request) {
 	}
 	if err == nil && last.Status == "running" {
 		writeError(w, http.StatusConflict, "a backup is already in progress")
-		return
-	}
-
-	// Fail fast when the backup script is missing so the user gets immediate
-	// feedback instead of an enqueued task that always fails in the worker.
-	scriptPath := h.cfg.BackupScriptPath
-	if scriptPath == "" {
-		scriptPath = "/opt/belune/scripts/backup.sh"
-	}
-	if _, statErr := os.Stat(scriptPath); errors.Is(statErr, os.ErrNotExist) {
-		writeError(w, http.StatusBadRequest,
-			"backup script not found at "+scriptPath+" — this host is not configured for control-plane backups")
 		return
 	}
 

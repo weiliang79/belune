@@ -193,9 +193,11 @@ If anything sticks in `pending` or `building`, see
 
 ## 8. Backups
 
-The platform includes a built-in backup scheduler that runs `scripts/backup.sh`
-on a daily schedule (default 02:00 UTC) and enforces a rotation policy. No
-external cron job is required.
+The platform includes a built-in backup scheduler (in-app cron, configurable
+under **Server → Backups**; default daily at 02:00) that runs natively in the
+worker and enforces a rotation policy. No external cron job or systemd timer
+is required. `scripts/backup.sh` remains available as a host/CLI equivalent
+for manual runs and pre-update backups, producing the same archive format.
 
 **Defaults** (active with no configuration):
 - Daily local backup to `BELUNE_DIR/backups/` (i.e. `/opt/belune/backups/`).

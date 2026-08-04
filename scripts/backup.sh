@@ -3,6 +3,14 @@
 # Creates a timestamped backup of Postgres data and Caddy TLS certs.
 # Usage: bash backup.sh [output-dir]
 #
+# This is the host/CLI backup path — used for manual runs
+# (`systemctl start belune-backup.service`) and by update.sh before a version
+# move. Daily automatic backups run in-app instead (Server → Backups: cron +
+# retention), executed natively by the worker via the Docker API. Both
+# producers write the SAME archive format to the SAME directory and record
+# their own row in backup_runs (this script as trigger='cli', the worker as
+# trigger='worker'), and take the same flock so they can never race each other.
+#
 # Optional encryption (age):
 #   Set BACKUP_ENCRYPTION_KEY to an age public key (starts with "age1...")
 #   or to a path of a file containing the public key.
@@ -18,6 +26,7 @@ BACKUP_DIR="${1:-${INSTALL_DIR}/backups}"
 TIMESTAMP=$(date -u +"%Y%m%dT%H%M%SZ")
 BACKUP_NAME="belune-backup-${TIMESTAMP}"
 WORK_DIR="${BACKUP_DIR}/${BACKUP_NAME}"
+LOCK_FILE="${BACKUP_DIR}/.lock"
 
 # Resolve encryption key from env or .env file
 BACKUP_ENCRYPTION_KEY="${BACKUP_ENCRYPTION_KEY:-}"
@@ -28,7 +37,54 @@ fi
 
 info()    { echo "  [info]  $*"; }
 success() { echo "  [ok]    $*"; }
-die()     { echo "  [err]   $*" >&2; exit 1; }
+die()     { echo "  [err]   $*" >&2; record_finish "failed" 0 "" "$*"; exit 1; }
+
+# ── backup_runs recording (best-effort — a DB hiccup must never fail the
+# actual backup, which is the whole point of this being a host/offline path) ──
+
+BACKUP_RUN_ID=""
+RUN_RECORDED=0
+
+# sql_escape doubles single quotes so a value can be safely interpolated into
+# a single-quoted SQL string literal.
+sql_escape() { printf '%s' "$1" | sed "s/'/''/g"; }
+
+# run_sql executes a statement via `docker exec … psql` and prints its first
+# output line. Silently returns empty on any failure (no DB_CONTAINER yet, DB
+# unreachable, migration not applied) — recording a run is a nice-to-have, not
+# a requirement for the backup itself to succeed.
+#
+# `head -1` matters even for a single-row `-tAc` query: psql still appends its
+# command completion tag (e.g. "INSERT 0 1") as a second line after an
+# INSERT...RETURNING result, which would otherwise corrupt a captured id with
+# a trailing newline + tag.
+run_sql() {
+  [[ -n "${DB_CONTAINER:-}" ]] || return 0
+  docker exec -i "${DB_CONTAINER}" psql -U "${PG_USER}" -d "${PG_DB}" -tAc "$1" 2>/dev/null | head -1 || true
+}
+
+# record_finish updates BACKUP_RUN_ID's row once (idempotent — die() and the
+# exit trap can both try). No-op if no row was ever inserted.
+record_finish() {
+  [[ -n "${BACKUP_RUN_ID}" && "${RUN_RECORDED}" == "0" ]] || return 0
+  RUN_RECORDED=1
+  local status="$1" size="${2:-0}" key="${3:-}" err="${4:-}"
+  local key_sql="NULL" err_sql="NULL"
+  [[ -n "${key}" ]] && key_sql="'$(sql_escape "${key}")'"
+  [[ -n "${err}" ]] && err_sql="'$(sql_escape "${err}")'"
+  run_sql "UPDATE backup_runs SET finished_at = NOW(), status = '${status}', size_bytes = ${size}, remote_key = ${key_sql}, error = ${err_sql} WHERE id = '${BACKUP_RUN_ID}';" >/dev/null
+}
+
+# Any exit before the explicit "succeeded" record_finish call at the bottom —
+# a bare `set -e` exit from a command with no `|| die`, or Ctrl-C — is a
+# failure that die() never got a chance to record with a specific message.
+on_exit() {
+  local rc=$?
+  if [[ ${rc} -ne 0 ]]; then
+    record_finish "failed" 0 "" "backup.sh exited with status ${rc}"
+  fi
+}
+trap on_exit EXIT
 
 [[ -f "${INSTALL_DIR}/docker-compose.yml" ]] || \
   die "No docker-compose.yml found at ${INSTALL_DIR}. Is Belune installed?"
@@ -40,6 +96,14 @@ echo "  Belune — Backup"
 echo "  ==========================="
 echo ""
 
+mkdir -p "${BACKUP_DIR}"
+
+# Exclusive, non-blocking: the worker (in-app cron/manual) takes this same
+# lock via the bind-mounted ./backups directory, so a concurrent worker run
+# and CLI run can never write over each other's archive.
+exec 200>"${LOCK_FILE}"
+flock -n 200 || die "a backup is already in progress (${LOCK_FILE} is locked)"
+
 mkdir -p "${WORK_DIR}"
 
 # ── Postgres dump ──────────────────────────────────────────────────────────────
@@ -48,6 +112,8 @@ info "Dumping Postgres database..."
 DB_CONTAINER=$(docker compose ps -q postgres 2>/dev/null) || die "Postgres container not running."
 PG_USER=$(grep 'POSTGRES_USER' .env 2>/dev/null | cut -d= -f2 || echo "belune")
 PG_DB=$(grep 'POSTGRES_DB'   .env 2>/dev/null | cut -d= -f2 || echo "belune")
+
+BACKUP_RUN_ID=$(run_sql "INSERT INTO backup_runs (trigger) VALUES ('cli') RETURNING id;")
 
 docker exec "${DB_CONTAINER}" \
   pg_dump -U "${PG_USER}" -d "${PG_DB}" --no-password \
@@ -110,6 +176,7 @@ if [[ -z "${BACKUP_REMOTE_ENABLED}" && -f "${INSTALL_DIR}/.env" ]]; then
     | cut -d= -f2- | tr -d '"' || true)
 fi
 
+REMOTE_KEY=""
 if [[ "${BACKUP_REMOTE_ENABLED}" == "true" ]]; then
   UPLOAD_BIN="${INSTALL_DIR}/bin/belune-backup-upload"
   if [[ ! -x "${UPLOAD_BIN}" ]]; then
@@ -121,9 +188,14 @@ if [[ "${BACKUP_REMOTE_ENABLED}" == "true" ]]; then
   # shellcheck source=/dev/null
   [[ -f "${INSTALL_DIR}/.env" ]] && source "${INSTALL_DIR}/.env"
   set +a
-  "${UPLOAD_BIN}" "${ARCHIVE}"
+  UPLOAD_OUTPUT=$("${UPLOAD_BIN}" "${ARCHIVE}")
+  echo "${UPLOAD_OUTPUT}"
+  REMOTE_KEY="${UPLOAD_OUTPUT#uploaded: }"
   success "Remote upload complete."
 fi
+
+SIZE_BYTES=$(stat -c%s "${ARCHIVE}" 2>/dev/null || echo 0)
+record_finish "succeeded" "${SIZE_BYTES}" "${REMOTE_KEY}" ""
 
 echo ""
 success "Backup complete: ${ARCHIVE}"

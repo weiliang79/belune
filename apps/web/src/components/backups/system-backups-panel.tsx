@@ -1,12 +1,20 @@
+import { useState } from "react";
 import { toast } from "sonner";
 import type { ColumnDef } from "@tanstack/react-table";
-import { Archive, ArchiveRestore, Cloud, HistoryIcon } from "lucide-react";
+import {
+  Archive,
+  ArchiveRestore,
+  Clock,
+  Cloud,
+  HistoryIcon,
+} from "lucide-react";
 import {
   useBackupRuns,
   useBackupStatus,
   useTriggerBackup,
   useTestBackupRemote,
 } from "@/lib/hooks/use-backups";
+import { useSettings, useUpdateSettings } from "@/lib/hooks/use-settings";
 import {
   Card,
   CardContent,
@@ -16,7 +24,10 @@ import {
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { BlobLogViewer } from "@/components/logs/blob-log-viewer";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { StatusPill } from "@/components/ui/status-pill";
+import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { DataTable } from "@/components/ui/data-table";
@@ -27,6 +38,10 @@ import {
   formatDateTimeShort,
 } from "@/lib/utils/format";
 import type { BackupRun, BackupStatus } from "@/lib/types";
+
+// Matches config.DefaultControlPlaneBackupSchedule on the API — daily at
+// 02:00, the cadence the retired belune-backup.timer used to run at.
+const DEFAULT_BACKUP_SCHEDULE = "0 2 * * *";
 
 /** "YYYY-MM-DD HH:mm:ss" for table cells (null-safe). */
 function fmtTableDate(iso: string | null) {
@@ -189,6 +204,8 @@ export function SystemBackupsPanel() {
         </CardContent>
       </Card>
 
+      <BackupScheduleCard />
+
       <RemoteStorageCard status={status} loading={statusLoading} />
 
       <Card>
@@ -245,6 +262,109 @@ export function SystemBackupsPanel() {
 
       <RestoreHelpCard remoteEnabled={!!status?.remote_enabled} />
     </div>
+  );
+}
+
+// BackupScheduleCard configures the in-app cron sweep that replaced
+// belune-backup.timer — the worker checks this schedule once a minute
+// (backup_schedule_task.go) and enqueues the same "Run Backup Now" task a
+// manual click would. Backed by the generic settings table (no dedicated
+// endpoint), so the toggle applies immediately but the schedule text needs an
+// explicit Save (it's free text, not a click).
+function BackupScheduleCard() {
+  const { data: settings, isLoading } = useSettings();
+  const updateSettings = useUpdateSettings();
+
+  const enabled =
+    settings?.find((s) => s.key === "control_plane_backup_enabled")?.value !==
+    "false";
+  const storedSchedule = settings?.find(
+    (s) => s.key === "control_plane_backup_schedule",
+  )?.value;
+
+  // null = no unsaved edit yet, so the field tracks the server value; once the
+  // operator types, draft takes over until Save resets it to null.
+  const [draft, setDraft] = useState<string | null>(null);
+  const schedule = draft ?? storedSchedule ?? DEFAULT_BACKUP_SCHEDULE;
+
+  const handleToggle = (next: boolean) => {
+    toast.promise(
+      updateSettings.mutateAsync([
+        { key: "control_plane_backup_enabled", value: next ? "true" : "false" },
+      ]),
+      {
+        loading: "Saving…",
+        success: `Scheduled backups ${next ? "enabled" : "disabled"}`,
+        error: (err) => err.message ?? "Failed to save",
+      },
+    );
+  };
+
+  const handleSave = () => {
+    toast.promise(
+      updateSettings
+        .mutateAsync([
+          { key: "control_plane_backup_schedule", value: schedule.trim() },
+        ])
+        .then(() => setDraft(null)),
+      {
+        loading: "Saving…",
+        success: "Schedule updated",
+        error: (err) => err.message ?? "Invalid cron schedule",
+      },
+    );
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center justify-between gap-2">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <Clock aria-hidden="true" className="size-4" />
+              Schedule
+            </CardTitle>
+            <CardDescription>
+              Automatic control-plane backups, on top of any manual runs.
+            </CardDescription>
+          </div>
+          <Switch
+            checked={enabled}
+            disabled={isLoading || updateSettings.isPending}
+            onCheckedChange={handleToggle}
+            aria-label="Scheduled backups"
+          />
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-2">
+        <Label htmlFor="backup-schedule" className="text-sm">
+          Cron schedule
+        </Label>
+        <div className="flex items-center gap-2">
+          <Input
+            id="backup-schedule"
+            value={schedule}
+            onChange={(e) => setDraft(e.target.value)}
+            disabled={!enabled || isLoading}
+            className="max-w-xs font-mono text-sm"
+            placeholder={DEFAULT_BACKUP_SCHEDULE}
+          />
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={handleSave}
+            disabled={draft === null || updateSettings.isPending}
+          >
+            Save
+          </Button>
+        </div>
+        <p className="text-text-faint text-xs">
+          Standard 5-field cron (minute hour day-of-month month weekday),
+          evaluated in the server's local time. Default: daily at 02:00 (
+          <code className="font-mono">{DEFAULT_BACKUP_SCHEDULE}</code>).
+        </p>
+      </CardContent>
+    </Card>
   );
 }
 

@@ -198,12 +198,11 @@ curl -sSfL "${RAW_URL}/.env.example" -o .env.example
 
 info "Downloading systemd units..."
 curl -sSfL "${RAW_URL}/infra/systemd/belune.service" -o infra/systemd/belune.service
-# belune-backup.{service,timer} are copied into /etc/systemd/system below; the
-# service's ExecStart runs scripts/backup.sh from the install dir. All three were
-# referenced by the systemd step but never fetched, so a root+systemd install
-# died on the missing file — after the stack was already up.
+# belune-backup.service is copied into /etc/systemd/system below as a
+# manual/CLI DR fallback (`systemctl start belune-backup.service` runs
+# scripts/backup.sh from the install dir). There is no timer: daily backups run
+# in-app now (Server → Backups).
 curl -sSfL "${RAW_URL}/infra/systemd/belune-backup.service" -o infra/systemd/belune-backup.service
-curl -sSfL "${RAW_URL}/infra/systemd/belune-backup.timer" -o infra/systemd/belune-backup.timer
 
 info "Downloading host scripts..."
 # backup.sh is run by belune-backup.service (and by update.sh before it moves the
@@ -357,6 +356,21 @@ else
   info "Could not detect the belune container uid — set ${INSTALL_DIR}/filemounts writable by it if file mounts fail."
 fi
 
+# ── Backups directory ────────────────────────────────────────────────────────
+
+# Control-plane backup archives now land here from BOTH producers: the worker
+# (in-app cron/manual, bind-mounted into the belune container at the same
+# path) and scripts/backup.sh (host CLI). Same ownership fix as file-mounts —
+# the worker runs as the non-root `belune` user and needs write access.
+info "Preparing the backups directory..."
+mkdir -p "${INSTALL_DIR}/backups"
+if [[ -n "${FM_UID}" && -n "${FM_GID}" ]]; then
+  chown "${FM_UID}:${FM_GID}" "${INSTALL_DIR}/backups"
+  success "Backups directory ready (owner ${FM_UID}:${FM_GID})."
+else
+  info "Could not detect the belune container uid — set ${INSTALL_DIR}/backups writable by it if in-app backups fail."
+fi
+
 info "Starting services..."
 docker compose up -d
 
@@ -410,30 +424,35 @@ if [[ -d /run/systemd/system ]] && [[ ${EUID:-$(id -u)} -eq 0 ]]; then
     info "/etc/systemd/system/belune.service already exists — skipping."
   fi
 
-  # ── Backup timer ──────────────────────────────────────────────────────────────
-  if [[ ! -f /etc/systemd/system/belune-backup.timer ]]; then
-    info "Installing belune-backup.service and belune-backup.timer..."
+  # ── Backup service (manual/CLI DR fallback only) ──────────────────────────────
+  # The daily trigger now lives in-app (Server → Backups: cron + retention,
+  # defaults to 02:00) so the worker records every run in backup_runs. The
+  # belune-backup.timer is deliberately NOT installed here — running both would
+  # produce two backups a day and race on the shared archive lockfile. The
+  # service unit is still installed so `systemctl start belune-backup.service`
+  # works as a host-only fallback when the dashboard/DB are down.
+  if [[ ! -f /etc/systemd/system/belune-backup.service ]]; then
+    info "Installing belune-backup.service (manual/CLI backups only — daily backups run in-app)..."
     if [[ "${INSTALL_DIR}" != "/opt/belune" ]]; then
       sed "s|/opt/belune|${INSTALL_DIR}|g" \
         infra/systemd/belune-backup.service > /etc/systemd/system/belune-backup.service
     else
       cp infra/systemd/belune-backup.service /etc/systemd/system/belune-backup.service
     fi
-    cp infra/systemd/belune-backup.timer /etc/systemd/system/belune-backup.timer
     systemctl daemon-reload
-    systemctl enable --now belune-backup.timer >/dev/null 2>&1 || true
-    success "belune-backup.timer installed and enabled (daily backups at 02:00)."
+    success "belune-backup.service installed (run manually with: systemctl start belune-backup.service)."
   else
-    info "/etc/systemd/system/belune-backup.timer already exists — skipping."
+    info "/etc/systemd/system/belune-backup.service already exists — skipping."
   fi
 else
   info "Skipping systemd install (not root or non-systemd host)."
   info "To enable auto-start on reboot:"
   info "  sudo cp ${INSTALL_DIR}/infra/systemd/belune.service /etc/systemd/system/"
   info "  sudo systemctl daemon-reload && sudo systemctl enable --now belune.service"
-  info "To enable daily backups:"
-  info "  sudo cp ${INSTALL_DIR}/infra/systemd/belune-backup.{service,timer} /etc/systemd/system/"
-  info "  sudo systemctl daemon-reload && sudo systemctl enable --now belune-backup.timer"
+  info "Daily backups run in-app (Server → Backups); belune-backup.service is only"
+  info "a manual/CLI fallback:"
+  info "  sudo cp ${INSTALL_DIR}/infra/systemd/belune-backup.service /etc/systemd/system/"
+  info "  sudo systemctl daemon-reload"
 fi
 
 # ── Done ──────────────────────────────────────────────────────────────────────

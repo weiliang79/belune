@@ -3,28 +3,86 @@ package worker
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/hibiken/asynq"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/robfig/cron/v3"
 
+	"github.com/weiliang79/belune/internal/config"
 	"github.com/weiliang79/belune/internal/store/generated"
 )
 
-// HandleBackupScheduleSweep runs every minute: for each enabled backup config
-// (database or application volume) whose cron schedule has elapsed since its
-// last run, it enqueues the matching backup task and stamps last_run_at.
-// Best-effort — a failed enqueue leaves last_run_at untouched so the next sweep
-// retries.
+// HandleBackupScheduleSweep runs every minute: for the control-plane backup
+// schedule and for each enabled per-resource backup config (database or
+// application volume) whose cron schedule has elapsed since its last run, it
+// enqueues the matching backup task. Best-effort — a failed enqueue leaves the
+// due-check baseline untouched so the next sweep retries.
 func (h *TaskHandler) HandleBackupScheduleSweep(ctx context.Context) {
 	if h.Enqueuer == nil {
 		return
 	}
 	now := time.Now()
+	h.sweepControlPlaneBackup(ctx, now)
 	h.sweepDatabaseBackupConfigs(ctx, now)
 	h.sweepVolumeBackupConfigs(ctx, now)
+}
+
+// sweepControlPlaneBackup enqueues TypeBackupNow when the in-app control-plane
+// backup schedule (Server → Backups) has elapsed since the last backup_runs
+// row — from EITHER producer, so a manual click or a scripts/backup.sh CLI run
+// (which also records a run — see backup.sh) resets the clock just like a
+// scheduled one would. Unlike the per-resource sweeps there is no dedicated
+// config row: enabled/schedule live in the generic settings table, and
+// "last run" is read off backup_runs directly rather than a stamped
+// last_run_at, so a CLI-triggered run is never double-counted.
+func (h *TaskHandler) sweepControlPlaneBackup(ctx context.Context, now time.Time) {
+	if s, err := h.Queries.GetSetting(ctx, config.SettingControlPlaneBackupEnabled); err == nil && s.Value == "false" {
+		return
+	}
+
+	schedule := config.DefaultControlPlaneBackupSchedule
+	// No stored setting yet: baseline "now" so a fresh install fires at the next
+	// scheduled tick rather than immediately on first boot.
+	baseline := now
+	if s, err := h.Queries.GetSetting(ctx, config.SettingControlPlaneBackupSchedule); err == nil {
+		if v := strings.TrimSpace(s.Value); v != "" {
+			schedule = v
+		}
+		baseline = s.UpdatedAt.Time
+	}
+
+	sched, err := cron.ParseStandard(schedule)
+	if err != nil {
+		slog.Warn("backup sweep: invalid control-plane schedule", "schedule", schedule, "error", err)
+		return
+	}
+
+	last, err := h.Queries.GetLastBackupRun(ctx)
+	switch {
+	case err == nil:
+		if last.Status == "running" {
+			return // a worker or CLI backup is already in flight
+		}
+		baseline = last.StartedAt.Time
+	case errors.Is(err, pgx.ErrNoRows):
+		// No run yet — keep the settings-row baseline computed above.
+	default:
+		slog.Warn("backup sweep: get last control-plane backup run", "error", err)
+		return
+	}
+
+	if sched.Next(baseline).After(now) {
+		return
+	}
+
+	if _, err := h.Enqueuer.Enqueue(asynq.NewTask(TypeBackupNow, nil), asynq.Queue("low")); err != nil {
+		slog.Warn("backup sweep: enqueue control-plane backup", "error", err)
+	}
 }
 
 func (h *TaskHandler) sweepDatabaseBackupConfigs(ctx context.Context, now time.Time) {

@@ -16,6 +16,22 @@ import (
 // DNS check (reads).
 const SettingPublicIP = "public_ip"
 
+// SettingControlPlaneBackupEnabled gates the in-app cron sweep for
+// control-plane backups (Postgres + Caddy TLS data + .env) — "false" disables
+// it; any other value (including unset) enables it. Manual "Run Backup Now"
+// clicks are unaffected either way.
+const SettingControlPlaneBackupEnabled = "control_plane_backup_enabled"
+
+// SettingControlPlaneBackupSchedule is the cron expression the sweep checks
+// control-plane backups against. Unset falls back to
+// DefaultControlPlaneBackupSchedule.
+const SettingControlPlaneBackupSchedule = "control_plane_backup_schedule"
+
+// DefaultControlPlaneBackupSchedule matches the cadence of the systemd timer
+// it replaces (belune-backup.timer ran at 02:00 daily), so upgrading an
+// existing install preserves the backup cadence operators are used to.
+const DefaultControlPlaneBackupSchedule = "0 2 * * *"
+
 type Config struct {
 	Port               int
 	DatabaseURL        string
@@ -43,16 +59,16 @@ type Config struct {
 	// PublicIP is the address a user's DNS record must point at for a certificate
 	// to be issuable. Empty means autodetect; autodetection failing is not fatal,
 	// it just disables the DNS precheck.
-	PublicIP            string
-	AccessLogPath       string
-	CORSOrigins         []string
-	SecureCookies       bool
-	TLS                 bool   // when true, send HSTS headers
-	LogLevel            string // debug, info, warn, error (default: info)
+	PublicIP      string
+	AccessLogPath string
+	CORSOrigins   []string
+	SecureCookies bool
+	TLS           bool   // when true, send HSTS headers
+	LogLevel      string // debug, info, warn, error (default: info)
 	// LogFormat selects the console encoding: "console" (human-readable,
 	// default) or "json". JSON is worth keeping for anything that parses the
 	// stream; the console format is for reading a terminal.
-	LogFormat           string // console, json (default: console)
+	LogFormat string // console, json (default: console)
 	// LogColor: auto (colour only when stdout is a terminal) | always | never.
 	LogColor            string // auto, always, never (default: auto)
 	DisableRateLimiting bool   // set true in tests to avoid per-IP counter accumulation
@@ -142,6 +158,23 @@ type Config struct {
 	// Number of most-recent backups to keep per managed database; older ones are
 	// pruned (rows + local files + S3 objects) after a new backup succeeds.
 	DatabaseBackupRetainCount int
+
+	// ControlPlaneBackupDir is where the worker writes belune-backup-*.tar.gz
+	// archives (Postgres dump + Caddy TLS data + .env). Must be the same HOST
+	// directory scripts/backup.sh and restore.sh use, bind-mounted into this
+	// container — otherwise the two producers/one consumer archive format
+	// invariant breaks. Defaults to $BELUNE_DIR/backups.
+	ControlPlaneBackupDir string
+	// EnvFilePath is where the worker reads .env from to copy verbatim into a
+	// control-plane backup archive (env_file: injects variables into the
+	// process, but the file itself isn't otherwise visible in-container).
+	// Defaults to $BELUNE_DIR/.env.
+	EnvFilePath string
+	// BackupEncryptionKey, when set, is an age public key (or a path to a file
+	// containing one) that control-plane backup archives are encrypted to.
+	// Mirrors scripts/backup.sh's BACKUP_ENCRYPTION_KEY so both producers emit
+	// the same archive format.
+	BackupEncryptionKey string
 }
 
 func Load() (*Config, error) {
@@ -211,6 +244,9 @@ func Load() (*Config, error) {
 		FileMountsDir:             getEnv("FILE_MOUNTS_DIR", beluneDir()+"/filemounts"),
 		DatabaseBackupHelperImage: getEnv("DATABASE_BACKUP_HELPER_IMAGE", "alpine:3.20"),
 		DatabaseBackupRetainCount: getEnvInt("DATABASE_BACKUP_RETAIN_COUNT", 7),
+		ControlPlaneBackupDir:     getEnv("CONTROL_PLANE_BACKUP_DIR", beluneDir()+"/backups"),
+		EnvFilePath:               getEnv("ENV_FILE_PATH", beluneDir()+"/.env"),
+		BackupEncryptionKey:       getEnv("BACKUP_ENCRYPTION_KEY", ""),
 	}
 
 	if cfg.JWTSecret == "" {

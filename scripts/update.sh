@@ -96,7 +96,6 @@ INFRA_FILES=(
   ".env.example|.env.example"
   "infra/systemd/belune.service|infra/systemd/belune.service"
   "infra/systemd/belune-backup.service|infra/systemd/belune-backup.service"
-  "infra/systemd/belune-backup.timer|infra/systemd/belune-backup.timer"
   "scripts/backup.sh|scripts/backup.sh"
   "scripts/restore.sh|scripts/restore.sh"
   "scripts/update.sh|scripts/update.sh"
@@ -200,6 +199,15 @@ if [[ -n "${FM_UID}" && -n "${FM_GID}" ]]; then
   chown "${FM_UID}:${FM_GID}" "${INSTALL_DIR}/filemounts"
 fi
 
+# Same for the backups directory: the new compose bind-mounts it into the belune
+# container so the worker can write control-plane archives natively. An install
+# from before Shape A already has ./backups (root-owned, from belune-backup.timer
+# running backup.sh as root) — chown it so the non-root worker can write there too.
+mkdir -p "${INSTALL_DIR}/backups"
+if [[ -n "${FM_UID}" && -n "${FM_GID}" ]]; then
+  chown "${FM_UID}:${FM_GID}" "${INSTALL_DIR}/backups"
+fi
+
 # Full reconcile, not --no-deps belune: the refreshed compose may change any
 # service (a new dependency, a Caddy/Redis/BuildKit tweak), and only `up -d` over
 # the whole project applies those. Compose recreates only what actually changed,
@@ -248,11 +256,24 @@ info "Previous infra files saved in ${INFRA_BACKUP}"
 # Only tell the operator to re-copy when they actually differ, so a Docker-only
 # install never sees an irrelevant instruction.
 if [[ -d /etc/systemd/system ]] && [[ -f /etc/systemd/system/belune.service ]]; then
-  for unit in belune.service belune-backup.service belune-backup.timer; do
+  # Daily backups now run in-app (Server → Backups: cron + retention). An
+  # install that predates that still has belune-backup.timer firing at 02:00,
+  # which would race the in-app run on the same archive lockfile and double
+  # the backup cadence — retire it. belune-backup.service is left alone: it is
+  # still the manual/CLI DR fallback (`systemctl start belune-backup.service`).
+  if [[ -f /etc/systemd/system/belune-backup.timer ]]; then
+    info "Retiring belune-backup.timer — daily backups now run in-app (Server → Backups)."
+    systemctl disable --now belune-backup.timer >/dev/null 2>&1 || true
+    rm -f /etc/systemd/system/belune-backup.timer
+    systemctl daemon-reload
+    success "belune-backup.timer disabled and removed."
+  fi
+
+  for unit in belune.service belune-backup.service; do
     if ! cmp -s "infra/systemd/${unit}" "/etc/systemd/system/${unit}" 2>/dev/null; then
       echo ""
       warn "systemd units changed in this release. To apply them:"
-      echo "      sudo cp infra/systemd/*.service infra/systemd/*.timer /etc/systemd/system/"
+      echo "      sudo cp infra/systemd/*.service /etc/systemd/system/"
       echo "      sudo systemctl daemon-reload"
       break
     fi
