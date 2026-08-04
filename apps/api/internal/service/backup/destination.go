@@ -12,11 +12,20 @@ import (
 	"github.com/minio/minio-go/v7/pkg/credentials"
 )
 
-// Destination is the decrypted, transport-level description of an S3-compatible
-// backup target. It is deliberately scope-agnostic: a project-owned destination
-// and any future admin-owned target build the exact same client, so the upload/
+// Destination is the decrypted, transport-level description of a backup
+// target. It is deliberately scope-agnostic: a project-owned destination and
+// any future admin-owned target build the exact same client, so the upload/
 // list/delete plumbing is shared.
+//
+// Provider == "local" is the one exception to "transport-level": it isn't a
+// transport at all — Endpoint/Bucket/AccessKey/SecretKey are meaningless and
+// NewDestinationClient must never be called for it. Callers check
+// Provider == "local" BEFORE building a client and skip straight to keeping
+// the staged archive on-host. Kept on this struct (rather than a separate
+// lookup) so a single Resolve() call gives callers everything they need to
+// branch correctly.
 type Destination struct {
+	Provider  string // "s3", "r2", "b2", "wasabi", "minio", "other", or "local"
 	Endpoint  string // empty = AWS regional endpoint derived from Region
 	Region    string
 	Bucket    string
@@ -25,6 +34,10 @@ type Destination struct {
 	SecretKey string
 	UseSSL    bool
 }
+
+// IsLocal reports whether this destination means "keep the archive on-host,
+// don't upload anywhere" — the local equivalent of an S3-compatible target.
+func (d Destination) IsLocal() bool { return d.Provider == "local" }
 
 // DestinationClient is a minio client bound to a single destination's bucket.
 type DestinationClient struct {

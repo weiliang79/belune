@@ -70,9 +70,14 @@ func (h *TaskHandler) HandleBackupVolumeTask(ctx context.Context, t *asynq.Task)
 	if err != nil {
 		return errors.Join(fmt.Errorf("resolve destination (permanent): %w", err), asynq.SkipRetry)
 	}
-	destClient, err := backup.NewDestinationClient(dest)
-	if err != nil {
-		return errors.Join(fmt.Errorf("build destination client (permanent): %w", err), asynq.SkipRetry)
+	// A local destination has no bucket/endpoint/credentials to build a client
+	// from — NewDestinationClient must never be called for it.
+	var destClient *backup.DestinationClient
+	if !dest.IsLocal() {
+		destClient, err = backup.NewDestinationClient(dest)
+		if err != nil {
+			return errors.Join(fmt.Errorf("build destination client (permanent): %w", err), asynq.SkipRetry)
+		}
 	}
 
 	appRow, err := h.Queries.GetApplicationWithProjectSlug(ctx, vol.ApplicationID)
@@ -135,20 +140,31 @@ func (h *TaskHandler) HandleBackupVolumeTask(ctx context.Context, t *asynq.Task)
 	}
 	lg.step("Archive written: %s (%d bytes)", fileName, sizeBytes)
 
-	// Object key = <destination.prefix>/<config.prefix>/<file>.
-	key := backup.BuildKey(dest.Prefix, backup.BuildKey(cfg.Prefix, fileName))
-	lg.step("Uploading to destination: %s", key)
-	if _, upErr := destClient.UploadTo(ctx, localPath, key); upErr != nil {
-		_ = os.Remove(localPath)
-		h.failVolumeBackupLog(ctx, run.ID, fmt.Sprintf("upload to destination: %v", upErr), lg)
-		h.notifyApplicationOwner(ctx, vol.ApplicationID, appRow.ProjectID, notify.EventVolumeBackupFailed,
-			"Volume backup failed",
-			fmt.Sprintf("Backing up volume %s of %s failed: %v", vol.Name, appRow.Name, upErr))
-		return fmt.Errorf("upload to destination: %w", upErr)
+	remoteKey := pgtype.Text{}
+	localPathText := pgtype.Text{}
+	if dest.IsLocal() {
+		// Local destination: the staged archive already IS the backup — no
+		// upload, no deletion. Record local_path so a later restore/prune finds
+		// it (resolveVolumeBackupFile already prefers local_path when valid).
+		lg.step("Local destination — keeping archive on-host: %s", localPath)
+		localPathText = pgtype.Text{String: localPath, Valid: true}
+	} else {
+		// Object key = <destination.prefix>/<config.prefix>/<file>.
+		key := backup.BuildKey(dest.Prefix, backup.BuildKey(cfg.Prefix, fileName))
+		lg.step("Uploading to destination: %s", key)
+		if _, upErr := destClient.UploadTo(ctx, localPath, key); upErr != nil {
+			_ = os.Remove(localPath)
+			h.failVolumeBackupLog(ctx, run.ID, fmt.Sprintf("upload to destination: %v", upErr), lg)
+			h.notifyApplicationOwner(ctx, vol.ApplicationID, appRow.ProjectID, notify.EventVolumeBackupFailed,
+				"Volume backup failed",
+				fmt.Sprintf("Backing up volume %s of %s failed: %v", vol.Name, appRow.Name, upErr))
+			return fmt.Errorf("upload to destination: %w", upErr)
+		}
+		remoteKey = pgtype.Text{String: key, Valid: true}
+		// Remote is authoritative; drop the local copy so the server disk
+		// doesn't mirror the bucket.
+		removeLocalAfterUpload(localPath, lg)
 	}
-	// Remote is authoritative; drop the local copy so the server disk doesn't
-	// mirror the bucket.
-	removeLocalAfterUpload(localPath, lg)
 
 	// Retention: keep only the newest keep_latest backups for this config.
 	h.pruneVolumeConfigBackups(ctx, cfg, destClient, lg)
@@ -158,7 +174,8 @@ func (h *TaskHandler) HandleBackupVolumeTask(ctx context.Context, t *asynq.Task)
 		ID:         run.ID,
 		FinishedAt: pgtype.Timestamptz{Time: time.Now(), Valid: true},
 		Status:     "succeeded",
-		RemoteKey:  pgtype.Text{String: key, Valid: true},
+		LocalPath:  localPathText,
+		RemoteKey:  remoteKey,
 		SizeBytes:  sizeBytes,
 		Log:        pgtype.Text{String: lg.String(), Valid: true},
 	})
@@ -169,7 +186,7 @@ func (h *TaskHandler) HandleBackupVolumeTask(ctx context.Context, t *asynq.Task)
 		slog.Warn("backup_volume: failed to stamp last_run_at", "config_id", formatUUID(cid), "error", err)
 	}
 
-	slog.Info("volume backed up", "volume_id", payload.ApplicationVolumeID, "size_bytes", sizeBytes, "key", key)
+	slog.Info("volume backed up", "volume_id", payload.ApplicationVolumeID, "size_bytes", sizeBytes, "local", dest.IsLocal(), "key", remoteKey.String)
 	return nil
 }
 
@@ -267,8 +284,9 @@ func (h *TaskHandler) finaliseVolumeBackup(ctx context.Context, id pgtype.UUID, 
 
 // pruneVolumeConfigBackups keeps the newest keep_latest backups produced by a
 // config and deletes the rest (rows + local files + remote objects in the
-// config's destination). A NULL/zero keep_latest keeps all. Best-effort — a
-// failed deletion is logged and does not fail the backup.
+// config's destination). A NULL/zero keep_latest keeps all. client is nil for
+// a local destination, so pruned rows there only lose their local file.
+// Best-effort — a failed deletion is logged and does not fail the backup.
 func (h *TaskHandler) pruneVolumeConfigBackups(ctx context.Context, cfg generated.ApplicationVolumeBackupConfig, client *backup.DestinationClient, lg *runLog) {
 	if !cfg.KeepLatest.Valid || cfg.KeepLatest.Int32 <= 0 {
 		return
@@ -291,7 +309,7 @@ func (h *TaskHandler) pruneVolumeConfigBackups(ctx context.Context, cfg generate
 				slog.Warn("prune volume backups: remove local", "path", b.LocalPath.String, "error", err)
 			}
 		}
-		if b.RemoteKey.Valid {
+		if b.RemoteKey.Valid && client != nil {
 			if err := client.DeleteFrom(ctx, []string{b.RemoteKey.String}); err != nil {
 				slog.Warn("prune volume backups: remove remote", "key", b.RemoteKey.String, "error", err)
 			}

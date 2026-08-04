@@ -302,6 +302,7 @@ func (h *TaskHandler) HandleBackupDBTask(ctx context.Context, t *asynq.Task) err
 	var cfg *generated.DatabaseBackupConfig
 	var destClient *backup.DestinationClient
 	var destPrefix string
+	var destLocal bool
 	configID := pgtype.UUID{}
 	if payload.BackupConfigID != "" {
 		cid, parseErr := parseUUID(payload.BackupConfigID)
@@ -322,13 +323,18 @@ func (h *TaskHandler) HandleBackupDBTask(ctx context.Context, t *asynq.Task) err
 		if resErr != nil {
 			return errors.Join(fmt.Errorf("resolve destination (permanent): %w", resErr), asynq.SkipRetry)
 		}
-		client, clErr := backup.NewDestinationClient(dest)
-		if clErr != nil {
-			return errors.Join(fmt.Errorf("build destination client (permanent): %w", clErr), asynq.SkipRetry)
+		// A local destination has no bucket/endpoint/credentials to build a
+		// client from — NewDestinationClient must never be called for it.
+		if !dest.IsLocal() {
+			client, clErr := backup.NewDestinationClient(dest)
+			if clErr != nil {
+				return errors.Join(fmt.Errorf("build destination client (permanent): %w", clErr), asynq.SkipRetry)
+			}
+			destClient = client
+			destPrefix = dest.Prefix
 		}
 		cfg = &c
-		destClient = client
-		destPrefix = dest.Prefix
+		destLocal = dest.IsLocal()
 		configID = cid
 	}
 
@@ -405,7 +411,12 @@ func (h *TaskHandler) HandleBackupDBTask(ctx context.Context, t *asynq.Task) err
 	// the local file is the sole backup and is bounded by pruneDatabaseBackups.
 	remoteKey := pgtype.Text{}
 	localKept := true
-	if cfg != nil {
+	if cfg != nil && destLocal {
+		// Local destination: the staged archive already IS the backup — no
+		// upload, no deletion. Retention (pruneConfigBackups below) prunes it
+		// like any other local file once newer runs push it past keep_latest.
+		lg.step("Local destination — keeping archive on-host: %s", localPath)
+	} else if cfg != nil {
 		// Config-driven backup: the project destination is the whole point, so a
 		// failed upload fails the run (unlike the best-effort global path). The
 		// object key is <destination.prefix>/<config.prefix>/<file>.
@@ -526,7 +537,11 @@ func (h *TaskHandler) pruneDatabaseBackups(ctx context.Context, dbID pgtype.UUID
 
 // pruneConfigBackups keeps the newest keep_latest backups produced by a config
 // and deletes the rest (rows + local files + remote objects in the config's
-// destination). A NULL/zero keep_latest keeps all. Best-effort.
+// destination, when it has one). A NULL/zero keep_latest keeps all.
+// Best-effort. client is nil for a local destination — deleteBackupArtifacts
+// already only deletes remotely when both a remote_key and a deleter are
+// present, so a nil client here just means every pruned row's local file
+// gets removed and nothing else.
 func (h *TaskHandler) pruneConfigBackups(ctx context.Context, cfg generated.DatabaseBackupConfig, client *backup.DestinationClient) {
 	if !cfg.KeepLatest.Valid || cfg.KeepLatest.Int32 <= 0 {
 		return
@@ -543,7 +558,10 @@ func (h *TaskHandler) pruneConfigBackups(ctx context.Context, cfg generated.Data
 	if len(rows) <= keep {
 		return
 	}
-	del := remoteDeleter(func(ctx context.Context, keys []string) error { return client.DeleteFrom(ctx, keys) })
+	var del remoteDeleter
+	if client != nil {
+		del = func(ctx context.Context, keys []string) error { return client.DeleteFrom(ctx, keys) }
+	}
 	for _, b := range rows[keep:] { // newest-first
 		h.deleteBackupArtifacts(ctx, b, del)
 	}

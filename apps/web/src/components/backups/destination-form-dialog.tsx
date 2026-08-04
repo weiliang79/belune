@@ -41,6 +41,7 @@ const PROVIDERS: { value: BackupProvider; label: string }[] = [
   { value: "wasabi", label: "Wasabi" },
   { value: "minio", label: "MinIO" },
   { value: "other", label: "Other (S3-compatible)" },
+  { value: "local", label: "Local (no upload)" },
 ];
 
 export function DestinationFormDialog({
@@ -72,7 +73,7 @@ export function DestinationFormDialog({
 //   - r2:             <account-id>.r2.cloudflarestorage.com, region "auto"
 //   - regionTemplate: host derived from region (Wasabi/B2)
 //   - manual:         user-supplied endpoint (MinIO / other S3-compatible)
-type EndpointMode = "aws" | "r2" | "regionTemplate" | "manual";
+type EndpointMode = "aws" | "r2" | "regionTemplate" | "manual" | "local";
 
 const PROVIDER_META: Record<
   BackupProvider,
@@ -102,6 +103,10 @@ const PROVIDER_META: Record<
   },
   minio: { label: "MinIO", mode: "manual", forceSSL: false },
   other: { label: "Other (S3-compatible)", mode: "manual", forceSSL: false },
+  // No transport at all: the worker keeps the staged archive on-host instead
+  // of uploading it. Every S3-ish field (endpoint/region/bucket/prefix/
+  // credentials/SSL) is irrelevant and hidden below.
+  local: { label: "Local (no upload)", mode: "local", forceSSL: false },
 };
 
 // resolveEndpoint computes the host-only endpoint sent to the backend.
@@ -114,6 +119,7 @@ function resolveEndpoint(
   const meta = PROVIDER_META[provider];
   switch (meta.mode) {
     case "aws":
+    case "local":
       return "";
     case "r2":
       return accountId.trim()
@@ -169,19 +175,24 @@ function DestinationForm({
   );
 
   // buildData assembles the payload shared by save + test (resolved endpoint,
-  // region, and blank-preserving credentials).
-  const buildData = () => ({
-    name,
-    provider,
-    endpoint: resolvedEndpoint,
-    region: provider === "r2" ? "auto" : region.trim() || "us-east-1",
-    bucket,
-    prefix: prefix.trim(),
-    use_ssl: meta.forceSSL ? true : useSSL,
-    // On edit, blank credentials preserve the stored secret.
-    access_key: accessKey || undefined,
-    secret_key: secretKey || undefined,
-  });
+  // region, and blank-preserving credentials). Local sends just name+provider
+  // — every other field is meaningless for it, so the backend zeroes them out
+  // regardless of what's sent, but keep the payload honest anyway.
+  const buildData = () =>
+    provider === "local"
+      ? { name, provider }
+      : {
+          name,
+          provider,
+          endpoint: resolvedEndpoint,
+          region: provider === "r2" ? "auto" : region.trim() || "us-east-1",
+          bucket,
+          prefix: prefix.trim(),
+          use_ssl: meta.forceSSL ? true : useSSL,
+          // On edit, blank credentials preserve the stored secret.
+          access_key: accessKey || undefined,
+          secret_key: secretKey || undefined,
+        };
 
   const validateProviderFields = (): boolean => {
     if (meta.mode === "r2" && !accountId.trim()) {
@@ -190,6 +201,10 @@ function DestinationForm({
     }
     if (meta.mode === "manual" && !endpoint.trim()) {
       toast.error("Endpoint is required for this provider");
+      return false;
+    }
+    if (meta.mode !== "local" && !bucket.trim()) {
+      toast.error("Bucket is required");
       return false;
     }
     return true;
@@ -214,7 +229,7 @@ function DestinationForm({
   };
 
   const handleTest = () => {
-    if (!bucket.trim()) {
+    if (provider !== "local" && !bucket.trim()) {
       toast.error("Bucket is required to test");
       return;
     }
@@ -237,8 +252,8 @@ function DestinationForm({
           {editing ? "Edit Destination" : "Add Destination"}
         </DialogTitle>
         <DialogDescription>
-          An S3-compatible bucket used to store database backups for this
-          project.
+          Where this project's database and volume backups are stored — an
+          S3-compatible bucket, or kept on this host only.
         </DialogDescription>
       </DialogHeader>
 
@@ -278,43 +293,55 @@ function DestinationForm({
           </Select>
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
-          <div className="space-y-1.5">
-            <Label htmlFor="dest-bucket">Bucket</Label>
-            <Input
-              id="dest-bucket"
-              value={bucket}
-              onChange={(e) => setBucket(e.target.value)}
-              placeholder="my-backups"
-              required
-            />
-          </div>
-          {provider !== "r2" && (
+        {provider === "local" && (
+          <p className="text-muted-foreground text-xs">
+            Backups stay on this host's disk — nothing is uploaded. They don't
+            survive losing the host, so use an off-host destination too for
+            real disaster recovery.
+          </p>
+        )}
+
+        {provider !== "local" && (
+          <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label htmlFor="dest-region">Region</Label>
+              <Label htmlFor="dest-bucket">Bucket</Label>
               <Input
-                id="dest-region"
-                value={region}
-                onChange={(e) => setRegion(e.target.value)}
-                placeholder={meta.regionPlaceholder ?? "us-east-1"}
+                id="dest-bucket"
+                value={bucket}
+                onChange={(e) => setBucket(e.target.value)}
+                placeholder="my-backups"
+                required
               />
             </div>
-          )}
-        </div>
+            {provider !== "r2" && (
+              <div className="space-y-1.5">
+                <Label htmlFor="dest-region">Region</Label>
+                <Input
+                  id="dest-region"
+                  value={region}
+                  onChange={(e) => setRegion(e.target.value)}
+                  placeholder={meta.regionPlaceholder ?? "us-east-1"}
+                />
+              </div>
+            )}
+          </div>
+        )}
 
-        <div className="space-y-1.5">
-          <Label htmlFor="dest-prefix">Prefix</Label>
-          <Input
-            id="dest-prefix"
-            value={prefix}
-            onChange={(e) => setPrefix(e.target.value)}
-            placeholder="e.g. backups/prod"
-          />
-          <p className="text-muted-foreground text-xs">
-            Optional base path inside the bucket. Each backup config can add its
-            own sub-path under this.
-          </p>
-        </div>
+        {provider !== "local" && (
+          <div className="space-y-1.5">
+            <Label htmlFor="dest-prefix">Prefix</Label>
+            <Input
+              id="dest-prefix"
+              value={prefix}
+              onChange={(e) => setPrefix(e.target.value)}
+              placeholder="e.g. backups/prod"
+            />
+            <p className="text-muted-foreground text-xs">
+              Optional base path inside the bucket. Each backup config can add
+              its own sub-path under this.
+            </p>
+          </div>
+        )}
 
         {/* R2: account id instead of a raw endpoint */}
         {meta.mode === "r2" && (
@@ -363,33 +390,35 @@ function DestinationForm({
           </p>
         )}
 
-        <div className="grid grid-cols-2 gap-3">
-          <div className="space-y-1.5">
-            <Label htmlFor="dest-access">Access key</Label>
-            <Input
-              id="dest-access"
-              value={accessKey}
-              onChange={(e) => setAccessKey(e.target.value)}
-              placeholder={editing ? "•••• (unchanged)" : ""}
-              autoComplete="off"
-            />
+        {provider !== "local" && (
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="dest-access">Access key</Label>
+              <Input
+                id="dest-access"
+                value={accessKey}
+                onChange={(e) => setAccessKey(e.target.value)}
+                placeholder={editing ? "•••• (unchanged)" : ""}
+                autoComplete="off"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="dest-secret">Secret key</Label>
+              <Input
+                id="dest-secret"
+                type="password"
+                value={secretKey}
+                onChange={(e) => setSecretKey(e.target.value)}
+                placeholder={editing ? "•••• (unchanged)" : ""}
+                autoComplete="off"
+              />
+            </div>
           </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="dest-secret">Secret key</Label>
-            <Input
-              id="dest-secret"
-              type="password"
-              value={secretKey}
-              onChange={(e) => setSecretKey(e.target.value)}
-              placeholder={editing ? "•••• (unchanged)" : ""}
-              autoComplete="off"
-            />
-          </div>
-        </div>
+        )}
 
         {/* SSL is only user-controllable for self-hosted/other endpoints;
-            managed providers are always HTTPS. */}
-        {!meta.forceSSL && (
+            managed providers are always HTTPS; local has no transport at all. */}
+        {provider !== "local" && !meta.forceSSL && (
           <label className="flex items-center gap-2 text-sm">
             <Checkbox checked={useSSL} onCheckedChange={setUseSSL} />
             Use SSL (HTTPS)
@@ -397,14 +426,18 @@ function DestinationForm({
         )}
 
         <DialogFooter className="sm:justify-between">
-          <Button
-            type="button"
-            variant="outline"
-            onClick={handleTest}
-            disabled={test.isPending}
-          >
-            {test.isPending ? "Testing…" : "Test connection"}
-          </Button>
+          {provider === "local" ? (
+            <span />
+          ) : (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handleTest}
+              disabled={test.isPending}
+            >
+              {test.isPending ? "Testing…" : "Test connection"}
+            </Button>
+          )}
           <Button type="submit" disabled={pending}>
             {pending ? "Saving…" : editing ? "Save" : "Create"}
           </Button>

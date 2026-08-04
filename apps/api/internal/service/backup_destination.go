@@ -44,14 +44,21 @@ type SaveBackupDestinationParams struct {
 	Credentials *DestinationCredentials
 }
 
-// Create inserts a new destination, encrypting its credentials.
+// Create inserts a new destination, encrypting its credentials. A local
+// destination has nothing to encrypt — credentials_encrypted is NOT NULL, so
+// it stores an empty (not nil) blob rather than relaxing the column.
 func (s *BackupDestinationService) Create(ctx context.Context, p SaveBackupDestinationParams) (generated.BackupDestination, error) {
-	if p.Credentials == nil {
-		return generated.BackupDestination{}, fmt.Errorf("credentials are required")
-	}
-	enc, err := s.encryptCredentials(p.Credentials)
-	if err != nil {
-		return generated.BackupDestination{}, err
+	var enc []byte
+	if p.Provider == "local" {
+		enc = []byte{}
+	} else {
+		if p.Credentials == nil {
+			return generated.BackupDestination{}, fmt.Errorf("credentials are required")
+		}
+		var err error
+		if enc, err = s.encryptCredentials(p.Credentials); err != nil {
+			return generated.BackupDestination{}, err
+		}
 	}
 	return s.queries.CreateBackupDestination(ctx, generated.CreateBackupDestinationParams{
 		ProjectID:            p.ProjectID,
@@ -144,10 +151,14 @@ func (s *BackupDestinationService) ClientForVolumeBackupConfig(ctx context.Conte
 }
 
 // Test builds a client for the stored destination and verifies bucket access.
+// A local destination has nothing to reach — it always succeeds.
 func (s *BackupDestinationService) Test(ctx context.Context, id pgtype.UUID) error {
 	dest, err := s.Resolve(ctx, id)
 	if err != nil {
 		return err
+	}
+	if dest.IsLocal() {
+		return nil
 	}
 	client, err := backup.NewDestinationClient(dest)
 	if err != nil {
@@ -162,6 +173,9 @@ func (s *BackupDestinationService) Test(ctx context.Context, id pgtype.UUID) err
 // re-entering the secret still tests against the form's other (possibly changed)
 // fields.
 func (s *BackupDestinationService) TestConnection(ctx context.Context, p SaveBackupDestinationParams, fallbackID pgtype.UUID) error {
+	if p.Provider == "local" {
+		return nil
+	}
 	accessKey, secretKey := "", ""
 	if p.Credentials != nil {
 		accessKey, secretKey = p.Credentials.AccessKey, p.Credentials.SecretKey
@@ -198,11 +212,18 @@ func (s *BackupDestinationService) TestConnection(ctx context.Context, p SaveBac
 }
 
 func (s *BackupDestinationService) toDestination(row generated.BackupDestination) (backup.Destination, error) {
+	// A local destination has no credentials to decrypt (credentials_encrypted
+	// is an empty, not NULL, bytea — see Create/Update) and no client is ever
+	// built for it, so skip decryption entirely rather than fail on empty input.
+	if row.Provider == "local" {
+		return backup.Destination{Provider: row.Provider}, nil
+	}
 	creds, err := s.decryptCredentials(row.CredentialsEncrypted)
 	if err != nil {
 		return backup.Destination{}, err
 	}
 	return backup.Destination{
+		Provider:  row.Provider,
 		Endpoint:  row.Endpoint,
 		Region:    row.Region,
 		Bucket:    row.Bucket,

@@ -75,11 +75,17 @@ type backupDestinationRequest struct {
 }
 
 var validBackupProviders = map[string]bool{
-	"s3": true, "r2": true, "b2": true, "wasabi": true, "minio": true, "other": true,
+	"s3": true, "r2": true, "b2": true, "wasabi": true, "minio": true, "other": true, "local": true,
 }
 
 // toSaveParams validates the request and builds save params. On update, empty
 // credentials preserve the stored secret (creds left nil).
+//
+// provider == "local" means "keep the archive on-host, don't upload
+// anywhere" — it has no endpoint/bucket/region/prefix/credentials, so those
+// fields are validated and stored as their zero values regardless of what the
+// request sent (a stale form value from switching providers must not leak
+// into a saved local destination).
 func (req *backupDestinationRequest) toSaveParams(projectID pgtype.UUID, requireCreds bool) (service.SaveBackupDestinationParams, string) {
 	name := strings.TrimSpace(req.Name)
 	if name == "" {
@@ -92,6 +98,15 @@ func (req *backupDestinationRequest) toSaveParams(projectID pgtype.UUID, require
 	if !validBackupProviders[provider] {
 		return service.SaveBackupDestinationParams{}, "invalid provider"
 	}
+
+	if provider == "local" {
+		return service.SaveBackupDestinationParams{
+			ProjectID: projectID,
+			Name:      name,
+			Provider:  provider,
+		}, ""
+	}
+
 	bucket := strings.TrimSpace(req.Bucket)
 	if bucket == "" {
 		return service.SaveBackupDestinationParams{}, "bucket is required"
@@ -282,7 +297,7 @@ func (h *Handler) TestBackupDestinationParams(w http.ResponseWriter, r *http.Req
 		writeError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
-	if strings.TrimSpace(req.Bucket) == "" {
+	if req.Provider != "local" && strings.TrimSpace(req.Bucket) == "" {
 		writeError(w, http.StatusBadRequest, "bucket is required")
 		return
 	}

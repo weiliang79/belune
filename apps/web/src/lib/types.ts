@@ -372,7 +372,14 @@ export interface DatabaseBackup {
   log?: string;
 }
 
-export type BackupProvider = "s3" | "r2" | "b2" | "wasabi" | "minio" | "other";
+export type BackupProvider =
+  | "s3"
+  | "r2"
+  | "b2"
+  | "wasabi"
+  | "minio"
+  | "other"
+  | "local";
 
 export interface BackupDestination {
   id: string;

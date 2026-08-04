@@ -6,7 +6,9 @@ export interface SaveBackupDestination {
   provider: string;
   endpoint?: string;
   region?: string;
-  bucket: string;
+  // Required for every provider except "local", which the backend ignores it
+  // for.
+  bucket?: string;
   prefix?: string;
   use_ssl?: boolean;
   access_key?: string;

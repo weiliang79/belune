@@ -62,6 +62,8 @@ export function DestinationsPanel({ projectId }: { projectId: string }) {
       .finally(() => setTestingId(null));
   };
 
+  const isLocal = (d: BackupDestination) => d.provider === "local";
+
   const handleDelete = (d: BackupDestination) => {
     toast.promise(del.mutateAsync(d.id), {
       loading: "Removing destination…",
@@ -79,7 +81,8 @@ export function DestinationsPanel({ projectId }: { projectId: string }) {
             Backup Destinations
           </CardTitle>
           <CardDescription>
-            S3-compatible storage targets for this project's database backups.
+            Where this project's database and volume backups are stored —
+            S3-compatible buckets, or local (kept on this host only).
           </CardDescription>
         </div>
         <Button size="sm" onClick={openCreate}>
@@ -109,35 +112,43 @@ export function DestinationsPanel({ projectId }: { projectId: string }) {
                     </Badge>
                   </div>
                   <p className="text-muted-foreground truncate text-xs">
-                    {d.bucket}
-                    {d.prefix ? `/${d.prefix}` : ""}
-                    {d.region ? ` · ${d.region}` : ""}
-                    {d.endpoint ? ` · ${d.endpoint}` : ""}
+                    {isLocal(d) ? (
+                      "Kept on this host — not uploaded anywhere"
+                    ) : (
+                      <>
+                        {d.bucket}
+                        {d.prefix ? `/${d.prefix}` : ""}
+                        {d.region ? ` · ${d.region}` : ""}
+                        {d.endpoint ? ` · ${d.endpoint}` : ""}
+                      </>
+                    )}
                   </p>
                 </div>
                 <div className="flex items-center gap-1">
-                  <Tooltip>
-                    <TooltipTrigger
-                      render={
-                        <Button
-                          variant="ghost"
-                          size="icon-sm"
-                          aria-label="Test connection"
-                          disabled={testingId === d.id}
-                          onClick={() => handleTest(d)}
-                        />
-                      }
-                    >
-                      {testingId === d.id ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <PlugZap className="h-4 w-4" />
-                      )}
-                    </TooltipTrigger>
-                    <TooltipPositioner>
-                      <TooltipContent>Test connection</TooltipContent>
-                    </TooltipPositioner>
-                  </Tooltip>
+                  {!isLocal(d) && (
+                    <Tooltip>
+                      <TooltipTrigger
+                        render={
+                          <Button
+                            variant="ghost"
+                            size="icon-sm"
+                            aria-label="Test connection"
+                            disabled={testingId === d.id}
+                            onClick={() => handleTest(d)}
+                          />
+                        }
+                      >
+                        {testingId === d.id ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <PlugZap className="h-4 w-4" />
+                        )}
+                      </TooltipTrigger>
+                      <TooltipPositioner>
+                        <TooltipContent>Test connection</TooltipContent>
+                      </TooltipPositioner>
+                    </Tooltip>
+                  )}
                   <Tooltip>
                     <TooltipTrigger
                       render={
