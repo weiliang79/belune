@@ -53,6 +53,7 @@ export function ApplicationFormDialog({
   const [sourceRepo, setSourceRepo] = useState("");
   const [gitSource, setGitSource] = useState<"connection" | "url">("connection");
   const [gitIntegrationId, setGitIntegrationId] = useState("");
+  const [gitToken, setGitToken] = useState("");
   const [dockerfilePath, setDockerfilePath] = useState("Dockerfile");
   const [branch, setBranch] = useState("");
   const [buildType, setBuildType] = useState("dockerfile");
@@ -68,6 +69,7 @@ export function ApplicationFormDialog({
       setSourceRepo("");
       setGitSource("connection");
       setGitIntegrationId("");
+      setGitToken("");
       setDockerfilePath("Dockerfile");
       setBranch("");
       setBuildType("dockerfile");
@@ -107,6 +109,9 @@ export function ApplicationFormDialog({
               build_type: buildType,
               ...(gitSource === "connection" && gitIntegrationId
                 ? { git_integration_id: gitIntegrationId }
+                : {}),
+              ...(gitSource === "url" && gitToken.trim()
+                ? { git_token: gitToken.trim() }
                 : {}),
             }),
       });
@@ -208,6 +213,7 @@ export function ApplicationFormDialog({
                     setGitSource(v as "connection" | "url");
                     setSourceRepo("");
                     setGitIntegrationId("");
+                    setGitToken("");
                     setBranch("");
                   }}
                 >
@@ -215,7 +221,7 @@ export function ApplicationFormDialog({
                     Connected Account
                   </SegmentedControlItem>
                   <SegmentedControlItem value="url">
-                    Public URL
+                    Git URL
                   </SegmentedControlItem>
                 </SegmentedControl>
               </div>
@@ -228,15 +234,34 @@ export function ApplicationFormDialog({
                   }}
                 />
               ) : (
-                <div className="space-y-2">
-                  <Label htmlFor="source-repo">Repository URL</Label>
-                  <Input
-                    id="source-repo"
-                    value={sourceRepo}
-                    onChange={(e) => setSourceRepo(e.target.value)}
-                    placeholder="https://github.com/user/repo.git"
-                  />
-                </div>
+                <>
+                  <div className="space-y-2">
+                    <Label htmlFor="source-repo">Repository URL</Label>
+                    <Input
+                      id="source-repo"
+                      value={sourceRepo}
+                      onChange={(e) => setSourceRepo(e.target.value)}
+                      placeholder="https://github.com/user/repo.git"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="git-token">Private Token (PAT)</Label>
+                    <Input
+                      id="git-token"
+                      type="password"
+                      value={gitToken}
+                      onChange={(e) => setGitToken(e.target.value)}
+                      placeholder="Leave empty for a public repository"
+                      className="font-mono"
+                    />
+                    <p className="text-muted-foreground text-xs">
+                      Per-app token for private repositories. A connected
+                      account is still recommended when available — it's
+                      scoped and registers push-to-deploy webhooks
+                      automatically, which a URL + PAT source does not.
+                    </p>
+                  </div>
+                </>
               )}
               <div className="space-y-2">
                 <Label>Build Method</Label>

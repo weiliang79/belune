@@ -20,6 +20,8 @@ export function createApplication(
     dockerfile_path?: string;
     build_type?: string;
     git_integration_id?: string;
+    /** PAT for a private repo cloned by URL; omitted/empty = public repo. */
+    git_token?: string;
     /** Ref to build; empty/omitted = the repository's default ref. */
     branch?: string;
   },
