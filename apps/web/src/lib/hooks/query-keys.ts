@@ -233,7 +233,8 @@ export const queryKeys = {
       ] as const,
   },
   backups: {
-    runs: ["backups", "runs"] as const,
+    runs: (limit: number, offset: number) =>
+      ["backups", "runs", limit, offset] as const,
     status: ["backups", "status"] as const,
   },
   alertPreferences: ["alert-preferences"] as const,

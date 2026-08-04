@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/weiliang79/belune/internal/service/backup"
+	"github.com/weiliang79/belune/internal/store/generated"
 	"github.com/weiliang79/belune/internal/worker"
 )
 
@@ -56,9 +57,14 @@ type backupStatusView struct {
 	Retention       map[string]any    `json:"retention"`
 }
 
-// ListBackupRuns returns the 20 most recent backup runs.
+// ListBackupRuns returns backup runs most-recent-first, paginated via
+// limit/offset query params (see parsePagination).
 func (h *Handler) ListBackupRuns(w http.ResponseWriter, r *http.Request) {
-	runs, err := h.queries.ListBackupRuns(r.Context(), 20)
+	limit, offset := parsePagination(r)
+	runs, err := h.queries.ListBackupRuns(r.Context(), generated.ListBackupRunsParams{
+		Limit:  limit,
+		Offset: offset,
+	})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to list backup runs")
 		return

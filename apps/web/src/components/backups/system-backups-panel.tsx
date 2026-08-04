@@ -47,6 +47,8 @@ import type { BackupRemoteConfig, BackupRun, BackupStatus } from "@/lib/types";
 // 02:00, the cadence the retired belune-backup.timer used to run at.
 const DEFAULT_BACKUP_SCHEDULE = "0 2 * * *";
 
+const RUNS_PAGE_SIZE = 10;
+
 /** "YYYY-MM-DD HH:mm:ss" for table cells (null-safe). */
 function fmtTableDate(iso: string | null) {
   return iso ? formatDateTime(iso) : "—";
@@ -115,11 +117,19 @@ const backupColumns: ColumnDef<BackupRun>[] = [
 // backups, which live on each project's Backups tab.
 export function SystemBackupsPanel() {
   const { data: status, isLoading: statusLoading } = useBackupStatus();
-  const { data: runs, isLoading: runsLoading } = useBackupRuns();
+  // Independent of the table's page, so the header badge/button always
+  // reflect the actual latest run regardless of which page is showing.
+  const { data: latestRuns } = useBackupRuns({ limit: 1, offset: 0 });
+  const [runsOffset, setRunsOffset] = useState(0);
+  const { data: runs, isLoading: runsLoading } = useBackupRuns({
+    limit: RUNS_PAGE_SIZE,
+    offset: runsOffset,
+  });
   const trigger = useTriggerBackup();
 
-  const isRunning = runs?.[0]?.status === "running";
-  const lastRunFailed = runs?.[0]?.status === "failed" || !!status?.last_error;
+  const isRunning = latestRuns?.[0]?.status === "running";
+  const lastRunFailed =
+    latestRuns?.[0]?.status === "failed" || !!status?.last_error;
 
   const handleTrigger = () => {
     toast.promise(trigger.mutateAsync(), {
@@ -225,8 +235,17 @@ export function SystemBackupsPanel() {
             getRowId={(r) => r.id}
             enableSorting
             emptyMessage={
-              'No backup runs yet. Click "Run Backup Now" to start one.'
+              runsOffset > 0
+                ? "No more runs."
+                : 'No backup runs yet. Click "Run Backup Now" to start one.'
             }
+            pagination={{
+              mode: "manual",
+              offset: runsOffset,
+              pageSize: RUNS_PAGE_SIZE,
+              hasMore: (runs?.length ?? 0) === RUNS_PAGE_SIZE,
+              onOffsetChange: setRunsOffset,
+            }}
             renderDetailPanel={({ row }) => {
               const run = row.original;
               const { log, error } = run;

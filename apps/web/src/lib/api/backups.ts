@@ -1,8 +1,17 @@
 import type { BackupRemoteConfig, BackupRun, BackupStatus } from "@/lib/types";
 import { api } from "./client";
 
-export function listBackupRuns() {
-  return api.get<BackupRun[]>("/backups");
+export interface ListBackupRunsParams {
+  limit?: number;
+  offset?: number;
+}
+
+export function listBackupRuns(params?: ListBackupRunsParams) {
+  const query = new URLSearchParams();
+  if (params?.limit) query.set("limit", String(params.limit));
+  if (params?.offset) query.set("offset", String(params.offset));
+  const qs = query.toString();
+  return api.get<BackupRun[]>(`/backups${qs ? `?${qs}` : ""}`);
 }
 
 export function getBackupStatus() {

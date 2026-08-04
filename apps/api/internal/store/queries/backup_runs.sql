@@ -17,7 +17,7 @@ WHERE id = $1;
 SELECT id, started_at, finished_at, status, remote_key, size_bytes, error, log, trigger
 FROM backup_runs
 ORDER BY started_at DESC
-LIMIT $1;
+LIMIT $1 OFFSET $2;
 
 -- name: GetLastSucceededBackupRun :one
 SELECT id, started_at, finished_at, status, remote_key, size_bytes, error, log, trigger

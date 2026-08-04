@@ -8,12 +8,16 @@ import {
 } from "@/lib/api/backups";
 import { queryKeys } from "./query-keys";
 
-export function useBackupRuns() {
+export function useBackupRuns(params: { limit: number; offset: number }) {
   return useQuery({
-    queryKey: queryKeys.backups.runs,
-    queryFn: listBackupRuns,
+    queryKey: queryKeys.backups.runs(params.limit, params.offset),
+    queryFn: () => listBackupRuns(params),
+    // Only the first page can show a run that just started, so only poll
+    // there — polling a back page while a backup runs would be pointless.
     refetchInterval: (query) =>
-      query.state.data?.[0]?.status === "running" ? 5000 : false,
+      params.offset === 0 && query.state.data?.[0]?.status === "running"
+        ? 5000
+        : false,
   });
 }
 
@@ -30,7 +34,7 @@ export function useTriggerBackup() {
     mutationFn: triggerBackupRun,
     onSuccess: () => {
       const refresh = () => {
-        qc.invalidateQueries({ queryKey: queryKeys.backups.runs });
+        qc.invalidateQueries({ queryKey: ["backups", "runs"] });
         qc.invalidateQueries({ queryKey: queryKeys.backups.status });
       };
       // The task is async: the 202 returns before the worker inserts the

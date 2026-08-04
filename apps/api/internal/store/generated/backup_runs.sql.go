@@ -87,11 +87,16 @@ const listBackupRuns = `-- name: ListBackupRuns :many
 SELECT id, started_at, finished_at, status, remote_key, size_bytes, error, log, trigger
 FROM backup_runs
 ORDER BY started_at DESC
-LIMIT $1
+LIMIT $1 OFFSET $2
 `
 
-func (q *Queries) ListBackupRuns(ctx context.Context, limit int32) ([]BackupRun, error) {
-	rows, err := q.db.Query(ctx, listBackupRuns, limit)
+type ListBackupRunsParams struct {
+	Limit  int32 `json:"limit"`
+	Offset int32 `json:"offset"`
+}
+
+func (q *Queries) ListBackupRuns(ctx context.Context, arg ListBackupRunsParams) ([]BackupRun, error) {
+	rows, err := q.db.Query(ctx, listBackupRuns, arg.Limit, arg.Offset)
 	if err != nil {
 		return nil, err
 	}
