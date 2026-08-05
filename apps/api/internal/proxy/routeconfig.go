@@ -5,18 +5,31 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/weiliang79/belune/internal/store/generated"
 )
+
+// ResolveUpstreamPort picks the container port a domain's traffic is proxied to:
+// the domain's own override first, then the application's configured
+// container_port, then the 8080 default. Keeps routing in step with
+// resolveContainerPort (the deploy health-check path), so a blank per-domain port
+// follows the app's port instead of always falling straight to 8080.
+func ResolveUpstreamPort(domainPort, appPort pgtype.Int4) int32 {
+	if domainPort.Valid && domainPort.Int32 > 0 {
+		return domainPort.Int32
+	}
+	if appPort.Valid && appPort.Int32 > 0 {
+		return appPort.Int32
+	}
+	return 8080
+}
 
 // BuildRouteConfig constructs a RouteConfig from a domain and its pre-loaded
 // features. healthCheckPath is the application-level health endpoint; pass "" to
 // disable Caddy upstream health probing for this route. cert carries the already
 // decrypted PEM pair for ssl_mode=custom, and is the zero value otherwise.
-func BuildRouteConfig(domain generated.Domain, containerName, healthCheckPath string, features []generated.DomainRouteFeature, cert HostCertificate) RouteConfig {
-	var port int32 = 8080
-	if domain.ContainerPort.Valid {
-		port = domain.ContainerPort.Int32
-	}
+func BuildRouteConfig(domain generated.Domain, appContainerPort pgtype.Int4, containerName, healthCheckPath string, features []generated.DomainRouteFeature, cert HostCertificate) RouteConfig {
+	port := ResolveUpstreamPort(domain.ContainerPort, appContainerPort)
 
 	var routeFeatures []RouteFeature
 	for _, f := range features {
@@ -54,12 +67,17 @@ func BuildRouteConfigFromDB(ctx context.Context, queries *generated.Queries, dec
 		return RouteConfig{}, fmt.Errorf("list route features for %s: %w", domain.Hostname, err)
 	}
 
+	app, err := queries.GetApplication(ctx, domain.ApplicationID)
+	if err != nil {
+		return RouteConfig{}, fmt.Errorf("load application for %s: %w", domain.Hostname, err)
+	}
+
 	cert, err := ResolveCertificate(ctx, queries, dec, domain)
 	if err != nil {
 		return RouteConfig{}, err
 	}
 
-	return BuildRouteConfig(domain, containerName, healthCheckPath, dbFeatures, cert), nil
+	return BuildRouteConfig(domain, app.ContainerPort, containerName, healthCheckPath, dbFeatures, cert), nil
 }
 
 // ResolveCertificate returns the decrypted PEM pair a domain serves, or the zero

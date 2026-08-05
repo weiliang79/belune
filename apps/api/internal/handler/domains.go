@@ -312,10 +312,11 @@ func (h *Handler) AddDomain(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var port int32 = 8080
+	reqPort := pgtype.Int4{}
 	if req.ContainerPort != nil {
-		port = *req.ContainerPort
+		reqPort = pgtype.Int4{Int32: *req.ContainerPort, Valid: true}
 	}
+	port := proxy.ResolveUpstreamPort(reqPort, row.ContainerPort)
 
 	cert := h.domainCertificate(r.Context(), domain)
 
@@ -480,10 +481,11 @@ func (h *Handler) UpdateDomain(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var port int32 = 8080
+	reqPort := pgtype.Int4{}
 	if req.ContainerPort != nil {
-		port = *req.ContainerPort
+		reqPort = pgtype.Int4{Int32: *req.ContainerPort, Valid: true}
 	}
+	port := proxy.ResolveUpstreamPort(reqPort, row.ContainerPort)
 
 	// Load route features for this domain
 	features := h.loadRouteFeatures(r, domainUUID)
@@ -681,10 +683,7 @@ func (h *Handler) rebuildDomainRoute(r *http.Request, domainID pgtype.UUID) {
 		return
 	}
 
-	var port int32 = 8080
-	if domain.ContainerPort.Valid {
-		port = domain.ContainerPort.Int32
-	}
+	port := proxy.ResolveUpstreamPort(domain.ContainerPort, row.ContainerPort)
 
 	features := h.loadRouteFeatures(r, domainID)
 	cert := h.domainCertificate(r.Context(), domain)

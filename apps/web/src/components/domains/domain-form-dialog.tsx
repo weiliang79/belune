@@ -437,7 +437,7 @@ function DomainForm({
                     type="number"
                     min="1"
                     max="65535"
-                    placeholder="3000"
+                    placeholder="8080"
                     value={field.state.value}
                     onBlur={field.handleBlur}
                     onChange={(e) => field.handleChange(e.target.value)}
@@ -446,8 +446,8 @@ function DomainForm({
                     <p className="text-destructive text-xs">{error}</p>
                   ) : (
                     <p className="text-muted-foreground text-xs">
-                      Override the app's default port for this domain. Leave
-                      blank to inherit.
+                      The port this domain routes to inside the container.
+                      Leave blank to use the app's default port (8080).
                     </p>
                   )}
                 </div>
