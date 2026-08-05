@@ -336,9 +336,10 @@ func (h *Handler) RunDatabaseBackupConfig(w http.ResponseWriter, r *http.Request
 
 type projectBackupActivityResponse struct {
 	databaseBackupResponse
-	Kind         string `json:"kind"` // "database" | "volume"
-	ResourceID   string `json:"resource_id"`
-	ResourceName string `json:"resource_name"`
+	Kind         string  `json:"kind"` // "database" | "volume"
+	ResourceID   string  `json:"resource_id"`
+	ResourceName string  `json:"resource_name"`
+	AppName      *string `json:"app_name,omitempty"` // volume rows only: the owning application's name
 }
 
 // ListProjectBackups returns recent backup runs across all of a project's
@@ -371,6 +372,9 @@ func (h *Handler) ListProjectBackups(w http.ResponseWriter, r *http.Request) {
 			Kind:         b.Kind,
 			ResourceID:   uuidToString(b.ResourceID),
 			ResourceName: b.ResourceName,
+		}
+		if b.AppName.Valid {
+			item.AppName = &b.AppName.String
 		}
 		if b.RemoteKey.Valid {
 			item.RemoteKey = b.RemoteKey.String

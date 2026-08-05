@@ -2,6 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { Loader2, Cloud, Archive, Database, HardDrive } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { CardDescription } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { DestinationsPanel } from "@/components/backups/destinations-panel";
 import { useProjectBackups } from "@/lib/hooks/use-project-backups";
@@ -71,13 +72,18 @@ function ProjectBackupsPage() {
                         />
                       )}
                       {b.kind === "volume" ? (
-                        <Link
-                          to="/projects/$projectId/applications/$applicationId/mounts"
-                          params={{ projectId, applicationId: b.resource_id }}
-                          className="hover:text-foreground truncate text-sm font-medium"
-                        >
-                          {b.resource_name}
-                        </Link>
+                        <>
+                          <Link
+                            to="/projects/$projectId/applications/$applicationId/mounts"
+                            params={{ projectId, applicationId: b.resource_id }}
+                            className="hover:text-foreground truncate text-sm font-medium"
+                          >
+                            {b.resource_name}
+                          </Link>
+                          {b.app_name && (
+                            <Badge variant="secondary">{b.app_name}</Badge>
+                          )}
+                        </>
                       ) : (
                         <Link
                           to="/projects/$projectId/databases/$databaseId"

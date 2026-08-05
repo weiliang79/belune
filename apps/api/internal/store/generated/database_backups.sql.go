@@ -274,7 +274,8 @@ SELECT b.id,
        b.log              AS log,
        b.backup_config_id,
        d.id               AS resource_id,
-       d.name             AS resource_name
+       d.name             AS resource_name,
+       NULL::text         AS app_name
 FROM database_backups b
 JOIN databases d ON d.id = b.database_id
 WHERE d.project_id = $1
@@ -292,7 +293,8 @@ SELECT vb.id,
        COALESCE(vb.log, '') AS log,
        vb.backup_config_id,
        a.id               AS resource_id,
-       v.name             AS resource_name
+       v.name             AS resource_name,
+       a.name             AS app_name
 FROM application_volume_backups vb
 JOIN application_volumes v ON v.id = vb.application_volume_id
 JOIN applications a ON a.id = v.application_id
@@ -320,6 +322,7 @@ type ListProjectBackupActivityRow struct {
 	BackupConfigID pgtype.UUID        `json:"backup_config_id"`
 	ResourceID     pgtype.UUID        `json:"resource_id"`
 	ResourceName   string             `json:"resource_name"`
+	AppName        pgtype.Text        `json:"app_name"`
 }
 
 // Recent backup runs across a project's databases AND application volumes,
@@ -348,6 +351,7 @@ func (q *Queries) ListProjectBackupActivity(ctx context.Context, arg ListProject
 			&i.BackupConfigID,
 			&i.ResourceID,
 			&i.ResourceName,
+			&i.AppName,
 		); err != nil {
 			return nil, err
 		}

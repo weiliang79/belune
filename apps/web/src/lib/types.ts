@@ -424,6 +424,7 @@ export interface ProjectBackupActivity extends DatabaseBackup {
   kind: "database" | "volume";
   resource_id: string;
   resource_name: string;
+  app_name?: string; // volume rows only: the owning application's name
 }
 
 export interface RouteFeature {
