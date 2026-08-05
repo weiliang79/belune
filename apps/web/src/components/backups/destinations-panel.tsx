@@ -28,6 +28,7 @@ import {
 } from "@/components/ui/tooltip";
 import { Skeleton } from "@/components/ui/skeleton";
 import { DestinationFormDialog } from "./destination-form-dialog";
+import { PROVIDER_LABELS } from "@/lib/backup-providers";
 import type { BackupDestination } from "@/lib/types";
 
 export function DestinationsPanel({ projectId }: { projectId: string }) {
@@ -107,13 +108,13 @@ export function DestinationsPanel({ projectId }: { projectId: string }) {
                 <div className="min-w-0 space-y-1">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="font-medium">{d.name}</span>
-                    <Badge variant="outline" className="uppercase">
-                      {d.provider}
+                    <Badge variant="outline">
+                      {PROVIDER_LABELS[d.provider]}
                     </Badge>
                   </div>
                   <p className="text-muted-foreground truncate text-xs">
                     {isLocal(d) ? (
-                      "Kept on this host — not uploaded anywhere"
+                      "Kept on this host · not uploaded anywhere"
                     ) : (
                       <>
                         {d.bucket}
