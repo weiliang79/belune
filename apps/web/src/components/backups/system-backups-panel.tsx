@@ -104,12 +104,6 @@ const backupColumns: ColumnDef<BackupRun>[] = [
     cell: ({ row: { original: run } }) =>
       run.size_bytes ? formatBytes(run.size_bytes) : "—",
   },
-  {
-    id: "remote_key",
-    header: "Remote key",
-    meta: { className: "max-w-[200px] truncate font-mono text-xs" },
-    cell: ({ row: { original: run } }) => run.remote_key ?? "—",
-  },
 ];
 
 // SystemBackupsPanel renders the control-plane (platform Postgres + Caddy certs)
@@ -254,6 +248,17 @@ export function SystemBackupsPanel() {
                 run.status === "succeeded" ? buildRestoreCommand(run) : null;
               return (
                 <div className="space-y-3">
+                  <div>
+                    <p className="text-muted-foreground mb-1 text-xs font-medium">
+                      Remote key
+                    </p>
+                    <div className="bg-elev flex items-center gap-2 rounded p-2">
+                      <code className="flex-1 font-mono text-xs break-all">
+                        {run.remote_key ?? "-"}
+                      </code>
+                      {run.remote_key && <CopyButton value={run.remote_key} />}
+                    </div>
+                  </div>
                   {restoreCmd && (
                     <div>
                       <p className="text-muted-foreground mb-1 text-xs font-medium">
@@ -452,8 +457,8 @@ function RestoreHelpCard({ remoteEnabled }: { remoteEnabled: boolean }) {
               <>
                 either the local copy under{" "}
                 <code className="font-mono text-xs">{BELUNE_DIR}/backups/</code>{" "}
-                or download the object from your remote bucket (the run's{" "}
-                <span className="font-medium">Remote key</span> above).
+                or download the object from your remote bucket (expand a run
+                above for its <span className="font-medium">Remote key</span>).
               </>
             ) : (
               <>
