@@ -30,12 +30,47 @@ WHERE backup_config_id = $1
 ORDER BY started_at DESC
 LIMIT $2;
 
--- name: ListProjectDatabaseBackups :many
-SELECT b.*, d.name AS database_name, d.slug AS database_slug
+-- name: ListProjectBackupActivity :many
+-- Recent backup runs across a project's databases AND application volumes,
+-- newest first, for the project Backups-tab activity feed. resource_id is the
+-- deep-link target: the database id on the database side, the owning
+-- application id (not the volume id) on the volume side.
+SELECT b.id,
+       'database'::text  AS kind,
+       b.started_at,
+       b.finished_at,
+       b.status,
+       b.remote_key,
+       b.size_bytes,
+       b.error,
+       b.log              AS log,
+       b.backup_config_id,
+       d.id               AS resource_id,
+       d.name             AS resource_name
 FROM database_backups b
 JOIN databases d ON d.id = b.database_id
 WHERE d.project_id = $1
-ORDER BY b.started_at DESC
+
+UNION ALL
+
+SELECT vb.id,
+       'volume'::text    AS kind,
+       vb.started_at,
+       vb.finished_at,
+       vb.status,
+       vb.remote_key,
+       vb.size_bytes,
+       vb.error,
+       COALESCE(vb.log, '') AS log,
+       vb.backup_config_id,
+       a.id               AS resource_id,
+       v.name             AS resource_name
+FROM application_volume_backups vb
+JOIN application_volumes v ON v.id = vb.application_volume_id
+JOIN applications a ON a.id = v.application_id
+WHERE a.project_id = $1
+
+ORDER BY started_at DESC
 LIMIT $2;
 
 -- name: DeleteDatabaseBackup :exec

@@ -262,61 +262,92 @@ func (q *Queries) ListDatabaseRestores(ctx context.Context, arg ListDatabaseRest
 	return items, nil
 }
 
-const listProjectDatabaseBackups = `-- name: ListProjectDatabaseBackups :many
-SELECT b.id, b.database_id, b.started_at, b.finished_at, b.status, b.local_path, b.remote_key, b.size_bytes, b.error, b.backup_config_id, b.log, b.target_database, d.name AS database_name, d.slug AS database_slug
+const listProjectBackupActivity = `-- name: ListProjectBackupActivity :many
+SELECT b.id,
+       'database'::text  AS kind,
+       b.started_at,
+       b.finished_at,
+       b.status,
+       b.remote_key,
+       b.size_bytes,
+       b.error,
+       b.log              AS log,
+       b.backup_config_id,
+       d.id               AS resource_id,
+       d.name             AS resource_name
 FROM database_backups b
 JOIN databases d ON d.id = b.database_id
 WHERE d.project_id = $1
-ORDER BY b.started_at DESC
+
+UNION ALL
+
+SELECT vb.id,
+       'volume'::text    AS kind,
+       vb.started_at,
+       vb.finished_at,
+       vb.status,
+       vb.remote_key,
+       vb.size_bytes,
+       vb.error,
+       COALESCE(vb.log, '') AS log,
+       vb.backup_config_id,
+       a.id               AS resource_id,
+       v.name             AS resource_name
+FROM application_volume_backups vb
+JOIN application_volumes v ON v.id = vb.application_volume_id
+JOIN applications a ON a.id = v.application_id
+WHERE a.project_id = $1
+
+ORDER BY started_at DESC
 LIMIT $2
 `
 
-type ListProjectDatabaseBackupsParams struct {
+type ListProjectBackupActivityParams struct {
 	ProjectID pgtype.UUID `json:"project_id"`
 	Limit     int32       `json:"limit"`
 }
 
-type ListProjectDatabaseBackupsRow struct {
+type ListProjectBackupActivityRow struct {
 	ID             pgtype.UUID        `json:"id"`
-	DatabaseID     pgtype.UUID        `json:"database_id"`
+	Kind           string             `json:"kind"`
 	StartedAt      pgtype.Timestamptz `json:"started_at"`
 	FinishedAt     pgtype.Timestamptz `json:"finished_at"`
 	Status         string             `json:"status"`
-	LocalPath      pgtype.Text        `json:"local_path"`
 	RemoteKey      pgtype.Text        `json:"remote_key"`
 	SizeBytes      int64              `json:"size_bytes"`
 	Error          pgtype.Text        `json:"error"`
-	BackupConfigID pgtype.UUID        `json:"backup_config_id"`
 	Log            string             `json:"log"`
-	TargetDatabase string             `json:"target_database"`
-	DatabaseName   string             `json:"database_name"`
-	DatabaseSlug   string             `json:"database_slug"`
+	BackupConfigID pgtype.UUID        `json:"backup_config_id"`
+	ResourceID     pgtype.UUID        `json:"resource_id"`
+	ResourceName   string             `json:"resource_name"`
 }
 
-func (q *Queries) ListProjectDatabaseBackups(ctx context.Context, arg ListProjectDatabaseBackupsParams) ([]ListProjectDatabaseBackupsRow, error) {
-	rows, err := q.db.Query(ctx, listProjectDatabaseBackups, arg.ProjectID, arg.Limit)
+// Recent backup runs across a project's databases AND application volumes,
+// newest first, for the project Backups-tab activity feed. resource_id is the
+// deep-link target: the database id on the database side, the owning
+// application id (not the volume id) on the volume side.
+func (q *Queries) ListProjectBackupActivity(ctx context.Context, arg ListProjectBackupActivityParams) ([]ListProjectBackupActivityRow, error) {
+	rows, err := q.db.Query(ctx, listProjectBackupActivity, arg.ProjectID, arg.Limit)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []ListProjectDatabaseBackupsRow{}
+	items := []ListProjectBackupActivityRow{}
 	for rows.Next() {
-		var i ListProjectDatabaseBackupsRow
+		var i ListProjectBackupActivityRow
 		if err := rows.Scan(
 			&i.ID,
-			&i.DatabaseID,
+			&i.Kind,
 			&i.StartedAt,
 			&i.FinishedAt,
 			&i.Status,
-			&i.LocalPath,
 			&i.RemoteKey,
 			&i.SizeBytes,
 			&i.Error,
-			&i.BackupConfigID,
 			&i.Log,
-			&i.TargetDatabase,
-			&i.DatabaseName,
-			&i.DatabaseSlug,
+			&i.BackupConfigID,
+			&i.ResourceID,
+			&i.ResourceName,
 		); err != nil {
 			return nil, err
 		}

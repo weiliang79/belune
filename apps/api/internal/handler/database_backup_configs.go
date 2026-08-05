@@ -336,19 +336,20 @@ func (h *Handler) RunDatabaseBackupConfig(w http.ResponseWriter, r *http.Request
 
 type projectBackupActivityResponse struct {
 	databaseBackupResponse
-	DatabaseID   string `json:"database_id"`
-	DatabaseName string `json:"database_name"`
-	DatabaseSlug string `json:"database_slug"`
+	Kind         string `json:"kind"` // "database" | "volume"
+	ResourceID   string `json:"resource_id"`
+	ResourceName string `json:"resource_name"`
 }
 
 // ListProjectBackups returns recent backup runs across all of a project's
-// databases (newest first) for the project Backups-tab activity summary.
+// databases AND application volumes (newest first) for the project
+// Backups-tab activity summary.
 func (h *Handler) ListProjectBackups(w http.ResponseWriter, r *http.Request) {
 	projectUUID, ok := h.projectFromPath(w, r)
 	if !ok {
 		return
 	}
-	rows, err := h.queries.ListProjectDatabaseBackups(r.Context(), generated.ListProjectDatabaseBackupsParams{
+	rows, err := h.queries.ListProjectBackupActivity(r.Context(), generated.ListProjectBackupActivityParams{
 		ProjectID: projectUUID,
 		Limit:     50,
 	})
@@ -367,9 +368,9 @@ func (h *Handler) ListProjectBackups(w http.ResponseWriter, r *http.Request) {
 				Log:       b.Log,
 				StartedAt: b.StartedAt.Time,
 			},
-			DatabaseID:   uuidToString(b.DatabaseID),
-			DatabaseName: b.DatabaseName,
-			DatabaseSlug: b.DatabaseSlug,
+			Kind:         b.Kind,
+			ResourceID:   uuidToString(b.ResourceID),
+			ResourceName: b.ResourceName,
 		}
 		if b.RemoteKey.Valid {
 			item.RemoteKey = b.RemoteKey.String

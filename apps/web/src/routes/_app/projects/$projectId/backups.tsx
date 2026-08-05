@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { Loader2, Cloud, Archive } from "lucide-react";
+import { Loader2, Cloud, Archive, Database, HardDrive } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { CardDescription } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -39,7 +39,7 @@ function ProjectBackupsPage() {
             Recent Backup Activity
           </CardTitle>
           <CardDescription>
-            The latest backups across all databases in this project.
+            The latest backups across all databases and volumes in this project.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -48,7 +48,7 @@ function ProjectBackupsPage() {
           ) : !activity || activity.length === 0 ? (
             <p className="text-text-faint py-4 text-center text-sm">
               No backups yet. Configure scheduled backups from a database&apos;s
-              Backups tab.
+              Backups tab or an application&apos;s Mounts tab.
             </p>
           ) : (
             <ul className="divide-border divide-y">
@@ -59,13 +59,34 @@ function ProjectBackupsPage() {
                 >
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
-                      <Link
-                        to="/projects/$projectId/databases/$databaseId"
-                        params={{ projectId, databaseId: b.database_id }}
-                        className="hover:text-foreground truncate text-sm font-medium"
-                      >
-                        {b.database_name}
-                      </Link>
+                      {b.kind === "volume" ? (
+                        <HardDrive
+                          className="text-text-faint h-3.5 w-3.5 shrink-0"
+                          aria-label="Application volume"
+                        />
+                      ) : (
+                        <Database
+                          className="text-text-faint h-3.5 w-3.5 shrink-0"
+                          aria-label="Database"
+                        />
+                      )}
+                      {b.kind === "volume" ? (
+                        <Link
+                          to="/projects/$projectId/applications/$applicationId/mounts"
+                          params={{ projectId, applicationId: b.resource_id }}
+                          className="hover:text-foreground truncate text-sm font-medium"
+                        >
+                          {b.resource_name}
+                        </Link>
+                      ) : (
+                        <Link
+                          to="/projects/$projectId/databases/$databaseId"
+                          params={{ projectId, databaseId: b.resource_id }}
+                          className="hover:text-foreground truncate text-sm font-medium"
+                        >
+                          {b.resource_name}
+                        </Link>
+                      )}
                       <span
                         className={cn(
                           "text-xs font-medium capitalize",

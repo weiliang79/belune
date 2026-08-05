@@ -421,9 +421,9 @@ export interface DatabaseBackupConfig {
 }
 
 export interface ProjectBackupActivity extends DatabaseBackup {
-  database_id: string;
-  database_name: string;
-  database_slug: string;
+  kind: "database" | "volume";
+  resource_id: string;
+  resource_name: string;
 }
 
 export interface RouteFeature {
