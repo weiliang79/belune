@@ -1,15 +1,18 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5"
 
+	"github.com/weiliang79/belune/internal/config"
 	"github.com/weiliang79/belune/internal/service/backup"
 	"github.com/weiliang79/belune/internal/store/generated"
 	"github.com/weiliang79/belune/internal/worker"
@@ -95,14 +98,35 @@ func (h *Handler) ListBackupRuns(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, views)
 }
 
+// resolveBackupRetention reads the dashboard-editable retention settings
+// fresh, falling back per-key to the .env-configured Config defaults when a
+// setting is unset — mirrors the worker's copy of this resolution (see
+// worker.resolveBackupRetention), kept separate since the two packages don't
+// share a settings-reading helper.
+func (h *Handler) resolveBackupRetention(ctx context.Context) (days, count int) {
+	days, count = h.cfg.BackupRetainDays, h.cfg.BackupRetainCount
+	if s, err := h.queries.GetSetting(ctx, config.SettingControlPlaneBackupRetainDays); err == nil {
+		if n, convErr := strconv.Atoi(strings.TrimSpace(s.Value)); convErr == nil && n > 0 {
+			days = n
+		}
+	}
+	if s, err := h.queries.GetSetting(ctx, config.SettingControlPlaneBackupRetainCount); err == nil {
+		if n, convErr := strconv.Atoi(strings.TrimSpace(s.Value)); convErr == nil && n > 0 {
+			count = n
+		}
+	}
+	return days, count
+}
+
 // GetBackupStatus returns a summary of the most recent backup activity.
 func (h *Handler) GetBackupStatus(w http.ResponseWriter, r *http.Request) {
 	rc := backup.LoadRemoteConfig(h.cfg)
+	retainDays, retainCount := h.resolveBackupRetention(r.Context())
 	status := backupStatusView{
 		RemoteEnabled: rc.Enabled,
 		Retention: map[string]any{
-			"days":  h.cfg.BackupRetainDays,
-			"count": h.cfg.BackupRetainCount,
+			"days":  retainDays,
+			"count": retainCount,
 		},
 	}
 	if rc.Enabled {

@@ -1,12 +1,16 @@
 import { useState } from "react";
 import { toast } from "sonner";
+import { useQueryClient } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
 import {
   Archive,
   ArchiveRestore,
   Clock,
   Cloud,
+  DatabaseBackup,
   HistoryIcon,
+  Settings2,
+  TimerIcon,
   type LucideIcon,
 } from "lucide-react";
 import {
@@ -17,6 +21,7 @@ import {
   useUpdateBackupRemote,
 } from "@/lib/hooks/use-backups";
 import { useSettings, useUpdateSettings } from "@/lib/hooks/use-settings";
+import { queryKeys } from "@/lib/hooks/query-keys";
 import {
   Card,
   CardContent,
@@ -30,6 +35,13 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import { StatusPill } from "@/components/ui/status-pill";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
@@ -48,6 +60,11 @@ import type { BackupRemoteConfig, BackupRun, BackupStatus } from "@/lib/types";
 const DEFAULT_BACKUP_SCHEDULE = "0 2 * * *";
 
 const RUNS_PAGE_SIZE = 10;
+
+// Matches the bounds validateRetentionSetting enforces server-side (see
+// handler/settings.go) — client-side just gives immediate feedback.
+const RETAIN_DAYS_MAX = 3650;
+const RETAIN_COUNT_MAX = 1000;
 
 /** "YYYY-MM-DD HH:mm:ss" for table cells (null-safe). */
 function fmtTableDate(iso: string | null) {
@@ -120,6 +137,16 @@ export function SystemBackupsPanel() {
     offset: runsOffset,
   });
   const trigger = useTriggerBackup();
+  const [configureOpen, setConfigureOpen] = useState(false);
+  // Shared with BackupScheduleSection inside the Sheet (same query, cached) —
+  // read here too so the summary grid can show the schedule without opening it.
+  const { data: settings } = useSettings();
+  const scheduleEnabled =
+    settings?.find((s) => s.key === "control_plane_backup_enabled")?.value !==
+    "false";
+  const scheduleCron =
+    settings?.find((s) => s.key === "control_plane_backup_schedule")?.value ||
+    DEFAULT_BACKUP_SCHEDULE;
 
   const isRunning = latestRuns?.[0]?.status === "running";
   const lastRunFailed =
@@ -148,21 +175,25 @@ export function SystemBackupsPanel() {
               </CardDescription>
             </div>
             <div className="flex items-center gap-2">
-              {status && (
-                <Badge variant={lastRunFailed ? "destructive" : "default"}>
-                  {lastRunFailed ? "Last run failed" : "Healthy"}
-                </Badge>
-              )}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setConfigureOpen(true)}
+              >
+                <Settings2 aria-hidden="true" className="mr-1.5 size-4" />
+                Configure
+              </Button>
               <Button
                 onClick={handleTrigger}
                 disabled={trigger.isPending || isRunning}
                 size="sm"
               >
+                <DatabaseBackup aria-hidden="true" className="mr-1.5 size-4" />
                 {isRunning
                   ? "Backup in progress…"
                   : trigger.isPending
                     ? "Queueing…"
-                    : "Run Backup Now"}
+                    : "Backup Now"}
               </Button>
             </div>
           </div>
@@ -174,7 +205,15 @@ export function SystemBackupsPanel() {
               <Skeleton className="h-4 w-40" />
             </div>
           ) : status ? (
-            <div className="grid grid-cols-2 gap-4 text-sm md:grid-cols-4">
+            <div className="grid grid-cols-2 gap-4 text-sm md:grid-cols-3">
+              <StatusItem
+                label="Status"
+                value={
+                  <Badge variant={lastRunFailed ? "destructive" : "default"}>
+                    {lastRunFailed ? "Last run failed" : "Healthy"}
+                  </Badge>
+                }
+              />
               <StatusItem
                 label="Last succeeded"
                 value={fmtSummaryDate(status.last_succeeded_at)}
@@ -194,11 +233,21 @@ export function SystemBackupsPanel() {
                 }
               />
               <StatusItem
+                label="Schedule"
+                value={
+                  scheduleEnabled ? (
+                    <p className="font-mono">{scheduleCron}</p>
+                  ) : (
+                    <Badge variant="secondary">Disabled</Badge>
+                  )
+                }
+              />
+              <StatusItem
                 label="Retention"
                 value={`${status.retention.count} backups / ${status.retention.days} days`}
               />
               {status.last_error && (
-                <div className="border-destructive/30 bg-destructive/10 col-span-2 mt-1 rounded-lg border p-3 md:col-span-4">
+                <div className="border-destructive/30 bg-destructive/10 col-span-2 mt-1 rounded-lg border p-3 md:col-span-3">
                   <p className="text-destructive text-xs font-semibold">
                     Last error
                   </p>
@@ -212,7 +261,12 @@ export function SystemBackupsPanel() {
         </CardContent>
       </Card>
 
-      <BackupScheduleAndRemoteCard status={status} loading={statusLoading} />
+      <ConfigureBackupsSheet
+        open={configureOpen}
+        onOpenChange={setConfigureOpen}
+        status={status}
+        loading={statusLoading}
+      />
 
       <Card>
         <CardHeader>
@@ -506,35 +560,184 @@ function RestoreHelpCard({ remoteEnabled }: { remoteEnabled: boolean }) {
   );
 }
 
-// BackupScheduleAndRemoteCard combines "when" (Schedule) and "where"
-// (Remote Storage) for control-plane backups into a single card, split by a
-// Separator instead of two full Cards. Remote Storage's form is split out so
-// its useState initializers can read real data on mount instead of racing
-// the query — the "loaded" key forces exactly one remount when the query
-// transitions from pending to loaded, not on every refetch afterward (a
-// save's own refetch should not blow away what the operator is mid-typing).
-function BackupScheduleAndRemoteCard({
+// ConfigureBackupsSheet holds "when" (Schedule), "where" (Remote Storage), and
+// "how long" (Retention) for control-plane backups — everything that used to
+// sit inline on the page, now behind a Configure button so the System Backup
+// card's read-only summary is what stays always-visible. Sections split by a
+// Separator instead of separate Cards. Remote Storage's and Retention's forms
+// are split out so their useState initializers can read real data on mount
+// instead of racing the query — the "loaded" key forces exactly one remount
+// when the query transitions from pending to loaded, not on every refetch
+// afterward (a save's own refetch should not blow away what the operator is
+// mid-typing).
+function ConfigureBackupsSheet({
+  open,
+  onOpenChange,
   status,
   loading,
 }: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
   status: BackupStatus | undefined;
   loading: boolean;
 }) {
   return (
-    <Card>
-      <CardContent className="space-y-6">
-        <BackupScheduleSection />
-        <Separator />
-        {loading ? (
-          <div className="space-y-2">
-            <Skeleton className="h-4 w-48" />
-            <Skeleton className="h-4 w-40" />
-          </div>
-        ) : (
-          <RemoteStorageSection key="loaded" remote={status?.remote ?? null} />
-        )}
-      </CardContent>
-    </Card>
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent className="sm:max-w-lg">
+        <SheetHeader>
+          <SheetTitle>Configure Backups</SheetTitle>
+          <SheetDescription>
+            Schedule, remote storage, and retention for control-plane backups.
+          </SheetDescription>
+        </SheetHeader>
+        <div className="space-y-6">
+          <BackupScheduleSection />
+          <Separator />
+          {loading ? (
+            <div className="space-y-2">
+              <Skeleton className="h-4 w-48" />
+              <Skeleton className="h-4 w-40" />
+            </div>
+          ) : (
+            <RemoteStorageSection
+              key="remote-loaded"
+              remote={status?.remote ?? null}
+            />
+          )}
+          <Separator />
+          {loading ? (
+            <div className="space-y-2">
+              <Skeleton className="h-4 w-48" />
+              <Skeleton className="h-4 w-40" />
+            </div>
+          ) : (
+            <RetentionSection
+              key="retention-loaded"
+              retention={status?.retention ?? null}
+            />
+          )}
+        </div>
+      </SheetContent>
+    </Sheet>
+  );
+}
+
+// RetentionSection edits how long control-plane backups are kept, both
+// locally and off-host — dashboard-editable settings
+// (control_plane_backup_retain_days/count), falling back to the .env
+// BACKUP_RETAIN_DAYS/COUNT values when unset (same shape as the schedule
+// above). retention is the server-resolved EFFECTIVE value (settings table or
+// .env fallback, whichever applies) — used as the initial draft so the form
+// always starts from what's actually in effect, not a guessed default.
+function RetentionSection({
+  retention,
+}: {
+  retention: { days: number; count: number } | null;
+}) {
+  const updateSettings = useUpdateSettings();
+  const qc = useQueryClient();
+
+  const [days, setDays] = useState(String(retention?.days ?? 30));
+  const [count, setCount] = useState(String(retention?.count ?? 14));
+
+  const handleSave = () => {
+    const daysNum = Number(days);
+    const countNum = Number(count);
+    if (
+      !Number.isInteger(daysNum) ||
+      daysNum < 1 ||
+      daysNum > RETAIN_DAYS_MAX
+    ) {
+      toast.error(
+        `Days must be a whole number between 1 and ${RETAIN_DAYS_MAX}`,
+      );
+      return;
+    }
+    if (
+      !Number.isInteger(countNum) ||
+      countNum < 1 ||
+      countNum > RETAIN_COUNT_MAX
+    ) {
+      toast.error(
+        `Count must be a whole number between 1 and ${RETAIN_COUNT_MAX}`,
+      );
+      return;
+    }
+    toast.promise(
+      updateSettings
+        .mutateAsync([
+          {
+            key: "control_plane_backup_retain_days",
+            value: String(daysNum),
+          },
+          {
+            key: "control_plane_backup_retain_count",
+            value: String(countNum),
+          },
+        ])
+        // Retention's effective value is surfaced via /backups/status (the
+        // summary card), a different query than the generic settings list —
+        // useUpdateSettings only invalidates the latter, so nudge this one too.
+        .then(() =>
+          qc.invalidateQueries({ queryKey: queryKeys.backups.status }),
+        ),
+      {
+        loading: "Saving…",
+        success: "Retention updated",
+        error: (err) => err.message ?? "Failed to save",
+      },
+    );
+  };
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center gap-2 text-base leading-snug font-medium">
+        <TimerIcon aria-hidden="true" className="size-4" />
+        Retention
+      </div>
+      <p className="text-muted-foreground text-sm">
+        How long control-plane backups are kept, locally and off-host.
+      </p>
+      <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-1.5">
+          <Label htmlFor="retain-days">Keep for (days)</Label>
+          <Input
+            id="retain-days"
+            type="number"
+            min={1}
+            max={RETAIN_DAYS_MAX}
+            value={days}
+            onChange={(e) => setDays(e.target.value)}
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="retain-count">Keep at least (count)</Label>
+          <Input
+            id="retain-count"
+            type="number"
+            min={1}
+            max={RETAIN_COUNT_MAX}
+            value={count}
+            onChange={(e) => setCount(e.target.value)}
+          />
+        </div>
+      </div>
+      <div className="flex justify-end">
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={handleSave}
+          disabled={updateSettings.isPending}
+        >
+          {updateSettings.isPending ? "Saving…" : "Save"}
+        </Button>
+      </div>
+      <p className="text-text-faint text-xs">
+        The most recent backups (count) are always kept regardless of age; older
+        ones are deleted once they pass the day limit. Applies to local archives
+        and the remote bucket alike.
+      </p>
+    </div>
   );
 }
 

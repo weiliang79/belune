@@ -106,22 +106,23 @@ produce the same archive format and record every run — there is no longer a
 systemd timer; the daily trigger is the in-app schedule (`control_plane_backup_schedule`
 setting, default `0 2 * * *`). Distinct from per-database backups below.
 
-**Remote storage is dashboard-managed** (Server → Backups → Remote Storage):
-edits save to `BACKUP_REMOTE_CONFIG_PATH` (`backup-remote.env`, mode `0600`),
-a flat `KEY=value` file separate from `.env` so the dashboard never touches
-bootstrap secrets like `ENCRYPTION_KEY`. It's read fresh on every backup — no
-API restart needed — and both `scripts/backup.sh` and the `belune-backup-upload`
-helper read the same file. The variables below are the fallback: any key
-missing from `backup-remote.env` (including "the file doesn't exist yet")
-falls back to it per-key, so setting these in `.env` still works on a stock
-install that has never touched the Remote Storage card. Retention
-(`BACKUP_RETAIN_*`) stays env-only — it's not part of the dashboard-managed file.
+**Schedule, remote storage, and retention are dashboard-managed** — Server →
+Backups → **Configure**. Remote storage edits save to `BACKUP_REMOTE_CONFIG_PATH`
+(`backup-remote.env`, mode `0600`), a flat `KEY=value` file separate from
+`.env` so the dashboard never touches bootstrap secrets like `ENCRYPTION_KEY`;
+it's read fresh on every backup — no API restart needed — and both
+`scripts/backup.sh` and the `belune-backup-upload` helper read the same file.
+Retention (`control_plane_backup_retain_days`/`...retain_count`) lives in the
+settings table instead — no bash reader needs it, since only the worker ever
+prunes. The variables below are all fallbacks: unset in their dashboard-managed
+source, they fall back per-key to `.env`, so setting these still works on a
+stock install that has never touched the Configure sheet.
 
 | Variable | Default | Notes |
 |---|---|---|
 | `BACKUP_REMOTE_ENABLED` | `false` | Fallback only — prefer the dashboard |
-| `BACKUP_RETAIN_COUNT` | `14` | Applies to local archives too, not just the remote bucket |
-| `BACKUP_RETAIN_DAYS` | `30` | |
+| `BACKUP_RETAIN_COUNT` | `14` | Applies to local archives too, not just the remote bucket. Fallback only |
+| `BACKUP_RETAIN_DAYS` | `30` | Fallback only |
 | `BACKUP_S3_BUCKET` | *empty* | Fallback only — prefer the dashboard |
 | `BACKUP_S3_ENDPOINT` | *empty* | For S3-compatible providers. Fallback only |
 | `BACKUP_S3_REGION` | `us-east-1` | Fallback only |

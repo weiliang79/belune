@@ -84,7 +84,7 @@ func (h *TaskHandler) HandleBackupNowTask(ctx context.Context, t *asynq.Task) er
 	}
 	lg.step("Backup complete: %s", archivePath)
 
-	h.rotateLocalControlPlaneBackups(lg)
+	h.rotateLocalControlPlaneBackups(ctx, lg)
 	h.finaliseRun(ctx, run.ID, sizeBytes, remoteKey, "", lg.String())
 
 	slog.Info("backup_now: completed", "size_bytes", sizeBytes, "destination", destination)
@@ -108,14 +108,15 @@ func (h *TaskHandler) failBackupNow(ctx context.Context, span trace.Span, runID 
 }
 
 // HandleBackupRotateTask applies the retention policy: deletes remote objects
-// older than BackupRetainDays that are beyond the BackupRetainCount newest.
+// older than the retained days that are beyond the retained count newest.
 func (h *TaskHandler) HandleBackupRotateTask(ctx context.Context, t *asynq.Task) error {
 	if h.BackupService == nil || !h.BackupService.Enabled() {
 		slog.Debug("backup_rotate: remote backup not enabled, skipping")
 		return nil
 	}
 
-	deleted, err := h.BackupService.Rotate(ctx)
+	retainDays, retainCount := h.resolveBackupRetention(ctx)
+	deleted, err := h.BackupService.Rotate(ctx, retainDays, retainCount)
 	metrics.RecordBackupRotate(err)
 	if err != nil {
 		return fmt.Errorf("backup rotate: %w", err)

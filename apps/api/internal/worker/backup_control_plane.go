@@ -10,11 +10,13 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
 	"filippo.io/age"
 
+	"github.com/weiliang79/belune/internal/config"
 	"github.com/weiliang79/belune/internal/service/backup"
 )
 
@@ -306,12 +308,32 @@ func ageEncryptFile(srcPath, destPath, recipientOrPath string) error {
 	return w.Close()
 }
 
+// resolveBackupRetention reads the dashboard-editable retention settings
+// fresh, falling back per-key to the .env-configured Config defaults when a
+// setting is unset. Mirrors handler.resolveBackupRetention — kept as a
+// separate copy since the handler and worker packages don't share a
+// settings-reading helper, and this is the only place either needs one.
+func (h *TaskHandler) resolveBackupRetention(ctx context.Context) (days, count int) {
+	days, count = h.Config.BackupRetainDays, h.Config.BackupRetainCount
+	if s, err := h.Queries.GetSetting(ctx, config.SettingControlPlaneBackupRetainDays); err == nil {
+		if n, convErr := strconv.Atoi(strings.TrimSpace(s.Value)); convErr == nil && n > 0 {
+			days = n
+		}
+	}
+	if s, err := h.Queries.GetSetting(ctx, config.SettingControlPlaneBackupRetainCount); err == nil {
+		if n, convErr := strconv.Atoi(strings.TrimSpace(s.Value)); convErr == nil && n > 0 {
+			count = n
+		}
+	}
+	return days, count
+}
+
 // rotateLocalControlPlaneBackups deletes local control-plane archives beyond
-// the retention policy (BackupRetainDays/BackupRetainCount — the same knobs
-// that already govern remote rotation), mirroring pruneDatabaseBackups'
-// keep-whichever-more rule. Best-effort; a listing/removal failure is logged
-// and does not fail the backup that triggered it.
-func (h *TaskHandler) rotateLocalControlPlaneBackups(lg *runLog) {
+// the retention policy (resolveBackupRetention — the same knobs that already
+// govern remote rotation), mirroring pruneDatabaseBackups' keep-whichever-more
+// rule. Best-effort; a listing/removal failure is logged and does not fail
+// the backup that triggered it.
+func (h *TaskHandler) rotateLocalControlPlaneBackups(ctx context.Context, lg *runLog) {
 	entries, err := os.ReadDir(h.Config.ControlPlaneBackupDir)
 	if err != nil {
 		lg.warn("local rotation: list backup dir: %v", err)
@@ -340,7 +362,8 @@ func (h *TaskHandler) rotateLocalControlPlaneBackups(lg *runLog) {
 	}
 	sort.Slice(objects, func(i, j int) bool { return objects[i].LastModified.Before(objects[j].LastModified) })
 
-	toDelete := backup.SelectForDeletion(objects, time.Now(), h.Config.BackupRetainDays, h.Config.BackupRetainCount)
+	retainDays, retainCount := h.resolveBackupRetention(ctx)
+	toDelete := backup.SelectForDeletion(objects, time.Now(), retainDays, retainCount)
 	for _, key := range toDelete {
 		if err := os.Remove(paths[key]); err != nil {
 			lg.warn("local rotation: remove %s: %v", key, err)

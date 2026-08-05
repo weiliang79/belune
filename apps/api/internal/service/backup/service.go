@@ -233,16 +233,17 @@ func SelectForDeletion(objects []BackupObject, now time.Time, retainDays, retain
 }
 
 // Rotate applies the retention policy: deletes remote objects that are beyond
-// BackupRetainCount AND older than BackupRetainDays. Returns the deleted keys.
-func (s *Service) Rotate(ctx context.Context) ([]string, error) {
+// retainCount AND older than retainDays. Returns the deleted keys. The caller
+// resolves the retention values fresh (dashboard settings, falling back to
+// Config.BackupRetainDays/Count) — Service stays DB-agnostic, same reasoning
+// as it not resolving RemoteConfig's DB-backed pieces itself.
+func (s *Service) Rotate(ctx context.Context, retainDays, retainCount int) ([]string, error) {
 	objects, err := s.List(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	// Retention day/count knobs stay env-only (BACKUP_RETAIN_DAYS/COUNT) — not
-	// part of the dashboard-managed remote config, so no fresh reload needed.
-	keys := SelectForDeletion(objects, time.Now(), s.cfg.BackupRetainDays, s.cfg.BackupRetainCount)
+	keys := SelectForDeletion(objects, time.Now(), retainDays, retainCount)
 	if len(keys) == 0 {
 		return nil, nil
 	}

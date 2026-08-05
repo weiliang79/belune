@@ -32,6 +32,14 @@ const SettingControlPlaneBackupSchedule = "control_plane_backup_schedule"
 // existing install preserves the backup cadence operators are used to.
 const DefaultControlPlaneBackupSchedule = "0 2 * * *"
 
+// SettingControlPlaneBackupRetainDays/Count are the dashboard-editable
+// retention knobs for control-plane backups (both local and remote copies).
+// Unset falls back to Config.BackupRetainDays/BackupRetainCount (the .env
+// values) — read fresh at rotation time, same fallback shape as the
+// schedule above.
+const SettingControlPlaneBackupRetainDays = "control_plane_backup_retain_days"
+const SettingControlPlaneBackupRetainCount = "control_plane_backup_retain_count"
+
 type Config struct {
 	Port               int
 	DatabaseURL        string

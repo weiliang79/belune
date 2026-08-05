@@ -3,9 +3,11 @@ package handler
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"net"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
@@ -132,6 +134,22 @@ func (h *Handler) UpdateSettings(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 			req[i].Value = sched
+
+		case config.SettingControlPlaneBackupRetainDays:
+			v, errMsg := validateRetentionSetting(s.Value, 1, 3650)
+			if errMsg != "" {
+				writeError(w, http.StatusBadRequest, "invalid retention days: "+errMsg)
+				return
+			}
+			req[i].Value = v
+
+		case config.SettingControlPlaneBackupRetainCount:
+			v, errMsg := validateRetentionSetting(s.Value, 1, 1000)
+			if errMsg != "" {
+				writeError(w, http.StatusBadRequest, "invalid retention count: "+errMsg)
+				return
+			}
+			req[i].Value = v
 		}
 	}
 
@@ -184,6 +202,21 @@ func (h *Handler) UpdateSettings(w http.ResponseWriter, r *http.Request) {
 	h.audit(r, "update_settings", "settings", "", nil)
 
 	writeJSON(w, http.StatusOK, map[string]string{"status": "updated"})
+}
+
+// validateRetentionSetting trims and validates a retention-knob value. Blank
+// falls back to the .env default (see config.SettingControlPlaneBackupRetain*),
+// so only a non-blank value is range-checked.
+func validateRetentionSetting(raw string, min, max int) (value, errMsg string) {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return "", ""
+	}
+	n, err := strconv.Atoi(trimmed)
+	if err != nil || n < min || n > max {
+		return "", fmt.Sprintf("must be a whole number between %d and %d", min, max)
+	}
+	return trimmed, ""
 }
 
 // effectiveDashboardTLS resolves what the dashboard's TLS settings will be once
