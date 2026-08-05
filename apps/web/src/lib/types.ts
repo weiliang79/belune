@@ -515,6 +515,7 @@ export interface BackupRun {
   size_bytes: number;
   error: string | null;
   log: string;
+  encrypted: boolean;
 }
 
 export interface BackupRemoteConfig {
@@ -532,6 +533,9 @@ export interface BackupStatus {
   remote_enabled: boolean;
   remote: BackupRemoteConfig | null;
   retention: { days: number; count: number };
+  encryption_enabled: boolean;
+  /** age public key backups are encrypted to — safe to display, never a secret. */
+  encryption_recipient: string | null;
 }
 
 export interface AlertPreferences {

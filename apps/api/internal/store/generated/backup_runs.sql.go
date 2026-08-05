@@ -12,7 +12,7 @@ import (
 )
 
 const getLastBackupRun = `-- name: GetLastBackupRun :one
-SELECT id, started_at, finished_at, status, remote_key, size_bytes, error, log, trigger
+SELECT id, started_at, finished_at, status, remote_key, size_bytes, error, log, trigger, encrypted
 FROM backup_runs
 ORDER BY started_at DESC
 LIMIT 1
@@ -31,12 +31,13 @@ func (q *Queries) GetLastBackupRun(ctx context.Context) (BackupRun, error) {
 		&i.Error,
 		&i.Log,
 		&i.Trigger,
+		&i.Encrypted,
 	)
 	return i, err
 }
 
 const getLastSucceededBackupRun = `-- name: GetLastSucceededBackupRun :one
-SELECT id, started_at, finished_at, status, remote_key, size_bytes, error, log, trigger
+SELECT id, started_at, finished_at, status, remote_key, size_bytes, error, log, trigger, encrypted
 FROM backup_runs
 WHERE status = 'succeeded'
 ORDER BY finished_at DESC
@@ -56,6 +57,7 @@ func (q *Queries) GetLastSucceededBackupRun(ctx context.Context) (BackupRun, err
 		&i.Error,
 		&i.Log,
 		&i.Trigger,
+		&i.Encrypted,
 	)
 	return i, err
 }
@@ -63,7 +65,7 @@ func (q *Queries) GetLastSucceededBackupRun(ctx context.Context) (BackupRun, err
 const insertBackupRun = `-- name: InsertBackupRun :one
 INSERT INTO backup_runs (trigger)
 VALUES ($1)
-RETURNING id, started_at, finished_at, status, remote_key, size_bytes, error, log, trigger
+RETURNING id, started_at, finished_at, status, remote_key, size_bytes, error, log, trigger, encrypted
 `
 
 func (q *Queries) InsertBackupRun(ctx context.Context, trigger string) (BackupRun, error) {
@@ -79,12 +81,13 @@ func (q *Queries) InsertBackupRun(ctx context.Context, trigger string) (BackupRu
 		&i.Error,
 		&i.Log,
 		&i.Trigger,
+		&i.Encrypted,
 	)
 	return i, err
 }
 
 const listBackupRuns = `-- name: ListBackupRuns :many
-SELECT id, started_at, finished_at, status, remote_key, size_bytes, error, log, trigger
+SELECT id, started_at, finished_at, status, remote_key, size_bytes, error, log, trigger, encrypted
 FROM backup_runs
 ORDER BY started_at DESC
 LIMIT $1 OFFSET $2
@@ -114,6 +117,7 @@ func (q *Queries) ListBackupRuns(ctx context.Context, arg ListBackupRunsParams) 
 			&i.Error,
 			&i.Log,
 			&i.Trigger,
+			&i.Encrypted,
 		); err != nil {
 			return nil, err
 		}
@@ -132,7 +136,8 @@ SET finished_at = $2,
     remote_key  = $4,
     size_bytes  = $5,
     error       = $6,
-    log         = $7
+    log         = $7,
+    encrypted   = $8
 WHERE id = $1
 `
 
@@ -144,6 +149,7 @@ type UpdateBackupRunParams struct {
 	SizeBytes  int64              `json:"size_bytes"`
 	Error      pgtype.Text        `json:"error"`
 	Log        string             `json:"log"`
+	Encrypted  bool               `json:"encrypted"`
 }
 
 func (q *Queries) UpdateBackupRun(ctx context.Context, arg UpdateBackupRunParams) error {
@@ -155,6 +161,7 @@ func (q *Queries) UpdateBackupRun(ctx context.Context, arg UpdateBackupRunParams
 		arg.SizeBytes,
 		arg.Error,
 		arg.Log,
+		arg.Encrypted,
 	)
 	return err
 }

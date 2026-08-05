@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -27,6 +28,7 @@ type backupRunView struct {
 	SizeBytes  int64   `json:"size_bytes"`
 	Error      *string `json:"error"`
 	Log        string  `json:"log"`
+	Encrypted  bool    `json:"encrypted"`
 }
 
 // backupRemoteView exposes the non-secret remote-storage config so the admin UI
@@ -52,12 +54,27 @@ func toBackupRemoteView(rc backup.RemoteConfig) backupRemoteView {
 }
 
 type backupStatusView struct {
-	LastSucceededAt *string           `json:"last_succeeded_at"`
-	LastAttemptedAt *string           `json:"last_attempted_at"`
-	LastError       *string           `json:"last_error"`
-	RemoteEnabled   bool              `json:"remote_enabled"`
-	Remote          *backupRemoteView `json:"remote"`
-	Retention       map[string]any    `json:"retention"`
+	LastSucceededAt     *string           `json:"last_succeeded_at"`
+	LastAttemptedAt     *string           `json:"last_attempted_at"`
+	LastError           *string           `json:"last_error"`
+	RemoteEnabled       bool              `json:"remote_enabled"`
+	Remote              *backupRemoteView `json:"remote"`
+	Retention           map[string]any    `json:"retention"`
+	EncryptionEnabled   bool              `json:"encryption_enabled"`
+	EncryptionRecipient *string           `json:"encryption_recipient"`
+}
+
+// resolveEncryptionRecipient mirrors worker.ageEncryptFile's recipient
+// resolution (BACKUP_ENCRYPTION_KEY is either a literal age1... public key or
+// a path to a file containing one). The recipient is a PUBLIC key — safe to
+// display read-only on the dashboard. Editing it stays host-only by design
+// (the archive contains .env itself; changing what it encrypts to must
+// require host access, same boundary as restore).
+func resolveEncryptionRecipient(keyOrPath string) string {
+	if data, err := os.ReadFile(keyOrPath); err == nil {
+		return strings.TrimSpace(string(data))
+	}
+	return keyOrPath
 }
 
 // ListBackupRuns returns backup runs most-recent-first, paginated via
@@ -81,6 +98,7 @@ func (h *Handler) ListBackupRuns(w http.ResponseWriter, r *http.Request) {
 			Status:    run.Status,
 			SizeBytes: run.SizeBytes,
 			Log:       run.Log,
+			Encrypted: run.Encrypted,
 		}
 		if run.FinishedAt.Valid {
 			s := run.FinishedAt.Time.Format(time.RFC3339)
@@ -132,6 +150,12 @@ func (h *Handler) GetBackupStatus(w http.ResponseWriter, r *http.Request) {
 	if rc.Enabled {
 		v := toBackupRemoteView(rc)
 		status.Remote = &v
+	}
+
+	if key := h.cfg.BackupEncryptionKey; key != "" {
+		status.EncryptionEnabled = true
+		recipient := resolveEncryptionRecipient(key)
+		status.EncryptionRecipient = &recipient
 	}
 
 	if last, err := h.queries.GetLastBackupRun(r.Context()); err == nil {

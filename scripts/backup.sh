@@ -80,15 +80,17 @@ run_sql() {
 }
 
 # record_finish updates BACKUP_RUN_ID's row once (idempotent — die() and the
-# exit trap can both try). No-op if no row was ever inserted.
+# exit trap can both try). No-op if no row was ever inserted. encrypted
+# defaults to false — die()/on_exit fire before (or without knowing) whether
+# encryption succeeded, so only the final success call passes the real value.
 record_finish() {
   [[ -n "${BACKUP_RUN_ID}" && "${RUN_RECORDED}" == "0" ]] || return 0
   RUN_RECORDED=1
-  local status="$1" size="${2:-0}" key="${3:-}" err="${4:-}"
+  local status="$1" size="${2:-0}" key="${3:-}" err="${4:-}" encrypted="${5:-false}"
   local key_sql="NULL" err_sql="NULL"
   [[ -n "${key}" ]] && key_sql="'$(sql_escape "${key}")'"
   [[ -n "${err}" ]] && err_sql="'$(sql_escape "${err}")'"
-  run_sql "UPDATE backup_runs SET finished_at = NOW(), status = '${status}', size_bytes = ${size}, remote_key = ${key_sql}, error = ${err_sql} WHERE id = '${BACKUP_RUN_ID}';" >/dev/null
+  run_sql "UPDATE backup_runs SET finished_at = NOW(), status = '${status}', size_bytes = ${size}, remote_key = ${key_sql}, error = ${err_sql}, encrypted = ${encrypted} WHERE id = '${BACKUP_RUN_ID}';" >/dev/null
 }
 
 # Any exit before the explicit "succeeded" record_finish call at the bottom —
@@ -189,6 +191,11 @@ if [[ -n "${BACKUP_ENCRYPTION_KEY}" ]]; then
   success "Encrypted archive: ${ARCHIVE}"
 fi
 
+# ARCHIVE now ends in .age iff encryption ran above — same source of truth
+# the worker uses (backup_control_plane.go checks the archive path suffix).
+ENCRYPTED="false"
+[[ "${ARCHIVE}" == *.age ]] && ENCRYPTED="true"
+
 # ── Remote upload (optional) ──────────────────────────────────────────────────
 
 REMOTE_KEY=""
@@ -215,7 +222,7 @@ if [[ "$(read_remote_config BACKUP_REMOTE_ENABLED)" == "true" ]]; then
 fi
 
 SIZE_BYTES=$(stat -c%s "${ARCHIVE}" 2>/dev/null || echo 0)
-record_finish "succeeded" "${SIZE_BYTES}" "${REMOTE_KEY}" ""
+record_finish "succeeded" "${SIZE_BYTES}" "${REMOTE_KEY}" "" "${ENCRYPTED}"
 
 echo ""
 success "Backup complete: ${ARCHIVE}"

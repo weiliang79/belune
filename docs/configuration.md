@@ -130,7 +130,7 @@ stock install that has never touched the Configure sheet.
 | `BACKUP_S3_ACCESS_KEY` | *empty* | Secret. Fallback only |
 | `BACKUP_S3_SECRET_KEY` | *empty* | Secret. Fallback only |
 | `BACKUP_S3_USE_SSL` | `true` | Fallback only |
-| `BACKUP_ENCRYPTION_KEY` | *empty* | age public key (or path to a file containing one); encrypts the archive as `.tar.gz.age`. Stays `.env`-only — not part of `backup-remote.env` |
+| `BACKUP_ENCRYPTION_KEY` | *empty* | age public key (or path to a file containing one); encrypts the archive as `.tar.gz.age`. Deliberately stays `.env`/host-only, unlike every other setting on this page — the archive contains `.env` itself (every platform secret), so changing what it encrypts to requires host access, same boundary as restore. Each run in **Recent Runs** shows a lock icon when its own archive was encrypted |
 
 ## Database backups
 

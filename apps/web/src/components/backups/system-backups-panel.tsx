@@ -9,6 +9,7 @@ import {
   Cloud,
   DatabaseBackup,
   HistoryIcon,
+  Lock,
   Settings2,
   TimerIcon,
   type LucideIcon,
@@ -43,6 +44,12 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { StatusPill } from "@/components/ui/status-pill";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipPositioner,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -97,7 +104,25 @@ const backupColumns: ColumnDef<BackupRun>[] = [
   {
     id: "status",
     header: "Status",
-    cell: ({ row: { original: run } }) => <StatusPill status={run.status} />,
+    cell: ({ row: { original: run } }) => (
+      <div className="flex items-center gap-1.5">
+        <StatusPill status={run.status} />
+        {run.encrypted && (
+          <Tooltip>
+            <TooltipTrigger
+              render={<span className="text-muted-foreground inline-flex" />}
+            >
+              <Lock aria-hidden="true" className="size-3.5" />
+            </TooltipTrigger>
+            <TooltipPositioner>
+              <TooltipContent>
+                Encrypted — requires the private key to restore
+              </TooltipContent>
+            </TooltipPositioner>
+          </Tooltip>
+        )}
+      </div>
+    ),
   },
   {
     id: "started_at",
@@ -219,10 +244,6 @@ export function SystemBackupsPanel() {
                 value={fmtSummaryDate(status.last_succeeded_at)}
               />
               <StatusItem
-                label="Last attempted"
-                value={fmtSummaryDate(status.last_attempted_at)}
-              />
-              <StatusItem
                 label="Remote storage"
                 value={
                   <Badge
@@ -245,6 +266,26 @@ export function SystemBackupsPanel() {
               <StatusItem
                 label="Retention"
                 value={`${status.retention.count} backups / ${status.retention.days} days`}
+              />
+              <StatusItem
+                label="Encryption"
+                value={
+                  status.encryption_enabled ? (
+                    <div className="space-y-0.5">
+                      <Badge>Enabled</Badge>
+                      {status.encryption_recipient && (
+                        <p
+                          className="text-text-faint truncate font-mono text-xs"
+                          title={status.encryption_recipient}
+                        >
+                          {status.encryption_recipient}
+                        </p>
+                      )}
+                    </div>
+                  ) : (
+                    <Badge variant="secondary">Disabled</Badge>
+                  )
+                }
               />
               {status.last_error && (
                 <div className="border-destructive/30 bg-destructive/10 col-span-2 mt-1 rounded-lg border p-3 md:col-span-3">

@@ -160,6 +160,7 @@ type BackupRun struct {
 	Error      pgtype.Text        `json:"error"`
 	Log        string             `json:"log"`
 	Trigger    string             `json:"trigger"`
+	Encrypted  bool               `json:"encrypted"`
 }
 
 type Certificate struct {

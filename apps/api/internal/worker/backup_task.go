@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/hibiken/asynq"
@@ -69,6 +70,10 @@ func (h *TaskHandler) HandleBackupNowTask(ctx context.Context, t *asynq.Task) er
 	if info, statErr := os.Stat(archivePath); statErr == nil {
 		sizeBytes = info.Size()
 	}
+	// buildControlPlaneArchive already applied encryption (if configured) and
+	// renamed the archive to end in .age — that suffix is the source of truth
+	// for whether THIS specific archive needs the private key to restore.
+	encrypted := strings.HasSuffix(archivePath, ".age")
 
 	remoteKey := pgtype.Text{}
 	destination := "local"
@@ -85,7 +90,7 @@ func (h *TaskHandler) HandleBackupNowTask(ctx context.Context, t *asynq.Task) er
 	lg.step("Backup complete: %s", archivePath)
 
 	h.rotateLocalControlPlaneBackups(ctx, lg)
-	h.finaliseRun(ctx, run.ID, sizeBytes, remoteKey, "", lg.String())
+	h.finaliseRun(ctx, run.ID, sizeBytes, remoteKey, encrypted, "", lg.String())
 
 	slog.Info("backup_now: completed", "size_bytes", sizeBytes, "destination", destination)
 	metrics.RecordBackupRun(destination, nil, time.Since(start))
@@ -101,7 +106,9 @@ func (h *TaskHandler) HandleBackupNowTask(ctx context.Context, t *asynq.Task) er
 // not transient in a way an immediate retry would fix).
 func (h *TaskHandler) failBackupNow(ctx context.Context, span trace.Span, runID pgtype.UUID, lg *runLog, err error, start time.Time) error {
 	lg.fail("Backup failed: %s", err.Error())
-	h.finaliseRun(ctx, runID, 0, pgtype.Text{}, err.Error(), lg.String())
+	// A failed run never produced a valid encrypted archive to speak of,
+	// regardless of how far it got.
+	h.finaliseRun(ctx, runID, 0, pgtype.Text{}, false, err.Error(), lg.String())
 	metrics.RecordBackupRun("local", err, time.Since(start))
 	recordSpanErr(span, err)
 	return errors.Join(fmt.Errorf("control-plane backup: %w", err), asynq.SkipRetry)
@@ -130,11 +137,11 @@ func (h *TaskHandler) HandleBackupRotateTask(ctx context.Context, t *asynq.Task)
 	return nil
 }
 
-// finaliseRun updates the backup_run record with the final status, optional
-// error message, and the full script output (log). Logs and swallows DB errors
-// — the backup itself already succeeded or failed; we don't want a DB hiccup to
-// mask that.
-func (h *TaskHandler) finaliseRun(ctx context.Context, id pgtype.UUID, sizeBytes int64, remoteKey pgtype.Text, errMsg, log string) {
+// finaliseRun updates the backup_run record with the final status, whether
+// the archive was encrypted, optional error message, and the full script
+// output (log). Logs and swallows DB errors — the backup itself already
+// succeeded or failed; we don't want a DB hiccup to mask that.
+func (h *TaskHandler) finaliseRun(ctx context.Context, id pgtype.UUID, sizeBytes int64, remoteKey pgtype.Text, encrypted bool, errMsg, log string) {
 	if h.Queries == nil || !id.Valid {
 		return
 	}
@@ -154,6 +161,7 @@ func (h *TaskHandler) finaliseRun(ctx context.Context, id pgtype.UUID, sizeBytes
 		SizeBytes:  sizeBytes,
 		Error:      errText,
 		Log:        log,
+		Encrypted:  encrypted,
 	}); err != nil {
 		slog.Warn("backup_now: failed to update run record", "error", err)
 	}
