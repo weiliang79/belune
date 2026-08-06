@@ -47,6 +47,25 @@ func (q *Queries) DeleteProjectEnvVarsNotIn(ctx context.Context, arg DeleteProje
 	return err
 }
 
+const getProjectEnvVar = `-- name: GetProjectEnvVar :one
+SELECT id, project_id, key, value_encrypted, is_secret, created_at, updated_at FROM project_env_vars WHERE id = $1
+`
+
+func (q *Queries) GetProjectEnvVar(ctx context.Context, id pgtype.UUID) (ProjectEnvVar, error) {
+	row := q.db.QueryRow(ctx, getProjectEnvVar, id)
+	var i ProjectEnvVar
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.Key,
+		&i.ValueEncrypted,
+		&i.IsSecret,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const listProjectEnvVars = `-- name: ListProjectEnvVars :many
 SELECT id, project_id, key, value_encrypted, is_secret, created_at, updated_at FROM project_env_vars WHERE project_id = $1 ORDER BY key
 `

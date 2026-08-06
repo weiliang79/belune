@@ -37,17 +37,16 @@ func TestUpdateAndListEnvVars(t *testing.T) {
 	vars := testutil.ReadJSONArray(t, resp)
 	require.Len(t, vars, 2)
 
-	// Check that non-secret values are decrypted and secrets are masked
+	// Check that non-secret values are decrypted and secrets never sent
 	for _, v := range vars {
 		ev := v.(map[string]any)
 		key := ev["key"].(string)
-		value := ev["value"].(string)
 
 		if key == "DATABASE_URL" {
-			assert.Equal(t, "postgres://localhost/db", value)
+			assert.Equal(t, "postgres://localhost/db", ev["value"])
 			assert.Equal(t, false, ev["is_secret"])
 		} else if key == "API_KEY" {
-			assert.Equal(t, "••••••••", value)
+			assert.Nil(t, ev["value"], "a secret's value must never be sent by the list endpoint")
 			assert.Equal(t, true, ev["is_secret"])
 		}
 	}

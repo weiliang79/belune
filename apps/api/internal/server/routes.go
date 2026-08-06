@@ -373,8 +373,10 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService,
 			r.Use(withTimeout(handlerTimeout))
 			r.Get("/api/projects/{projectId}/env", h.ListProjectEnvVars)
 			r.Put("/api/projects/{projectId}/env", h.UpdateProjectEnvVars)
+			r.Get("/api/projects/{projectId}/env/{envVarId}/reveal", h.RevealProjectEnvVar)
 			r.Get("/api/projects/{projectId}/applications/{applicationId}/env", h.ListEnvVars)
 			r.Put("/api/projects/{projectId}/applications/{applicationId}/env", h.UpdateEnvVars)
+			r.Get("/api/projects/{projectId}/applications/{applicationId}/env/{envVarId}/reveal", h.RevealEnvVar)
 		})
 
 		// Databases: standard limit + timeout

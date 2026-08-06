@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"regexp"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -33,7 +34,13 @@ type preparedEnvVar struct {
 //
 // Blank keys are skipped rather than rejected: the editor submits an empty row
 // for the "add variable" affordance.
-func prepareEnvVars(vars []envVarInput, encrypt func([]byte) ([]byte, error)) ([]preparedEnvVar, string) {
+//
+// existing maps key -> currently-stored ciphertext. The list endpoint masks
+// secret values as "••••••••", so a row the editor never touched carries that
+// mask string, not the real value — encrypting it as submitted would overwrite
+// the real secret with the literal mask. A row marked Unchanged is exempt: its
+// existing ciphertext is reused verbatim instead of re-encrypting v.Value.
+func prepareEnvVars(vars []envVarInput, existing map[string][]byte, encrypt func([]byte) ([]byte, error)) ([]preparedEnvVar, string) {
 	out := make([]preparedEnvVar, 0, len(vars))
 	seen := make(map[string]struct{}, len(vars))
 	for _, v := range vars {
@@ -49,6 +56,13 @@ func prepareEnvVars(vars []envVarInput, encrypt func([]byte) ([]byte, error)) ([
 			return nil, fmt.Sprintf("duplicate env var key: %q", v.Key)
 		}
 		seen[v.Key] = struct{}{}
+
+		if v.Unchanged {
+			if encrypted, ok := existing[v.Key]; ok {
+				out = append(out, preparedEnvVar{key: v.Key, encrypted: encrypted, isSecret: v.IsSecret})
+				continue
+			}
+		}
 
 		encrypted, err := encrypt([]byte(v.Value))
 		if err != nil {
@@ -69,10 +83,12 @@ func keysOf(prepared []preparedEnvVar) []string {
 }
 
 type envVarResponse struct {
-	ID       pgtype.UUID `json:"id"`
-	Key      string      `json:"key"`
-	Value    string      `json:"value,omitempty"`
-	IsSecret bool        `json:"is_secret"`
+	ID        pgtype.UUID `json:"id"`
+	Key       string      `json:"key"`
+	Value     string      `json:"value,omitempty"`
+	IsSecret  bool        `json:"is_secret"`
+	CreatedAt string      `json:"created_at"`
+	UpdatedAt string      `json:"updated_at"`
 }
 
 func (h *Handler) ListEnvVars(w http.ResponseWriter, r *http.Request) {
@@ -97,25 +113,75 @@ func (h *Handler) ListEnvVars(w http.ResponseWriter, r *http.Request) {
 	result := make([]envVarResponse, 0, len(envVars))
 	for _, ev := range envVars {
 		resp := envVarResponse{
-			ID:       ev.ID,
-			Key:      ev.Key,
-			IsSecret: ev.IsSecret,
+			ID:        ev.ID,
+			Key:       ev.Key,
+			IsSecret:  ev.IsSecret,
+			CreatedAt: ev.CreatedAt.Time.Format(time.RFC3339),
+			UpdatedAt: ev.UpdatedAt.Time.Format(time.RFC3339),
 		}
 
-		// Decrypt and show non-secret values; mask secrets
+		// Decrypt and show non-secret values. A secret's value is never sent by
+		// this endpoint, real or masked — the editor fetches it on demand via
+		// RevealEnvVar instead.
 		if !ev.IsSecret {
 			decrypted, err := h.cfg.Keyring.Decrypt(ev.ValueEncrypted)
 			if err == nil {
 				resp.Value = string(decrypted)
 			}
-		} else {
-			resp.Value = "••••••••"
 		}
 
 		result = append(result, resp)
 	}
 
 	writeJSON(w, http.StatusOK, result)
+}
+
+// RevealEnvVar returns the decrypted value of a single env var. It exists so a
+// secret (masked in the list response) can be loaded into the editor without
+// forcing a rewrite of every row. The reveal is audited because it deliberately
+// hands back plaintext the UI otherwise hides.
+func (h *Handler) RevealEnvVar(w http.ResponseWriter, r *http.Request) {
+	applicationID := chi.URLParam(r, "applicationId")
+	var applicationUUID pgtype.UUID
+	if err := applicationUUID.Scan(applicationID); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid application id")
+		return
+	}
+
+	envVarID := chi.URLParam(r, "envVarId")
+	var envVarUUID pgtype.UUID
+	if err := envVarUUID.Scan(envVarID); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid env var id")
+		return
+	}
+
+	if !h.canAccessApplication(r, applicationUUID) {
+		writeError(w, http.StatusForbidden, "access denied")
+		return
+	}
+
+	ev, err := h.queries.GetEnvVar(r.Context(), envVarUUID)
+	if err != nil {
+		writeError(w, http.StatusNotFound, "env var not found")
+		return
+	}
+	if ev.ApplicationID != applicationUUID {
+		writeError(w, http.StatusNotFound, "env var not found")
+		return
+	}
+
+	decrypted, err := h.cfg.Keyring.Decrypt(ev.ValueEncrypted)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to decrypt value")
+		return
+	}
+
+	h.audit(r, "reveal_env_var", "env_var", envVarID, map[string]any{
+		"application_id": applicationID,
+		"key":             ev.Key,
+	})
+
+	writeJSON(w, http.StatusOK, map[string]string{"value": string(decrypted)})
 }
 
 type updateEnvVarsRequest struct {
@@ -126,6 +192,11 @@ type envVarInput struct {
 	Key      string `json:"key"`
 	Value    string `json:"value"`
 	IsSecret bool   `json:"is_secret"`
+	// Unchanged marks a secret row the editor never touched: its value is
+	// still the "••••••••" mask from the list response, not the real secret,
+	// so prepareEnvVars must reuse the stored ciphertext instead of
+	// encrypting this value.
+	Unchanged bool `json:"unchanged,omitempty"`
 }
 
 func (h *Handler) UpdateEnvVars(w http.ResponseWriter, r *http.Request) {
@@ -147,7 +218,17 @@ func (h *Handler) UpdateEnvVars(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	prepared, errMsg := prepareEnvVars(req.Vars, h.cfg.Keyring.Encrypt)
+	existingVars, err := h.queries.ListEnvVarsByApplication(r.Context(), applicationUUID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to load existing env vars")
+		return
+	}
+	existing := make(map[string][]byte, len(existingVars))
+	for _, ev := range existingVars {
+		existing[ev.Key] = ev.ValueEncrypted
+	}
+
+	prepared, errMsg := prepareEnvVars(req.Vars, existing, h.cfg.Keyring.Encrypt)
 	if errMsg != "" {
 		writeError(w, http.StatusBadRequest, errMsg)
 		return

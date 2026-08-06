@@ -3,6 +3,7 @@ package handler
 import (
 	"encoding/json"
 	"net/http"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -33,24 +34,75 @@ func (h *Handler) ListProjectEnvVars(w http.ResponseWriter, r *http.Request) {
 	result := make([]envVarResponse, 0, len(envVars))
 	for _, ev := range envVars {
 		resp := envVarResponse{
-			ID:       ev.ID,
-			Key:      ev.Key,
-			IsSecret: ev.IsSecret,
+			ID:        ev.ID,
+			Key:       ev.Key,
+			IsSecret:  ev.IsSecret,
+			CreatedAt: ev.CreatedAt.Time.Format(time.RFC3339),
+			UpdatedAt: ev.UpdatedAt.Time.Format(time.RFC3339),
 		}
 
+		// Decrypt and show non-secret values. A secret's value is never sent by
+		// this endpoint, real or masked — the editor fetches it on demand via
+		// RevealProjectEnvVar instead.
 		if !ev.IsSecret {
 			decrypted, err := h.cfg.Keyring.Decrypt(ev.ValueEncrypted)
 			if err == nil {
 				resp.Value = string(decrypted)
 			}
-		} else {
-			resp.Value = "••••••••"
 		}
 
 		result = append(result, resp)
 	}
 
 	writeJSON(w, http.StatusOK, result)
+}
+
+// RevealProjectEnvVar returns the decrypted value of a single project-level
+// env var. Project counterpart of RevealEnvVar — an inherited secret revealed
+// from an application's env page hits this endpoint, audited as a
+// project-level reveal.
+func (h *Handler) RevealProjectEnvVar(w http.ResponseWriter, r *http.Request) {
+	projectID := chi.URLParam(r, "projectId")
+	var projectUUID pgtype.UUID
+	if err := projectUUID.Scan(projectID); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid project id")
+		return
+	}
+
+	envVarID := chi.URLParam(r, "envVarId")
+	var envVarUUID pgtype.UUID
+	if err := envVarUUID.Scan(envVarID); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid env var id")
+		return
+	}
+
+	if !h.canAccessProject(r, projectUUID) {
+		writeError(w, http.StatusForbidden, "access denied")
+		return
+	}
+
+	ev, err := h.queries.GetProjectEnvVar(r.Context(), envVarUUID)
+	if err != nil {
+		writeError(w, http.StatusNotFound, "env var not found")
+		return
+	}
+	if ev.ProjectID != projectUUID {
+		writeError(w, http.StatusNotFound, "env var not found")
+		return
+	}
+
+	decrypted, err := h.cfg.Keyring.Decrypt(ev.ValueEncrypted)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to decrypt value")
+		return
+	}
+
+	h.audit(r, "reveal_env_var", "project_env_var", envVarID, map[string]any{
+		"project_id": projectID,
+		"key":        ev.Key,
+	})
+
+	writeJSON(w, http.StatusOK, map[string]string{"value": string(decrypted)})
 }
 
 func (h *Handler) UpdateProjectEnvVars(w http.ResponseWriter, r *http.Request) {
@@ -72,7 +124,17 @@ func (h *Handler) UpdateProjectEnvVars(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	prepared, errMsg := prepareEnvVars(req.Vars, h.cfg.Keyring.Encrypt)
+	existingVars, err := h.queries.ListProjectEnvVars(r.Context(), projectUUID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to load existing project env vars")
+		return
+	}
+	existing := make(map[string][]byte, len(existingVars))
+	for _, ev := range existingVars {
+		existing[ev.Key] = ev.ValueEncrypted
+	}
+
+	prepared, errMsg := prepareEnvVars(req.Vars, existing, h.cfg.Keyring.Encrypt)
 	if errMsg != "" {
 		writeError(w, http.StatusBadRequest, errMsg)
 		return

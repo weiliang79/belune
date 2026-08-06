@@ -49,6 +49,25 @@ func (q *Queries) DeleteEnvVarsNotIn(ctx context.Context, arg DeleteEnvVarsNotIn
 	return err
 }
 
+const getEnvVar = `-- name: GetEnvVar :one
+SELECT id, application_id, key, value_encrypted, is_secret, created_at, updated_at FROM env_vars WHERE id = $1
+`
+
+func (q *Queries) GetEnvVar(ctx context.Context, id pgtype.UUID) (EnvVar, error) {
+	row := q.db.QueryRow(ctx, getEnvVar, id)
+	var i EnvVar
+	err := row.Scan(
+		&i.ID,
+		&i.ApplicationID,
+		&i.Key,
+		&i.ValueEncrypted,
+		&i.IsSecret,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const listEnvVarsByApplication = `-- name: ListEnvVarsByApplication :many
 SELECT id, application_id, key, value_encrypted, is_secret, created_at, updated_at FROM env_vars WHERE application_id = $1 ORDER BY key
 `

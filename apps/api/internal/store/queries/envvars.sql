@@ -1,6 +1,9 @@
 -- name: ListEnvVarsByApplication :many
 SELECT * FROM env_vars WHERE application_id = $1 ORDER BY key;
 
+-- name: GetEnvVar :one
+SELECT * FROM env_vars WHERE id = $1;
+
 -- name: UpsertEnvVar :one
 INSERT INTO env_vars (application_id, key, value_encrypted, is_secret)
 VALUES ($1, $2, $3, $4)
