@@ -187,8 +187,22 @@ export interface Domain {
 export interface EnvVar {
   id: string;
   key: string;
+  // Absent for a secret row — the list endpoint never sends a secret's value
+  // (real or masked); fetch it via the reveal endpoint instead.
+  value?: string;
+  is_secret: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface EnvVarInput {
+  key: string;
   value: string;
   is_secret: boolean;
+  // True for a saved secret the editor never touched: value still holds the
+  // "••••••••" list mask, not the real secret, so the backend must reuse the
+  // stored ciphertext for this key instead of encrypting value.
+  unchanged?: boolean;
 }
 
 export interface MetricsOverview {

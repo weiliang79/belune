@@ -1,4 +1,4 @@
-import type { EnvVar } from "@/lib/types";
+import type { EnvVar, EnvVarInput } from "@/lib/types";
 import { api } from "./client";
 
 export function getEnvVars(projectId: string, applicationId: string) {
@@ -8,9 +8,19 @@ export function getEnvVars(projectId: string, applicationId: string) {
 export function upsertEnvVars(
   projectId: string,
   applicationId: string,
-  vars: { key: string; value: string; is_secret: boolean }[],
+  vars: EnvVarInput[],
 ) {
   return api.put<EnvVar[]>(`/projects/${projectId}/applications/${applicationId}/env`, {
     vars,
   });
+}
+
+export function revealEnvVar(
+  projectId: string,
+  applicationId: string,
+  envVarId: string,
+) {
+  return api.get<{ value: string }>(
+    `/projects/${projectId}/applications/${applicationId}/env/${envVarId}/reveal`,
+  );
 }
