@@ -166,14 +166,14 @@ export function DatabaseFormDialog({ projectId, open, onOpenChange }: Props) {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent className="grid-rows-[auto_minmax(0,1fr)_auto] max-h-[85vh]">
         <DialogHeader>
           <DialogTitle>Create Database</DialogTitle>
           <DialogDescription>
             Provision a new managed database instance.
           </DialogDescription>
         </DialogHeader>
-        <div className="space-y-4 py-2">
+        <div className="space-y-4 overflow-y-auto py-2">
           {dbError && (
             <div className="bg-destructive/10 text-destructive rounded-md px-3 py-2 text-sm">
               {dbError}

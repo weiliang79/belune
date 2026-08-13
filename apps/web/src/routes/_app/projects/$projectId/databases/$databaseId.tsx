@@ -127,6 +127,8 @@ function DatabaseDetailPage() {
   const { data: db, isLoading } = useDatabase(projectId, databaseId);
   const { data: project } = useProject(projectId);
   const deleteDb = useDeleteDatabase(projectId);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState("");
   const stop = useStopDatabase(projectId, databaseId);
   const start = useStartDatabase(projectId, databaseId);
   const restart = useRestartDatabase(projectId, databaseId);
@@ -521,7 +523,13 @@ function DatabaseDetailPage() {
                     container.
                   </p>
                 </div>
-                <AlertDialog>
+                <AlertDialog
+                  open={deleteOpen}
+                  onOpenChange={(o) => {
+                    setDeleteOpen(o);
+                    if (o) setDeleteConfirm("");
+                  }}
+                >
                   <AlertDialogTrigger
                     render={<Button variant="destructive-solid" size="sm" />}
                   >
@@ -535,10 +543,31 @@ function DatabaseDetailPage() {
                         all its data. This action cannot be undone.
                       </AlertDialogDescription>
                     </AlertDialogHeader>
+                    <div className="space-y-2">
+                      <Label htmlFor="delete-db-confirm" className="font-normal">
+                        Type{" "}
+                        <span className="text-foreground font-medium">
+                          {db.name}
+                        </span>{" "}
+                        to confirm.
+                      </Label>
+                      <Input
+                        id="delete-db-confirm"
+                        value={deleteConfirm}
+                        onChange={(e) => setDeleteConfirm(e.target.value)}
+                        autoComplete="off"
+                        autoCorrect="off"
+                        spellCheck={false}
+                      />
+                    </div>
                     <AlertDialogFooter>
                       <AlertDialogCancel>Cancel</AlertDialogCancel>
                       <AlertDialogAction
                         onClick={handleDelete}
+                        disabled={
+                          deleteConfirm.trim() !== db.name.trim() ||
+                          deleteDb.isPending
+                        }
                         className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                       >
                         {deleteDb.isPending ? (
