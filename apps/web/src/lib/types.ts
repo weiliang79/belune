@@ -33,6 +33,10 @@ export interface Application {
   source_repo: string | null;
   source_image: string | null;
   dockerfile_path: string;
+  // Subdirectory of the repo to build from — detection, the Dockerfile path,
+  // and the Dockerfile build context all resolve relative to this. Git
+  // source only; null/empty = the repo root (today's only behavior).
+  root_directory: string | null;
   build_type: "dockerfile" | "buildpacks" | "railpack" | "image";
   build_type_override: string | null;
   builder_image: string | null;

@@ -38,6 +38,7 @@ type changeSourceRequest struct {
 	Branch           string `json:"branch"`
 	BuildType        string `json:"build_type"`
 	DockerfilePath   string `json:"dockerfile_path"`
+	RootDirectory    string `json:"root_directory"`
 	GitIntegrationID string `json:"git_integration_id"`
 	GitToken         string `json:"git_token"`
 }
@@ -151,6 +152,9 @@ func (h *Handler) buildChangeSourceParams(
 		if !validBranchName(req.Branch) {
 			return p, fmt.Errorf("invalid branch name")
 		}
+		if !validRootDirectory(req.RootDirectory) {
+			return p, fmt.Errorf("invalid root directory")
+		}
 		buildType := req.BuildType
 		if buildType == "" {
 			// Matches the create dialog's default. Railpack detects the stack
@@ -161,6 +165,7 @@ func (h *Handler) buildChangeSourceParams(
 		p.BuildType = buildType
 		p.SourceRepo = pgtype.Text{String: req.SourceRepo, Valid: true}
 		p.DockerfilePath = pgtype.Text{String: req.DockerfilePath, Valid: req.DockerfilePath != ""}
+		p.RootDirectory = pgtype.Text{String: req.RootDirectory, Valid: req.RootDirectory != ""}
 		// Both branch columns move together, as everywhere else: one
 		// user-facing branch decides what is built and which pushes deploy.
 		p.Branch = pgtype.Text{String: req.Branch, Valid: req.Branch != ""}

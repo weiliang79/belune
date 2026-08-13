@@ -64,6 +64,7 @@ type createApplicationRequest struct {
 	HealthCheckPath  string  `json:"health_check_path"`  // HTTP path to poll after deploy (e.g. /healthz)
 	GitIntegrationID string  `json:"git_integration_id"` // optional connected provider account
 	Branch           string  `json:"branch"`             // ref to build; empty = repository default
+	RootDirectory    string  `json:"root_directory"`     // subdirectory to build from; empty = repo root
 }
 
 func (h *Handler) CreateApplication(w http.ResponseWriter, r *http.Request) {
@@ -103,6 +104,11 @@ func (h *Handler) CreateApplication(w http.ResponseWriter, r *http.Request) {
 
 	if !validBranchName(req.Branch) {
 		writeError(w, http.StatusBadRequest, "invalid branch name")
+		return
+	}
+
+	if !validRootDirectory(req.RootDirectory) {
+		writeError(w, http.StatusBadRequest, "invalid root directory")
 		return
 	}
 
@@ -146,6 +152,7 @@ func (h *Handler) CreateApplication(w http.ResponseWriter, r *http.Request) {
 		HealthCheckPath:  req.HealthCheckPath,
 		GitIntegrationID: parseOptionalUUID(req.GitIntegrationID),
 		Branch:           req.Branch,
+		RootDirectory:    req.RootDirectory,
 	})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to create application")
@@ -645,6 +652,7 @@ type updateApplicationRequest struct {
 	GitToken          string  `json:"git_token"`         // PAT for private repos; encrypted server-side; empty = preserve existing
 	HealthCheckPath   string  `json:"health_check_path"` // HTTP path to poll after deploy; empty = clear
 	Branch            string  `json:"branch"`            // ref to build; empty = repository default
+	RootDirectory     string  `json:"root_directory"`    // subdirectory to build from; empty = repo root
 	// GitIntegrationID: pointer so we can tell "absent" (preserve) from ""
 	// (clear) from a UUID (set the connected provider account).
 	GitIntegrationID *string `json:"git_integration_id"`
@@ -681,6 +689,11 @@ func (h *Handler) UpdateApplication(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if !validRootDirectory(req.RootDirectory) {
+		writeError(w, http.StatusBadRequest, "invalid root directory")
+		return
+	}
+
 	// type and build_type are not updatable, so they come from the stored row:
 	// the request only ever moves the fields that have to stay coherent with
 	// them.
@@ -709,6 +722,7 @@ func (h *Handler) UpdateApplication(w http.ResponseWriter, r *http.Request) {
 		HealthCheckPath:   req.HealthCheckPath,
 		GitIntegrationID:  resolveOptionalUUID(req.GitIntegrationID, current.GitIntegrationID),
 		Branch:            req.Branch,
+		RootDirectory:     req.RootDirectory,
 	})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to update application")
@@ -949,4 +963,34 @@ func validBranchName(branch string) bool {
 	}
 	// Refs cannot contain these, per git-check-ref-format.
 	return !strings.ContainsAny(branch, "~^:?*[\\") && !strings.Contains(branch, "..")
+}
+
+// validRootDirectory reports whether a root directory value is safe to join
+// onto a clone's temp directory and hand to a builder. Not a full path
+// validator — just enough to keep traversal and control characters out.
+//
+// Empty is meaningful: build from the repository root, today's only
+// behavior. A leading "/" is rejected because the value is relative to the
+// clone root, not absolute; ".." (and empty) segments are rejected outright
+// rather than relying solely on the worker's post-join containment check, so
+// a bad value is caught at save time instead of surfacing as a deploy
+// failure.
+func validRootDirectory(dir string) bool {
+	if dir == "" {
+		return true
+	}
+	if len(dir) > 500 || strings.HasPrefix(dir, "/") {
+		return false
+	}
+	for _, r := range dir {
+		if r == 0 || unicode.IsControl(r) {
+			return false
+		}
+	}
+	for segment := range strings.SplitSeq(dir, "/") {
+		if segment == "" || segment == "." || segment == ".." {
+			return false
+		}
+	}
+	return true
 }

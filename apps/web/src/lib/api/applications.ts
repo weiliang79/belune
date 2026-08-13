@@ -24,6 +24,8 @@ export function createApplication(
     git_token?: string;
     /** Ref to build; empty/omitted = the repository's default ref. */
     branch?: string;
+    /** Subdirectory to build from; empty/omitted = the repo root. */
+    root_directory?: string;
   },
 ) {
   return api.post<Application>(`/projects/${projectId}/applications`, data);
@@ -43,6 +45,8 @@ export function updateApplication(
     /** Ref to build; empty string clears it back to the repository default. */
     branch?: string;
     git_integration_id?: string;
+    /** Subdirectory to build from; empty string clears it back to the repo root. */
+    root_directory?: string;
     // Note: resource limits (setResources) and health config (setHealthCheck)
     // have their own endpoints. This update preserves them, so they are not
     // accepted here — sending them would be silently ignored.
@@ -189,6 +193,7 @@ export function changeApplicationSource(
     branch?: string;
     build_type?: string;
     dockerfile_path?: string;
+    root_directory?: string;
     git_integration_id?: string;
     git_token?: string;
   },

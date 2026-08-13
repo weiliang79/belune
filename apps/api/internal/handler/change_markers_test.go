@@ -115,6 +115,35 @@ func TestChangeMarkers_SourceOutranksConfig(t *testing.T) {
 	assert.Equal(t, "source", fetchApp(t, token, projectID, appID)["pending_change"])
 }
 
+// Changing root_directory needs a real build from the new subdirectory, so it
+// must stamp the source marker like dockerfile_path and branch do — not the
+// weaker config marker, which only triggers a reload of the existing image.
+func TestChangeMarkers_RootDirectoryChangeStampsSource(t *testing.T) {
+	resetDB(t)
+	token := env.SetupAdmin(t, "admin@test.com", "password123")
+	project := env.CreateProject(t, token, "Test Project", "test-project")
+	projectID := extractID(project["id"])
+	app := env.CreateApplication(t, token, projectID, map[string]any{
+		"name": "Marker App", "type": "git",
+		"build_type": "dockerfile", "source_repo": "https://github.com/test/repo",
+	})
+	appID := extractID(app["id"])
+	markDeployed(t, appID)
+
+	resp := env.DoRequest(t, "PUT",
+		fmt.Sprintf("/api/projects/%s/applications/%s", projectID, appID),
+		map[string]any{
+			"name": "Marker App", "source_repo": "https://github.com/test/repo",
+			"root_directory": "apps/web",
+		}, testutil.AuthHeader(token))
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	resp.Body.Close()
+
+	_, source := markerState(t, appID)
+	assert.True(t, source, "root directory change must stamp the source marker")
+	assert.Equal(t, "source", fetchApp(t, token, projectID, appID)["pending_change"])
+}
+
 // A save that changes nothing must stamp nothing, or the indicator becomes
 // noise the user cannot clear by doing what it asks.
 func TestChangeMarkers_NoOpSaveStampsNothing(t *testing.T) {

@@ -17,8 +17,8 @@ WHERE a.id = $1;
 -- what every application did before branch selection existed.
 -- auto_deploy_branch is kept in lockstep with it: one user-facing "Branch"
 -- decides both what we build and which pushes deploy, so the two cannot drift.
-INSERT INTO applications (project_id, name, slug, type, source_repo, source_image, dockerfile_path, build_type, cpu_limit, memory_limit, webhook_secret_encrypted, git_credentials_encrypted, health_check_path, git_integration_id, branch, auto_deploy_branch)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+INSERT INTO applications (project_id, name, slug, type, source_repo, source_image, dockerfile_path, build_type, cpu_limit, memory_limit, webhook_secret_encrypted, git_credentials_encrypted, health_check_path, git_integration_id, branch, auto_deploy_branch, root_directory)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
 RETURNING *;
 
 -- name: UpdateApplication :one
@@ -27,7 +27,7 @@ UPDATE applications SET
     build_type_override = $6, builder_image = $7, custom_buildpacks = $8,
     status = $9, cpu_limit = $10, memory_limit = $11, git_credentials_encrypted = $12,
     health_check_path = $13, git_integration_id = $14,
-    branch = $15, auto_deploy_branch = $16, updated_at = NOW()
+    branch = $15, auto_deploy_branch = $16, root_directory = $17, updated_at = NOW()
 WHERE id = $1
 RETURNING *;
 
@@ -108,9 +108,9 @@ INSERT INTO applications (
     project_id, name, slug, type,
     source_repo, source_image, dockerfile_path, build_type,
     cpu_limit, memory_limit, git_credentials_encrypted, health_check_path,
-    git_integration_id, parent_application_id, branch
+    git_integration_id, parent_application_id, branch, root_directory
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
 RETURNING *;
 
 -- name: GetPreviewByParentBranch :one
@@ -264,6 +264,7 @@ UPDATE applications SET
     git_credentials_encrypted = $10,
     webhook_secret_encrypted = $11,
     webhook_secret = NULL,
+    root_directory = $12,
     source_changed_at = NOW(),
     updated_at = NOW()
 WHERE id = $1

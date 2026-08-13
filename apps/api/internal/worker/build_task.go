@@ -69,6 +69,7 @@ func (h *TaskHandler) HandleBuildTask(ctx context.Context, t *asynq.Task) error 
 		BuildType: appRow.BuildType, BuilderImage: appRow.BuilderImage,
 		CustomBuildpacks: appRow.CustomBuildpacks, Status: appRow.Status,
 		GitCredentialsEncrypted: appRow.GitCredentialsEncrypted,
+		RootDirectory:           appRow.RootDirectory,
 	}
 	dc.app = app
 
@@ -115,6 +116,12 @@ func (h *TaskHandler) HandleBuildTask(ctx context.Context, t *asynq.Task) error 
 	}
 	slog.Info("cloned repository", "commit", cloneResult.CommitSHA)
 
+	buildDir, err := resolveBuildDir(tmpDir, app.RootDirectory.String)
+	if err != nil {
+		h.failDeployment(ctx, dc, "build", err.Error())
+		return err
+	}
+
 	// Fetch and decrypt env vars for build-time use
 	envVars, err := h.Queries.ListEnvVarsByApplication(ctx, applicationID)
 	if err != nil {
@@ -146,7 +153,7 @@ func (h *TaskHandler) HandleBuildTask(ctx context.Context, t *asynq.Task) error 
 	sink := buildlog.NewLogSink(pub, buildCtx)
 
 	buildOpts := build.BuildOptions{
-		SourceDir:      tmpDir,
+		SourceDir:      buildDir,
 		ImageTag:       imageName,
 		DockerfilePath: app.DockerfilePath.String,
 		BuilderImage:   app.BuilderImage.String,

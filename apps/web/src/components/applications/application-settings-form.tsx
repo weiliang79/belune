@@ -47,6 +47,7 @@ type FormValues = {
   source_repo: string;
   source_image: string;
   dockerfile_path: string;
+  root_directory: string;
   build_type_override: string;
   git_token: string;
   branch: string;
@@ -109,6 +110,7 @@ export function ApplicationSettingsForm({
       source_repo: application.source_repo ?? "",
       source_image: application.source_image ?? "",
       dockerfile_path: application.dockerfile_path ?? "",
+      root_directory: application.root_directory ?? "",
       build_type_override: application.build_type_override ?? "",
       git_token: "",
       branch: application.branch ?? "",
@@ -140,6 +142,7 @@ export function ApplicationSettingsForm({
           source_repo: isGit ? value.source_repo || undefined : undefined,
           source_image: isGit ? undefined : value.source_image || undefined,
           dockerfile_path: isGit ? value.dockerfile_path || undefined : undefined,
+          root_directory: isGit ? value.root_directory || undefined : undefined,
           // Sent even when blank: blank means "the repository's default ref",
           // which must be able to clear a previously set branch.
           branch: value.branch,
@@ -182,6 +185,7 @@ export function ApplicationSettingsForm({
             branch: v.branch.trim(),
             build_type: v.build_type_override || "railpack",
             dockerfile_path: v.dockerfile_path || undefined,
+            root_directory: v.root_directory || undefined,
             git_token:
               gitSource === "url" ? v.git_token || undefined : undefined,
             git_integration_id:
@@ -442,6 +446,26 @@ export function ApplicationSettingsForm({
                   )}
                 />
               )}
+              <form.Field
+                name="root_directory"
+                children={(field) => (
+                  <div className="space-y-2">
+                    <Label>Root Directory</Label>
+                    <Input
+                      value={field.state.value}
+                      onBlur={field.handleBlur}
+                      onChange={(e) => field.handleChange(e.target.value)}
+                      placeholder="e.g. apps/web — leave blank for repo root"
+                      className="font-mono"
+                    />
+                    <p className="text-muted-foreground text-xs">
+                      Build from a subdirectory of the repo (monorepo support).
+                      Detection and the Dockerfile path and build context all
+                      resolve from here.
+                    </p>
+                  </div>
+                )}
+              />
               <form.Subscribe
                 selector={(s) => s.values.build_type_override}
                 children={(override) =>
@@ -455,6 +479,17 @@ export function ApplicationSettingsForm({
                             value={field.state.value}
                             onBlur={field.handleBlur}
                             onChange={(e) => field.handleChange(e.target.value)}
+                          />
+                          <form.Subscribe
+                            selector={(s) => s.values.root_directory}
+                            children={(rootDir) =>
+                              rootDir.trim() ? (
+                                <p className="text-muted-foreground text-xs">
+                                  Relative to the Root Directory above, not the
+                                  repo root.
+                                </p>
+                              ) : null
+                            }
                           />
                         </div>
                       )}

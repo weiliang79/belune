@@ -46,6 +46,7 @@ type CreateApplicationParams struct {
 	HealthCheckPath  string      // HTTP path to poll after deploy (e.g. /healthz)
 	GitIntegrationID pgtype.UUID // optional FK to a connected provider account
 	Branch           string      // ref to build; empty = the repository's default ref
+	RootDirectory    string      // subdirectory to build from; empty = the repo root
 }
 
 // Create inserts the application record and sets its final slug atomically.
@@ -89,6 +90,7 @@ func (s *ApplicationService) Create(ctx context.Context, p CreateApplicationPara
 			GitIntegrationID:        p.GitIntegrationID,
 			Branch:                  branchValue(p.Branch),
 			AutoDeployBranch:        branchValue(p.Branch),
+			RootDirectory:           pgtype.Text{String: p.RootDirectory, Valid: p.RootDirectory != ""},
 		})
 		if err != nil {
 			return err
@@ -121,6 +123,7 @@ type UpdateApplicationParams struct {
 	HealthCheckPath   string      // empty = clear existing
 	GitIntegrationID  pgtype.UUID // optional FK to a connected provider account; zero = clear
 	Branch            string      // ref to build; empty = the repository's default ref
+	RootDirectory     string      // subdirectory to build from; empty = the repo root
 }
 
 // Update applies field changes to an application.
@@ -176,6 +179,7 @@ func (s *ApplicationService) Update(
 		GitIntegrationID: p.GitIntegrationID,
 		Branch:           branch,
 		AutoDeployBranch: autoDeployBranch,
+		RootDirectory:    pgtype.Text{String: p.RootDirectory, Valid: p.RootDirectory != ""},
 	})
 }
 
@@ -285,6 +289,7 @@ func (s *ApplicationService) FindOrCreatePreview(
 			GitIntegrationID:        parent.GitIntegrationID,
 			ParentApplicationID:     pgtype.UUID{Bytes: parent.ID.Bytes, Valid: true},
 			Branch:                  pgtype.Text{String: branch, Valid: true},
+			RootDirectory:           parent.RootDirectory,
 		})
 		if txErr != nil {
 			return txErr

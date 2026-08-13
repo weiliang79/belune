@@ -285,6 +285,7 @@ func (h *TaskHandler) loadApplication(ctx context.Context, dc *deployContext) er
 		ReadonlyRootfs:                appRow.ReadonlyRootfs,
 		ContainerCaps:                 appRow.ContainerCaps,
 		ContainerPort:                 appRow.ContainerPort,
+		RootDirectory:                 appRow.RootDirectory,
 	}
 	dc.containerName = naming.ContainerName(appRow.ProjectSlug, appRow.Slug, dc.payload.ApplicationID)
 
@@ -493,6 +494,11 @@ func (h *TaskHandler) buildFromGit(ctx context.Context, dc *deployContext) error
 	dc.commitSHA = cloneResult.CommitSHA
 	slog.Info("cloned repository", "commit", dc.commitSHA)
 
+	buildDir, err := resolveBuildDir(tmpDir, dc.app.RootDirectory.String)
+	if err != nil {
+		return err
+	}
+
 	// Record the built commit so Rebuild can re-checkout the deployed commit and
 	// so deployment history shows it (webhook pushes set it at create time, but
 	// manual/reload/rebuild deploys otherwise wouldn't).
@@ -514,7 +520,7 @@ func (h *TaskHandler) buildFromGit(ctx context.Context, dc *deployContext) error
 	sink := buildlog.NewLogSink(pub, buildCtx)
 
 	buildOpts := build.BuildOptions{
-		SourceDir:      tmpDir,
+		SourceDir:      buildDir,
 		ImageTag:       dc.imageName,
 		DockerfilePath: dc.app.DockerfilePath.String,
 		BuilderImage:   dc.app.BuilderImage.String,
@@ -701,11 +707,11 @@ func (h *TaskHandler) createAndStart(ctx context.Context, dc *deployContext) err
 	hc := healthCheckRuntimeConfig(dc.app)
 
 	containerID, err := h.Runtime.CreateContainer(ctx, runtime.ContainerConfig{
-		Name:            dc.containerName,
-		Image:           dc.imageName,
-		Env:             dc.env,
-		Ports:           map[string]string{},
-		Network:         naming.ProjectNetworkName(dc.appRow.ProjectSlug),
+		Name:    dc.containerName,
+		Image:   dc.imageName,
+		Env:     dc.env,
+		Ports:   map[string]string{},
+		Network: naming.ProjectNetworkName(dc.appRow.ProjectSlug),
 		// application-id groups all of an app's logs; deployment-id further
 		// separates them into per-run sessions so the viewer can isolate one
 		// redeploy/rebuild/rollback from the next.

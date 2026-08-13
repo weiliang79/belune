@@ -23,8 +23,8 @@ import (
 //     CPU/memory limits, runtime profile, health-check path.
 //
 //   - markSourceChanged  a real build or pull is required. source_image,
-//     dockerfile_path, build_type_override, builder_image, branch, git
-//     credentials.
+//     dockerfile_path, build_type_override, builder_image, branch,
+//     root_directory, git credentials.
 //
 // Source is the stronger of the two and is reported on its own, so a source
 // change does not also need markConfigChanged — stamping both would leave a
@@ -63,6 +63,7 @@ func (h *Handler) markApplicationUpdate(ctx context.Context, before, after gener
 		before.BuilderImage != after.BuilderImage ||
 		before.Branch != after.Branch ||
 		before.GitIntegrationID != after.GitIntegrationID ||
+		before.RootDirectory != after.RootDirectory ||
 		!bytes.Equal(before.GitCredentialsEncrypted, after.GitCredentialsEncrypted)
 
 	// Not auto_deploy_branch: it only filters which pushes trigger a deploy, so

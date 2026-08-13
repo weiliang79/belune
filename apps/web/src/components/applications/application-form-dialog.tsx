@@ -55,6 +55,7 @@ export function ApplicationFormDialog({
   const [gitIntegrationId, setGitIntegrationId] = useState("");
   const [gitToken, setGitToken] = useState("");
   const [dockerfilePath, setDockerfilePath] = useState("Dockerfile");
+  const [rootDirectory, setRootDirectory] = useState("");
   const [branch, setBranch] = useState("");
   const [buildType, setBuildType] = useState("dockerfile");
   const [appError, setAppError] = useState("");
@@ -71,6 +72,7 @@ export function ApplicationFormDialog({
       setGitIntegrationId("");
       setGitToken("");
       setDockerfilePath("Dockerfile");
+      setRootDirectory("");
       setBranch("");
       setBuildType("dockerfile");
       setAppError("");
@@ -105,6 +107,7 @@ export function ApplicationFormDialog({
           : {
               source_repo: sourceRepo,
               branch: branch.trim(),
+              root_directory: rootDirectory.trim(),
               dockerfile_path: dockerfilePath,
               build_type: buildType,
               ...(gitSource === "connection" && gitIntegrationId
@@ -308,6 +311,21 @@ export function ApplicationFormDialog({
                   </p>
                 </div>
               )}
+              <div className="space-y-2">
+                <Label htmlFor="root-directory">Root Directory</Label>
+                <Input
+                  id="root-directory"
+                  value={rootDirectory}
+                  onChange={(e) => setRootDirectory(e.target.value)}
+                  placeholder="e.g. apps/web — leave blank for repo root"
+                  className="font-mono"
+                />
+                <p className="text-muted-foreground text-xs">
+                  Build from a subdirectory of the repo (monorepo support).
+                  Detection and the Dockerfile path and build context all
+                  resolve from here.
+                </p>
+              </div>
               {buildType === "dockerfile" && (
                 <div className="space-y-2">
                   <Label htmlFor="dockerfile-path">Dockerfile Path</Label>
@@ -317,6 +335,11 @@ export function ApplicationFormDialog({
                     onChange={(e) => setDockerfilePath(e.target.value)}
                     placeholder="Dockerfile"
                   />
+                  {rootDirectory.trim() && (
+                    <p className="text-muted-foreground text-xs">
+                      Relative to the Root Directory above, not the repo root.
+                    </p>
+                  )}
                 </div>
               )}
             </>

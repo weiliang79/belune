@@ -27,6 +27,7 @@ type applicationResponse struct {
 	SourceRepo                pgtype.Text        `json:"source_repo"`
 	SourceImage               pgtype.Text        `json:"source_image"`
 	DockerfilePath            pgtype.Text        `json:"dockerfile_path"`
+	RootDirectory             pgtype.Text        `json:"root_directory"`
 	BuildType                 string             `json:"build_type"`
 	BuildTypeOverride         pgtype.Text        `json:"build_type_override"`
 	BuilderImage              pgtype.Text        `json:"builder_image"`
@@ -110,6 +111,7 @@ func toApplicationResponse(a generated.Application) applicationResponse {
 		SourceRepo:                a.SourceRepo,
 		SourceImage:               a.SourceImage,
 		DockerfilePath:            a.DockerfilePath,
+		RootDirectory:             a.RootDirectory,
 		BuildType:                 a.BuildType,
 		BuildTypeOverride:         a.BuildTypeOverride,
 		BuilderImage:              a.BuilderImage,
