@@ -52,9 +52,10 @@ type createDatabaseRequest struct {
 	RestoreCommand string            `json:"restore_command"` // command mode: restore from $BELUNE_BACKUP_DIR
 }
 
+// mysql has no entry: unlike the others, root isn't a safe default user (see
+// createDatabaseRecord) — its default is derived from the slug instead.
 var defaultUsers = map[string]string{
 	"postgres": "postgres",
-	"mysql":    "root",
 	"redis":    "default",
 	"mongo":    "admin",
 }
@@ -155,6 +156,14 @@ func (h *Handler) CreateDatabase(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// The mysql image's entrypoint rejects MYSQL_USER="root" outright (root is
+	// configured exclusively via root_password); catch it here as a 400 instead
+	// of letting it surface later as a confusing provisioning failure.
+	if req.Type == "mysql" && req.Credentials != nil && strings.EqualFold(req.Credentials.User, "root") {
+		writeError(w, http.StatusBadRequest, "user cannot be \"root\" for MySQL — set root_password to configure the root account instead")
+		return
+	}
+
 	// Fetch project for slug
 	project, err := h.queries.GetProject(r.Context(), projectUUID)
 	if err != nil {
@@ -207,6 +216,14 @@ func (h *Handler) createDatabaseRecord(ctx context.Context, project generated.Pr
 		// Determine effective credential values
 		user := defaultUsers[req.Type]
 		dbName := req.Name
+		if req.Type == "mysql" {
+			// root isn't a real app-scoped user, and Belune's own backup/restore/
+			// health-check tooling authenticates as root via root_password (see
+			// backup_db_task.go) — the app gets a real, scoped user instead,
+			// named after the slug (a clean identifier, unlike the display name).
+			user = baseSlug
+			dbName = baseSlug
+		}
 		if req.Credentials != nil {
 			if req.Credentials.User != "" {
 				user = req.Credentials.User

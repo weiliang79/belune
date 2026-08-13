@@ -1,5 +1,11 @@
-import { useEffect, useState } from "react";
-import { Loader2, ChevronDown, ChevronUp } from "lucide-react";
+import { useEffect, useState, type ComponentType } from "react";
+import { Loader2, ChevronDown, ChevronUp, Database as OtherIcon } from "lucide-react";
+import {
+  SiPostgresql,
+  SiMysql,
+  SiRedis,
+  SiMongodb,
+} from "@icons-pack/react-simple-icons";
 import {
   Dialog,
   DialogContent,
@@ -12,6 +18,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useCreateDatabase } from "@/lib/hooks/use-databases";
 
 function slugify(name: string): string {
@@ -28,11 +41,20 @@ const DEFAULT_VERSIONS: Record<string, string> = {
   redis: "7",
   mongo: "7",
 };
+// mysql has no entry: its default user is derived from the slug (shown as the
+// "Same as Slug" placeholder below), not a fixed name — see database-form-dialog.
 const DEFAULT_USERS: Record<string, string> = {
   postgres: "postgres",
-  mysql: "root",
   redis: "default",
   mongo: "admin",
+};
+
+const DB_TYPE_ICON: Record<string, ComponentType<{ className?: string }>> = {
+  postgres: SiPostgresql,
+  mysql: SiMysql,
+  redis: SiRedis,
+  mongo: SiMongodb,
+  other: OtherIcon,
 };
 
 interface Props {
@@ -210,26 +232,32 @@ export function DatabaseFormDialog({ projectId, open, onOpenChange }: Props) {
             </p>
           </div>
           <div className="space-y-2">
-            <Label htmlFor="db-type">Type</Label>
-            <select
-              id="db-type"
+            <Label>Type</Label>
+            <Select
               value={dbType}
-              onChange={(e) => {
-                setDbType(e.target.value);
+              onValueChange={(v) => {
+                setDbType((v as string) ?? "postgres");
                 setDbVersion("");
                 setDbUser("");
                 setDbPassword("");
                 setDbDatabaseName("");
                 setDbRootPassword("");
               }}
-              className="border-input bg-background ring-offset-background focus-visible:ring-ring flex h-9 w-full rounded-md border px-3 py-1 text-sm focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
             >
-              {DB_TYPES.map((t) => (
-                <option key={t} value={t}>
-                  {t.charAt(0).toUpperCase() + t.slice(1)}
-                </option>
-              ))}
-            </select>
+              <SelectTrigger>
+                <SelectValue placeholder="Select type" />
+              </SelectTrigger>
+              <SelectContent>
+                {DB_TYPES.map((t) => {
+                  const Icon = DB_TYPE_ICON[t];
+                  return (
+                    <SelectItem key={t} value={t} icon={<Icon />}>
+                      {t.charAt(0).toUpperCase() + t.slice(1)}
+                    </SelectItem>
+                  );
+                })}
+              </SelectContent>
+            </Select>
           </div>
           {dbType !== "other" && (
             <>
@@ -266,7 +294,11 @@ export function DatabaseFormDialog({ projectId, open, onOpenChange }: Props) {
                           id="db-user"
                           value={dbUser}
                           onChange={(e) => setDbUser(e.target.value)}
-                          placeholder={DEFAULT_USERS[dbType] || ""}
+                          placeholder={
+                            dbType === "mysql"
+                              ? "Same as Slug"
+                              : DEFAULT_USERS[dbType] || ""
+                          }
                         />
                       </div>
                     )}
@@ -299,7 +331,11 @@ export function DatabaseFormDialog({ projectId, open, onOpenChange }: Props) {
                           id="db-database-name"
                           value={dbDatabaseName}
                           onChange={(e) => setDbDatabaseName(e.target.value)}
-                          placeholder={dbName || "same as name"}
+                          placeholder={
+                            dbType === "mysql"
+                              ? "Same as Slug"
+                              : dbName || "same as name"
+                          }
                         />
                       </div>
                     )}

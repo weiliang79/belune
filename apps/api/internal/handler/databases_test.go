@@ -32,6 +32,52 @@ func TestCreateDatabase(t *testing.T) {
 	assert.Equal(t, "provision_db", env.Asynq.Tasks[0].TypeName)
 }
 
+func TestCreateDatabase_MySQLDefaultUserIsNotRoot(t *testing.T) {
+	resetDB(t)
+	token := env.SetupAdmin(t, "admin@test.com", "password123")
+	project := env.CreateProject(t, token, "Test Project", "test-project")
+	projectID := extractID(project["id"])
+
+	// Display name intentionally has a space + capitals — the default database
+	// name must still come out as the clean slug, not this raw name.
+	resp := env.DoRequest(t, "POST", fmt.Sprintf("/api/projects/%s/databases", projectID), map[string]any{
+		"name": "Laravel MySQL",
+		"type": "mysql",
+	}, testutil.AuthHeader(token))
+	require.Equal(t, http.StatusAccepted, resp.StatusCode)
+	db := testutil.ReadJSON(t, resp)
+	dbID := extractID(db["id"])
+
+	resp = env.DoRequest(t, "GET", fmt.Sprintf("/api/projects/%s/databases/%s", projectID, dbID), nil, testutil.AuthHeader(token))
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	result := testutil.ReadJSON(t, resp)
+	creds, ok := result["credentials"].(map[string]any)
+	require.True(t, ok, "credentials should be a map")
+	// The base slug (naming.Slugify of the name), not the final DB row's
+	// project-prefixed + ID-suffixed slug column.
+	assert.Equal(t, "laravel-mysql", creds["user"])
+	assert.Equal(t, "laravel-mysql", creds["database"])
+	assert.NotEqual(t, "root", creds["user"])
+	assert.NotEmpty(t, creds["root_password"])
+	assert.NotEqual(t, creds["root_password"], creds["password"])
+}
+
+func TestCreateDatabase_MySQLRejectsRootUserOverride(t *testing.T) {
+	resetDB(t)
+	token := env.SetupAdmin(t, "admin@test.com", "password123")
+	project := env.CreateProject(t, token, "Test Project", "test-project")
+	projectID := extractID(project["id"])
+
+	resp := env.DoRequest(t, "POST", fmt.Sprintf("/api/projects/%s/databases", projectID), map[string]any{
+		"name": "mydb",
+		"type": "mysql",
+		"credentials": map[string]any{
+			"user": "root",
+		},
+	}, testutil.AuthHeader(token))
+	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+}
+
 func TestGetDatabase(t *testing.T) {
 	resetDB(t)
 	token := env.SetupAdmin(t, "admin@test.com", "password123")
