@@ -1,0 +1,112 @@
+---
+title: Settings
+description: The application Settings tab — build source, health check, resources, runtime hardening, and delete.
+---
+
+The **Settings** tab holds an app's identity and build source, health check, resource
+limits, and runtime hardening. 
+
+<Callout type="info">
+Most changes here apply on the next **deploy**, or a **reload** when the container is
+recreated.
+</Callout>
+
+## Application Settings
+
+<Screenshot name="app-settings" alt="The Application Settings card: name, source, build method, and repository fields." />
+
+The first card holds the app's identity and build source.
+
+- **Application Name** — the app's display name.
+- **Source** — switch between a **Git Repository** and a **Docker Image**.
+
+<Callout type="info" title="About Switching Source">
+  Switching source keeps your domains, volumes, mounts, environment variables, and
+  deploy hook, and drops only the settings specific to the old source (repo/branch/build
+  config, or the image reference).
+</Callout>
+
+**For a Git Repository:**
+
+- **Build Method** — override detection with **Dockerfile**, **Buildpacks**, or
+  **Railpack**. See [Builders](/docs/application/builders).
+- **Repository Source** — a **Connected Account** (a [connected](/docs/server/git)
+  GitHub App or OAuth provider), or a **Public URL** with an
+  optional branch and per-app token.
+- **Root Directory** — build from a **subdirectory** of the repo (monorepo support);
+  detection, the Dockerfile path, and the build context all resolve from here. Blank
+  builds from the repo root.
+- **Dockerfile Path** — path to the Dockerfile, **relative to the Root Directory**,
+  not the repo root.
+
+**For a Docker Image:**
+
+- **Docker Image** — the image reference to pull and run (`nginx:1.27`,
+  `ghcr.io/org/app:1.4`).
+
+## Resources
+
+<Screenshot name="app-settings-resources" alt="The Resources card: CPU and memory limit fields." />
+
+CPU and memory ceilings for the container. Leave a field at **0** for no limit —
+for example `0.5` = half a core, `512` = 512 MB. 
+
+Applied when the container is next recreated.
+
+## Health Check
+
+<Screenshot name="app-settings-health-check" alt="The Health Check card: method, path, expected status, and timeout." />
+
+How Belune decides whether the app is healthy. Three methods, and the change applies on
+the next deploy:
+
+- **None** — Belune runs no probe of its own.
+- **HTTP** — after each deploy, Belune probes a path (for example `/healthz`) on the
+  container's port; a non-2xx response (or one outside the **Expected status** range)
+  fails the deploy. Set the **Path**, **Expected status**, and **Timeout**.
+- **Command** — a command runs continuously inside the container and marks the app
+  **Unhealthy** whenever it fails.
+
+<Callout type="warn" title="`None` Doesn't Hide The Image's Own Healthcheck">
+  Setting this to **None** only turns off *Belune's* probe. It does **not** suppress
+  a `HEALTHCHECK` baked into the image — Belune reflects the container's native Docker
+  health, so an image whose baked healthcheck fails still shows **Unhealthy**. 
+  
+  For a worker with no HTTP port, make the image's healthcheck role-aware instead of 
+  relying on None.
+</Callout>
+
+## Build Cache
+
+<Screenshot name="app-settings-build-cache" alt="The Build Cache card: cache size and a clear button." />
+
+The persistent layer cache reused across builds, with its current size. **Clear Build
+Cache** forces the next build to start from scratch — useful when a cached layer has
+gone stale.
+
+## Runtime
+
+<Screenshot name="app-settings-runtime" alt="The Runtime card: read-only filesystem toggle and capabilities selector." />
+
+Options for container hardening:
+
+- **Read-only root filesystem** — blocks writes to the container filesystem except
+  mounted [volumes](/docs/application/mounts) and `/tmp`, `/run`. Turn it off only 
+  for stock images that must write elsewhere.
+- **Capabilities**
+  - **Minimal** (default) — drops all Linux capabilities; the most hardened option.
+  - **Standard** — grants Docker's default capability set, needed by images that change
+    file ownership or switch users at startup (for example the official `caddy` image).
+
+<Callout type="info" title="Capabilities and Read-Only In Practice">
+  These are the runtime settings framework deploys most often touch. A static-site
+  `caddy` image needs either its file capability stripped or **Standard** caps, and a
+  Laravel FrankenPHP image needs **Standard** with read-only left **on**. 
+  
+  The [frameworks guides](/docs/application/frameworks/laravel) show real combinations.
+</Callout>
+
+## Danger Zone
+
+**Delete Application** stops the running container and permanently deletes the app.
+This can't be undone.

@@ -1,0 +1,73 @@
+---
+title: Uninstall
+description: Remove Belune from a host.
+---
+
+Belune lives in a single directory (`/opt/belune`) and a systemd unit, so removing it means stopping the compose stack, disabling the unit, and deleting that directory. What survives depends on whether you keep the Docker volumes — take a final backup before you remove them.
+
+<Callout type="warn">
+  Removing the data volumes is irreversible. Export a backup you can reach from off the server first.
+</Callout>
+
+## 1. Before You Uninstall
+
+Take a final backup and copy it somewhere off the server — once the volumes are gone, so is everything in them:
+
+```bash
+cd /opt/belune
+sudo bash scripts/backup.sh /path/outside/the/stack
+```
+
+This dumps Postgres and the Caddy TLS data to a timestamped directory. Copy it off the host (`scp`, an S3-compatible destination, whatever you already use) before continuing. See [Configurations](/docs/server/configurations) if you'd rather trigger a backup from the dashboard first.
+
+## 2. Stop and Remove the Stack
+
+<Callout type="warn">
+Only do this after step 1's backup is safely off the server.
+</Callout>
+
+Remove the compose stack:
+
+```bash
+cd /opt/belune
+docker compose down       # stops and removes containers; volumes are kept
+```
+
+If you want to destroy the Postgres & Redis, Caddy, and build cache volumes, add `-v` at the end:
+
+```bash
+docker compose down -v    # irreversible: destroys belunedata, pgdata, redisdata, caddyconfig, caddydata, caddylogs, buildkitcache
+```
+
+`down -v` removes only the platform volumes listed above. **Application and database data volumes are created by Belune outside the compose stack, so they survive `down -v`.** To also delete them — this destroys all app and database data — remove them by label:
+
+```bash
+docker volume ls --filter label=managed-by=belune          # review what will be removed
+docker volume rm $(docker volume ls -q --filter label=managed-by=belune)
+```
+
+## 3. Remove the systemd Units
+
+```bash
+sudo systemctl disable --now belune.service
+sudo rm /etc/systemd/system/belune.service \
+        /etc/systemd/system/belune-backup.service
+sudo systemctl daemon-reload
+```
+
+This stops the stack from being brought back up on the next reboot. `belune-backup.service` is the manual/CLI backup fallback (daily backups otherwise run in-app) — remove it too if present. An install from before backups moved in-app may still have `belune-backup.timer`; if `systemctl status belune-backup.timer` shows it, remove it the same way (`disable --now`, then `rm /etc/systemd/system/belune-backup.timer`).
+
+## 4. Delete the Install Directory
+
+```bash
+sudo rm -rf /opt/belune
+```
+
+This removes `docker-compose.yml`, the Caddy/BuildKit config, the `scripts/` helpers, and `.env` — which holds `JWT_SECRET`, `ENCRYPTION_KEY`, and the Postgres password. If you kept the Docker volumes (skipped `-v` above) and plan to reinstall against them later, keep a copy of this `.env`; the encryption key in particular is required to decrypt secrets already stored in the database.
+
+## What's Left Behind
+
+- **Pulled Docker images** — `ghcr.io/weiliang79/belune`, `postgres:16-alpine`, `redis:7-alpine`, `moby/buildkit`, `caddy:2-alpine`, and any image your apps used. Reclaim the space with `docker image prune -a`.
+- **The `docker` group membership** the installer may have granted — harmless to leave, or remove with `sudo gpasswd -d <user> docker` if you're decommissioning the host entirely.
+- **Anything deployed outside the compose stack** — Belune doesn't touch containers, volumes, or networks it didn't create, so unrelated Docker workloads on the same host are untouched by any of the steps above.
+- **DNS records** pointing at this host — Belune doesn't manage DNS, so any `A` records you created during [install](/docs/install) will keep resolving here until you remove them yourself.

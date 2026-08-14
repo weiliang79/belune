@@ -1,0 +1,81 @@
+---
+title: Git
+description: Connect GitHub, GitLab, Bitbucket, or Gitea for private repositories and push-to-deploy.
+---
+
+Git integrations let Belune clone private repositories and deploy automatically on push.
+
+<Screenshot
+  name="git-providers"
+  alt="The Git page's Providers tab, listing configured provider apps."
+/>
+
+## Providers vs. Connections
+
+- A **Provider** is an app registration — a GitHub App, or an OAuth client ID/secret pair, that makes connecting possible at all.
+- A **Connection** is one actual linked account, authenticated through one of those providers.
+
+<Callout type="info">
+  Registering providers is an admin-only capability, since a provider app is a
+  platform-wide credential, not a personal one.
+</Callout>
+
+## Supported Providers
+
+<Screenshot name="git-provider-add" alt="The add Git provider form dialog." />
+
+Four providers are supported, added from **Providers → Add provider**:
+
+- **GitHub** — cloud-hosted, and the only provider with the richer GitHub App flow (see below).
+- **GitLab** — cloud-hosted by default, or self-hosted with an optional base URL.
+- **Bitbucket** — cloud-hosted.
+- **Gitea** — self-hosted only; a base URL is required.
+
+### Register a GitHub App
+
+GitHub gets a dedicated flow instead of manual OAuth:
+
+1. On the create provider dialog, pick **GitHub** provider
+2. On Visibility field choose **Private** (only your admin account can connect through it) or **Public** (any team member can connect their own account)
+3. On the **Organization** field, optionally scope the provider to an organization
+4. Click **Create GitHub App** button. You're redirected to GitHub to create and install the App from a manifest
+5. After redirect back, the provider is configured automatically.
+
+### Register an OAuth Provider
+
+GitLab, Bitbucket, and Gitea are registered as standard OAuth apps:
+
+1. On the create provider dialog, pick the specified provider
+2. On the Visibility field set the provider visibility (Private/Public, same meaning as above)
+3. On the Base URL field, enter base URL if self-hosted (required for Gitea)
+4. Go to the provider settings page, register Belune's **callback URL** shown in the dialog (`/api/git/integrations/callback`).
+   - GitLab: On the group page, go to **Settings** → **Applications**
+   - Bitbucket: Go to **Workspace settings** → **Apps and features** → **OAuth clients**
+   - Gitea: Go to **Settings** → **Applications** → **Create a new OAuth2 Application**
+5. Enter the **Client ID** and **Client secret** from an OAuth app you create on that provider.
+
+<Callout type="info">
+  The client secret is stored encrypted and is never shown again after saving.
+</Callout>
+
+## Connect Your Account
+
+<Screenshot
+  name="git-connections"
+  alt="The Git page's Connections tab, listing linked accounts."
+/>
+
+From the **Connections** tab, pick any available provider to be redirected there and authorize Belune. Once connected, the table shows the account login, host, and when it was connected.
+
+<Callout type="warn">
+  Deleting a connection removes that account's credentials; any application
+  deploying through it will need to be pointed at a different connection.
+</Callout>
+
+## Deploy from a Connection
+
+When creating a Git-based application, pick **Connected Account** on the repository source field, then the repository and branch. The pickers only list repositories that connection can actually see; an existing application's Settings tab shows the same fields and lets you change them.
+
+## Push-to-Deploy
+
+Connecting a repository registers a webhook on it automatically. A push to the application's configured branch triggers a build the same way a manual deploy does — see [Deployments](/docs/application/deployments) for what happens after the webhook fires, and for deploy hooks as a git-independent alternative.

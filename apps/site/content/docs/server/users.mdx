@@ -1,0 +1,35 @@
+---
+title: Users
+description: Invite teammates and manage access.
+---
+
+Belune supports multiple users with two roles and either direct account creation or email invitations. Manage the roster from **Settings → Team**.
+
+<Screenshot name="users" alt="The Team page listing users and their roles." />
+
+## Roles
+
+Admin and Member are the only two roles. 
+
+- **Admin** unlocks the platform-wide pages — Server, Certificates, Git Providers, Notifications, Docker, Team, Quotas, and the Audit Log — plus every project. 
+- **Member** reaches the projects and applications they have access to, their own git connections, and their own Account settings, but never the admin-only pages above.
+
+## Add a User Directly
+
+**Add User** creates an account immediately with an email, a password you set, and a role — no invitation, no SMTP required. Useful for the very first teammate, or when email isn't configured yet.
+
+## Invite by Email
+
+<Screenshot name="users-invite" alt="Inviting a teammate by email from the Team page." />
+
+**Invite by Email** requires [SMTP](/docs/server/configurations#email-smtp) to be configured. It sends a sign-up link to the given address with the chosen role attached; the invitee sets their own password when they follow it.
+
+Pending invitations are listed with their expiry and can be revoked before they're accepted.
+
+## Password Resets and Role Changes
+
+An admin can reset any other user's password or change their role at any time from the Team table. Both actions immediately revoke that user's existing sessions, so a password reset (say, after a suspected compromise) can't be undone by an already-open browser tab.
+
+## Account Protection
+
+Five failed sign-in attempts for the same email within 15 minutes locks that account out for 15 minutes, regardless of role. This applies platform-wide and isn't currently configurable.

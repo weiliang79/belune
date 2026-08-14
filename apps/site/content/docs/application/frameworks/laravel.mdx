@@ -1,0 +1,436 @@
+---
+title: Laravel
+description: Deploy a Laravel app on Belune — running web, queue, websocket, and scheduler in one image.
+---
+
+A production Laravel app has four long-running processes:
+
+| Process    | Process/Command             | Why                                  |
+| ---------- | --------------------------- | ------------------------------------ |
+| Web        | FrankenPHP (or nginx+fpm)   | Serves HTTP                          |
+| Queue      | `php artisan queue:work`    | Jobs, mail, notifications            |
+| Scheduler  | `php artisan schedule:work` | Cron tasks — no host cron needed     |
+| WebSockets | `php artisan reverb:start`  | Laravel Reverb (first-party, 11+)    |
+
+Belune's builders won't start all of these for you, so the working shape is a
+**FrankenPHP** image that runs one process on its own — or all of them together
+under `supervisord` (one build, one container, every process supervised).
+
+## All-in-One vs Per-Process
+
+The same image runs in two shapes:
+
+- **All-in-One (AIO)** — One container runs the web server,
+  queue worker, and scheduler together under `supervisord`. One build, one
+  container, one deploy, and shown as a single application in Belune.
+- **Per-process** — Deploy the same image once per process you need; each runs
+  as its own container.
+
+|                        | All-in-One                                   | Per-process                                       |
+| ---------------------- | -------------------------------------------- | ------------------------------------------------- |
+| applications to manage | Only one                                     | Per process                                       |
+| Resource limits        | Shared across all processes                  | Per process                                       |
+| Scaling                | All-or-nothing                               | Scale a role on its own (e.g. more queue workers) |
+| Restarts               | Restarting the container restarts everything | Restart one role without touching the others      |
+| Logs & metrics         | Combined in one **Logs** tab                 | Separated per container                           |
+| Best for               | Most self-hosted apps — simplest to run      | Busy queues or independent scaling and uptime     |
+
+<Callout type="info">
+Recommended to start with **All-in-One**, it's the simplest thing that works.
+</Callout>
+
+## Prerequisites
+
+A few things to line up before you deploy:
+
+- **Use the `database` drivers.** Point session, cache, and queue at `database` so
+  the app needs no Redis and writes nothing to disk — which is what lets it run on
+  the read-only root filesystem.
+- **A managed database.** Create a MySQL or Postgres database in the project;
+  you'll wire the app to it with the `DB_*` variables below.
+
+## 1. Add The Container Files
+
+Commit four files to your repo. Belune's build detector prefers a Dockerfile,
+so adding one switches off the language builders automatically.
+
+### `Dockerfile`
+
+A single image that installs PHP + Node, builds the Inertia frontend, and
+pre-compiles routes and views at build time.
+
+```dockerfile
+FROM dunglas/frankenphp:php8.4
+
+# System packages: supervisor (AIO), Node (Inertia build), git+unzip (composer).
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        supervisor git unzip ca-certificates curl gnupg \
+    && curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
+    && apt-get install -y --no-install-recommends nodejs \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN install-php-extensions pcntl pdo_mysql redis opcache bcmath intl
+
+# Composer isn't bundled in the FrankenPHP image — copy it from the official one.
+COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
+
+WORKDIR /app
+COPY . .
+
+# A throwaway APP_KEY lets artisan/Wayfinder boot during the build; the real key
+# comes from the runtime environment.
+RUN export APP_KEY="base64:$(head -c 32 /dev/urandom | base64)" \
+    && composer install --no-dev --no-interaction --prefer-dist --optimize-autoloader \
+    && npm ci \
+    && npm run build \
+    && php artisan route:cache \
+    && php artisan view:cache
+
+COPY docker/supervisord.conf /etc/supervisor/conf.d/laravel.conf
+COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
+COPY docker/healthcheck.sh /usr/local/bin/healthcheck.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/healthcheck.sh
+
+# Role-aware healthcheck — see the note below.
+HEALTHCHECK --interval=15s --timeout=5s --start-period=60s --retries=3 \
+    CMD healthcheck.sh
+
+ENTRYPOINT ["entrypoint.sh"]
+```
+
+<Callout type="warn" title="Three Things That Will Bite You">
+  - **Select a php version compatible with your app.** This `Dockerfile` is using `8.4`.
+  - **Copy composer from `composer:2` image.** The FrankenPHP image doesn't bundle it, so
+    need the `COPY --from=composer:2` line.
+  - **No `config:cache`.** Caching config bakes the build-time environment into
+    the image, so the app can't read the variables Belune injects at runtime (and
+    the cache write fails on the read-only filesystem).
+</Callout>
+
+<Callout type="info" title="Override The Inherited Healthcheck">
+  The `dunglas/frankenphp` base image ships a `HEALTHCHECK` that probes Caddy's
+  admin API on port `2019`. But the app runs `frankenphp php-server` which doesn't
+  expose that port, so the inherited check always fails and the container reports
+  **unhealthy** even while it serves fine.
+
+  Belune only routes a domain to a healthy app, so an unhealthy container returns
+  a **404**. The override runs [`docker/healthcheck.sh`](#dockerhealthchecksh),
+  which probes Laravel's `/up` route for the web/AIO shape (and the right thing for
+  each worker role — see below).
+</Callout>
+
+### `docker/entrypoint.sh`
+
+One entrypoint serves both shapes: it reads the `PROCESS` variable to decide
+which process to run. See
+[Split Into Separate Processes](#split-into-separate-processes).
+
+```sh
+#!/bin/sh
+set -e
+
+PROCESS="${PROCESS:-all}"
+
+# Redirect compiled Blade views to the writable /tmp and seed them from the
+# baked cache — see the read-only note below.
+export VIEW_COMPILED_PATH=/tmp/laravel-views
+mkdir -p "$VIEW_COMPILED_PATH"
+cp -a /app/storage/framework/views/. "$VIEW_COMPILED_PATH/" 2>/dev/null || true
+
+# Seed the scheduler heartbeat so the role-aware healthcheck has a fresh file
+# before schedule:work's first tick (see docker/healthcheck.sh).
+if [ "$PROCESS" = "all" ] || [ "$PROCESS" = "scheduler" ]; then
+    touch /tmp/scheduler-heartbeat 2>/dev/null || true
+fi
+
+# Run migrations once, from the web/AIO role only, so queue/scheduler containers
+# don't race it. Non-fatal so a slow database doesn't crash-loop the app.
+if [ "$PROCESS" = "all" ] || [ "$PROCESS" = "web" ]; then
+    php artisan migrate --force || echo "entrypoint: migrate failed, continuing"
+fi
+
+case "$PROCESS" in
+    web)       exec frankenphp php-server --listen :8080 --root public ;;
+    queue)     exec php artisan queue:work --tries=3 --max-time=3600 ;;
+    scheduler) exec php artisan schedule:work ;;
+    reverb)    exec php artisan reverb:start --host=0.0.0.0 --port=8081 ;;
+    all)       exec supervisord -c /etc/supervisor/conf.d/laravel.conf -n ;;
+    *)         echo "entrypoint: unknown PROCESS '$PROCESS'" >&2; exit 1 ;;
+esac
+```
+
+<Callout type="warn" title="Why Changing View Compiled Path Matters">
+  `view:cache` compiles ordinary templates at build time, but **inline/string
+  Blade components compile on first render at runtime** and write into the
+  compiled-views directory. 
+  
+  On the read-only root filesystem that write fails with 
+  `tempnam(): file created in the system's temporary directory` and the
+  request 500s. Pointing `VIEW_COMPILED_PATH` at the writable `/tmp` (and seeding
+  it from the baked cache) fixes it. 
+  
+  Applies to every role, since the queue and scheduler render views too (e.g. 
+  mailables).
+</Callout>
+
+### `docker/supervisord.conf`
+
+Runs the processes in one container, paths point at `/tmp` so nothing is
+written to the read-only root filesystem. You can ignore this file if you are
+decided to deploy with **separate process**.
+
+```ini
+[supervisord]
+nodaemon=true
+logfile=/dev/stdout
+logfile_maxbytes=0
+pidfile=/tmp/supervisord.pid
+childlogdir=/tmp
+
+[program:web]
+command=frankenphp php-server --listen :8080 --root /app/public
+autorestart=true
+stdout_logfile=/dev/stdout
+stdout_logfile_maxbytes=0
+redirect_stderr=true
+
+[program:queue]
+command=php /app/artisan queue:work --tries=3 --max-time=3600
+autorestart=true
+stdout_logfile=/dev/stdout
+stdout_logfile_maxbytes=0
+redirect_stderr=true
+
+[program:scheduler]
+command=php /app/artisan schedule:work
+autorestart=true
+stdout_logfile=/dev/stdout
+stdout_logfile_maxbytes=0
+redirect_stderr=true
+```
+
+<Callout type="info">
+You are safe to remove the `queue` and `scheduler` program section if your application 
+are not in use on these roles.
+</Callout>
+
+<Callout type="info">
+Every program logs to stdout, so the app's **Logs** tab captures all of them
+</Callout>
+
+### `docker/healthcheck.sh`
+
+One script decides health for every role, dispatching on the `PROCESS`
+variable the entrypoint uses.
+
+```sh
+#!/bin/sh
+case "${PROCESS:-all}" in
+    web|all)
+        # Web + AIO serve HTTP — probe Laravel's built-in /up route.
+        exec curl -fsS http://localhost:8080/up
+        ;;
+    reverb)
+        # Reverb listens on 8081; any HTTP response means it's accepting
+        # connections. No -f, since Reverb may answer non-2xx to a plain GET.
+        exec curl -s -o /dev/null --max-time 5 http://localhost:8081
+        ;;
+    scheduler)
+        # schedule:work refreshes /tmp/scheduler-heartbeat every minute (see
+        # routes/console.php). Fail if it goes stale — catches a hung scheduler.
+        [ -n "$(find /tmp/scheduler-heartbeat -mmin -2 2>/dev/null)" ] || exit 1
+        ;;
+    queue)
+        # queue:work has no clean heartbeat hook; rely on crash -> container exit
+        # -> restart. Use Laravel Horizon if you need real worker-health here.
+        exit 0
+        ;;
+    *)
+        exit 0
+        ;;
+esac
+```
+
+<Callout type="info" title="Workers Stay Healthy Automatically">
+  An `/up` HTTP probe only fits the `web` and AIO shapes — a `queue` or
+  `scheduler` container opens no port. And because the `frankenphp` image ships its
+  own healthcheck, Docker marks those portless containers **unhealthy** even while
+  they run fine.
+
+  So either [disable the healthcheck in the `Dockerfile`](https://docs.docker.com/reference/dockerfile/#healthcheck)
+  (which also drops it for `web`), or ship a role-aware
+  [`docker/healthcheck.sh`](#dockerhealthchecksh) that probes the right thing per
+  `PROCESS` — nothing to configure per app.
+</Callout>
+
+The `scheduler` role checks a heartbeat file that a per-minute task refreshes, so
+a *hung* scheduler (process alive but stuck) is caught too. Add that task to
+`routes/console.php`:
+
+```php
+use Illuminate\Support\Facades\Schedule;
+
+Schedule::call(fn () => @touch('/tmp/scheduler-heartbeat'))->everyMinute();
+```
+
+<Callout type="warn" title="Why Workers Don't Just Check The Process Is Alive">
+  Each role runs as **PID 1**, so "the process is alive" already equals "the
+  container is running" — the platform knows that without a probe and restarts the
+  container if the process exits.
+
+  The only thing a worker healthcheck can *add* is **hang detection**, which needs
+  app cooperation: the scheduler's heartbeat, or Reverb's open port. The queue has
+  no clean hook, so it relies on crash-restart.
+
+  Keep this in mind: without hang detection (e.g. the queue's `exit 0`), the
+  dashboard can show a worker **Healthy** while its process is actually **hung**.
+</Callout>
+
+## 2. Trust The Proxy
+
+Belune's reverse proxy - **Caddy** terminates TLS and forwards to the app over plain HTTP.
+Without trusting it, Laravel reads the request as HTTP and generates `http://`
+asset URLs, and the browser blocks them as mixed content on your HTTPS page, so the
+bundle never loads and you get a blank screen.
+
+Trust the proxy in `bootstrap/app.php`:
+
+```php
+->withMiddleware(function (Middleware $middleware): void {
+    $middleware->trustProxies(at: '*');
+    // ...the rest of your middleware config
+})
+```
+
+<Callout type="info" title="Why Trust All Proxies">
+  The container only ever receives traffic from Belune's proxy, so trusting all
+  proxies is safe here. With it in place, `X-Forwarded-Proto: https` is honored
+  and `asset()` / `@vite` emit `https://` URLs.
+</Callout>
+
+## 3. Deploy
+
+Before deploying, there are a few settings to adjust.
+
+### Settings
+
+In the app's settings tab:
+
+- **Capabilities** switch to **Standard**. The FrankenPHP binary ships with a file
+  capability, which Belune's default (Minimal) capability set refuses to run.
+  Set it on the app's **Settings → Runtime** panel.
+- **Read-only root filesystem** stays **on**. With the database drivers and the two
+  small tweaks above, nothing is written to the app's filesystem at runtime.
+
+### Environment Variables
+
+```ini
+APP_NAME=Laravel
+APP_ENV=production
+APP_KEY=base64:...          # secret, `php artisan key:generate --show`
+APP_DEBUG=false
+APP_URL=https://laravel.example.com
+
+# Logging
+LOG_CHANNEL=stderr          # logs to stdout, captured by the Logs tab
+
+# Database
+DB_CONNECTION=mysql         # or postgres, based on your application
+DB_HOST=...  
+DB_PORT=3306  
+DB_DATABASE=...  
+DB_USERNAME=...
+DB_PASSWORD=...             # secret, from the managed database
+
+# Drivers — database-backed, so nothing is written to disk
+SESSION_DRIVER=database
+QUEUE_CONNECTION=database
+CACHE_STORE=database
+```
+
+<Callout type="warn" title="Mark Secrets">
+  `APP_KEY` and `DB_PASSWORD` are the secrets, recommended to mark them 
+  as **Secret** variables on the **Environment** tab. The rest are plain 
+  configuration.
+</Callout>
+
+<Callout type="info" title="VITE_* Are Build-Time Environment Variables">
+  Anything the frontend reads through `import.meta.env.VITE_*` is compiled into
+  the bundle during `npm run build`, so set those variables before the first build;
+  changing one later needs a new [deploy](/docs/application/deployments), not just a reload.
+</Callout>
+
+### Deploy
+
+On boot the entrypoint runs `php artisan migrate --force`, so the first deploy
+also creates the schema (including the sessions, cache, and jobs tables). Once
+the `/up` healthcheck passes, Belune routes your domain to the app.
+
+## Split Into Separate Processes
+
+With the setup above, your app can run one process per container. Set the `PROCESS`
+variable to `web`, `queue`, or `scheduler` on a given app and the entrypoint runs
+only that role. Deploy the same repo as multiple apps when you want to scale or
+control them independently.
+
+## Add WebSockets (Reverb)
+
+[Laravel Reverb](https://reverb.laravel.com) is the first-party WebSocket server
+(Laravel 11+) — a fourth long-running process for broadcasting. It isn't part of
+the base example; add it in four steps.
+
+First install it in your app, which registers the broadcaster and writes the
+`REVERB_*` keys to your `.env`:
+
+```bash
+composer require laravel/reverb
+php artisan reverb:install
+```
+
+**Add a `reverb` program** to `docker/supervisord.conf` so the AIO container
+supervises it alongside the others:
+
+```ini
+# ...the web, queue and scheduler programs from above
+
+[program:reverb]
+command=php /app/artisan reverb:start --host=0.0.0.0 --port=8081
+autorestart=true
+stdout_logfile=/dev/stdout
+stdout_logfile_maxbytes=0
+redirect_stderr=true
+```
+
+Set the Reverb variables:
+
+```ini
+BROADCAST_CONNECTION=reverb
+REVERB_APP_ID=...  
+REVERB_APP_KEY=...
+REVERB_APP_SECRET=...            # secret
+REVERB_HOST=laravel.example.com  
+REVERB_PORT=443  
+REVERB_SCHEME=https
+
+# Build-time — Laravel Echo reads these in the browser (set before the build):
+VITE_REVERB_APP_KEY="${REVERB_APP_KEY}"
+VITE_REVERB_HOST="${REVERB_HOST}"
+VITE_REVERB_PORT=443
+VITE_REVERB_SCHEME=https
+```
+
+And finally, **Route the WebSocket port.** On the app's **Domains** tab, keep the default
+route to `8080` and add a [path route](/docs/application/domains#path-based-routing) `/app` →
+container port **8081**. Reverb clients then connect to
+`wss://laravel.example.com/app/<key>`.
+
+<Callout type="warn" title="VITE_REVERB_* are Build-Time">
+  Laravel Echo reads the `VITE_REVERB_*` values from the compiled bundle, so set
+  them before the first build — a change needs a new [deploy](/docs/application/deployments),
+  not a reload.
+</Callout>
+
+## Example
+
+A runnable example is on GitHub:
+[`frameworks/laravel`](https://github.com/weiliang79/belune-examples/tree/main/frameworks/laravel).

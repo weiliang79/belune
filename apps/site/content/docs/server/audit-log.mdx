@@ -1,0 +1,20 @@
+---
+title: Audit Log
+description: A record of who did what, and when.
+---
+
+The audit log records change-relevant actions across the platform with the acting user, resource, and timestamp.
+
+<Screenshot name="audit-logs" alt="The audit log listing recent actions with the acting user and timestamp." />
+
+## What's Recorded
+
+Every sensitive action is written through a single non-blocking audit service, so logging never adds request latency and an entry is never silently dropped even under load. A full buffer falls back to a direct, synchronous write rather than discarding the event.
+
+<Callout type="info">
+Anything in an entry's metadata that looks like a password, token, secret, credential, or API key is redacted before it's ever persisted, so the table itself is safe to export or replicate without re-exposing something sensitive.
+</Callout>
+
+## Retention
+
+Entries are kept forever by default — audit data is compliance-sensitive, so nothing prunes it automatically unless you opt in. Setting `audit_log_retention_days` to a positive number starts pruning entries older than that window, run in the same daily cleanup pass as the [log retention](/docs/server/configurations) settings. There's no dedicated UI control for this yet; it's set the same way other advanced settings are, directly against the settings API.

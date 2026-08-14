@@ -1,0 +1,104 @@
+---
+title: Architecture
+description: How Belune is put together.
+---
+
+Belune runs as a small Docker Compose stack on a single host. One Go binary — the API and background worker together — drives everything, backed by Postgres and Redis, and talks to the host's Docker engine to run your applications and databases. Caddy fronts it all with automatic TLS.
+
+<Mermaid
+  chart={`flowchart TB
+  net([Internet])
+  subgraph host[Host]
+    caddy["Caddy"]
+    belune["Belune <br/>Chi API · Asynq worker · embedded React UI"]
+    pg[(Postgres)]
+    redis[(Redis)]
+    bk["BuildKit"]
+    docker{{Docker Engine}}
+    apps["App & DB containers"]
+  end
+  net --> caddy
+  caddy -->|"Dashboard Domain"| belune
+  caddy -->|"App Domains"| apps
+  belune -->|"Programs Routes · Reads Cert. Status"| caddy
+  belune --> pg
+  belune --> redis
+  belune --> bk
+  belune --> docker
+  docker --> apps
+`}
+/>
+
+## The Stack
+
+Five services make up a Belune host, all defined in one `docker-compose.yml`:
+
+- **belune** — a single Go binary serving the HTTP API (Chi router), the background worker (Asynq), and the embedded React dashboard, all in one process bound to `127.0.0.1:8080`. Reached only through Caddy.
+- **Postgres** — the source of truth for all platform state (projects, applications, deployments, users, audit log — accessed via sqlc-generated queries). Named volume `pgdata`.
+- **Redis** — backs the Asynq job queue (deploys, backups, template instantiation) and the pub/sub channels that push live status/log updates to the dashboard over WebSocket. Named volume `redisdata`.
+- **BuildKit** (`moby/buildkit:v0.31.1`, privileged) — the daemon Railpack, Cloud Native Buildpacks, and Dockerfile builds all build images against, reached by the API over `BUILDKIT_HOST=tcp://buildkit:1234`. Not exposed to the host; only `belune` talks to it. Named volume `buildkitcache` holds layer cache across builds.
+- **Caddy** — reverse proxy and automatic HTTPS for every domain on the host, including the dashboard's own. Its admin API on `127.0.0.1:2019` is how Belune programs routes and reads certificate status live — see [Certificates](/docs/server/certificates).
+
+<Callout type="info" title="About the Dashboard">
+  The dashboard itself is not a separate service: the React app is embedded into
+  the `belune` binary and served alongside the API.
+</Callout>
+
+## How a Request Flows
+
+Every request, whether it's for the dashboard or a deployed app, enters the same way:
+
+```
+internet → Caddy (:80/:443) → belune (127.0.0.1:8080) or a deployed app container
+```
+
+Caddy terminates TLS and routes by hostname. A request for the dashboard's own domain (or the bare server IP before one is set) goes to the `belune` container; a request for any other domain routes to whichever app or database container has that domain attached. Only Caddy's `80` and `443` are published on the host — `belune`'s `8080` is bound to loopback, so there is no way to reach the API or the login page without going through Caddy and its TLS.
+
+Belune keeps Caddy's routing table in sync by pushing config to its admin API whenever a domain is added, removed, or an app's container is recreated — this is the [reconcile step](/docs/server/configurations) you can also trigger manually from Server → Configurations.
+
+## How a Deploy Works
+
+### For Git-Based Applications
+
+1. **Clone** — the worker checks out the pushed commit (or the branch tip, for a manual deploy) using the user-specified credentials, or none for public repositories.
+2. **Build** — the builder you chose is used, or if you left it on auto one is picked in priority order: **Dockerfile** (if present) → **Cloud Native Buildpacks** → **Railpack**. See [Builders](/docs/application/builders).
+3. **Load** — the built image is loaded into the host's Docker engine, tagged with the deployment's ID.
+4. **Run** — the previous container (if any) is stopped and a new one started from the image, attached to the project's private network, with its configured env vars, volumes, and mounts.
+5. **Route** — Belune pushes the app's domain(s) to Caddy's admin API, which requests or renews a certificate as needed.
+6. **Health** — the application is marked **running** once the container is up.
+
+### Image-Based Applications and Databases
+1. **Pull** — the worker pulls the image from the image registry.
+2. **Run** — the previous container (if any) is stopped and a new one started from the image, attached to the project's private network, with its configured env vars, volumes, and mounts.
+3. **Route** — Belune pushes the app's domain(s) to Caddy's admin API, which requests or renews a certificate as needed.
+4. **Health** — the application is marked **running** once the container is up.
+
+## The Docker Socket
+
+Belune mounts `/var/run/docker.sock` as read-write — its entire job is creating and managing containers, images, volumes, and networks on your behalf, so it needs the same access the `docker` CLI would have. 
+
+Belune does not run as root: it runs as a non-root `belune` user that is additionally placed in the group that owns the socket on the host (`DOCKER_GID` in `.env`, detected at install time since the GID varies by distro). 
+
+Without that access the Belune container starts and serves the dashboard, but every Docker-dependent feature — deploys, logs, metrics, the Docker admin pages — will fail.
+
+## Networking
+
+- `belune` is bound to `127.0.0.1:8080` — not reachable from outside the host except through Caddy.
+- Caddy's `80` and `443` are the only ports published to the world; its admin API on `2019` is loopback-only.
+- Each **project** gets its own private Docker bridge network, created on first use and named after the project. Every application and database in that project joins it, which is what lets services address each other by container name (e.g. an app reaching its database at `db-hostname:5432`) without being reachable from other projects.
+- Databases are attached to their project network only — there is no public port by default. [External Access](/docs/database/overview) opens a database to the outside world through an on-demand SSH tunnel rather than a permanent published port.
+
+## Data and Persistence
+
+Named Docker volumes hold everything that needs to survive a container restart or an update:
+
+| Volume                      | Holds                                                                                       |
+| --------------------------- | ------------------------------------------------------------------------------------------- |
+| `belunedata`                | Local logical dumps for managed-database backups (`/data/backups/databases`)                |
+| `pgdata`                    | Postgres — all platform state                                                               |
+| `redisdata`                 | Redis — job queue state                                                                     |
+| `caddydata` / `caddyconfig` | Caddy's certificates, ACME account, and live config                                         |
+| `caddylogs`                 | Caddy's access log, tailed by `belune` for [request logs](/docs/application/logs-metrics)               |
+| `buildkitcache`             | BuildKit's layer cache, so rebuilds don't start cold                                        |
+
+Application volume and file mounts get their own named volumes and host-side files respectively, outside this fixed set — see [Mounts](/docs/application/mounts).

@@ -1,0 +1,80 @@
+---
+title: Troubleshoot
+description: Common problems and how to resolve them.
+---
+
+When something isn't working, the app's **Logs** tab and the domain's **TLS
+badge** answer most questions on their own. The cases below are for when they
+don't.
+
+## Deployment Stuck in `deploying` or `building`
+
+The status badge never leaves `deploying`/`building` and no logs appear.
+
+1. Check the API/worker logs: `docker compose logs -f belune`.
+2. The job queue runs on Redis — if Redis is unhealthy, the task is never picked
+   up:
+   ```bash
+   docker compose ps redis
+   docker compose logs redis --tail 50
+   ```
+3. If Redis is healthy but nothing is processing, restart the API:
+   `docker compose restart belune`.
+4. If the build itself failed, open the **Deployments** tab — the build log is
+   attached to the deployment record.
+
+## Container Exits Immediately After Deploy
+
+Status flips from `running` → `stopped` within seconds.
+
+1. Open the app's **Logs** tab — the last lines before exit usually reveal the
+   cause.
+2. Check the exit code: `docker ps -a | grep <container-name>`.
+3. Common causes:
+   - **Missing environment variables** — verify on the **Environment** tab.
+   - **Port mismatch** — the app must listen on the port the domain routes to.
+   - **Failing health check** — the health endpoint must return `2xx`.
+
+## Database Connection Errors (API Won't Start)
+
+The `belune` container exits with `dial error` or `connection refused`.
+
+1. Check Postgres is running: `docker compose ps postgres`.
+2. Verify `DATABASE_URL` in `.env` matches the Postgres service name.
+3. Check Postgres logs for auth failures: `docker compose logs postgres --tail 50`.
+4. If the data volume is corrupt (rare), restore from a backup —
+   see [platform backup & restore](/docs/server/configurations#backups).
+
+## Certificates Not Issuing
+
+A domain's TLS badge stays **Pending** or turns **Failed**.
+
+Start at the badge — click it for the ACME server's exact reason, and see
+[Certificates](/docs/server/certificates) for every status and failure. When the badge
+tells you nothing:
+
+1. Check Caddy logs: `docker compose logs caddy --tail 100`.
+2. Confirm DNS points at the server's public IP (set `BELUNE_PUBLIC_IP` and
+   Belune checks this for you).
+3. Confirm ports 80 and 443 are open and not already bound:
+   ```bash
+   ss -tlnp | grep -E ':80|:443'
+   ```
+
+<Callout type="warn">
+  If the `caddydata` volume is corrupt, removing it **revokes existing
+  certificates** — Belune re-issues them, but expect a brief HTTPS gap.
+</Callout>
+
+## Live Updates Keep Disconnecting
+
+The dashboard's "Disconnected" badge appears and live logs/metrics stall. The
+WebSocket client retries with backoff up to 10 times before giving up; reload the
+page to reset it. If it persists, check the API logs for
+`websocket upgrade failed`, and confirm no intermediate proxy is enforcing a
+short idle timeout.
+
+## Still Stuck?
+
+Open a discussion on [GitHub](https://github.com/weiliang79/belune) with the
+relevant log output.

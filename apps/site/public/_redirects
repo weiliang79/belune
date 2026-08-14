@@ -1,0 +1,5 @@
+# Cloudflare Pages redirects.
+# Distribution endpoint: `curl -fsSL https://belune.dev/install.sh | bash`.
+# Points at the installer in the repo. TODO(release): switch `main` to the
+# pinned tagged release once the release workflow (ship Phase B) publishes tags.
+/install.sh  https://raw.githubusercontent.com/weiliang79/belune/main/scripts/install.sh  302

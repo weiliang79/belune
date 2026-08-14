@@ -1,0 +1,9 @@
+{
+  "title": "Project",
+  "defaultOpen": true,
+  "pages": [
+    "overview",
+    "backup-destinations",
+    "templates"
+  ]
+}

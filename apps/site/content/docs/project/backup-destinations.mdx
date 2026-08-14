@@ -1,0 +1,61 @@
+---
+title: Backup Destinations
+description: Where project backups are stored.
+---
+
+Backup destinations are storage targets, configured per project on its **Backups** tab, that a database's or application volume's backup schedule can point at. Different volumes and databases in the same project can point at different destinations.
+
+<Screenshot name="backup-destinations" alt="A project's backup destinations." />
+
+## Destination Types
+
+Seven types are supported:
+
+- **AWS S3** and **Cloudflare R2** — derive their endpoint automatically (from the region, or from an R2 account ID)
+- **Backblaze B2** and **Wasabi** — derive it from a region template
+- **MinIO** and **Other (S3-compatible)** — take a manual host, for anything self-hosted or not explicitly listed
+- **Local** — the archive it produces stays on this host's disk, pruned by the same retention setting as any other destination
+
+<Callout type="info">
+Managed providers (S3, R2, B2, Wasabi) always connect over HTTPS. MinIO and Other let you toggle SSL, for a self-signed or plain-HTTP setup.
+</Callout>
+
+<Callout type="warn">
+A **Local** destination doesn't survive losing the host and is not disaster recovery on its own. Pair it with an S3-compatible destination (or the control-plane's own [remote storage](/docs/server/configurations#backups)) if you need to recover from a dead server.
+</Callout>
+
+## Add a Destination
+
+<Screenshot name="backup-destination-add" alt="Adding an S3-compatible backup destination: endpoint, region, bucket, and credentials." />
+
+**Add destination** asks for a name and the type, and:
+
+- For **Local**, there's nothing else to fill in.
+- For an **S3-compatible** type, it also asks for a bucket and credentials (access key + secret key). What else you fill in depends on the provider:
+  - a region for S3/B2/Wasabi
+  - an account ID for R2
+  - or a raw endpoint host for MinIO/Other
+
+A **Prefix** sets an optional base path inside the bucket, and each backup schedule can add its own sub-path underneath it, so one bucket can cleanly hold backups from several volumes, databases, or projects.
+
+Editing an existing destination leaves credentials untouched unless you type new ones.
+
+## Test a Destination
+
+**Test connection** is available both on a saved destination and while filling in the form. It verifies the bucket is actually reachable with the given credentials — worth doing before wiring a destination into a schedule.
+
+<Callout type="info">
+A **Local** destination has nothing to test, so there's no button for it.
+</Callout>
+
+## Using a Destination in a Schedule
+
+A destination is just where backups *can* go; attaching one to an actual schedule happens on the application's volume mount tab or database's Backups tab, where you also set the frequency and retention. 
+
+See more on [Backing up application volumes](/docs/application/mounts#backing-up-volumes) or [Database backup & restore](/docs/database/backup-restore). 
+
+The project's Backups tab also shows **Recent Backup Activity**, a combined feed of every latest backup regardless of which destination it used.
+
+## Removing a Destination
+
+A destination can't be deleted while any backup schedule still references it, so remove or repoint those schedules first. This prevents a schedule from silently pointing at nothing the next time it runs.

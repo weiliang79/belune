@@ -1,0 +1,14 @@
+{
+  "title": "Server",
+  "defaultOpen": true,
+  "pages": [
+    "git",
+    "certificates",
+    "notifications",
+    "users",
+    "quotas",
+    "audit-log",
+    "docker",
+    "configurations"
+  ]
+}

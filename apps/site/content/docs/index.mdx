@@ -1,0 +1,47 @@
+---
+title: Introduction
+description: What Belune is, and where to start.
+---
+
+Belune is an open-source, self-hosted PaaS that runs as a single Go binary next
+to Docker on your own server. It gives you git-push deploys, managed databases
+with real backups, automatic TLS you can actually see the status of, and a
+dashboard for all of it — without Kubernetes or an external control plane.
+
+<Screenshot name="03-dashboard-home" alt="The Belune dashboard: projects and their services at a glance." />
+
+## Start Here
+
+<Cards>
+  <Card
+    title="Install Belune"
+    description="Bring a fresh install online: installer, DNS, HTTPS, first login."
+    href="/docs/install"
+  />
+  <Card
+    title="Deploy your first app"
+    description="From a Docker image or Git repository to a live HTTPS URL."
+    href="/docs/application/walkthrough"
+  />
+  <Card
+    title="App templates"
+    description="Launch ready-made apps from the catalog in a few clicks."
+    href="/docs/project/templates"
+  />
+  <Card
+    title="Configurations"
+    description="Instance settings, backups, and host maintenance."
+    href="/docs/server/configurations"
+  />
+</Cards>
+
+## What You Need
+
+- A Linux host with 1 CPU & 2GB RAM.
+- Root or sudo access (for the systemd unit and ports 80/443).
+- A domain you control, for automatic TLS. A bare IP works for evaluation.
+
+<Callout type="info">
+  Belune is pre-1.0. A minor release (0.x) may include breaking changes; a patch
+  is always safe. Back up before upgrading — Belune makes that a one-liner.
+</Callout>

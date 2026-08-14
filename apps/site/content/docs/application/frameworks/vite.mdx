@@ -1,0 +1,180 @@
+---
+title: Vite
+description: Deploy a Vite single-page app on Belune.
+---
+
+A Vite app builds to static assets, so there's no Node server at runtime, just the
+files in `dist/`. You can pick one of two methods to serve them on Belune:
+
+- **[Serve with Railpack](#serve-with-railpack)** — Simplest, set one
+  environment variable and Railpack serves the build.
+- **[Serve with a Caddy Dockerfile](#serve-with-a-caddy-dockerfile)** — Advanced, a small
+  Dockerfile for full control over the listen port, SPA fallback, and caching
+  headers.
+
+## Prerequisites
+
+A few notes before you deploy a Vite app:
+
+Belune's read-only root filesystem is fine to **leave enabled** and capabilities can stay
+**Minimal**, as the static server only *reads* from `dist/`.
+
+If you serve with [Railpack](#serve-with-railpack), you might see a one-off Caddy log line
+at startup (`could not clean … storage_clean lock …`). It's harmless certificate-storage
+housekeeping and can be ignored.
+
+But if your `package.json` keeps a `"start": "vite"` script and Railpack runs it, the Vite
+dev server needs to write to `node_modules/.vite` at runtime, which makes the container
+crash. Forcing SPA mode (below) avoids this.
+
+### Set the Base Path
+
+A Vite build hardcodes the base path its assets load from. To serve at the root of a domain,
+you want Vite's default, `base: '/'` in `vite.config.js`.
+
+A project set up for GitHub Pages project hosting sets something like `base: '/repo-name/'`,
+so the built `index.html` points at `/repo-name/assets/…`.
+
+<Callout type="warn" title="A Wrong Base Path Will Lead to a Blank Page">
+  When the base path doesn't match where the app is served, the browser requests the
+  bundle at a path that doesn't exist.
+
+  The SPA fallback then returns `index.html` as `text/html` content type for the `.js`
+  request, the module never executes, and you will get a blank page — title loads,
+  body empty, often with no console error.
+</Callout>
+
+### Environment Variables
+
+Everything a Vite build reads through `import.meta.env.VITE_*` is inlined at
+**build time**, so these are compile-time constants, not runtime config. Two
+consequences:
+
+- Set them on the **Environment** tab **before** the build; changing one needs a
+  new [deploy](/docs/application/deployments), not just a reload.
+- Never put secrets in `VITE_*` — they ship in plaintext inside the client bundle,
+  visible to anyone who opens the app.
+
+<Callout type="info" title="Runtime Env Without a Rebuild">
+  Because `VITE_*` are compile-time constants, changing one normally means a rebuild.
+  To inject env at **container start** instead — one image across environments — add the
+  third-party [`vite-envs`](https://github.com/garronej/vite-envs) plugin: the build emits
+  a `vite-envs.sh` script that you run from your Docker entrypoint, before serving, to
+  write the current env into the app, which you then read through `import.meta.env` at
+  runtime. Two consequences:
+
+  - It adds a startup step to the entrypoint, so you can only use it with the
+    [Caddy Dockerfile](#serve-with-a-caddy-dockerfile) method.
+  - It's still not a place for secrets — the values reach the browser.
+</Callout>
+
+## Serve with Railpack
+
+Railpack builds the project and serves the static `dist/` with Caddy — all automatically.
+
+### 1. Force SPA Mode
+
+By default Railpack determines the start command in a set order (see
+[Railpack Node Configuration](https://railpack.com/languages/node#configuration)). A typical
+Vite template ships a `start` script that runs the dev server, which is wrong for
+production, so switch Railpack into static SPA mode instead. Either:
+
+- Set **`RAILPACK_SPA_OUTPUT_DIR=dist`** on the **Environment** tab.
+- Remove the `start` script from `package.json` so Railpack detects the SPA itself.
+
+<Callout type="warn" title="Use a Relative Path">
+  The value must be **relative** — `dist`, not `/app/dist`. An absolute path gets
+  joined onto the app's working directory (`/app`), producing a document root of
+  `/app/app/dist` that doesn't exist — so Caddy starts fine but every request returns
+  a **404**.
+</Callout>
+
+### 2. Set the Container Port to 80
+
+Railpack's SPA server listens on port **80**, while Belune routes each domain to
+container port **8080** by default. Set the domain's **Container Port** to `80` on its
+Routing tab, or the domain returns a **502** even though the app shows *running*.
+
+Deep links work out of the box — Railpack's generated Caddyfile falls back to
+`index.html` for paths that don't match a file, so a hard refresh of `/dashboard`
+still loads the app.
+
+### Example
+
+A runnable example is on GitHub:
+[`frameworks/vite/railpack`](https://github.com/weiliang79/belune-examples/tree/main/frameworks/vite/railpack).
+
+## Serve with a Caddy Dockerfile
+
+For full control over the port, caching headers, and compression, serve `dist/`
+yourself. Belune's build detector prefers a Dockerfile, so adding one switches off
+Railpack automatically.
+
+### 1. Add a Dockerfile and Caddyfile
+
+Commit both files to your repo root. This Caddyfile listens on **8080**, so the
+domain's default routing works with no Container Port override, and `try_files`
+handles SPA fallback.
+
+```dockerfile
+# Dockerfile
+FROM node:22-alpine AS build
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci
+COPY . .
+RUN npm run build
+
+FROM caddy:2-alpine
+# Strip the binary's file capability so it runs under Belune's hardened default
+RUN apk add --no-cache libcap && setcap -r /usr/bin/caddy
+COPY --from=build /app/dist /srv
+COPY Caddyfile /etc/caddy/Caddyfile
+```
+
+```caddyfile
+# Caddyfile
+:8080 {
+	root * /srv
+	encode gzip
+	try_files {path} /index.html   # SPA fallback
+	file_server
+}
+```
+
+<Callout type="warn" title="Why the setcap Line Matters">
+  Belune drops all Linux capabilities by default. The official `caddy` image ships its
+  binary with a file capability (`cap_net_bind_service`), and the kernel refuses to
+  execute a file-capability binary when those capabilities are dropped — so without the
+  fix the container crash-loops with `exec /usr/bin/caddy: operation not permitted`.
+  Binding port `8080` needs no privileged capability, so `setcap -r` removes it and the
+  image runs under the hardened default, read-only root filesystem included. *(Alternative:
+  leave the binary untouched and set **Capabilities** to **Standard** on the app's
+  **Settings → Runtime** panel.)*
+</Callout>
+
+### 2. Deploy
+
+Deploy the app. Belune detects the Dockerfile, builds the image, and serves on whatever
+port the Caddyfile listens on. Since this one uses `8080` — Belune's default — no
+Container Port override is needed.
+
+### Example
+
+A runnable example is on GitHub:
+[`frameworks/vite/dockerfile`](https://github.com/weiliang79/belune-examples/tree/main/frameworks/vite/dockerfile).
+
+## Proxying an API
+
+The SPA and its backend are usually two applications in the same project. Point the
+SPA at the backend by its public domain in a `VITE_*` variable at build time:
+
+```ini
+VITE_API_URL=https://api.example.com
+```
+
+Because the browser calls the API directly, the backend needs its own domain and
+[CORS](https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS) allowing the SPA's
+origin. Alternatively, put both behind one hostname with
+[path-based routing](/docs/application/domains#path-based-routing) — e.g. `/api` → the backend
+app — so they share an origin and no CORS is needed.

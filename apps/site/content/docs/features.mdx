@@ -1,0 +1,37 @@
+---
+title: Features
+description: What Belune can do, at a glance.
+---
+
+Belune runs a full application platform on a single Docker host — deploys, managed databases, TLS, and the operational tooling to run them. This is a tour of what's included; each item links to its guide.
+
+## Application Deployment
+- Deploy from a git repository, a prebuilt image, or a one-click template — see [Application Walkthrough](/docs/application/walkthrough) and [Templates](/docs/project/templates).
+- Zero-config builds (Railpack / buildpacks), Dockerfile builds, and prebuilt images — see [Builders](/docs/application/builders).
+- Auto-deploy with hooks, rollbacks, rebuilds of a pinned commit, and reload without a rebuild — see [Deployments](/docs/application/deployments).
+- Git integrations: GitHub App and OAuth — see [Git](/docs/server/git).
+
+## Application Operations
+- Domains and path-based routing — see [Domains](/docs/application/domains).
+- Per-app environment variables — see [Environment variables](/docs/application/environment-variables).
+- Volume mounts and file/config mounts with reveal-on-demand secrets — see [Mounts](/docs/application/mounts).
+- Leveled logs with live streaming — see [Logs & metrics](/docs/application/logs-metrics).
+- Per-app metrics — CPU, memory, and network I/O — see [Logs & metrics](/docs/application/logs-metrics).
+- An in-container terminal — see [Terminal](/docs/application/terminal).
+
+## Databases
+- Managed Postgres, MySQL, MongoDB, and Redis (plus a generic image type) — see [Databases](/docs/database/overview).
+- Backups to local or S3-compatible destinations, scheduled or on demand — see [Backups & restore](/docs/database/backup-restore).
+- Guarded major-version upgrades and SSH-tunnel external access.
+
+## TLS & Certificates
+- Automatic HTTPS via Caddy and custom certificates with visible certificate status — see [Certificates](/docs/server/certificates).
+
+## Server Operations
+- One-line install with public-IP detection, and a version-pinned updater — see [Install](/docs/install) and [Updating](/docs/updating).
+- Server maintenance: disk cleanup, proxy reconcile, and instance settings — see [Configurations](/docs/server/configurations).
+- A read-only Docker admin view — see [Docker](/docs/server/docker).
+- Notifications, users & roles, quotas, and an audit log.
+
+## Security
+- Session auth with CSRF protection, encrypted-at-rest secrets, audit logging, and per-user rate limiting.

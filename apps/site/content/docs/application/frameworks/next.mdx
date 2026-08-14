@@ -1,0 +1,116 @@
+---
+title: Next.js
+description: Deploy a Next.js app on Belune.
+---
+
+Belune's Railpack builder auto-detects a Next.js project and builds it with
+`next build`. We recommend reading the notes below before you deploy.
+
+## Prerequisites
+
+Before deploying, decide how Next builds your app (the `output` mode) and how it reads
+configuration (environment variables and the port it listens on). Each one changes how
+the app runs on Belune.
+
+### Output as Default, `export` or `standalone`
+
+The `output` key in `next.config.js` decides whether your app runs as a Node server or
+ships as static files — and that changes how you deploy it:
+
+| `output`          | What runs                                                     | What it supports                                                         | On Belune                                                               |
+| ----------------- | ------------------------------------------------------------- | ------------------------------------------------------------------------ | ----------------------------------------------------------------------- |
+| *unset* (default) | A Node server (`next start`)                                  | Everything — SSR, ISR, Route Handlers, Middleware, Server Actions        | Railpack builds and runs it                                             |
+| `'standalone'`    | A minimal Node server (`server.js`, only traced dependencies) | Same as the default                                                      | Railpack not supported, needs a **Dockerfile** running `node server.js` |
+| `'export'`        | Nothing — static files in `out/`                              | **SSG only**: no SSR, ISR, Route Handlers, Middleware, or Server Actions | Serve `out/` as static files (no Node server)                           |
+
+The **default** output is the simplest on Belune, Railpack builds it and runs
+`next start`, no extra files. **`standalone`** produces a smaller image (it traces
+only the dependencies the server needs), but Railpack can't run it, you will need to 
+deploy with a small Dockerfile that runs `node server.js` (below).
+
+<Callout type="warn" title="`output: 'export'` Drops Every Request-Time Feature">
+  A static export has no server, so SSR, ISR, Route Handlers, Middleware, Server Actions,
+  and the built-in Image Optimization all stop working, only pre-rendered pages ship.
+  
+  To serve the exported `out/` directory, follow the same two methods as a
+  [Vite single-page app](/docs/application/frameworks/vite), Railpack SPA mode pointed at `out`, or a
+  Caddy Dockerfile.
+
+  Use it only for a fully static site, otherwise stay on the default or `standalone`
+  output.
+</Callout>
+
+Runnable examples for each output mode are on GitHub:
+[`default`](https://github.com/weiliang79/belune-examples/tree/main/frameworks/nextjs/default),
+[`standalone`](https://github.com/weiliang79/belune-examples/tree/main/frameworks/nextjs/standalone),
+and [`export`](https://github.com/weiliang79/belune-examples/tree/main/frameworks/nextjs/export).
+
+### The `standalone` Dockerfile
+
+Railpack can serve the **default** and **`export`** outputs without a Dockerfile,
+but not `standalone`. `next build` with `output: 'standalone'` emits
+`.next/standalone`, but not the static assets or `public/`, so a Dockerfile has to
+copy those in too:
+
+```dockerfile
+FROM node:22-alpine AS build
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci
+COPY . .
+RUN npm run build
+
+FROM node:22-alpine AS runner
+WORKDIR /app
+ENV NODE_ENV=production PORT=8080
+# standalone doesn't bundle these — copy them in explicitly
+COPY --from=build /app/.next/standalone ./
+COPY --from=build /app/.next/static ./.next/static
+COPY --from=build /app/public ./public
+EXPOSE 8080
+CMD ["node", "server.js"]
+```
+
+Belune's build detector prefers a Dockerfile, so adding one switches off Railpack
+automatically. It listens on `8080` as Belune's default, so no Container Port
+override is needed.
+
+### Environment Variables
+
+Two kinds, and the difference matters:
+
+- **`NEXT_PUBLIC_*`**: inlined into the client bundle at **build time**. Set them
+  before the first build; changing one later needs a [rebuild](/docs/application/deployments),
+  not just a reload. Never put secrets here — they ship in plaintext to the browser.
+- **Server-side variables** (database URLs, API secrets): read at **runtime**, so a
+  [reload](/docs/application/deployments) picks up a change with no rebuild.
+
+<Callout type="info" title="Guaranteeing Runtime Server Env">
+  A server variable can still get baked in if it's read while a page is *statically
+  prerendered* at build. To force per-request evaluation, opt the route into
+  dynamic rendering with:
+  
+  - Dynamically rendered pages/components, e.g. `cookies()`, `headers()`, set 
+  `export const dynamic = 'force-dynamic'`, `fetch(..., { cache: 'no-store' })`, etc.
+  - `connection()` async function.
+
+  See Next's [self-hosting guide](https://nextjs.org/docs/app/guides/self-hosting#environment-variables) 
+  for more info.
+</Callout>
+
+<Callout type="info" title="Serve with Port">
+  Belune routes each domain to container port **8080** by default, while Next server 
+  listens on `3000` unless told. So either:
+
+  - Set **`PORT=8080`** on the **Environment** tab — `next start` and the standalone
+    server both honor it.
+  - Or leave Next on `3000` and set the domain's **Container Port** to `3000`.
+</Callout>
+
+## Caching and ISR
+
+Next's data and ISR cache lives inside the container, so it resets on each deploy.
+If you rely on Incremental Static Regeneration and want the cache to survive
+redeploys, persist Next's cache directory with a [volume](/docs/application/mounts), or point
+Next at a shared store (such as Redis) with a custom cache handler — see Next's
+[self-hosting guide](https://nextjs.org/docs/app/guides/self-hosting#caching-and-isr).

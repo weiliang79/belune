@@ -1,0 +1,50 @@
+---
+title: Builders
+description: How Belune turns your source into a running container.
+---
+
+Belune deploys four kinds of application: a **Git repo with a Dockerfile**, a **Cloud Native Buildpacks** project, a **Railpack** auto-detected app, or a **prebuilt image** pulled from a registry. 
+
+For a Git application you can choose the builder you want, or let the worker pick the right one automatically in priority order:
+
+```
+Dockerfile → Cloud Native Buildpacks → Railpack
+```
+
+## Dockerfile Builds
+
+If a `Dockerfile` exists at the repository root (or the path you specify), it wins automatically and no other builder is even considered. Belune drives BuildKit against it directly, so anything a normal `docker build` supports works here too.
+
+## Cloud Native Buildpacks
+
+When there's no Dockerfile, Belune tries Cloud Native Buildpacks next: a standard, language-aware builder that detects your stack from the repo contents (a `package.json`, a `go.mod`, a `requirements.txt`, and so on) and produces an image without you writing any build instructions.
+
+See [Buildpacks docs](https://buildpacks.io/docs/for-app-developers/concepts/buildpack/) for more details.
+
+## Railpack
+
+Railpack is the last-resort auto-detector — it's zero-config, and the default `build_type` a new Git application starts on. It recognizes common stacks (Node, Python, Go, and others) directly from the repo and needs nothing from you beyond a working app.
+
+See [Railpack docs](https://railpack.com/getting-started) for more details.
+
+## Prebuilt Images
+
+Point the application at any registry image and Belune skips building entirely — it just pulls and runs it.
+
+Every deploy resolves the tag to its immutable digest and runs that instead of the mutable tag, falling back to the tag only if resolution fails. That's what makes a later reload or rollback reproduce the exact same image, rather than whatever the tag happens to point at by then — you'll see `Pinned to digest sha256:...` in the deploy log when it happens.
+
+## Build Cache
+
+Git-sourced applications get a persistent per-app layer cache (build layers + launch layers, in Cloud Native Buildpacks terms), reused across builds so an unchanged dependency doesn't get rebuilt every time. 
+
+**Clear Build Cache**, on the application's Settings tab, forces the next build to start cold. It's useful when a cache has gone stale, at the cost of a slower next build.
+
+## Choosing a Builder
+
+A Git application's **Build Method** — Dockerfile, Buildpacks, or Railpack — can be chosen from the create-application dialog or its Settings tab.
+
+<Callout type="warn">
+**Build Method** change here doesn't touch the running container by itself — it takes effect on the next deploy. 
+</Callout>
+
+Switching an application's source between Git and image is its own confirmed action, since it drops the fields that only make sense for the type you're leaving (repository/branch/build settings and Git credentials, or the image reference) while keeping domains, volumes, mounts, environment variables, and the deploy hook intact either way.

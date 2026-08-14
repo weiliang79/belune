@@ -1,0 +1,47 @@
+@import 'tailwindcss';
+@import 'fumadocs-ui/css/neutral.css';
+@import 'fumadocs-ui/css/preset.css';
+
+@theme inline {
+  --font-sans: var(--font-geist), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+   Belune brand accent, ported from apps/web/src/index.css.
+   Light mode = indigo (#4249BD); dark mode = violet (#7C3AED).
+   We remap Fumadocs' semantic `--color-fd-primary` (+ ring) onto the brand so
+   links, active nav, buttons and focus rings adopt the app's look.
+   ────────────────────────────────────────────────────────────────────────── */
+:root {
+  --brand: #4249bd;
+  --brand-hover: #5a61d4;
+  --brand-soft: rgba(66, 73, 189, 0.16);
+  --brand-line: rgba(66, 73, 189, 0.42);
+
+  --color-fd-primary: var(--brand);
+  --color-fd-ring: var(--brand);
+}
+
+.dark {
+  --brand: #7c3aed;
+  --brand-hover: #8b5cf6;
+  --brand-soft: rgba(124, 58, 237, 0.16);
+  --brand-line: rgba(124, 58, 237, 0.42);
+
+  --color-fd-primary: var(--brand);
+  --color-fd-ring: var(--brand);
+}
+
+html {
+  scrollbar-gutter: stable;
+}
+
+html > body[data-scroll-locked] {
+  margin-right: 0px !important;
+  --removed-body-scroll-bar-size: 0px !important;
+}
+
+::selection {
+  background: var(--brand-soft);
+}

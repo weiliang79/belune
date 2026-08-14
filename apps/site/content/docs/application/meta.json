@@ -1,0 +1,16 @@
+{
+  "title": "Application",
+  "defaultOpen": true,
+  "pages": [
+    "walkthrough",
+    "builders",
+    "deployments",
+    "environment-variables",
+    "domains",
+    "mounts",
+    "logs-metrics",
+    "terminal",
+    "settings",
+    "frameworks"
+  ]
+}

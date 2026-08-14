@@ -1,0 +1,93 @@
+---
+title: Walkthrough
+description: From a Git repo or Docker image to a live HTTPS URL, step by step.
+---
+
+This walks through deploying an app end to end — either from a **Git repository** or
+a **Docker image** — to a live URL with a certificate.
+
+<Screenshot name="app-overview" alt="An application's Overview tab: status, image, and recent activity." />
+
+## 1. Create a Project
+
+A **project** groups an app with the databases and services it depends on.
+From the dashboard, click **New project** and give it a name. See 
+[Project Overview](/docs/project/overview).
+
+## 2. Add an Application
+
+Inside the project, click **New application** and pick a source.
+
+### From a Git Repository
+
+Choose **Git Repository**, then either **Connected Account** (a GitHub App or OAuth
+provider you've [connected](/docs/server/git) — required for private repos) or a
+plain **Git URL**. Pick a branch; pushing to it later triggers auto-deploys.
+
+Belune detects how to build your code, in this order:
+
+| Belune finds…                     | Build path                         |
+| --------------------------------- | ---------------------------------- |
+| A `Dockerfile`                    | Builds the Dockerfile directly     |
+| A Cloud Native Buildpacks project | Builds with buildpacks             |
+| Anything else                     | Railpack auto-detects the language |
+
+No configuration is required for the common cases — a Node, Python, Go, or PHP app
+builds on the first try. See [Builders](/docs/application/builders) for the details.
+
+### From a Docker Image
+
+Choose **Docker Image** and enter an image reference (`nginx:latest`,
+`ghcr.io/org/app:1.4`). Belune pulls the image and runs it — there's no build step.
+This is the fastest path for anything you or a vendor already publish to a registry.
+
+## 3. Add a Database (Optional)
+
+**New service → Database**, pick Postgres, MySQL, MongoDB, or Redis, and Belune
+provisions it with a persistent volume. Copy its connection details into the
+app's environment. See [Database Overview](/docs/database/overview).
+
+## 4. Set Environment Variables
+
+Under the app's **Environment** tab, add the variables your app needs. Values
+are encrypted at rest. See [Environment Variables](/docs/application/environment-variables).
+
+<Screenshot name="app-env" alt="An application's Environment tab with variables and masked secret values." />
+
+<Callout type="info">
+  Some frameworks bake variables in at **build time** (for example `VITE_*` or
+  `NEXT_PUBLIC_*`). Set those before the first build so they land in the bundle.
+</Callout>
+
+## 5. Add a Domain
+
+On the app's **Domains** tab, add a hostname (`myapp.example.com`). As long as
+a domain or a wildcard subdomain from [install](/docs/install#4-dns) resolves and 
+ports 80/443 are open, Belune requests a Let's Encrypt certificate automatically 
+and the TLS badge reaches **Active** within a minute.
+
+<Screenshot name="app-domains" alt="An application's Domains tab: hostname, container port, and TLS status." />
+
+Need a specific container port, a path prefix, or an internal-only route? Set it
+here too — Belune configures Caddy for you. See [Domains](/docs/application/domains).
+
+## 6. Deploy
+
+Hit **Deploy**. A Git app is cloned and built — watch the **build log** stream live;
+a Docker image is pulled instead, with no build step. Either way the container starts,
+and when the app flips to **running** (green badge) it is serving traffic.
+
+```bash
+curl -I https://myapp.example.com   # 200 OK, valid certificate
+```
+
+<Screenshot name="app-deploy-log" alt="The build log streaming live during a deployment." />
+
+## Next
+
+<Cards>
+  <Card title="Builders" description="How Belune detects and builds your code." href="/docs/application/builders" />
+  <Card title="Deployments" description="Auto-deploy, rebuild, reload, and rollback." href="/docs/application/deployments" />
+  <Card title="Environment Variables" description="Config and secrets, build- vs runtime." href="/docs/application/environment-variables" />
+  <Card title="Domains" description="Hostnames, ports, paths, and TLS." href="/docs/application/domains" />
+</Cards>

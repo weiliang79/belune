@@ -1,0 +1,67 @@
+---
+title: Updating
+description: Move Belune to a new version, safely.
+---
+
+Belune installs are pinned to a version, never `:latest`, so a routine pull can't move you across a migration boundary. Updating is a deliberate step, so Belune ships an `update.sh` script to handle it. 
+
+The updater takes a backup, fetches the version-matched infra files, moves the image pin, and health-checks the result — with clear rollback instructions if anything goes wrong.
+
+## Update to the Latest Release
+
+```bash
+cd /opt/belune
+sudo bash scripts/update.sh
+```
+
+With no argument, the script resolves the latest GitHub release and updates to it. If you're already on that version, it says so and exits without touching anything.
+
+## Update to a Specific Version
+
+```bash
+sudo bash scripts/update.sh v0.2.0
+```
+
+Pass either form — `v0.2.0` or `0.2.0` — the script normalizes it. Useful for pinning to a version you've tested, or for skipping a release you know you want to avoid.
+
+## What update.sh Does
+
+In order:
+
+1. **Resolve** the current version (read from `BELUNE_IMAGE` in `.env`) and the target version, and bail out early if they're the same.
+2. **Pull** the target image first — no point backing up if the new image can't even be fetched.
+3. **Fetch the version-pinned infra set** — `docker-compose.yml`, the Caddyfile template, BuildKit config, `.env.example`, the systemd units, and `backup.sh`/`restore.sh`/`update.sh` itself — from that release's git tag, into a staging directory. A failed fetch here aborts before anything on disk changes.
+4. **Back up** — runs `scripts/backup.sh` (Postgres dump + Caddy TLS data) before touching anything live. If the backup fails, it asks before continuing.
+5. **Move the pin** — rewrites `BELUNE_IMAGE` in `.env` to the target image, keeping a copy of the old `.env` as `.env.backup-<old-version>`.
+6. **Swap infra files** — copies the staged files into place, saving the previous set to `.infra-backup-<old-version>` first so a rollback has something to restore.
+7. **Reconcile** — runs a full `docker compose up -d`, not just a restart of `belune`: a changed compose file can touch any service, and only the full reconcile applies that. Compose only recreates what actually changed, so an image-only update still just replaces the `belune` container.
+8. **Health-gate** — polls `/healthz` for up to 90 seconds. If it never comes up, it prints the rollback instructions and exits non-zero rather than leaving you guessing.
+
+Database migrations run automatically when the new `belune` container boots — this is exactly why step 4 backs up first: migrations are forward-only.
+
+<Callout type="warn" title="Infra changes during update">
+Most releases only change the `belune` image, so the update replaces that
+one container while Postgres, Redis, Caddy, and BuildKit keep running
+untouched — no interruption to already-routed traffic.
+
+But some releases change `docker-compose.yml`, the Caddyfile, or BuildKit's
+config. Then the updater restarts the whole stack — including Caddy or another
+shared service — which can mean a few seconds of interrupted routing for the
+dashboard and your apps.
+
+Release notes will call this out explicitly when it applies.
+
+</Callout>
+
+## Rolling Back
+
+If the health check fails, or the new version misbehaves once it's up, you can revert to the previous version by running:
+
+```bash
+cd /opt/belune
+sed -i 's|^BELUNE_IMAGE=.*|BELUNE_IMAGE=<previous image>|' .env
+cp -a .infra-backup-<old-version>/. .
+docker compose up -d
+```
+
+This restores the previous image pin and the exact infra files that shipped with it, then reconciles the stack again. If the new version already ran a migration against your data, restoring the image alone isn't enough — restore the pre-update backup as well; see [Configurations](/docs/server/configurations#backups).
