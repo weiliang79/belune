@@ -38,7 +38,9 @@ Frontend mirrors it: `src/lib/api/<resource>.ts` (fetch) → `src/lib/hooks/use-
 
 ## Procedures
 
-**Changing the schema** → add a forward-only `apps/api/internal/migrations/0000NN_name.up.sql` (no `.down.sql`; alpha is forward-only) → edit `internal/store/queries/*.sql` → `task generate:sqlc` → verify with `go run ./cmd/migrate-check` against a fresh DB.
+**Changing the schema** → add a forward-only `apps/api/internal/migrations/0000NN_name.up.sql` (forward-only is the convention here; new migrations ship without a `.down.sql`) → edit `internal/store/queries/*.sql` → `task generate:sqlc` → verify with `go run ./cmd/migrate-check` against a fresh DB.
+
+**Dropping or restructuring existing data** → v0.1.x is a public release line and `update.sh` runs migrations against live installs, so a migration that drops a column/table or rewrites existing rows breaks real upgrades — and a down migration would not save them, since the container has already restarted by then. Preserve and backfill in place, or ship a documented upgrade path. Purely additive changes need no such ceremony.
 
 **Writing/using a full-row `UPDATE`** (e.g. `UpdateApplication` sets every source column) → the handler MUST `Get<Resource>` first and fall back to the stored value for each field the request omits. Passing a partial body straight through silently clears `source_repo`, `branch`, `root_directory`, etc.
 
