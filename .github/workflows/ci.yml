@@ -89,8 +89,15 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # -b (build mode) is load-bearing, not a style choice. The root tsconfig is
+      # solution-style — `"files": []` plus `references` to tsconfig.app.json and
+      # tsconfig.node.json — and plain `tsc` ignores `references` entirely. It
+      # therefore compiles an empty file set, exits 0 in under a second, and
+      # reports success without having read a single line of src/. Build mode
+      # follows the references and checks the projects behind them. A type check
+      # that cannot fail is not a type check.
       - name: Type check
-        run: npx tsc --noEmit
+        run: npx tsc -b --noEmit
 
       - name: Test
         run: npm run test
