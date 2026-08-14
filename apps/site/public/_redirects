@@ -1,5 +1,9 @@
 # Cloudflare Pages redirects.
 # Distribution endpoint: `curl -fsSL https://belune.dev/install.sh | bash`.
-# Points at the installer in the repo. TODO(release): switch `main` to the
-# pinned tagged release once the release workflow (ship Phase B) publishes tags.
+#
+# Served from `main`, intentionally NOT a per-version tag: install.sh resolves
+# the latest release itself at runtime (GitHub releases/latest) and fetches the
+# image + config from that release tag, so the served copy never needs to name a
+# version. Pinning this to a tag would just freeze the installer and force an
+# edit every release. Target is set once and left alone.
 /install.sh  https://raw.githubusercontent.com/weiliang79/belune/main/scripts/install.sh  302
