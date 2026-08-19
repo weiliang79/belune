@@ -2,6 +2,8 @@ package handler
 
 import (
 	"encoding/json"
+	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -241,6 +243,15 @@ func (h *Handler) UpdateBackupDestination(w http.ResponseWriter, r *http.Request
 	}
 	updated, err := h.backupDestSvc.Update(r.Context(), dest.ID, params)
 	if err != nil {
+		// Name the count: without it a refusal to save reads as a bug rather
+		// than as protection for backups already written here.
+		var locked service.ErrDestinationIdentityLocked
+		if errors.As(err, &locked) {
+			writeError(w, http.StatusConflict, fmt.Sprintf(
+				"%d backup(s) are stored in this destination, so its provider, endpoint and bucket can no longer be changed. Region and credentials can still be updated, or create a new destination.",
+				locked.BackupCount))
+			return
+		}
 		writeError(w, http.StatusInternalServerError, "failed to update destination")
 		return
 	}

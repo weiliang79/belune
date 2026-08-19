@@ -1,0 +1,110 @@
+package handler_test
+
+import (
+	"context"
+	"net/http"
+	"testing"
+
+	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/weiliang79/belune/internal/store/generated"
+	"github.com/weiliang79/belune/internal/testutil"
+)
+
+// seedBackupInDestination inserts a database, a succeeded backup, and a
+// location row placing that backup in destID — the state that locks a
+// destination's identity.
+func seedBackupInDestination(t *testing.T, projectID, destID pgtype.UUID) {
+	t.Helper()
+	ctx := context.Background()
+
+	db, err := env.Queries.CreateDatabase(ctx, generated.CreateDatabaseParams{
+		ProjectID:            projectID,
+		Type:                 "postgres",
+		Name:                 "locked-db",
+		Slug:                 "locked-db",
+		Version:              "16",
+		Status:               "running",
+		CredentialsEncrypted: []byte{0x00},
+		BackupMode:           "none",
+	})
+	require.NoError(t, err)
+
+	run, err := env.Queries.InsertDatabaseBackup(ctx, generated.InsertDatabaseBackupParams{
+		DatabaseID: db.ID,
+	})
+	require.NoError(t, err)
+
+	_, err = env.Queries.InsertBackupLocation(ctx, generated.InsertBackupLocationParams{
+		DatabaseBackupID: run.ID,
+		DestinationID:    destID,
+		RemoteKey:        pgtype.Text{String: "backups/locked-db.backup.gz", Valid: true},
+	})
+	require.NoError(t, err)
+}
+
+// TestUpdateBackupDestination_IdentityLockedWhileHoldingBackups covers the third
+// W1 failure mode: a destination repointed in place would send every backup
+// recorded there at storage its data was never written to.
+func TestUpdateBackupDestination_IdentityLockedWhileHoldingBackups(t *testing.T) {
+	resetDB(t)
+	token := env.SetupAdmin(t, "admin@test.com", "password123")
+	project := env.CreateProject(t, token, "Backups", "backups")
+	projectID := project["id"].(string)
+
+	create := map[string]any{
+		"name":       "hetzner-s3",
+		"provider":   "s3",
+		"endpoint":   "s3.example.com",
+		"region":     "us-east-1",
+		"bucket":     "bucket-a",
+		"access_key": "ak",
+		"secret_key": "sk",
+	}
+	resp := env.DoRequest(t, "POST", "/api/projects/"+projectID+"/backup-destinations", create, testutil.AuthHeader(token))
+	require.Equal(t, http.StatusCreated, resp.StatusCode)
+	destID := testutil.ReadJSON(t, resp)["id"].(string)
+
+	// Nothing recorded yet: the bucket is still free to change.
+	free := map[string]any{
+		"name": "hetzner-s3", "provider": "s3", "endpoint": "s3.example.com",
+		"region": "us-east-1", "bucket": "bucket-early",
+	}
+	resp = env.DoRequest(t, "PUT", "/api/projects/"+projectID+"/backup-destinations/"+destID, free, testutil.AuthHeader(token))
+	require.Equal(t, http.StatusOK, resp.StatusCode, "an empty destination should still be editable")
+
+	var destUUID pgtype.UUID
+	require.NoError(t, destUUID.Scan(destID))
+	var projUUID pgtype.UUID
+	require.NoError(t, projUUID.Scan(projectID))
+	seedBackupInDestination(t, projUUID, destUUID)
+
+	// Bucket is identity — refused, and the message names the count.
+	moved := map[string]any{
+		"name": "hetzner-s3", "provider": "s3", "endpoint": "s3.example.com",
+		"region": "us-east-1", "bucket": "bucket-b",
+	}
+	resp = env.DoRequest(t, "PUT", "/api/projects/"+projectID+"/backup-destinations/"+destID, moved, testutil.AuthHeader(token))
+	require.Equal(t, http.StatusConflict, resp.StatusCode)
+	assert.Contains(t, testutil.ReadJSON(t, resp)["error"], "1 backup(s)")
+
+	// Endpoint is identity too.
+	rehosted := map[string]any{
+		"name": "hetzner-s3", "provider": "s3", "endpoint": "s3.elsewhere.com",
+		"region": "us-east-1", "bucket": "bucket-early",
+	}
+	resp = env.DoRequest(t, "PUT", "/api/projects/"+projectID+"/backup-destinations/"+destID, rehosted, testutil.AuthHeader(token))
+	assert.Equal(t, http.StatusConflict, resp.StatusCode)
+
+	// Credentials and region are not: rotation must stay possible.
+	rotated := map[string]any{
+		"name": "hetzner-s3", "provider": "s3", "endpoint": "s3.example.com",
+		"region": "eu-central-1", "bucket": "bucket-early",
+		"access_key": "ak2", "secret_key": "sk2",
+	}
+	resp = env.DoRequest(t, "PUT", "/api/projects/"+projectID+"/backup-destinations/"+destID, rotated, testutil.AuthHeader(token))
+	require.Equal(t, http.StatusOK, resp.StatusCode, "credential and region changes must stay allowed")
+	assert.Equal(t, "eu-central-1", testutil.ReadJSON(t, resp)["region"])
+}
