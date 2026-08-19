@@ -356,10 +356,20 @@ func buildFeatureHandlers(cfg proxy.RouteConfig) ([]caddyHandle, error) {
 		}
 		parsed, err := proxy.ParseFeatureConfig(f.Type, f.Config)
 		if err != nil {
-			slog.Warn("caddy: skipping invalid route feature", "type", f.Type, "error", err)
+			// Name the domain: this is how an operator finds the offending row,
+			// and it is the only warning a withdrawn feature type (rate_limit)
+			// produces now that ParseFeatureConfig rejects it outright. Skipping
+			// keeps the rest of the route building — dropping the whole route
+			// would take a live site down over one bad feature.
+			slog.Warn("caddy: skipping invalid route feature",
+				"hostname", cfg.Hostname, "type", f.Type, "error", err)
 			continue
 		}
 
+		// No rate_limit case below: ParseFeatureConfig rejects every payload
+		// while the stock Caddy image has no ratelimit module, so such a feature
+		// is warned about and skipped above and never reaches this switch.
+		// 0.2.0 restores both together.
 		switch c := parsed.(type) {
 		case *proxy.BasicAuthConfig:
 			handlers = append(handlers, caddyHandle{
@@ -410,15 +420,6 @@ func buildFeatureHandlers(cfg proxy.RouteConfig) ([]caddyHandle, error) {
 				}},
 			})
 
-		case *proxy.RateLimitConfig:
-			// Unreachable for new configs — ParseFeatureConfig rejects them — but
-			// still reachable for a row created before that, via a direct API call.
-			// Keep building the route: returning an error here would take a live
-			// site down over a feature that was already inert, which is strictly
-			// worse than the bug. Warn instead, and name the domain so the
-			// operator can find it.
-			slog.Warn("rate_limit feature is configured but does nothing; the stock Caddy image has no ratelimit module",
-				"hostname", cfg.Hostname, "rate", c.Rate)
 		}
 	}
 

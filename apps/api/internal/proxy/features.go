@@ -129,8 +129,19 @@ func ParseFeatureConfig(featureType string, raw json.RawMessage) (any, error) {
 		// Accepting this stored a config that emitted no Caddy handler at all —
 		// the stock caddy image carries no ratelimit module — so a domain looked
 		// rate-limited and was not. Rejecting is the honest answer until 0.2.0
-		// ships the custom Caddy image; delete this branch then and restore the
-		// validation below it.
+		// ships the custom Caddy image. To restore it then, delete this branch
+		// and reinstate the parse this replaced:
+		//
+		//	var c RateLimitConfig
+		//	if err := strictUnmarshal(raw, &c); err != nil {
+		//		return nil, fmt.Errorf("%s: %w", featureType, err)
+		//	}
+		//	if c.Rate == "" {
+		//		return nil, fmt.Errorf("%s: rate is required (e.g. \"10/s\")", featureType)
+		//	}
+		//	return &c, nil
+		//
+		// along with the caddy route-builder case that emits the handler.
 		return nil, fmt.Errorf("%s: rate limiting is not supported in this release; it arrives with the custom Caddy image in 0.2.0", featureType)
 
 	default:
