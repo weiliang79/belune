@@ -1,0 +1,164 @@
+package worker_test
+
+import (
+	"context"
+	"encoding/json"
+	"io"
+	"os"
+	"strings"
+	"testing"
+
+	"github.com/hibiken/asynq"
+	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/stretchr/testify/require"
+	tcminio "github.com/testcontainers/testcontainers-go/modules/minio"
+
+	"github.com/weiliang79/belune/internal/config"
+	"github.com/weiliang79/belune/internal/pkg/crypto"
+	"github.com/weiliang79/belune/internal/service"
+	"github.com/weiliang79/belune/internal/service/backup"
+	"github.com/weiliang79/belune/internal/store/generated"
+	"github.com/weiliang79/belune/internal/testutil"
+)
+
+// minioEndpoint starts a MinIO container and returns its host:port.
+func minioEndpoint(t *testing.T) string {
+	t.Helper()
+	ctx := context.Background()
+	container, err := tcminio.Run(ctx, "minio/minio:latest",
+		tcminio.WithUsername("minioadmin"), tcminio.WithPassword("minioadmin"))
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = container.Terminate(context.Background()) })
+
+	endpoint, err := container.ConnectionString(ctx)
+	require.NoError(t, err)
+	return strings.TrimPrefix(strings.TrimPrefix(endpoint, "http://"), "https://")
+}
+
+// makeBucket creates bucket on the MinIO at endpoint. The DestinationClient has
+// no create-bucket call (destinations are expected to pre-exist), so this
+// borrows the global backup service's EnsureBucket to set the fixture up.
+func makeBucket(t *testing.T, endpoint, bucket string) {
+	t.Helper()
+	svc := backup.New(&config.Config{
+		BackupRemoteEnabled: true,
+		BackupS3Endpoint:    endpoint,
+		BackupS3Region:      "us-east-1",
+		BackupS3Bucket:      bucket,
+		BackupS3AccessKey:   "minioadmin",
+		BackupS3SecretKey:   "minioadmin",
+		BackupS3UseSSL:      false,
+	})
+	require.NoError(t, svc.EnsureBucket(context.Background()))
+}
+
+// seedDestination inserts a backup destination pointing at bucket on the MinIO
+// at endpoint, with the test keyring's encrypted credentials.
+func seedDestination(t *testing.T, projectID pgtype.UUID, name, endpoint, bucket string) generated.BackupDestination {
+	t.Helper()
+	keyring, err := crypto.ParseKeyringEnv("", testutil.TestEncryptionKey, "")
+	require.NoError(t, err)
+	credsJSON, err := json.Marshal(map[string]string{
+		"access_key": "minioadmin", "secret_key": "minioadmin",
+	})
+	require.NoError(t, err)
+	enc, err := keyring.Encrypt(credsJSON)
+	require.NoError(t, err)
+
+	dest, err := testQueries.CreateBackupDestination(context.Background(), generated.CreateBackupDestinationParams{
+		ProjectID:            projectID,
+		Name:                 name,
+		Provider:             "minio",
+		Endpoint:             endpoint,
+		Region:               "us-east-1",
+		Bucket:               bucket,
+		UseSsl:               false,
+		CredentialsEncrypted: enc,
+	})
+	require.NoError(t, err)
+	return dest
+}
+
+// TestRestoreFollowsRecordedLocation_NotRepointedConfig is the W1 regression: a
+// backup must be restored from the bucket it was written to, not from wherever
+// its config points at restore time. The config is a mutable pointer, so
+// resolving through it sends the download at a bucket the object was never in.
+func TestRestoreFollowsRecordedLocation_NotRepointedConfig(t *testing.T) {
+	if os.Getenv("BELUNE_DOCKER_INTEGRATION") == "" {
+		t.Skip("set BELUNE_DOCKER_INTEGRATION=1 to run the backup-location test (needs MinIO)")
+	}
+	ctx := context.Background()
+
+	endpoint := minioEndpoint(t)
+	makeBucket(t, endpoint, "bucket-a")
+	makeBucket(t, endpoint, "bucket-b")
+
+	var restoredLen int
+	rt := &testutil.MockContainerRuntime{
+		ExecFunc: func(_ context.Context, _ string, _ []string, stdin io.Reader, stdout, _ io.Writer) (int, error) {
+			if stdin != nil {
+				b, _ := io.ReadAll(stdin)
+				restoredLen = len(b)
+				return 0, nil
+			}
+			if stdout != nil {
+				_, _ = stdout.Write([]byte(strings.Repeat("SQL ", 100)))
+			}
+			return 0, nil
+		},
+	}
+	keyring, err := crypto.ParseKeyringEnv("", testutil.TestEncryptionKey, "")
+	require.NoError(t, err)
+
+	h := newTestHandler(rt, nil)
+	h.Config.DatabaseBackupDir = t.TempDir()
+	h.BackupDestinations = service.NewBackupDestinationService(testQueries, keyring)
+
+	db := seedDatabase(t)
+	destA := seedDestination(t, db.ProjectID, "bucket-a", endpoint, "bucket-a")
+	destB := seedDestination(t, db.ProjectID, "bucket-b", endpoint, "bucket-b")
+
+	cfg, err := testQueries.CreateDatabaseBackupConfig(ctx, generated.CreateDatabaseBackupConfigParams{
+		DatabaseID:    db.ID,
+		DestinationID: destA.ID,
+		Schedule:      "0 3 * * *",
+		Enabled:       true,
+	})
+	require.NoError(t, err)
+
+	// Back up through the config → the object lands in bucket-a and the local
+	// copy is dropped, so restore has to go remote.
+	bp, _ := json.Marshal(map[string]string{
+		"database_id":      dbIDStr(db),
+		"backup_config_id": uuidString(cfg.ID),
+	})
+	require.NoError(t, h.HandleBackupDBTask(ctx, asynq.NewTask("backup_db", bp)))
+
+	backups, err := testQueries.ListDatabaseBackups(ctx, generated.ListDatabaseBackupsParams{
+		DatabaseID: db.ID, Limit: 5,
+	})
+	require.NoError(t, err)
+	require.NotEmpty(t, backups)
+	require.True(t, backups[0].RemoteKey.Valid, "backup should have been uploaded to the destination")
+	require.False(t, backups[0].LocalPath.Valid, "local copy should be dropped after a successful upload")
+
+	// Repoint the config at a different destination. Everything already written
+	// still lives in bucket-a; only new runs belong in bucket-b.
+	_, err = testQueries.UpdateDatabaseBackupConfig(ctx, generated.UpdateDatabaseBackupConfigParams{
+		ID:            cfg.ID,
+		DestinationID: destB.ID,
+		Prefix:        cfg.Prefix,
+		Schedule:      cfg.Schedule,
+		KeepLatest:    cfg.KeepLatest,
+		Enabled:       cfg.Enabled,
+	})
+	require.NoError(t, err)
+
+	rp, _ := json.Marshal(map[string]string{
+		"database_id": dbIDStr(db),
+		"backup_id":   uuidString(backups[0].ID),
+	})
+	require.NoError(t, h.HandleRestoreDBTask(ctx, asynq.NewTask("restore_db", rp)),
+		"restore must download from the bucket the backup was written to, not the config's current one")
+	require.NotZero(t, restoredLen, "restore streamed nothing to the database")
+}
