@@ -36,6 +36,7 @@ import { toast } from "sonner";
 import {
   useDatabase,
   useDatabaseVolume,
+  useDatabaseDeletionImpact,
   useDeleteDatabase,
   useUpdateDatabase,
   useSetDatabaseExternalAccess,
@@ -75,7 +76,7 @@ import { StatusBadge } from "@/lib/components/status-badge";
 import { DatabaseReloadBadge } from "@/lib/components/database-reload-badge";
 import { ProvenanceNote } from "@/lib/components/provenance-note";
 import { CopyButton } from "@/lib/components/copy-button";
-import { formatBytes } from "@/lib/utils/format";
+import { formatBytes, formatList } from "@/lib/utils/format";
 import { cn } from "@/lib/utils";
 import type { Database, DatabaseBackupConfig } from "@/lib/types";
 
@@ -129,6 +130,11 @@ function DatabaseDetailPage() {
   const deleteDb = useDeleteDatabase(projectId);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState("");
+  const { data: deleteImpact } = useDatabaseDeletionImpact(
+    projectId,
+    databaseId,
+    deleteOpen,
+  );
   const stop = useStopDatabase(projectId, databaseId);
   const start = useStartDatabase(projectId, databaseId);
   const restart = useRestartDatabase(projectId, databaseId);
@@ -200,7 +206,6 @@ function DatabaseDetailPage() {
 
   return (
     <div className="space-y-6">
-
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex min-w-0 items-center gap-3">
           <div className="bg-elev text-text-muted grid size-11 shrink-0 place-items-center rounded-xl">
@@ -219,7 +224,10 @@ function DatabaseDetailPage() {
             </div>
             <p className="text-text-faint flex flex-wrap items-center gap-x-2 truncate text-sm">
               <span className="truncate font-mono">{db.slug}</span>
-              <ProvenanceNote sourceKind={db.source_kind} sourceRef={db.source_ref} />
+              <ProvenanceNote
+                sourceKind={db.source_kind}
+                sourceRef={db.source_ref}
+              />
             </p>
           </div>
         </div>
@@ -258,7 +266,11 @@ function DatabaseDetailPage() {
             <AlertDialog>
               <AlertDialogTrigger
                 render={
-                  <Button size="sm" variant="outline" disabled={stop.isPending} />
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={stop.isPending}
+                  />
                 }
               >
                 <SquareIcon aria-hidden="true" />
@@ -519,8 +531,8 @@ function DatabaseDetailPage() {
                     <p className="text-sm font-medium">Delete this database</p>
                   </div>
                   <p className="text-muted-foreground mt-1 text-xs">
-                    This will permanently delete the database, its data, and
-                    container.
+                    This will permanently delete the database, its data, its
+                    container, and every backup taken of it.
                   </p>
                 </div>
                 <AlertDialog
@@ -542,9 +554,24 @@ function DatabaseDetailPage() {
                         This will permanently delete &quot;{db.name}&quot; and
                         all its data. This action cannot be undone.
                       </AlertDialogDescription>
+                      {deleteImpact && deleteImpact.backup_count > 0 ? (
+                        <AlertDialogDescription className="text-destructive font-medium">
+                          Also permanently deletes{" "}
+                          {deleteImpact.backup_count === 1
+                            ? "1 backup"
+                            : `${deleteImpact.backup_count} backups`}
+                          {deleteImpact.backup_destinations.length > 0
+                            ? `, including copies in ${formatList(deleteImpact.backup_destinations)}`
+                            : ""}
+                          . Restore from them will no longer be possible.
+                        </AlertDialogDescription>
+                      ) : null}
                     </AlertDialogHeader>
                     <div className="space-y-2">
-                      <Label htmlFor="delete-db-confirm" className="font-normal">
+                      <Label
+                        htmlFor="delete-db-confirm"
+                        className="font-normal"
+                      >
                         Type{" "}
                         <span className="text-foreground font-medium">
                           {db.name}
@@ -716,14 +743,15 @@ function ExternalAccessCard({ db }: { db: Database }) {
             <p className="text-text-faint text-xs">
               Add <span className="font-mono">-i /path/to/key</span> if the key
               is not in your SSH agent or config. The tunnel lasts as long as
-              the command runs — press{" "}
-              <span className="font-mono">Ctrl-C</span> to close it.
+              the command runs — press <span className="font-mono">Ctrl-C</span>{" "}
+              to close it.
               {hostsUnset ? (
                 <>
                   {" "}
-                  Set <span className="font-mono">SERVER_SSH_HOST</span> and{" "}
-                  <span className="font-mono">SERVER_SSH_USER</span> to fill the
-                  placeholders in automatically.
+                  Set <span className="font-mono">
+                    SERVER_SSH_HOST
+                  </span> and <span className="font-mono">SERVER_SSH_USER</span>{" "}
+                  to fill the placeholders in automatically.
                 </>
               ) : null}
             </p>
@@ -1094,7 +1122,9 @@ function BackupsTab({ db }: { db: Database }) {
               >
                 <div className="min-w-0 space-y-1">
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className="font-medium">{destName(c.destination_id)}</span>
+                    <span className="font-medium">
+                      {destName(c.destination_id)}
+                    </span>
                     {c.enabled ? (
                       <Badge variant="outline">Active</Badge>
                     ) : (
@@ -1158,7 +1188,9 @@ function BackupsTab({ db }: { db: Database }) {
       <BackupConfigRunsSheet
         db={db}
         config={selected}
-        destinationName={selected ? destName(selected.destination_id) : undefined}
+        destinationName={
+          selected ? destName(selected.destination_id) : undefined
+        }
         open={sheetOpen}
         onOpenChange={setSheetOpen}
       />

@@ -96,14 +96,45 @@ func (s *DatabaseService) DeleteBackup(ctx context.Context, dbID, backupID pgtyp
 	return s.queries.DeleteDatabaseBackup(ctx, backupID)
 }
 
+// cleanupBackupsPageSize bounds one listing pass; cleanupBackups keeps going
+// until a short page. The old single capped call was silently partial: the
+// delete-confirmation dialog counts every backup, so a database with more than
+// one page promised destruction that never happened and left the surplus S3
+// objects with no row pointing at them — unreachable, unprunable, still billed.
+const cleanupBackupsPageSize = 1000
+
 // cleanupBackups removes a database's backup archives (local files and, when
 // configured, S3 objects). Best-effort: the DB-row delete cascades regardless.
 func (s *DatabaseService) cleanupBackups(ctx context.Context, dbID pgtype.UUID) {
-	rows, err := s.queries.ListDatabaseBackups(ctx, generated.ListDatabaseBackupsParams{DatabaseID: dbID, Limit: 1000})
-	if err != nil {
-		slog.Warn("could not list backups during db deletion", "error", err)
-		return
+	for {
+		rows, err := s.queries.ListDatabaseBackups(ctx, generated.ListDatabaseBackupsParams{
+			DatabaseID: dbID, Limit: cleanupBackupsPageSize,
+		})
+		if err != nil {
+			slog.Warn("could not list backups during db deletion", "error", err)
+			return
+		}
+		if len(rows) == 0 {
+			return
+		}
+		// Bail when a page removes nothing: the listing has no offset, so a page
+		// that cannot delete its rows would be handed back identically forever.
+		if s.cleanupBackupPage(ctx, rows) == 0 {
+			slog.Warn("stopping backup cleanup: no rows could be removed",
+				"remaining", len(rows))
+			return
+		}
+		if len(rows) < cleanupBackupsPageSize {
+			return
+		}
 	}
+}
+
+// cleanupBackupPage erases one page of backups: local file, remote object, and
+// row. The row delete is what lets the caller page — the listing has no offset,
+// so each pass must shrink the set it is walking. Returns how many rows went.
+func (s *DatabaseService) cleanupBackupPage(ctx context.Context, rows []generated.DatabaseBackup) int {
+	removed := 0
 	for _, b := range rows {
 		if b.LocalPath.Valid {
 			if err := os.Remove(b.LocalPath.String); err != nil && !os.IsNotExist(err) {
@@ -113,7 +144,38 @@ func (s *DatabaseService) cleanupBackups(ctx context.Context, dbID pgtype.UUID) 
 		// Route remote cleanup per backup (config backups live in project
 		// destinations; ad-hoc runs in the global target).
 		s.deleteRemoteBackup(ctx, b)
+		if err := s.queries.DeleteDatabaseBackup(ctx, b.ID); err != nil {
+			slog.Warn("could not delete backup row during db deletion",
+				"backup_id", b.ID, "error", err)
+			continue
+		}
+		removed++
 	}
+	return removed
+}
+
+// DeletionImpact is what deleting a database takes with it beyond the database
+// itself. database_backups.database_id is ON DELETE CASCADE and cleanupBackups
+// erases the remote objects too, so this is destruction the operator has to be
+// shown before they consent to it — not a warning after the fact.
+type DeletionImpact struct {
+	BackupCount  int64
+	Destinations []string
+}
+
+// DeletionImpact counts the backups a delete would destroy and names the
+// destinations holding copies. Destination names come from recorded locations,
+// so backups written before 000061 are counted but their bucket is not named.
+func (s *DatabaseService) DeletionImpact(ctx context.Context, dbID pgtype.UUID) (DeletionImpact, error) {
+	count, err := s.queries.CountDatabaseBackupsWithArtifacts(ctx, dbID)
+	if err != nil {
+		return DeletionImpact{}, fmt.Errorf("count database backups: %w", err)
+	}
+	names, err := s.queries.ListDestinationNamesForDatabaseBackups(ctx, dbID)
+	if err != nil {
+		return DeletionImpact{}, fmt.Errorf("list backup destinations: %w", err)
+	}
+	return DeletionImpact{BackupCount: count, Destinations: names}, nil
 }
 
 // Delete stops and removes the database container and its volume, then deletes the DB record.

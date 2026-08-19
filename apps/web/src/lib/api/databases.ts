@@ -143,3 +143,18 @@ export function reloadDatabase(projectId: string, databaseId: string) {
     `/projects/${projectId}/databases/${databaseId}/reload`,
   );
 }
+
+/** What deleting a database destroys beyond the database itself. */
+export interface DatabaseDeletionImpact {
+  backup_count: number;
+  backup_destinations: string[];
+}
+
+export function getDatabaseDeletionImpact(
+  projectId: string,
+  databaseId: string,
+) {
+  return api.get<DatabaseDeletionImpact>(
+    `/projects/${projectId}/databases/${databaseId}/deletion-impact`,
+  );
+}
