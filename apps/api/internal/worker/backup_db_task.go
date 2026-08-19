@@ -465,6 +465,16 @@ func (h *TaskHandler) HandleBackupDBTask(ctx context.Context, t *asynq.Task) err
 	})
 
 	if cfg != nil {
+		// Record where this copy actually went, so a later restore does not have
+		// to re-derive it from the config — which by then may point elsewhere.
+		// Ad-hoc runs get no row: the global env-var target has no destination
+		// row to reference (see the 000061 migration).
+		h.recordBackupLocation(ctx, generated.InsertBackupLocationParams{
+			DatabaseBackupID: run.ID,
+			DestinationID:    cfg.DestinationID,
+			RemoteKey:        remoteKey,
+			LocalPath:        localPathText,
+		})
 		h.pruneConfigBackups(ctx, *cfg, destClient)
 	} else {
 		h.pruneDatabaseBackups(ctx, db.ID)
@@ -472,6 +482,22 @@ func (h *TaskHandler) HandleBackupDBTask(ctx context.Context, t *asynq.Task) err
 
 	slog.Info("database backed up", "database_id", payload.DatabaseID, "method", method, "size_bytes", sizeBytes, "remote", remoteKey.Valid, "config", cfg != nil)
 	return nil
+}
+
+// recordBackupLocation stores where a backup copy was written. Best-effort: the
+// archive is already safely written, so failing the run over the bookkeeping
+// would be worse than losing it — the restore path still falls back to the
+// config when a backup has no recorded location.
+func (h *TaskHandler) recordBackupLocation(ctx context.Context, p generated.InsertBackupLocationParams) {
+	if !p.RemoteKey.Valid && !p.LocalPath.Valid {
+		return // nothing was written anywhere; has_a_file would reject it
+	}
+	if _, err := h.Queries.InsertBackupLocation(ctx, p); err != nil {
+		slog.Warn("backup: record location",
+			"database_backup_id", formatUUID(p.DatabaseBackupID),
+			"volume_backup_id", formatUUID(p.VolumeBackupID),
+			"error", err)
+	}
 }
 
 // removeLocalAfterUpload deletes the local archive once it is safely uploaded to

@@ -179,6 +179,14 @@ func (h *TaskHandler) HandleBackupVolumeTask(ctx context.Context, t *asynq.Task)
 		SizeBytes:  sizeBytes,
 		Log:        pgtype.Text{String: lg.String(), Valid: true},
 	})
+	// Record where this copy went, so restore does not have to re-derive it from
+	// the config — which by then may point at a different destination.
+	h.recordBackupLocation(ctx, generated.InsertBackupLocationParams{
+		VolumeBackupID: run.ID,
+		DestinationID:  cfg.DestinationID,
+		RemoteKey:      remoteKey,
+		LocalPath:      localPathText,
+	})
 	if err := h.Queries.SetApplicationVolumeBackupConfigLastRun(ctx, generated.SetApplicationVolumeBackupConfigLastRunParams{
 		ID:        cid,
 		LastRunAt: pgtype.Timestamptz{Time: time.Now(), Valid: true},

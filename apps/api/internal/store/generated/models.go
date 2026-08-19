@@ -151,6 +151,16 @@ type BackupDestination struct {
 	Prefix               string             `json:"prefix"`
 }
 
+type BackupLocation struct {
+	ID               pgtype.UUID        `json:"id"`
+	DatabaseBackupID pgtype.UUID        `json:"database_backup_id"`
+	VolumeBackupID   pgtype.UUID        `json:"volume_backup_id"`
+	DestinationID    pgtype.UUID        `json:"destination_id"`
+	RemoteKey        pgtype.Text        `json:"remote_key"`
+	LocalPath        pgtype.Text        `json:"local_path"`
+	UploadedAt       pgtype.Timestamptz `json:"uploaded_at"`
+}
+
 type BackupRun struct {
 	ID         pgtype.UUID        `json:"id"`
 	StartedAt  pgtype.Timestamptz `json:"started_at"`

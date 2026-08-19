@@ -11,6 +11,32 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const countDatabaseBackupsWithArtifacts = `-- name: CountDatabaseBackupsWithArtifacts :one
+SELECT COUNT(*) FROM database_backups
+WHERE database_id = $1
+  AND (remote_key IS NOT NULL OR local_path IS NOT NULL)
+`
+
+// Backups of a database that still have a file somewhere, for the delete
+// confirmation. Counts the artifact, not the row.
+func (q *Queries) CountDatabaseBackupsWithArtifacts(ctx context.Context, databaseID pgtype.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countDatabaseBackupsWithArtifacts, databaseID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countLocationsByDestination = `-- name: CountLocationsByDestination :one
+SELECT COUNT(*) FROM backup_locations WHERE destination_id = $1
+`
+
+func (q *Queries) CountLocationsByDestination(ctx context.Context, destinationID pgtype.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countLocationsByDestination, destinationID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const deleteDatabaseBackup = `-- name: DeleteDatabaseBackup :exec
 DELETE FROM database_backups WHERE id = $1
 `
@@ -68,6 +94,45 @@ func (q *Queries) GetLastSucceededDatabaseBackup(ctx context.Context, databaseID
 		&i.BackupConfigID,
 		&i.Log,
 		&i.TargetDatabase,
+	)
+	return i, err
+}
+
+const insertBackupLocation = `-- name: InsertBackupLocation :one
+INSERT INTO backup_locations (
+    database_backup_id, volume_backup_id, destination_id, remote_key, local_path
+)
+VALUES ($1, $2, $3, $4, $5)
+RETURNING id, database_backup_id, volume_backup_id, destination_id, remote_key, local_path, uploaded_at
+`
+
+type InsertBackupLocationParams struct {
+	DatabaseBackupID pgtype.UUID `json:"database_backup_id"`
+	VolumeBackupID   pgtype.UUID `json:"volume_backup_id"`
+	DestinationID    pgtype.UUID `json:"destination_id"`
+	RemoteKey        pgtype.Text `json:"remote_key"`
+	LocalPath        pgtype.Text `json:"local_path"`
+}
+
+// Records where a backup copy was written. Written at upload time, alongside
+// the legacy remote_key/local_path columns (reads move off those in 0.1.x).
+func (q *Queries) InsertBackupLocation(ctx context.Context, arg InsertBackupLocationParams) (BackupLocation, error) {
+	row := q.db.QueryRow(ctx, insertBackupLocation,
+		arg.DatabaseBackupID,
+		arg.VolumeBackupID,
+		arg.DestinationID,
+		arg.RemoteKey,
+		arg.LocalPath,
+	)
+	var i BackupLocation
+	err := row.Scan(
+		&i.ID,
+		&i.DatabaseBackupID,
+		&i.VolumeBackupID,
+		&i.DestinationID,
+		&i.RemoteKey,
+		&i.LocalPath,
+		&i.UploadedAt,
 	)
 	return i, err
 }
@@ -251,6 +316,105 @@ func (q *Queries) ListDatabaseRestores(ctx context.Context, arg ListDatabaseRest
 			&i.Status,
 			&i.Error,
 			&i.Log,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listDestinationNamesForDatabaseBackups = `-- name: ListDestinationNamesForDatabaseBackups :many
+SELECT DISTINCT d.name
+FROM backup_locations l
+JOIN database_backups b ON b.id = l.database_backup_id
+JOIN backup_destinations d ON d.id = l.destination_id
+WHERE b.database_id = $1
+ORDER BY d.name
+`
+
+// Distinct destinations holding recorded copies of a database's backups, so the
+// delete dialog can name where the data goes.
+func (q *Queries) ListDestinationNamesForDatabaseBackups(ctx context.Context, databaseID pgtype.UUID) ([]string, error) {
+	rows, err := q.db.Query(ctx, listDestinationNamesForDatabaseBackups, databaseID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []string{}
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return nil, err
+		}
+		items = append(items, name)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listLocationsForDatabaseBackup = `-- name: ListLocationsForDatabaseBackup :many
+SELECT id, database_backup_id, volume_backup_id, destination_id, remote_key, local_path, uploaded_at FROM backup_locations
+WHERE database_backup_id = $1
+ORDER BY uploaded_at
+`
+
+func (q *Queries) ListLocationsForDatabaseBackup(ctx context.Context, databaseBackupID pgtype.UUID) ([]BackupLocation, error) {
+	rows, err := q.db.Query(ctx, listLocationsForDatabaseBackup, databaseBackupID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []BackupLocation{}
+	for rows.Next() {
+		var i BackupLocation
+		if err := rows.Scan(
+			&i.ID,
+			&i.DatabaseBackupID,
+			&i.VolumeBackupID,
+			&i.DestinationID,
+			&i.RemoteKey,
+			&i.LocalPath,
+			&i.UploadedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listLocationsForVolumeBackup = `-- name: ListLocationsForVolumeBackup :many
+SELECT id, database_backup_id, volume_backup_id, destination_id, remote_key, local_path, uploaded_at FROM backup_locations
+WHERE volume_backup_id = $1
+ORDER BY uploaded_at
+`
+
+func (q *Queries) ListLocationsForVolumeBackup(ctx context.Context, volumeBackupID pgtype.UUID) ([]BackupLocation, error) {
+	rows, err := q.db.Query(ctx, listLocationsForVolumeBackup, volumeBackupID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []BackupLocation{}
+	for rows.Next() {
+		var i BackupLocation
+		if err := rows.Scan(
+			&i.ID,
+			&i.DatabaseBackupID,
+			&i.VolumeBackupID,
+			&i.DestinationID,
+			&i.RemoteKey,
+			&i.LocalPath,
+			&i.UploadedAt,
 		); err != nil {
 			return nil, err
 		}
