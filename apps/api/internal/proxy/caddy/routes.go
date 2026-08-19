@@ -411,8 +411,14 @@ func buildFeatureHandlers(cfg proxy.RouteConfig) ([]caddyHandle, error) {
 			})
 
 		case *proxy.RateLimitConfig:
-			// Rate limiting requires a Caddy module — log for now.
-			slog.Info("rate_limit feature configured but requires caddy-rate-limit module", "rate", c.Rate)
+			// Unreachable for new configs — ParseFeatureConfig rejects them — but
+			// still reachable for a row created before that, via a direct API call.
+			// Keep building the route: returning an error here would take a live
+			// site down over a feature that was already inert, which is strictly
+			// worse than the bug. Warn instead, and name the domain so the
+			// operator can find it.
+			slog.Warn("rate_limit feature is configured but does nothing; the stock Caddy image has no ratelimit module",
+				"hostname", cfg.Hostname, "rate", c.Rate)
 		}
 	}
 
