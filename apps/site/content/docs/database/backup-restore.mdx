@@ -41,6 +41,16 @@ From a database's **Backups** tab, add one or more schedules. Each has:
 Deleting a schedule also deletes the backups it produced.
 </Callout>
 
+## Deleting a Database
+
+Deleting a database deletes every backup ever taken of it, including copies already uploaded to a remote destination. Restoring from them afterwards is not possible.
+
+The delete dialog states how many backups will go and names the destinations holding them, and asks you to type the database name to confirm. The count and the destruction are recorded in the [audit log](/docs/server/audit-log), so the question "where did those backups go" has an answer afterwards.
+
+<Callout type="warn">
+Deleting the **project** removes its databases the same way, and their backups with them — but the project delete dialog does not itemise what it is about to destroy. Delete databases individually first if you want to see the consequences before agreeing to them.
+</Callout>
+
 ## On-Demand Backups
 
 **Back up now** runs a one-off backup immediately, outside any schedule.
