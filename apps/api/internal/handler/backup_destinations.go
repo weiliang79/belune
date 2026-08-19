@@ -248,7 +248,7 @@ func (h *Handler) UpdateBackupDestination(w http.ResponseWriter, r *http.Request
 		var locked service.ErrDestinationIdentityLocked
 		if errors.As(err, &locked) {
 			writeError(w, http.StatusConflict, fmt.Sprintf(
-				"%d backup(s) are stored in this destination, so its provider, endpoint and bucket can no longer be changed. Region and credentials can still be updated, or create a new destination.",
+				"%d backup(s) are stored in this destination, so the settings that decide where its objects live can no longer be changed. Credentials can still be rotated, or create a new destination for the new location.",
 				locked.BackupCount))
 			return
 		}
@@ -259,8 +259,9 @@ func (h *Handler) UpdateBackupDestination(w http.ResponseWriter, r *http.Request
 	writeJSON(w, http.StatusOK, toDestinationResponse(updated))
 }
 
-// DeleteBackupDestination removes a destination. The DB restricts deletion while
-// a backup config still references it (ON DELETE RESTRICT) — surfaced as 409.
+// DeleteBackupDestination removes a destination. The DB refuses while a backup
+// config references it (ON DELETE RESTRICT) or while any backup is recorded as
+// living in it (backup_locations) — surfaced as 409 naming whichever it is.
 func (h *Handler) DeleteBackupDestination(w http.ResponseWriter, r *http.Request) {
 	projectUUID, ok := h.projectFromPath(w, r)
 	if !ok {
@@ -271,7 +272,15 @@ func (h *Handler) DeleteBackupDestination(w http.ResponseWriter, r *http.Request
 		return
 	}
 	if err := h.backupDestSvc.Delete(r.Context(), dest.ID); err != nil {
-		writeError(w, http.StatusConflict, "destination is in use by a backup configuration")
+		// Recorded backups are now the more common cause, and "in use by a
+		// backup configuration" would send the operator to delete a schedule
+		// that is not the thing holding the destination.
+		msg := "destination is in use by a backup configuration"
+		if n, cErr := h.backupDestSvc.CountBackupsStored(r.Context(), dest.ID); cErr == nil && n > 0 {
+			msg = fmt.Sprintf(
+				"%d backup(s) are stored in this destination. Delete those backups (or the resources they belong to) before removing it.", n)
+		}
+		writeError(w, http.StatusConflict, msg)
 		return
 	}
 	h.audit(r, "delete_backup_destination", "project", uuidToString(projectUUID), map[string]any{"destination_id": uuidToString(dest.ID)})

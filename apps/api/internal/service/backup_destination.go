@@ -96,7 +96,15 @@ func (s *BackupDestinationService) Update(ctx context.Context, id pgtype.UUID, p
 	if err != nil {
 		return generated.BackupDestination{}, err
 	}
-	if p.Provider != current.Provider || p.Endpoint != current.Endpoint || p.Bucket != current.Bucket {
+	// An empty endpoint means the client derives one from the region
+	// (s3.<region>.amazonaws.com — see backup.newMinioClient), so for those
+	// destinations the region IS the address and moving it repoints every
+	// recorded backup at storage the bucket does not live behind. Where the
+	// endpoint is explicit, region is just a signing hint and stays editable.
+	regionIsIdentity := current.Endpoint == "" && p.Region != current.Region
+
+	if p.Provider != current.Provider || p.Endpoint != current.Endpoint ||
+		p.Bucket != current.Bucket || regionIsIdentity {
 		count, cErr := s.queries.CountLocationsByDestination(ctx, id)
 		if cErr != nil {
 			return generated.BackupDestination{}, fmt.Errorf("count backups in destination: %w", cErr)
@@ -133,6 +141,12 @@ func (s *BackupDestinationService) ListByProject(ctx context.Context, projectID 
 // Get returns the raw destination row (including encrypted credentials).
 func (s *BackupDestinationService) Get(ctx context.Context, id pgtype.UUID) (generated.BackupDestination, error) {
 	return s.queries.GetBackupDestination(ctx, id)
+}
+
+// CountBackupsStored reports how many backups are recorded as living in this
+// destination. Used to explain a refused delete.
+func (s *BackupDestinationService) CountBackupsStored(ctx context.Context, id pgtype.UUID) (int64, error) {
+	return s.queries.CountLocationsByDestination(ctx, id)
 }
 
 // Delete removes a destination by id.
@@ -193,6 +207,69 @@ func (s *BackupDestinationService) ClientForVolumeBackupConfig(ctx context.Conte
 		return nil, err
 	}
 	return backup.NewDestinationClient(dest)
+}
+
+// PurgeVolumeBackupObjects removes the remote objects for the given volume
+// backup runs, routing each to the destination it was recorded as written to
+// and falling back to fallbackConfigID for runs with no recorded location.
+//
+// Routing per run matters here: resolving one client from the config's current
+// destination sends every key at whatever bucket the config points at now, so
+// after a repoint the real objects are silently left behind in the old bucket —
+// and their location rows would go on pinning that destination against
+// deletion. Location rows for objects actually removed are deleted with them.
+//
+// Best-effort by design: this runs while tearing a config down, and a storage
+// error must not leave the config undeletable. Returns the first error seen so
+// the caller can decide, having already done as much as it could.
+func (s *BackupDestinationService) PurgeVolumeBackupObjects(ctx context.Context, runs []generated.ApplicationVolumeBackup, fallbackConfigID pgtype.UUID) error {
+	var firstErr error
+	note := func(err error) {
+		if err != nil && firstErr == nil {
+			firstErr = err
+		}
+	}
+
+	for _, run := range runs {
+		locs, err := s.queries.ListLocationsForVolumeBackup(ctx, run.ID)
+		if err != nil {
+			note(fmt.Errorf("list backup locations: %w", err))
+			continue
+		}
+
+		if len(locs) == 0 {
+			// Written before locations were recorded: the config is the only
+			// thing left that knows where it went.
+			if !run.RemoteKey.Valid || !fallbackConfigID.Valid {
+				continue
+			}
+			client, cErr := s.ClientForVolumeBackupConfig(ctx, fallbackConfigID)
+			if cErr != nil {
+				note(cErr)
+				continue
+			}
+			note(client.DeleteFrom(ctx, []string{run.RemoteKey.String}))
+			continue
+		}
+
+		for _, loc := range locs {
+			if loc.RemoteKey.Valid {
+				client, cErr := s.ClientForDestination(ctx, loc.DestinationID)
+				if cErr != nil {
+					note(cErr)
+					continue
+				}
+				if client != nil {
+					if dErr := client.DeleteFrom(ctx, []string{loc.RemoteKey.String}); dErr != nil {
+						note(dErr)
+						continue // keep the row: the object may still be there
+					}
+				}
+			}
+			note(s.queries.DeleteBackupLocation(ctx, loc.ID))
+		}
+	}
+	return firstErr
 }
 
 // Test builds a client for the stored destination and verifies bucket access.

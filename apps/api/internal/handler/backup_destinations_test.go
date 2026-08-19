@@ -108,3 +108,97 @@ func TestUpdateBackupDestination_IdentityLockedWhileHoldingBackups(t *testing.T)
 	require.Equal(t, http.StatusOK, resp.StatusCode, "credential and region changes must stay allowed")
 	assert.Equal(t, "eu-central-1", testutil.ReadJSON(t, resp)["region"])
 }
+
+// TestDeleteUser_CascadesThroughRecordedBackups guards the FK shape on
+// backup_locations.destination_id. ON DELETE RESTRICT looked right but broke
+// this cascade: Postgres fires a destination's referencing-key triggers as it
+// deletes each row, so it tripped on location rows that the parallel
+// databases → database_backups → backup_locations cascade was about to remove
+// anyway, and deleting a user who owned any recorded backup failed outright.
+func TestDeleteUser_CascadesThroughRecordedBackups(t *testing.T) {
+	resetDB(t)
+	ctx := context.Background()
+	adminToken := env.SetupAdmin(t, "admin@test.com", "password123")
+
+	resp := env.DoRequest(t, "POST", "/api/users", map[string]string{
+		"email":    "owner@test.com",
+		"password": "password123",
+		"role":     "member",
+	}, testutil.AuthHeader(adminToken))
+	require.Equal(t, http.StatusCreated, resp.StatusCode)
+	ownerID := testutil.ReadJSON(t, resp)["id"].(string)
+	var ownerUUID pgtype.UUID
+	require.NoError(t, ownerUUID.Scan(ownerID))
+
+	project, err := env.Queries.CreateProject(ctx, generated.CreateProjectParams{
+		Name:   "Owned",
+		Slug:   "owned",
+		UserID: ownerUUID,
+	})
+	require.NoError(t, err)
+
+	dest, err := env.Queries.CreateBackupDestination(ctx, generated.CreateBackupDestinationParams{
+		ProjectID:            project.ID,
+		Name:                 "hetzner-s3",
+		Provider:             "s3",
+		Endpoint:             "s3.example.com",
+		Region:               "us-east-1",
+		Bucket:               "b",
+		CredentialsEncrypted: []byte{0x00},
+	})
+	require.NoError(t, err)
+	seedBackupInDestination(t, project.ID, dest.ID)
+
+	resp = env.DoRequest(t, "DELETE", "/api/users/"+ownerID, nil, testutil.AuthHeader(adminToken))
+	require.Equal(t, http.StatusOK, resp.StatusCode,
+		"deleting a user who owns a recorded backup must cascade, not violate the destination FK")
+
+	count, err := env.Queries.CountLocationsByDestination(ctx, dest.ID)
+	require.NoError(t, err)
+	assert.Zero(t, count, "location rows should have cascaded away with the project")
+}
+
+// TestUpdateBackupDestination_RegionIsIdentityForDerivedEndpoint: an AWS
+// destination stores an empty endpoint, and the client derives
+// s3.<region>.amazonaws.com from the region — so there the region is the
+// address, and changing it repoints recorded backups at a regional endpoint
+// their bucket does not live behind.
+func TestUpdateBackupDestination_RegionIsIdentityForDerivedEndpoint(t *testing.T) {
+	resetDB(t)
+	token := env.SetupAdmin(t, "admin@test.com", "password123")
+	project := env.CreateProject(t, token, "AWS", "aws")
+	projectID := project["id"].(string)
+	var projUUID pgtype.UUID
+	require.NoError(t, projUUID.Scan(projectID))
+
+	// provider s3 with no endpoint: the AWS shape the edit form produces.
+	create := map[string]any{
+		"name": "aws-backups", "provider": "s3", "endpoint": "",
+		"region": "us-east-1", "bucket": "bucket-a",
+		"access_key": "ak", "secret_key": "sk",
+	}
+	resp := env.DoRequest(t, "POST", "/api/projects/"+projectID+"/backup-destinations", create, testutil.AuthHeader(token))
+	require.Equal(t, http.StatusCreated, resp.StatusCode)
+	destID := testutil.ReadJSON(t, resp)["id"].(string)
+	var destUUID pgtype.UUID
+	require.NoError(t, destUUID.Scan(destID))
+
+	seedBackupInDestination(t, projUUID, destUUID)
+
+	moved := map[string]any{
+		"name": "aws-backups", "provider": "s3", "endpoint": "",
+		"region": "eu-central-1", "bucket": "bucket-a",
+	}
+	resp = env.DoRequest(t, "PUT", "/api/projects/"+projectID+"/backup-destinations/"+destID, moved, testutil.AuthHeader(token))
+	assert.Equal(t, http.StatusConflict, resp.StatusCode,
+		"region change on a derived-endpoint destination moves where objects are read from")
+
+	// Credential rotation must still work — region unchanged.
+	rotated := map[string]any{
+		"name": "aws-backups", "provider": "s3", "endpoint": "",
+		"region": "us-east-1", "bucket": "bucket-a",
+		"access_key": "ak2", "secret_key": "sk2",
+	}
+	resp = env.DoRequest(t, "PUT", "/api/projects/"+projectID+"/backup-destinations/"+destID, rotated, testutil.AuthHeader(token))
+	assert.Equal(t, http.StatusOK, resp.StatusCode, "credential rotation must stay possible")
+}
