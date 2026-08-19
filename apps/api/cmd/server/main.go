@@ -56,6 +56,13 @@ func main() {
 	}
 	slog.SetDefault(slog.New(logger.NewRedactHandler(base)))
 
+	// Configuration findings: accepted but inadvisable. Logged once the logger
+	// exists so they honour the operator's format and level, and never fatal —
+	// the dashboard shows the same list via /api/stats.
+	for _, w := range cfg.Validate() {
+		slog.Warn("configuration warning", "code", w.Code, "detail", w.Message, "remedy", w.Remedy)
+	}
+
 	traceShutdown, err := tracing.Init(context.Background(), tracing.Config{
 		Endpoint:       cfg.OTLPEndpoint,
 		Insecure:       cfg.OTLPInsecure,

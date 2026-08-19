@@ -194,6 +194,38 @@ type Config struct {
 	BackupEncryptionKey string
 }
 
+// maxSafeJWTExpiryHours is the longest access-token TTL that is not worth
+// warning about. Refresh tokens run 168 h and already cover session length, so
+// nothing legitimate needs a long access token — and an access token cannot be
+// revoked, so a long one is a window that cannot be closed.
+const maxSafeJWTExpiryHours = 12
+
+// Warning is a configuration finding: not fatal, but something the operator
+// should act on. Surfaced at startup and on the dashboard.
+type Warning struct {
+	// Code identifies the finding for the frontend; the text is human-facing.
+	Code    string `json:"code"`
+	Message string `json:"message"`
+	Remedy  string `json:"remedy"`
+}
+
+// Validate reports configuration that is accepted but inadvisable. It never
+// fails startup: an operator locked out of their own control plane by a warning
+// is worse than the setting the warning is about.
+func (c *Config) Validate() []Warning {
+	var warnings []Warning
+	if c.JWTExpiryHours > maxSafeJWTExpiryHours {
+		warnings = append(warnings, Warning{
+			Code: "jwt_expiry_too_long",
+			Message: fmt.Sprintf(
+				"Access tokens are valid for %d hours. Installs created before v0.1.0 carry JWT_EXPIRY_HOURS=24 in their .env; the installer no longer writes it and the default is 1 hour. Access tokens cannot be revoked, so a stolen one stays usable for the full window.",
+				c.JWTExpiryHours),
+			Remedy: "Remove JWT_EXPIRY_HOURS from your .env and restart. Sessions are unaffected; refresh tokens already cover them.",
+		})
+	}
+	return warnings
+}
+
 func Load() (*Config, error) {
 	cfg := &Config{
 		Port:               getEnvInt("PORT", 8080),

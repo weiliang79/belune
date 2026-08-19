@@ -8,6 +8,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/weiliang79/belune/internal/config"
 	"github.com/weiliang79/belune/internal/server/middleware"
 	"github.com/weiliang79/belune/internal/service"
 	"github.com/weiliang79/belune/internal/store/generated"
@@ -77,6 +78,11 @@ type statsResponse struct {
 	Deploy7d       deploy7dStats            `json:"deploy_7d"`
 	NeedsAttention needsAttention           `json:"needs_attention"`
 	Host           *service.HostMetricPoint `json:"host"`
+	// ConfigWarnings sits beside NeedsAttention rather than inside it. That
+	// block counts failing workloads; a configuration finding is a different
+	// kind of thing, and folding it in would corrupt the number an operator
+	// reads as "how many things are broken right now". Admin-only, like Host.
+	ConfigWarnings []config.Warning `json:"config_warnings,omitempty"`
 }
 
 // appHealth folds the per-resource counts into the exhaustive fleet breakdown.
@@ -145,7 +151,7 @@ func (h *Handler) GetStats(w http.ResponseWriter, r *http.Request) {
 	errorServices := appH.Errored + dbH.Errored
 
 	resp := statsResponse{
-		IsAdmin: isAdmin,
+		IsAdmin:   isAdmin,
 		AppHealth: appHealth(appH, dbH, errorServices),
 		Deploy7d: deploy7dStats{
 			Succeeded:     dep.Succeeded,
@@ -174,6 +180,9 @@ func (h *Handler) GetStats(w http.ResponseWriter, r *http.Request) {
 		}
 		host := h.latestHostStats(ctx)
 		resp.Host = &host
+		// Computed from the loaded config, so this costs no query — it is the
+		// same list logged once at startup.
+		resp.ConfigWarnings = h.cfg.Validate()
 	}
 
 	// Unhealthy is an application-only state; databases have no health check.

@@ -28,6 +28,7 @@ import {
 import { DataTable } from "@/components/ui/data-table";
 import { formatDateTimeShort, formatRelativeTime } from "@/lib/utils/format";
 import { cn } from "@/lib/utils";
+import { ConfigWarningsBanner } from "@/lib/components/stats/config-warnings-banner";
 import { OperatorHealthStrip } from "@/lib/components/stats/operator-health-strip";
 import type { Project } from "@/lib/types";
 
@@ -266,6 +267,8 @@ function ProjectsPage() {
         }
       />
 
+      <ConfigWarningsBanner />
+
       <OperatorHealthStrip />
 
       <div className="flex flex-wrap items-center gap-2">
@@ -288,10 +291,18 @@ function ProjectsPage() {
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="recent" icon={<ClockIcon />} className="capitalize">
+            <SelectItem
+              value="recent"
+              icon={<ClockIcon />}
+              className="capitalize"
+            >
               Most recent
             </SelectItem>
-            <SelectItem value="name" icon={<ArrowDownAZIcon />} className="capitalize">
+            <SelectItem
+              value="name"
+              icon={<ArrowDownAZIcon />}
+              className="capitalize"
+            >
               Name
             </SelectItem>
           </SelectContent>

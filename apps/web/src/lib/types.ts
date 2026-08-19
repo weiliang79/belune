@@ -615,6 +615,19 @@ export interface Stats {
     total: number;
   };
   host: HostResources | null;
+  /**
+   * Configuration findings — accepted but inadvisable settings. Deliberately
+   * separate from needs_attention, which counts failing workloads: folding a
+   * config finding into that number would corrupt it. Admin-only, so absent
+   * for members.
+   */
+  config_warnings?: ConfigWarning[];
+}
+
+export interface ConfigWarning {
+  code: string;
+  message: string;
+  remedy: string;
 }
 
 // ---- Docker inspect (read-only admin pages) --------------------------------
