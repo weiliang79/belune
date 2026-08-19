@@ -108,3 +108,42 @@ UPDATE database_backups SET log = $2 WHERE id = $1;
 
 -- name: SetDatabaseRestoreLog :exec
 UPDATE database_restores SET log = $2 WHERE id = $1;
+
+-- name: InsertBackupLocation :one
+-- Records where a backup copy was written. Written at upload time, alongside
+-- the legacy remote_key/local_path columns (reads move off those in 0.1.x).
+INSERT INTO backup_locations (
+    database_backup_id, volume_backup_id, destination_id, remote_key, local_path
+)
+VALUES ($1, $2, $3, $4, $5)
+RETURNING *;
+
+-- name: ListLocationsForDatabaseBackup :many
+SELECT * FROM backup_locations
+WHERE database_backup_id = $1
+ORDER BY uploaded_at;
+
+-- name: ListLocationsForVolumeBackup :many
+SELECT * FROM backup_locations
+WHERE volume_backup_id = $1
+ORDER BY uploaded_at;
+
+-- name: CountLocationsByDestination :one
+SELECT COUNT(*) FROM backup_locations WHERE destination_id = $1;
+
+-- name: CountDatabaseBackupsWithArtifacts :one
+-- Backups of a database that still have a file somewhere, for the delete
+-- confirmation. Counts the artifact, not the row.
+SELECT COUNT(*) FROM database_backups
+WHERE database_id = $1
+  AND (remote_key IS NOT NULL OR local_path IS NOT NULL);
+
+-- name: ListDestinationNamesForDatabaseBackups :many
+-- Distinct destinations holding recorded copies of a database's backups, so the
+-- delete dialog can name where the data goes.
+SELECT DISTINCT d.name
+FROM backup_locations l
+JOIN database_backups b ON b.id = l.database_backup_id
+JOIN backup_destinations d ON d.id = l.destination_id
+WHERE b.database_id = $1
+ORDER BY d.name;
