@@ -73,12 +73,41 @@ func (s *BackupDestinationService) Create(ctx context.Context, p SaveBackupDesti
 	})
 }
 
+// ErrDestinationIdentityLocked is returned when an edit would move a
+// destination that already holds recorded backups. It carries the count so the
+// caller can say how much is at stake.
+type ErrDestinationIdentityLocked struct {
+	BackupCount int64
+}
+
+func (e ErrDestinationIdentityLocked) Error() string {
+	return fmt.Sprintf("destination holds %d recorded backup(s); its bucket and endpoint cannot be changed", e.BackupCount)
+}
+
 // Update mutates an existing destination. When Credentials is nil the stored
 // secret is preserved (COALESCE in the query handles the NULL).
+//
+// Provider, endpoint and bucket are a destination's identity: recorded backups
+// name it to find their objects, so moving it would silently point them at
+// storage their data was never written to. Region and credentials stay editable
+// — rotation is legitimate and does not move anything.
 func (s *BackupDestinationService) Update(ctx context.Context, id pgtype.UUID, p SaveBackupDestinationParams) (generated.BackupDestination, error) {
+	current, err := s.queries.GetBackupDestination(ctx, id)
+	if err != nil {
+		return generated.BackupDestination{}, err
+	}
+	if p.Provider != current.Provider || p.Endpoint != current.Endpoint || p.Bucket != current.Bucket {
+		count, cErr := s.queries.CountLocationsByDestination(ctx, id)
+		if cErr != nil {
+			return generated.BackupDestination{}, fmt.Errorf("count backups in destination: %w", cErr)
+		}
+		if count > 0 {
+			return generated.BackupDestination{}, ErrDestinationIdentityLocked{BackupCount: count}
+		}
+	}
+
 	var enc []byte
 	if p.Credentials != nil {
-		var err error
 		if enc, err = s.encryptCredentials(p.Credentials); err != nil {
 			return generated.BackupDestination{}, err
 		}
