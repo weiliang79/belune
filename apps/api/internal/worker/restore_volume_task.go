@@ -130,16 +130,24 @@ func (h *TaskHandler) resolveVolumeBackupFile(ctx context.Context, bk generated.
 	if !bk.RemoteKey.Valid {
 		return "", noop, errors.New("backup has no local file and no remote copy")
 	}
-	if !bk.BackupConfigID.Valid {
-		return "", noop, errors.New("backup has no config to resolve its destination")
-	}
 	if h.BackupDestinations == nil {
 		return "", noop, errors.New("backup destinations service is not configured")
 	}
 
-	client, err := h.BackupDestinations.ClientForVolumeBackupConfig(ctx, bk.BackupConfigID)
+	// Prefer the destination this backup was recorded as written to; the config
+	// is a mutable pointer and may since have been repointed or deleted.
+	client, err := h.clientForRecordedVolumeBackup(ctx, bk.ID)
 	if err != nil {
-		return "", noop, fmt.Errorf("resolve backup destination: %w", err)
+		return "", noop, err
+	}
+	if client == nil {
+		// No recorded location: written before 000061, or its config is gone.
+		if !bk.BackupConfigID.Valid {
+			return "", noop, errors.New("backup has no recorded location and no config to resolve its destination")
+		}
+		if client, err = h.BackupDestinations.ClientForVolumeBackupConfig(ctx, bk.BackupConfigID); err != nil {
+			return "", noop, fmt.Errorf("resolve backup destination: %w", err)
+		}
 	}
 	tmp := filepath.Join(os.TempDir(), "belune-volrestore-"+filepath.Base(bk.RemoteKey.String))
 	cleanup := func() { _ = os.Remove(tmp) }

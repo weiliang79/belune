@@ -121,8 +121,24 @@ func (s *BackupDestinationService) Resolve(ctx context.Context, id pgtype.UUID) 
 	return s.toDestination(row)
 }
 
-// ClientForConfig resolves the destination client for a backup config id. Used
-// to delete a config-produced backup's remote object from the right bucket.
+// ClientForDestination resolves the client for a destination id. This is the
+// path a backup with a recorded location takes: the destination is read from the
+// location row, not re-derived from a config that may since have been repointed.
+// Returns a nil client for a local destination, which has no bucket to reach.
+func (s *BackupDestinationService) ClientForDestination(ctx context.Context, destinationID pgtype.UUID) (*backup.DestinationClient, error) {
+	dest, err := s.Resolve(ctx, destinationID)
+	if err != nil {
+		return nil, err
+	}
+	if dest.IsLocal() {
+		return nil, nil
+	}
+	return backup.NewDestinationClient(dest)
+}
+
+// ClientForConfig resolves the destination client for a backup config id. Kept
+// as the fallback for backups written before locations were recorded, and for
+// ad-hoc runs that have no destination row at all.
 func (s *BackupDestinationService) ClientForConfig(ctx context.Context, configID pgtype.UUID) (*backup.DestinationClient, error) {
 	cfg, err := s.queries.GetDatabaseBackupConfig(ctx, configID)
 	if err != nil {

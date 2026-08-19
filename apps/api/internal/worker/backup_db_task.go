@@ -500,6 +500,53 @@ func (h *TaskHandler) recordBackupLocation(ctx context.Context, p generated.Inse
 	}
 }
 
+// clientForRecordedDatabaseBackup returns the destination client for the bucket
+// a database backup was recorded as written to. A nil client with a nil error
+// means there is nothing recorded to use — no location row (a backup predating
+// 000061, or an ad-hoc run), or a location with no remote object — and the
+// caller should fall back to the config path.
+func (h *TaskHandler) clientForRecordedDatabaseBackup(ctx context.Context, backupID pgtype.UUID) (*backup.DestinationClient, error) {
+	if h.BackupDestinations == nil {
+		return nil, nil
+	}
+	locs, err := h.Queries.ListLocationsForDatabaseBackup(ctx, backupID)
+	if err != nil {
+		return nil, fmt.Errorf("list backup locations: %w", err)
+	}
+	return h.clientForLocations(ctx, locs)
+}
+
+// clientForRecordedVolumeBackup is the volume-backup twin of the above.
+func (h *TaskHandler) clientForRecordedVolumeBackup(ctx context.Context, backupID pgtype.UUID) (*backup.DestinationClient, error) {
+	if h.BackupDestinations == nil {
+		return nil, nil
+	}
+	locs, err := h.Queries.ListLocationsForVolumeBackup(ctx, backupID)
+	if err != nil {
+		return nil, fmt.Errorf("list backup locations: %w", err)
+	}
+	return h.clientForLocations(ctx, locs)
+}
+
+// clientForLocations picks the first recorded location holding a remote object
+// and builds its client. Today a backup has exactly one location; the loop is
+// what lets 0.1.x add a second copy without revisiting the restore path.
+func (h *TaskHandler) clientForLocations(ctx context.Context, locs []generated.BackupLocation) (*backup.DestinationClient, error) {
+	for _, loc := range locs {
+		if !loc.RemoteKey.Valid {
+			continue // local-only copy; the caller already tried the local file
+		}
+		client, err := h.BackupDestinations.ClientForDestination(ctx, loc.DestinationID)
+		if err != nil {
+			return nil, fmt.Errorf("resolve recorded backup destination: %w", err)
+		}
+		if client != nil {
+			return client, nil
+		}
+	}
+	return nil, nil
+}
+
 // removeLocalAfterUpload deletes the local archive once it is safely uploaded to
 // a remote target, so the server disk isn't used to mirror the bucket. A removal
 // failure is noted in the run log but does not fail the (already-uploaded) backup.
@@ -522,16 +569,28 @@ func (h *TaskHandler) globalRemoteDeleter() remoteDeleter {
 }
 
 // deleteBackupArtifacts removes a backup's local file, remote object, and row.
-// del routes remote deletion to the right destination (nil skips it).
+// The recorded location decides which bucket the object is deleted from; del is
+// the fallback for backups written before locations existed (nil skips it).
 func (h *TaskHandler) deleteBackupArtifacts(ctx context.Context, b generated.DatabaseBackup, del remoteDeleter) {
 	if b.LocalPath.Valid {
 		if err := os.Remove(b.LocalPath.String); err != nil && !os.IsNotExist(err) {
 			slog.Warn("prune: remove local backup", "path", b.LocalPath.String, "error", err)
 		}
 	}
-	if b.RemoteKey.Valid && del != nil {
-		if err := del(ctx, []string{b.RemoteKey.String}); err != nil {
-			slog.Warn("prune: remove remote backup", "key", b.RemoteKey.String, "error", err)
+	if b.RemoteKey.Valid {
+		client, err := h.clientForRecordedDatabaseBackup(ctx, b.ID)
+		if err != nil {
+			slog.Warn("prune: resolve recorded destination", "backup_id", formatUUID(b.ID), "error", err)
+		}
+		switch {
+		case client != nil:
+			if err := client.DeleteFrom(ctx, []string{b.RemoteKey.String}); err != nil {
+				slog.Warn("prune: remove remote backup", "key", b.RemoteKey.String, "error", err)
+			}
+		case del != nil:
+			if err := del(ctx, []string{b.RemoteKey.String}); err != nil {
+				slog.Warn("prune: remove remote backup", "key", b.RemoteKey.String, "error", err)
+			}
 		}
 	}
 	if err := h.Queries.DeleteDatabaseBackup(ctx, b.ID); err != nil {
@@ -1038,8 +1097,20 @@ func (h *TaskHandler) resolveBackupFile(ctx context.Context, backup generated.Da
 	tmp := filepath.Join(os.TempDir(), "belune-restore-"+filepath.Base(backup.RemoteKey.String))
 	cleanup := func() { _ = os.Remove(tmp) }
 
-	// Config-driven backups live in their project destination, not the global
-	// env-var S3 target — download from the bucket the object was uploaded to.
+	// Prefer the destination this backup was recorded as written to. Resolving
+	// through the config instead would follow a pointer that has moved: repoint
+	// or delete the config and every prior backup aims at the wrong bucket.
+	if client, err := h.clientForRecordedDatabaseBackup(ctx, backup.ID); err != nil {
+		return "", noop, err
+	} else if client != nil {
+		if err := client.Download(ctx, backup.RemoteKey.String, tmp); err != nil {
+			return "", noop, err
+		}
+		return tmp, cleanup, nil
+	}
+
+	// No recorded location: a backup written before 000061, or one whose config
+	// was deleted. Fall back to the config-driven path, unchanged.
 	if backup.BackupConfigID.Valid {
 		if h.BackupDestinations == nil {
 			return "", noop, errors.New("backup destinations service is not configured")
