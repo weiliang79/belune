@@ -162,3 +162,73 @@ func TestRestoreFollowsRecordedLocation_NotRepointedConfig(t *testing.T) {
 		"restore must download from the bucket the backup was written to, not the config's current one")
 	require.NotZero(t, restoredLen, "restore streamed nothing to the database")
 }
+
+// TestRestoreSurvivesDeletedConfig covers the orphan population: deleting a
+// config nulls backup_config_id on every run it produced, which used to leave
+// the destination unknowable. The recorded location outlives the config.
+func TestRestoreSurvivesDeletedConfig(t *testing.T) {
+	if os.Getenv("BELUNE_DOCKER_INTEGRATION") == "" {
+		t.Skip("set BELUNE_DOCKER_INTEGRATION=1 to run the backup-location test (needs MinIO)")
+	}
+	ctx := context.Background()
+
+	endpoint := minioEndpoint(t)
+	makeBucket(t, endpoint, "orphan-bucket")
+
+	var restoredLen int
+	rt := &testutil.MockContainerRuntime{
+		ExecFunc: func(_ context.Context, _ string, _ []string, stdin io.Reader, stdout, _ io.Writer) (int, error) {
+			if stdin != nil {
+				b, _ := io.ReadAll(stdin)
+				restoredLen = len(b)
+				return 0, nil
+			}
+			if stdout != nil {
+				_, _ = stdout.Write([]byte(strings.Repeat("SQL ", 100)))
+			}
+			return 0, nil
+		},
+	}
+	keyring, err := crypto.ParseKeyringEnv("", testutil.TestEncryptionKey, "")
+	require.NoError(t, err)
+
+	h := newTestHandler(rt, nil)
+	h.Config.DatabaseBackupDir = t.TempDir()
+	h.BackupDestinations = service.NewBackupDestinationService(testQueries, keyring)
+
+	db := seedDatabase(t)
+	dest := seedDestination(t, db.ProjectID, "orphan-bucket", endpoint, "orphan-bucket")
+	cfg, err := testQueries.CreateDatabaseBackupConfig(ctx, generated.CreateDatabaseBackupConfigParams{
+		DatabaseID:    db.ID,
+		DestinationID: dest.ID,
+		Schedule:      "0 3 * * *",
+		Enabled:       true,
+	})
+	require.NoError(t, err)
+
+	bp, _ := json.Marshal(map[string]string{
+		"database_id":      dbIDStr(db),
+		"backup_config_id": uuidString(cfg.ID),
+	})
+	require.NoError(t, h.HandleBackupDBTask(ctx, asynq.NewTask("backup_db", bp)))
+	backups, err := testQueries.ListDatabaseBackups(ctx, generated.ListDatabaseBackupsParams{
+		DatabaseID: db.ID, Limit: 5,
+	})
+	require.NoError(t, err)
+	require.NotEmpty(t, backups)
+
+	// Drop the config directly: ON DELETE SET NULL orphans the run, so nothing
+	// is left to re-derive the destination from except the location row.
+	require.NoError(t, testQueries.DeleteDatabaseBackupConfig(ctx, cfg.ID))
+	orphaned, err := testQueries.GetDatabaseBackup(ctx, backups[0].ID)
+	require.NoError(t, err)
+	require.False(t, orphaned.BackupConfigID.Valid, "deleting the config should have nulled the run's config id")
+
+	rp, _ := json.Marshal(map[string]string{
+		"database_id": dbIDStr(db),
+		"backup_id":   uuidString(backups[0].ID),
+	})
+	require.NoError(t, h.HandleRestoreDBTask(ctx, asynq.NewTask("restore_db", rp)),
+		"a backup orphaned by config deletion must still restore from its recorded location")
+	require.NotZero(t, restoredLen, "restore streamed nothing to the database")
+}

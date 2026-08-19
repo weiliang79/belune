@@ -270,9 +270,9 @@ func (h *Handler) DeleteDatabaseBackupConfig(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	// Remove this config's backups first (local + remote + row) — after the
-	// config row is gone the runs' config_id is nulled and the destination can
-	// no longer be resolved for cleanup.
+	// Remove this config's backups first (local + remote + row). Recorded
+	// locations would survive the config, but runs written before 000061 have
+	// only config_id to resolve their destination and it is nulled on delete.
 	runs, err := h.queries.ListDatabaseBackupsByConfig(r.Context(), generated.ListDatabaseBackupsByConfigParams{
 		BackupConfigID: cfg.ID,
 		Limit:          1000,

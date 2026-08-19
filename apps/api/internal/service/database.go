@@ -24,12 +24,39 @@ func NewDatabaseService(queries *generated.Queries, rt runtime.ContainerRuntime,
 	return &DatabaseService{queries: queries, runtime: rt, backups: backups, destinations: destinations}
 }
 
-// deleteRemoteBackup removes a backup's remote object, routing to the config's
-// project destination when the run came from a config, or the global target
-// otherwise. Best-effort.
+// deleteRemoteBackup removes a backup's remote object. It routes to the
+// destination the backup was recorded as written to, falling back to the
+// config's current destination (backups predating 000061) and then the global
+// target. Best-effort — deleting from the wrong bucket would leave the real
+// object behind, which is why the recorded location wins.
 func (s *DatabaseService) deleteRemoteBackup(ctx context.Context, b generated.DatabaseBackup) {
 	if !b.RemoteKey.Valid {
 		return
+	}
+	if s.destinations != nil {
+		locs, err := s.queries.ListLocationsForDatabaseBackup(ctx, b.ID)
+		if err != nil {
+			slog.Warn("could not list backup locations for remote cleanup", "key", b.RemoteKey.String, "error", err)
+		}
+		for _, loc := range locs {
+			if !loc.RemoteKey.Valid {
+				continue
+			}
+			client, cerr := s.destinations.ClientForDestination(ctx, loc.DestinationID)
+			if cerr != nil {
+				slog.Warn("could not resolve recorded destination for remote backup cleanup", "key", loc.RemoteKey.String, "error", cerr)
+				continue
+			}
+			if client == nil {
+				continue // local destination: the file is handled by the caller
+			}
+			if derr := client.DeleteFrom(ctx, []string{loc.RemoteKey.String}); derr != nil {
+				slog.Warn("could not remove remote backup", "key", loc.RemoteKey.String, "error", derr)
+			}
+		}
+		if len(locs) > 0 {
+			return
+		}
 	}
 	if b.BackupConfigID.Valid && s.destinations != nil {
 		client, err := s.destinations.ClientForConfig(ctx, b.BackupConfigID)
