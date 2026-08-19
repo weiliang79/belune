@@ -68,14 +68,17 @@ func TestRestoreFromS3_RealDocker(t *testing.T) {
 
 	db := seedDatabase(t)
 
-	// Back up → uploads to S3 (remote_key set).
-	bp, _ := json.Marshal(map[string]string{"database_id": dbIDStr(db)})
-	require.NoError(t, h.HandleBackupDBTask(ctx, asynq.NewTask("backup_db", bp)))
+	// Back up → uploads to S3 (remote_key set). backupAndList runs the task
+	// itself, so it is the only call needed.
 	backups := backupAndList(t, h, db)
 	require.True(t, backups[0].RemoteKey.Valid, "backup should have been uploaded to S3")
 
-	// Delete the local copy so restore must fall back to the S3 download path.
-	require.NoError(t, os.Remove(backups[0].LocalPath.String))
+	// A successful upload is authoritative, so the worker already dropped the
+	// local archive — otherwise the server disk would mirror the bucket. That
+	// is what forces restore down the S3 download path, and asserting it here
+	// is what makes this a test of that path rather than of a file we deleted.
+	require.False(t, backups[0].LocalPath.Valid,
+		"local copy should have been dropped after a successful S3 upload")
 
 	rp, _ := json.Marshal(map[string]string{"database_id": dbIDStr(db), "backup_id": uuidString(backups[0].ID)})
 	require.NoError(t, h.HandleRestoreDBTask(ctx, asynq.NewTask("restore_db", rp)))
