@@ -37,6 +37,15 @@ func (q *Queries) CountLocationsByDestination(ctx context.Context, destinationID
 	return count, err
 }
 
+const deleteBackupLocation = `-- name: DeleteBackupLocation :exec
+DELETE FROM backup_locations WHERE id = $1
+`
+
+func (q *Queries) DeleteBackupLocation(ctx context.Context, id pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, deleteBackupLocation, id)
+	return err
+}
+
 const deleteDatabaseBackup = `-- name: DeleteDatabaseBackup :exec
 DELETE FROM database_backups WHERE id = $1
 `

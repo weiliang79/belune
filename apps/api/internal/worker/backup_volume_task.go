@@ -321,15 +321,15 @@ func (h *TaskHandler) pruneVolumeConfigBackups(ctx context.Context, cfg generate
 			// Delete from where the object actually went; the passed client is
 			// the config's current destination, right only for backups written
 			// before locations were recorded.
-			target := client
+			target, key := client, b.RemoteKey.String
 			if recorded, rerr := h.clientForRecordedVolumeBackup(ctx, b.ID); rerr != nil {
 				slog.Warn("prune volume backups: resolve recorded destination", "backup_id", formatUUID(b.ID), "error", rerr)
 			} else if recorded != nil {
-				target = recorded
+				target, key = recorded.client, recorded.key
 			}
 			if target != nil {
-				if err := target.DeleteFrom(ctx, []string{b.RemoteKey.String}); err != nil {
-					slog.Warn("prune volume backups: remove remote", "key", b.RemoteKey.String, "error", err)
+				if err := target.DeleteFrom(ctx, []string{key}); err != nil {
+					slog.Warn("prune volume backups: remove remote", "key", key, "error", err)
 				}
 			}
 		}

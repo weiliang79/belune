@@ -278,26 +278,24 @@ func (h *Handler) DeleteVolumeBackupConfig(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	// Best-effort: remove this config's backup objects from the destination
-	// before dropping the config (afterwards the destination can't be resolved).
+	// Remove this config's backup objects before dropping the config, since a
+	// run written before locations existed has only the config to resolve its
+	// destination. Each run is routed to where it was actually written, not to
+	// wherever the config points now.
 	if h.backupDestSvc != nil {
-		if client, err := h.backupDestSvc.ClientForVolumeBackupConfig(r.Context(), cfg.ID); err == nil {
-			runs, _ := h.queries.ListApplicationVolumeBackups(r.Context(), generated.ListApplicationVolumeBackupsParams{
-				ApplicationVolumeID: vol.ID,
-				Limit:               1000,
-			})
-			var keys []string
-			for _, b := range runs {
-				if b.BackupConfigID.Valid && b.BackupConfigID == cfg.ID && b.RemoteKey.Valid {
-					keys = append(keys, b.RemoteKey.String)
-				}
+		runs, _ := h.queries.ListApplicationVolumeBackups(r.Context(), generated.ListApplicationVolumeBackupsParams{
+			ApplicationVolumeID: vol.ID,
+			Limit:               1000,
+		})
+		var owned []generated.ApplicationVolumeBackup
+		for _, b := range runs {
+			if b.BackupConfigID.Valid && b.BackupConfigID == cfg.ID {
+				owned = append(owned, b)
 			}
-			if len(keys) > 0 {
-				if err := client.DeleteFrom(r.Context(), keys); err != nil {
-					writeError(w, http.StatusInternalServerError, "failed to remove backup objects from destination")
-					return
-				}
-			}
+		}
+		if err := h.backupDestSvc.PurgeVolumeBackupObjects(r.Context(), owned, cfg.ID); err != nil {
+			writeError(w, http.StatusInternalServerError, "failed to remove backup objects from destination")
+			return
 		}
 	}
 

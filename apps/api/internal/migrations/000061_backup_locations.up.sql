@@ -15,9 +15,20 @@ CREATE TABLE backup_locations (
     id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     database_backup_id UUID REFERENCES database_backups(id) ON DELETE CASCADE,
     volume_backup_id   UUID REFERENCES application_volume_backups(id) ON DELETE CASCADE,
-    -- RESTRICT: a destination holding recorded backups can no longer be
-    -- deleted. Stricter than before, and the point of the table.
-    destination_id     UUID NOT NULL REFERENCES backup_destinations(id) ON DELETE RESTRICT,
+    -- A destination holding recorded backups can no longer be deleted directly.
+    -- Stricter than before, and the point of the table.
+    --
+    -- DEFERRABLE INITIALLY DEFERRED, not ON DELETE RESTRICT. Postgres fires a
+    -- table's referencing-key triggers as it deletes each row, so during a
+    -- cascade from users → projects → backup_destinations the RESTRICT tripped
+    -- on location rows that the parallel databases → database_backups →
+    -- backup_locations cascade was about to remove anyway. Deleting a user who
+    -- owned any recorded backup failed outright. Deferring the check to COMMIT
+    -- lets the cascade finish first, while a direct DELETE of a destination
+    -- still fails — the rows are still there at commit time. RESTRICT cannot be
+    -- deferred, which is why the action is omitted entirely.
+    destination_id     UUID NOT NULL REFERENCES backup_destinations(id)
+                           DEFERRABLE INITIALLY DEFERRED,
     remote_key         TEXT,
     local_path         TEXT,
     uploaded_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),

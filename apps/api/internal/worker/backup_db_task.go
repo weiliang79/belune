@@ -500,12 +500,20 @@ func (h *TaskHandler) recordBackupLocation(ctx context.Context, p generated.Inse
 	}
 }
 
-// clientForRecordedDatabaseBackup returns the destination client for the bucket
-// a database backup was recorded as written to. A nil client with a nil error
-// means there is nothing recorded to use — no location row (a backup predating
-// 000061, or an ad-hoc run), or a location with no remote object — and the
-// caller should fall back to the config path.
-func (h *TaskHandler) clientForRecordedDatabaseBackup(ctx context.Context, backupID pgtype.UUID) (*backup.DestinationClient, error) {
+// recordedCopy is a backup copy that is actually retrievable: the client for
+// the bucket it lives in, paired with the key it was stored under. The two must
+// travel together — using one copy's client against another copy's key is the
+// same class of mistake this whole change exists to fix.
+type recordedCopy struct {
+	client *backup.DestinationClient
+	key    string
+}
+
+// clientForRecordedDatabaseBackup returns the recorded copy of a database
+// backup. A nil copy with a nil error means there is nothing recorded to use —
+// no location row (a backup predating 000061, or an ad-hoc run), or no location
+// with a remote object — and the caller should fall back to the config path.
+func (h *TaskHandler) clientForRecordedDatabaseBackup(ctx context.Context, backupID pgtype.UUID) (*recordedCopy, error) {
 	if h.BackupDestinations == nil {
 		return nil, nil
 	}
@@ -513,11 +521,11 @@ func (h *TaskHandler) clientForRecordedDatabaseBackup(ctx context.Context, backu
 	if err != nil {
 		return nil, fmt.Errorf("list backup locations: %w", err)
 	}
-	return h.clientForLocations(ctx, locs)
+	return h.copyForLocations(ctx, locs)
 }
 
 // clientForRecordedVolumeBackup is the volume-backup twin of the above.
-func (h *TaskHandler) clientForRecordedVolumeBackup(ctx context.Context, backupID pgtype.UUID) (*backup.DestinationClient, error) {
+func (h *TaskHandler) clientForRecordedVolumeBackup(ctx context.Context, backupID pgtype.UUID) (*recordedCopy, error) {
 	if h.BackupDestinations == nil {
 		return nil, nil
 	}
@@ -525,13 +533,14 @@ func (h *TaskHandler) clientForRecordedVolumeBackup(ctx context.Context, backupI
 	if err != nil {
 		return nil, fmt.Errorf("list backup locations: %w", err)
 	}
-	return h.clientForLocations(ctx, locs)
+	return h.copyForLocations(ctx, locs)
 }
 
-// clientForLocations picks the first recorded location holding a remote object
-// and builds its client. Today a backup has exactly one location; the loop is
-// what lets 0.1.x add a second copy without revisiting the restore path.
-func (h *TaskHandler) clientForLocations(ctx context.Context, locs []generated.BackupLocation) (*backup.DestinationClient, error) {
+// copyForLocations picks the first recorded location holding a remote object and
+// returns its client and key together. Today a backup has exactly one location;
+// carrying the key is what lets 0.1.x add a second copy without the restore path
+// silently pairing one destination with another's key.
+func (h *TaskHandler) copyForLocations(ctx context.Context, locs []generated.BackupLocation) (*recordedCopy, error) {
 	for _, loc := range locs {
 		if !loc.RemoteKey.Valid {
 			continue // local-only copy; the caller already tried the local file
@@ -541,7 +550,7 @@ func (h *TaskHandler) clientForLocations(ctx context.Context, locs []generated.B
 			return nil, fmt.Errorf("resolve recorded backup destination: %w", err)
 		}
 		if client != nil {
-			return client, nil
+			return &recordedCopy{client: client, key: loc.RemoteKey.String}, nil
 		}
 	}
 	return nil, nil
@@ -578,14 +587,14 @@ func (h *TaskHandler) deleteBackupArtifacts(ctx context.Context, b generated.Dat
 		}
 	}
 	if b.RemoteKey.Valid {
-		client, err := h.clientForRecordedDatabaseBackup(ctx, b.ID)
+		copy, err := h.clientForRecordedDatabaseBackup(ctx, b.ID)
 		if err != nil {
 			slog.Warn("prune: resolve recorded destination", "backup_id", formatUUID(b.ID), "error", err)
 		}
 		switch {
-		case client != nil:
-			if err := client.DeleteFrom(ctx, []string{b.RemoteKey.String}); err != nil {
-				slog.Warn("prune: remove remote backup", "key", b.RemoteKey.String, "error", err)
+		case copy != nil:
+			if err := copy.client.DeleteFrom(ctx, []string{copy.key}); err != nil {
+				slog.Warn("prune: remove remote backup", "key", copy.key, "error", err)
 			}
 		case del != nil:
 			if err := del(ctx, []string{b.RemoteKey.String}); err != nil {
@@ -1100,10 +1109,10 @@ func (h *TaskHandler) resolveBackupFile(ctx context.Context, backup generated.Da
 	// Prefer the destination this backup was recorded as written to. Resolving
 	// through the config instead would follow a pointer that has moved: repoint
 	// or delete the config and every prior backup aims at the wrong bucket.
-	if client, err := h.clientForRecordedDatabaseBackup(ctx, backup.ID); err != nil {
+	if copy, err := h.clientForRecordedDatabaseBackup(ctx, backup.ID); err != nil {
 		return "", noop, err
-	} else if client != nil {
-		if err := client.Download(ctx, backup.RemoteKey.String, tmp); err != nil {
+	} else if copy != nil {
+		if err := copy.client.Download(ctx, copy.key, tmp); err != nil {
 			return "", noop, err
 		}
 		return tmp, cleanup, nil

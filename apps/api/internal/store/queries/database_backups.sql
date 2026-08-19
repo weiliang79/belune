@@ -147,3 +147,6 @@ JOIN database_backups b ON b.id = l.database_backup_id
 JOIN backup_destinations d ON d.id = l.destination_id
 WHERE b.database_id = $1
 ORDER BY d.name;
+
+-- name: DeleteBackupLocation :exec
+DELETE FROM backup_locations WHERE id = $1;
