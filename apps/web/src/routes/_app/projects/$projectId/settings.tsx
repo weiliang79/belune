@@ -161,8 +161,9 @@ function ProjectSettings() {
                   <p className="text-sm font-medium">Delete Project</p>
                 </div>
                 <p className="text-muted-foreground mt-1 text-xs">
-                  Permanently deletes the project, every application in it, and
-                  stops all running containers. This cannot be undone.
+                  Permanently deletes the project and everything in it — every
+                  application and database, their containers and volumes, and
+                  every backup taken of those databases. This cannot be undone.
                 </p>
               </div>
               <Button

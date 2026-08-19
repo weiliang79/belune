@@ -25,7 +25,9 @@ interface Props {
 /**
  * Mirrors DeleteApplicationDialog — deliberately, so the two most destructive
  * actions in the product ask for the same thing in the same way. This one
- * destroys strictly more: every application in the project goes with it.
+ * destroys strictly more: every application AND database in the project goes
+ * with it, each through its own delete path — so database backups, remote
+ * copies included, go too.
  */
 export function DeleteProjectDialog({
   projectId,
@@ -56,8 +58,23 @@ export function DeleteProjectDialog({
         <AlertDialogHeader>
           <AlertDialogTitle>Delete {projectName}?</AlertDialogTitle>
           <AlertDialogDescription>
-            This will permanently delete the project, all its applications, and
-            stop all running containers. This action cannot be undone.
+            This will permanently delete the project and everything in it —
+            every application and database, their containers and volumes. This
+            action cannot be undone.
+          </AlertDialogDescription>
+          {/* Backups are called out separately because they are the one thing
+              that survives losing the server, so an operator may reasonably
+              believe they are a safety net here. Project deletion removes each
+              database through its own delete path, which erases remote copies
+              too. Static wording, not a count: an accurate number needs impact
+              aggregated across databases and volumes (see the project-deletion
+              gap), and a partial count on a confirmation dialog would be worse
+              than none. Worded so it claims nothing about what the project
+              actually contains. */}
+          <AlertDialogDescription className="text-destructive font-medium">
+            Any backups taken of its databases are destroyed as well, including
+            copies already uploaded to a remote destination. Restore from them
+            will no longer be possible.
           </AlertDialogDescription>
         </AlertDialogHeader>
 
