@@ -51,6 +51,10 @@ export function useDatabaseVolume(projectId: string, databaseId: string) {
 // useDatabaseDeletionImpact reports what a delete would destroy. Enabled only
 // while the confirmation dialog is open — the answer is only needed at the
 // moment of consent, and it is two extra queries.
+//
+// No staleTime: this gates an irreversible action, so a cached answer is worse
+// than a slightly slower dialog. A backup taken since the dialog was last
+// opened must not be destroyed on the strength of a count that predates it.
 export function useDatabaseDeletionImpact(
   projectId: string,
   databaseId: string,
@@ -58,9 +62,11 @@ export function useDatabaseDeletionImpact(
 ) {
   return useQuery({
     queryKey: queryKeys.databases.deletionImpact(projectId, databaseId),
-    queryFn: () => databasesApi.getDatabaseDeletionImpact(projectId, databaseId),
+    queryFn: () =>
+      databasesApi.getDatabaseDeletionImpact(projectId, databaseId),
     enabled,
-    staleTime: 10_000,
+    staleTime: 0,
+    gcTime: 0,
   });
 }
 

@@ -1,6 +1,16 @@
 const MONTHS = [
-  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec",
 ];
 
 const pad2 = (n: number) => String(n).padStart(2, "0");
@@ -68,4 +78,14 @@ export function formatUptime(seconds: number): string {
   if (h < 24) return `${h}h ${m % 60}m`;
   const d = Math.floor(h / 24);
   return `${d}d ${h % 24}h`;
+}
+
+const listFormatter = new Intl.ListFormat("en", {
+  style: "long",
+  type: "conjunction",
+});
+
+/** Renders names as "a", "a and b", "a, b, and c". */
+export function formatList(items: string[]): string {
+  return listFormatter.format(items);
 }

@@ -45,7 +45,7 @@ import { Label } from "@/components/ui/label";
 import { StatusPill } from "@/components/ui/status-pill";
 import { PendingChangeBadge } from "@/lib/components/pending-change-badge";
 import { DatabaseReloadBadge } from "@/lib/components/database-reload-badge";
-import { formatUptime } from "@/lib/utils/format";
+import { formatUptime, formatList } from "@/lib/utils/format";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -156,7 +156,10 @@ function ApplicationActions({
 
   const status = app.status.toLowerCase();
   const busy =
-    isTransient(status) || stop.isPending || start.isPending || restart.isPending;
+    isTransient(status) ||
+    stop.isPending ||
+    start.isPending ||
+    restart.isPending;
 
   let primary: React.ReactNode = null;
   if (busy) {
@@ -175,29 +178,24 @@ function ApplicationActions({
         >
           <SquareIcon aria-hidden="true" className="size-4" />
         </IconAction>
-        <IconAction
-          label="Restart"
-          onClick={() => restart.mutate()}
-        >
+        <IconAction label="Restart" onClick={() => restart.mutate()}>
           <RotateCcwIcon aria-hidden="true" className="size-4" />
         </IconAction>
       </>
     );
-  } else if (status === "failed" || status === "error" || status === "crashed") {
+  } else if (
+    status === "failed" ||
+    status === "error" ||
+    status === "crashed"
+  ) {
     primary = (
-      <IconAction
-        label="Restart"
-        onClick={() => restart.mutate()}
-      >
+      <IconAction label="Restart" onClick={() => restart.mutate()}>
         <RotateCcwIcon aria-hidden="true" className="size-4" />
       </IconAction>
     );
   } else {
     primary = (
-      <IconAction
-        label="Start"
-        onClick={() => start.mutate()}
-      >
+      <IconAction label="Start" onClick={() => start.mutate()}>
         <PlayIcon aria-hidden="true" className="size-4" />
       </IconAction>
     );
@@ -302,15 +300,27 @@ function DatabaseActions({
   const del = useDeleteDatabase(projectId);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState("");
-  const { data: deleteImpact } = useDatabaseDeletionImpact(
-    projectId,
-    db.id,
-    confirmOpen,
-  );
+  const {
+    data: deleteImpact,
+    isSuccess: impactKnown,
+    isError: impactFailed,
+  } = useDatabaseDeletionImpact(projectId, db.id, confirmOpen);
+
   // Backups are destroyed with the database, remote copies included. A quick
   // action may not delete them on one click — type the name, as on the detail
   // page. Without backups this stays a one-click delete.
-  const backupsAtRisk = (deleteImpact?.backup_count ?? 0) > 0;
+  //
+  // This gate fails CLOSED. "No backups" is a claim that needs an answer from
+  // the server, so until one arrives the button stays disabled, and if the
+  // query errors we assume backups exist and demand the typed name. Treating
+  // an unanswered query as "nothing to lose" would put the destructive path
+  // one click away in exactly the moments the server is unwell — and React
+  // Query stops retrying, so that state persists for as long as the dialog is
+  // open rather than resolving on its own.
+  const backupsAtRisk = impactFailed || (deleteImpact?.backup_count ?? 0) > 0;
+  const confirmSatisfied = backupsAtRisk
+    ? deleteConfirm.trim() === db.name.trim()
+    : impactKnown;
 
   const status = db.status.toLowerCase();
   const busy =
@@ -407,16 +417,22 @@ function DatabaseActions({
               This permanently deletes the database and its volume. This action
               cannot be undone.
             </AlertDialogDescription>
-            {backupsAtRisk ? (
+            {deleteImpact && deleteImpact.backup_count > 0 ? (
               <AlertDialogDescription className="text-destructive font-medium">
                 Also permanently deletes{" "}
-                {deleteImpact!.backup_count === 1
+                {deleteImpact.backup_count === 1
                   ? "1 backup"
-                  : `${deleteImpact!.backup_count} backups`}
-                {deleteImpact!.backup_destinations.length > 0
-                  ? `, including copies in ${deleteImpact!.backup_destinations.join(", ")}`
+                  : `${deleteImpact.backup_count} backups`}
+                {deleteImpact.backup_destinations.length > 0
+                  ? `, including copies in ${formatList(deleteImpact.backup_destinations)}`
                   : ""}
                 . Restore from them will no longer be possible.
+              </AlertDialogDescription>
+            ) : null}
+            {impactFailed ? (
+              <AlertDialogDescription className="text-destructive font-medium">
+                Could not check what this deletes. Any backups of this database
+                would be destroyed too, so confirm by name to continue.
               </AlertDialogDescription>
             ) : null}
           </AlertDialogHeader>
@@ -443,9 +459,7 @@ function DatabaseActions({
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
-              disabled={
-                backupsAtRisk && deleteConfirm.trim() !== db.name.trim()
-              }
+              disabled={!confirmSatisfied}
               onClick={() =>
                 toast.promise(del.mutateAsync(db.id), {
                   loading: "Deleting database…",
@@ -583,7 +597,9 @@ function EndpointCell({
 }
 
 function usageText(item: ServiceRowItem, metrics: ServiceMetrics | undefined) {
-  return metrics && RUNNING.has(item.data.status.toLowerCase()) ? metrics : null;
+  return metrics && RUNNING.has(item.data.status.toLowerCase())
+    ? metrics
+    : null;
 }
 
 /**
@@ -614,7 +630,10 @@ function buildColumns(
     {
       id: "endpoint",
       header: "Port · Domain",
-      meta: { className: "hidden md:table-cell", headerClassName: "hidden md:table-cell" },
+      meta: {
+        className: "hidden md:table-cell",
+        headerClassName: "hidden md:table-cell",
+      },
       cell: ({ row }) => (
         <EndpointCell item={row.original} metrics={metricsFor(row.original)} />
       ),

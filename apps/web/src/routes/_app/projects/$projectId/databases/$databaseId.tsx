@@ -76,7 +76,7 @@ import { StatusBadge } from "@/lib/components/status-badge";
 import { DatabaseReloadBadge } from "@/lib/components/database-reload-badge";
 import { ProvenanceNote } from "@/lib/components/provenance-note";
 import { CopyButton } from "@/lib/components/copy-button";
-import { formatBytes } from "@/lib/utils/format";
+import { formatBytes, formatList } from "@/lib/utils/format";
 import { cn } from "@/lib/utils";
 import type { Database, DatabaseBackupConfig } from "@/lib/types";
 
@@ -206,7 +206,6 @@ function DatabaseDetailPage() {
 
   return (
     <div className="space-y-6">
-
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex min-w-0 items-center gap-3">
           <div className="bg-elev text-text-muted grid size-11 shrink-0 place-items-center rounded-xl">
@@ -225,7 +224,10 @@ function DatabaseDetailPage() {
             </div>
             <p className="text-text-faint flex flex-wrap items-center gap-x-2 truncate text-sm">
               <span className="truncate font-mono">{db.slug}</span>
-              <ProvenanceNote sourceKind={db.source_kind} sourceRef={db.source_ref} />
+              <ProvenanceNote
+                sourceKind={db.source_kind}
+                sourceRef={db.source_ref}
+              />
             </p>
           </div>
         </div>
@@ -264,7 +266,11 @@ function DatabaseDetailPage() {
             <AlertDialog>
               <AlertDialogTrigger
                 render={
-                  <Button size="sm" variant="outline" disabled={stop.isPending} />
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={stop.isPending}
+                  />
                 }
               >
                 <SquareIcon aria-hidden="true" />
@@ -562,7 +568,10 @@ function DatabaseDetailPage() {
                       ) : null}
                     </AlertDialogHeader>
                     <div className="space-y-2">
-                      <Label htmlFor="delete-db-confirm" className="font-normal">
+                      <Label
+                        htmlFor="delete-db-confirm"
+                        className="font-normal"
+                      >
                         Type{" "}
                         <span className="text-foreground font-medium">
                           {db.name}
@@ -603,16 +612,6 @@ function DatabaseDetailPage() {
       )}
     </div>
   );
-}
-
-const listFormatter = new Intl.ListFormat("en", {
-  style: "long",
-  type: "conjunction",
-});
-
-/** Renders destination names as "a", "a and b", "a, b, and c". */
-function formatList(items: string[]): string {
-  return listFormatter.format(items);
 }
 
 /** Per-engine localhost connection string reached through the SSH tunnel. */
@@ -744,14 +743,15 @@ function ExternalAccessCard({ db }: { db: Database }) {
             <p className="text-text-faint text-xs">
               Add <span className="font-mono">-i /path/to/key</span> if the key
               is not in your SSH agent or config. The tunnel lasts as long as
-              the command runs — press{" "}
-              <span className="font-mono">Ctrl-C</span> to close it.
+              the command runs — press <span className="font-mono">Ctrl-C</span>{" "}
+              to close it.
               {hostsUnset ? (
                 <>
                   {" "}
-                  Set <span className="font-mono">SERVER_SSH_HOST</span> and{" "}
-                  <span className="font-mono">SERVER_SSH_USER</span> to fill the
-                  placeholders in automatically.
+                  Set <span className="font-mono">
+                    SERVER_SSH_HOST
+                  </span> and <span className="font-mono">SERVER_SSH_USER</span>{" "}
+                  to fill the placeholders in automatically.
                 </>
               ) : null}
             </p>
@@ -1122,7 +1122,9 @@ function BackupsTab({ db }: { db: Database }) {
               >
                 <div className="min-w-0 space-y-1">
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className="font-medium">{destName(c.destination_id)}</span>
+                    <span className="font-medium">
+                      {destName(c.destination_id)}
+                    </span>
                     {c.enabled ? (
                       <Badge variant="outline">Active</Badge>
                     ) : (
@@ -1186,7 +1188,9 @@ function BackupsTab({ db }: { db: Database }) {
       <BackupConfigRunsSheet
         db={db}
         config={selected}
-        destinationName={selected ? destName(selected.destination_id) : undefined}
+        destinationName={
+          selected ? destName(selected.destination_id) : undefined
+        }
         open={sheetOpen}
         onOpenChange={setSheetOpen}
       />

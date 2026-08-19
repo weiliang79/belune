@@ -1179,8 +1179,14 @@ func (h *Handler) DeleteDatabase(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Read the impact before the delete cascades it away, so the audit entry can
-	// answer "where did the backups go" afterwards.
+	// answer "where did the backups go" afterwards. A failure here must not block
+	// the delete, but it must not vanish either — without this log the audit
+	// record is simply missing its detail with nothing explaining why.
 	impact, impactErr := h.dbService.DeletionImpact(r.Context(), dbUUID)
+	if impactErr != nil {
+		slog.Warn("could not determine deletion impact; audit detail will be incomplete",
+			"database_id", databaseID, "error", impactErr)
+	}
 
 	if err := h.dbService.Delete(r.Context(), dbUUID); err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to delete database")
@@ -1190,7 +1196,9 @@ func (h *Handler) DeleteDatabase(w http.ResponseWriter, r *http.Request) {
 	details := map[string]any{}
 	if impactErr == nil {
 		details["backups_destroyed"] = impact.BackupCount
-		details["backup_destinations"] = impact.Destinations
+		// Same normalisation the API response uses: a consumer reading both
+		// should not have to handle null here and [] there.
+		details["backup_destinations"] = orEmpty(impact.Destinations)
 	}
 	h.audit(r, "delete_database", "database", databaseID, details)
 
@@ -1216,14 +1224,19 @@ func (h *Handler) GetDatabaseDeletionImpact(w http.ResponseWriter, r *http.Reque
 		writeError(w, http.StatusInternalServerError, "failed to determine deletion impact")
 		return
 	}
-	destinations := impact.Destinations
-	if destinations == nil {
-		destinations = []string{}
-	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"backup_count":        impact.BackupCount,
-		"backup_destinations": destinations,
+		"backup_destinations": orEmpty(impact.Destinations),
 	})
+}
+
+// orEmpty renders a nil slice as [] rather than null, so clients never have to
+// branch on which one they got.
+func orEmpty(s []string) []string {
+	if s == nil {
+		return []string{}
+	}
+	return s
 }
 
 func buildConnectionString(db generated.Database, creds map[string]string) string {
