@@ -48,6 +48,22 @@ export function useDatabaseVolume(projectId: string, databaseId: string) {
   });
 }
 
+// useDatabaseDeletionImpact reports what a delete would destroy. Enabled only
+// while the confirmation dialog is open — the answer is only needed at the
+// moment of consent, and it is two extra queries.
+export function useDatabaseDeletionImpact(
+  projectId: string,
+  databaseId: string,
+  enabled: boolean,
+) {
+  return useQuery({
+    queryKey: queryKeys.databases.deletionImpact(projectId, databaseId),
+    queryFn: () => databasesApi.getDatabaseDeletionImpact(projectId, databaseId),
+    enabled,
+    staleTime: 10_000,
+  });
+}
+
 export function useCreateDatabase(projectId: string) {
   const qc = useQueryClient();
   return useMutation({

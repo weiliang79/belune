@@ -1178,14 +1178,52 @@ func (h *Handler) DeleteDatabase(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Read the impact before the delete cascades it away, so the audit entry can
+	// answer "where did the backups go" afterwards.
+	impact, impactErr := h.dbService.DeletionImpact(r.Context(), dbUUID)
+
 	if err := h.dbService.Delete(r.Context(), dbUUID); err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to delete database")
 		return
 	}
 
-	h.audit(r, "delete_database", "database", databaseID, nil)
+	details := map[string]any{}
+	if impactErr == nil {
+		details["backups_destroyed"] = impact.BackupCount
+		details["backup_destinations"] = impact.Destinations
+	}
+	h.audit(r, "delete_database", "database", databaseID, details)
 
 	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
+}
+
+// GetDatabaseDeletionImpact reports what deleting this database would destroy
+// beyond the database itself, so the confirmation dialog can state the real
+// consequence instead of implying only the container and its data are at stake.
+func (h *Handler) GetDatabaseDeletionImpact(w http.ResponseWriter, r *http.Request) {
+	databaseID := chi.URLParam(r, "databaseId")
+	var dbUUID pgtype.UUID
+	if err := dbUUID.Scan(databaseID); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid database id")
+		return
+	}
+	if !h.canAccessDatabase(r, dbUUID) {
+		writeError(w, http.StatusForbidden, "access denied")
+		return
+	}
+	impact, err := h.dbService.DeletionImpact(r.Context(), dbUUID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to determine deletion impact")
+		return
+	}
+	destinations := impact.Destinations
+	if destinations == nil {
+		destinations = []string{}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"backup_count":        impact.BackupCount,
+		"backup_destinations": destinations,
+	})
 }
 
 func buildConnectionString(db generated.Database, creds map[string]string) string {

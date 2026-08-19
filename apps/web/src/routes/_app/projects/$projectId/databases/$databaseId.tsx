@@ -36,6 +36,7 @@ import { toast } from "sonner";
 import {
   useDatabase,
   useDatabaseVolume,
+  useDatabaseDeletionImpact,
   useDeleteDatabase,
   useUpdateDatabase,
   useSetDatabaseExternalAccess,
@@ -129,6 +130,11 @@ function DatabaseDetailPage() {
   const deleteDb = useDeleteDatabase(projectId);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState("");
+  const { data: deleteImpact } = useDatabaseDeletionImpact(
+    projectId,
+    databaseId,
+    deleteOpen,
+  );
   const stop = useStopDatabase(projectId, databaseId);
   const start = useStartDatabase(projectId, databaseId);
   const restart = useRestartDatabase(projectId, databaseId);
@@ -519,8 +525,8 @@ function DatabaseDetailPage() {
                     <p className="text-sm font-medium">Delete this database</p>
                   </div>
                   <p className="text-muted-foreground mt-1 text-xs">
-                    This will permanently delete the database, its data, and
-                    container.
+                    This will permanently delete the database, its data, its
+                    container, and every backup taken of it.
                   </p>
                 </div>
                 <AlertDialog
@@ -542,6 +548,18 @@ function DatabaseDetailPage() {
                         This will permanently delete &quot;{db.name}&quot; and
                         all its data. This action cannot be undone.
                       </AlertDialogDescription>
+                      {deleteImpact && deleteImpact.backup_count > 0 ? (
+                        <AlertDialogDescription className="text-destructive font-medium">
+                          Also permanently deletes{" "}
+                          {deleteImpact.backup_count === 1
+                            ? "1 backup"
+                            : `${deleteImpact.backup_count} backups`}
+                          {deleteImpact.backup_destinations.length > 0
+                            ? `, including copies in ${formatList(deleteImpact.backup_destinations)}`
+                            : ""}
+                          . Restore from them will no longer be possible.
+                        </AlertDialogDescription>
+                      ) : null}
                     </AlertDialogHeader>
                     <div className="space-y-2">
                       <Label htmlFor="delete-db-confirm" className="font-normal">
@@ -585,6 +603,16 @@ function DatabaseDetailPage() {
       )}
     </div>
   );
+}
+
+const listFormatter = new Intl.ListFormat("en", {
+  style: "long",
+  type: "conjunction",
+});
+
+/** Renders destination names as "a", "a and b", "a, b, and c". */
+function formatList(items: string[]): string {
+  return listFormatter.format(items);
 }
 
 /** Per-engine localhost connection string reached through the SSH tunnel. */

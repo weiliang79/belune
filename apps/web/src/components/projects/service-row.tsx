@@ -31,6 +31,7 @@ import {
   useStopApplication,
 } from "@/lib/hooks/use-applications";
 import {
+  useDatabaseDeletionImpact,
   useDeleteDatabase,
   useRestartDatabase,
   useStartDatabase,
@@ -39,6 +40,8 @@ import {
 import { queryKeys } from "@/lib/hooks/query-keys";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { StatusPill } from "@/components/ui/status-pill";
 import { PendingChangeBadge } from "@/lib/components/pending-change-badge";
 import { DatabaseReloadBadge } from "@/lib/components/database-reload-badge";
@@ -298,6 +301,16 @@ function DatabaseActions({
   const restart = useRestartDatabase(projectId, db.id);
   const del = useDeleteDatabase(projectId);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState("");
+  const { data: deleteImpact } = useDatabaseDeletionImpact(
+    projectId,
+    db.id,
+    confirmOpen,
+  );
+  // Backups are destroyed with the database, remote copies included. A quick
+  // action may not delete them on one click — type the name, as on the detail
+  // page. Without backups this stays a one-click delete.
+  const backupsAtRisk = (deleteImpact?.backup_count ?? 0) > 0;
 
   const status = db.status.toLowerCase();
   const busy =
@@ -380,7 +393,13 @@ function DatabaseActions({
         </DropdownMenuContent>
       </DropdownMenu>
 
-      <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+      <AlertDialog
+        open={confirmOpen}
+        onOpenChange={(o) => {
+          setConfirmOpen(o);
+          if (o) setDeleteConfirm("");
+        }}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete {db.name}?</AlertDialogTitle>
@@ -388,10 +407,45 @@ function DatabaseActions({
               This permanently deletes the database and its volume. This action
               cannot be undone.
             </AlertDialogDescription>
+            {backupsAtRisk ? (
+              <AlertDialogDescription className="text-destructive font-medium">
+                Also permanently deletes{" "}
+                {deleteImpact!.backup_count === 1
+                  ? "1 backup"
+                  : `${deleteImpact!.backup_count} backups`}
+                {deleteImpact!.backup_destinations.length > 0
+                  ? `, including copies in ${deleteImpact!.backup_destinations.join(", ")}`
+                  : ""}
+                . Restore from them will no longer be possible.
+              </AlertDialogDescription>
+            ) : null}
           </AlertDialogHeader>
+          {backupsAtRisk ? (
+            <div className="space-y-2">
+              <Label
+                htmlFor={`delete-db-confirm-${db.id}`}
+                className="font-normal"
+              >
+                Type{" "}
+                <span className="text-foreground font-medium">{db.name}</span>{" "}
+                to confirm.
+              </Label>
+              <Input
+                id={`delete-db-confirm-${db.id}`}
+                value={deleteConfirm}
+                onChange={(e) => setDeleteConfirm(e.target.value)}
+                autoComplete="off"
+                autoCorrect="off"
+                spellCheck={false}
+              />
+            </div>
+          ) : null}
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
+              disabled={
+                backupsAtRisk && deleteConfirm.trim() !== db.name.trim()
+              }
               onClick={() =>
                 toast.promise(del.mutateAsync(db.id), {
                   loading: "Deleting database…",

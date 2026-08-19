@@ -116,6 +116,30 @@ func (s *DatabaseService) cleanupBackups(ctx context.Context, dbID pgtype.UUID) 
 	}
 }
 
+// DeletionImpact is what deleting a database takes with it beyond the database
+// itself. database_backups.database_id is ON DELETE CASCADE and cleanupBackups
+// erases the remote objects too, so this is destruction the operator has to be
+// shown before they consent to it — not a warning after the fact.
+type DeletionImpact struct {
+	BackupCount  int64
+	Destinations []string
+}
+
+// DeletionImpact counts the backups a delete would destroy and names the
+// destinations holding copies. Destination names come from recorded locations,
+// so backups written before 000061 are counted but their bucket is not named.
+func (s *DatabaseService) DeletionImpact(ctx context.Context, dbID pgtype.UUID) (DeletionImpact, error) {
+	count, err := s.queries.CountDatabaseBackupsWithArtifacts(ctx, dbID)
+	if err != nil {
+		return DeletionImpact{}, fmt.Errorf("count database backups: %w", err)
+	}
+	names, err := s.queries.ListDestinationNamesForDatabaseBackups(ctx, dbID)
+	if err != nil {
+		return DeletionImpact{}, fmt.Errorf("list backup destinations: %w", err)
+	}
+	return DeletionImpact{BackupCount: count, Destinations: names}, nil
+}
+
 // Delete stops and removes the database container and its volume, then deletes the DB record.
 func (s *DatabaseService) Delete(ctx context.Context, dbID pgtype.UUID) error {
 	db, err := s.queries.GetDatabase(ctx, dbID)

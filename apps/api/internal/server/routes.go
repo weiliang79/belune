@@ -401,6 +401,7 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService,
 			r.Get("/api/projects/{projectId}/databases/{databaseId}/logs/history", h.ListDatabaseLogs)
 			r.Get("/api/projects/{projectId}/databases/{databaseId}/logs/sessions", h.ListDatabaseLogSessions)
 			r.Post("/api/projects/{projectId}/databases/{databaseId}/upgrade", h.UpgradeDatabase)
+			r.Get("/api/projects/{projectId}/databases/{databaseId}/deletion-impact", h.GetDatabaseDeletionImpact)
 			r.Delete("/api/projects/{projectId}/databases/{databaseId}", h.DeleteDatabase)
 
 			// Scheduled backup configurations per database
