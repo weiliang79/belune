@@ -40,6 +40,23 @@ A **Prefix** sets an optional base path inside the bucket, and each backup sched
 
 Editing an existing destination leaves credentials untouched unless you type new ones.
 
+## What Can Be Changed Later
+
+Once a destination holds backups, Belune records that those backups live *there* — that record is what a restore follows, so the settings deciding where its objects live are locked:
+
+- **Locked:** type, endpoint, and bucket. On AWS S3 the region is locked too, because with no explicit endpoint the region *is* the address (`s3.<region>.amazonaws.com`).
+- **Still editable:** the name, the prefix, and the credentials. Rotating an access key is expected and moves nothing.
+
+Attempting a locked change is refused, and the message says how many backups are stored there.
+
+<Callout type="info">
+To start writing to different storage, add a second destination and point your schedules at it. The old one keeps serving restores of what it already holds.
+</Callout>
+
+<Callout type="warn">
+This protects backups taken from now on. A destination that was already repointed before upgrading cannot be un-done — Belune has no record of where those objects went, and restoring them will fail even though the backup list shows them as successful.
+</Callout>
+
 ## Test a Destination
 
 **Test connection** is available both on a saved destination and while filling in the form. It verifies the bucket is actually reachable with the given credentials — worth doing before wiring a destination into a schedule.
@@ -58,4 +75,9 @@ The project's Backups tab also shows **Recent Backup Activity**, a combined feed
 
 ## Removing a Destination
 
-A destination can't be deleted while any backup schedule still references it, so remove or repoint those schedules first. This prevents a schedule from silently pointing at nothing the next time it runs.
+A destination can't be deleted while either of these is true:
+
+- **A backup schedule still references it** — remove or repoint those schedules first, so none silently points at nothing the next time it runs.
+- **Backups are still stored in it** — delete those backups, or the databases and volumes they belong to, first.
+
+The second is stricter than it looks, and deliberately so: deleting the destination row would leave every backup recorded there unable to say where it lives, turning a restorable backup into one that only looks restorable. The refusal message tells you which case you're in, and how many backups are involved.

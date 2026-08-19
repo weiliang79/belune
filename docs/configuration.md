@@ -62,6 +62,17 @@ break the level detection the log viewer relies on.
 | `ENCRYPTION_KEYS` | *empty* | Multi-key form for rotation, `v1:hex,v2:hex` |
 | `ENCRYPTION_KEY_CURRENT` | *empty* | Which key ID new writes use |
 
+Installs created before v0.1.0 carry an explicit `JWT_EXPIRY_HOURS=24` in their
+`.env`. The installer no longer writes it, but `update.sh` deliberately does not
+edit an existing `.env` — silently rewriting an operator's config during an
+upgrade is a worse precedent than the setting itself. The API warns at startup
+and on the Projects page whenever the value exceeds 12 hours; remove the line and
+restart to take the 1-hour default. Sessions are unaffected, since refresh tokens
+already cover them.
+
+Access tokens cannot be revoked, which is what makes a long lifetime costly: a
+stolen one stays usable for the whole window.
+
 Rotation is a procedure, not a setting — see
 [runbooks/key-rotation.md](runbooks/key-rotation.md).
 
