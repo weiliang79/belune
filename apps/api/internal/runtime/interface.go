@@ -69,6 +69,16 @@ type ContainerInfo struct {
 	CreatedAt time.Time
 }
 
+// LabelHelper marks the throwaway containers RunHelper starts to do work inside
+// a volume (backup, restore, snapshot). They carry the managed-by label like
+// everything else, so they appear in ListContainers — but they are unnamed, so
+// no database row can ever vouch for one and the orphan sweep would treat a
+// healthy in-flight restore as garbage. It lives here rather than in the Docker
+// package because the writer and the reader are on opposite sides of this
+// interface, and a constant either of them can rename privately is a constant
+// that will drift.
+const LabelHelper = "belune-helper"
+
 // ContainerResourceStats holds resource usage stats for a single container.
 type ContainerResourceStats struct {
 	CPUPercent     float64

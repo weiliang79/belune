@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/weiliang79/belune/internal/naming"
+	"github.com/weiliang79/belune/internal/runtime"
 	"github.com/weiliang79/belune/internal/store/generated"
 )
 
@@ -219,6 +220,16 @@ func (h *TaskHandler) cleanupStalePreviews(ctx context.Context) {
 	}
 }
 
+// isRunningHelper reports whether this is a helper container that has not
+// finished. Docker's state is "running" while it works and "created" in the
+// instant before it starts; anything else means it is over.
+func isRunningHelper(ctr runtime.ContainerInfo) bool {
+	if ctr.Labels[runtime.LabelHelper] != "true" {
+		return false
+	}
+	return ctr.Status == "running" || ctr.Status == "created"
+}
+
 // cleanupOrphanContainers removes managed containers that belong to nothing in
 // the database. Only containers older than 1 hour are considered to avoid
 // racing with in-progress deployments.
@@ -270,18 +281,27 @@ func (h *TaskHandler) cleanupOrphanContainers(ctx context.Context) {
 		known[db.Slug] = true
 	}
 
-	// Nothing known while managed containers exist means the allowlist failed to
-	// build, not that every container is garbage. Reaping the lot is never a
-	// normal outcome, so refuse rather than act on an answer this suspicious.
-	if len(known) == 0 && len(containers) > 0 {
-		slog.Warn("orphan cleanup: refusing to run with an empty allowlist",
-			"managed_containers", len(containers))
-		return
-	}
+	// There is deliberately no "refuse when the allowlist is empty" guard here.
+	// It reads like cheap insurance, but both lookups above return on error, so
+	// an empty allowlist is not a failed build — it is an install with no
+	// applications and no databases, where every managed container genuinely is
+	// leftover. Refusing there stalls reaping forever on exactly the install
+	// that needs it, and catches nothing that can actually happen. What protects
+	// the dangerous case is above and below: every lookup returns rather than
+	// continuing, and helpers still at work are spared by label.
 
 	removed := 0
 	for _, ctr := range containers {
 		if known[ctr.Name] {
+			continue
+		}
+		// A helper doing work inside a volume can never be in the allowlist: it
+		// has no name of its own and no row to vouch for it. While it is running
+		// it is not an orphan, it is a job in progress — and a volume restore
+		// killed between `find -delete` and `tar x` leaves the volume empty. One
+		// that has exited is genuinely leftover and falls through to be reaped.
+		if isRunningHelper(ctr) {
+			slog.Debug("orphan cleanup: skipping a helper still at work", "container", ctr.Name)
 			continue
 		}
 		if time.Since(ctr.CreatedAt) < orphanAge {
