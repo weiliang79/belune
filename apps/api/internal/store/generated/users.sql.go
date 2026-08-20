@@ -36,7 +36,7 @@ func (q *Queries) CountUsers(ctx context.Context) (int64, error) {
 const createUser = `-- name: CreateUser :one
 INSERT INTO users (email, password_hash, role, username, first_name, last_name)
 VALUES ($1, $2, $3, $4, $5, $6)
-RETURNING id, email, password_hash, role, username, first_name, last_name, created_at
+RETURNING id, email, password_hash, role, username, first_name, last_name, created_at, totp_secret_encrypted, totp_enabled_at, totp_last_step
 `
 
 type CreateUserParams struct {
@@ -67,6 +67,9 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 		&i.FirstName,
 		&i.LastName,
 		&i.CreatedAt,
+		&i.TotpSecretEncrypted,
+		&i.TotpEnabledAt,
+		&i.TotpLastStep,
 	)
 	return i, err
 }
@@ -81,7 +84,7 @@ func (q *Queries) DeleteUser(ctx context.Context, id pgtype.UUID) error {
 }
 
 const getUserByEmail = `-- name: GetUserByEmail :one
-SELECT id, email, password_hash, role, username, first_name, last_name, created_at FROM users WHERE email = $1
+SELECT id, email, password_hash, role, username, first_name, last_name, created_at, totp_secret_encrypted, totp_enabled_at, totp_last_step FROM users WHERE email = $1
 `
 
 func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error) {
@@ -96,12 +99,15 @@ func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error
 		&i.FirstName,
 		&i.LastName,
 		&i.CreatedAt,
+		&i.TotpSecretEncrypted,
+		&i.TotpEnabledAt,
+		&i.TotpLastStep,
 	)
 	return i, err
 }
 
 const getUserByID = `-- name: GetUserByID :one
-SELECT id, email, password_hash, role, username, first_name, last_name, created_at FROM users WHERE id = $1
+SELECT id, email, password_hash, role, username, first_name, last_name, created_at, totp_secret_encrypted, totp_enabled_at, totp_last_step FROM users WHERE id = $1
 `
 
 func (q *Queries) GetUserByID(ctx context.Context, id pgtype.UUID) (User, error) {
@@ -116,12 +122,15 @@ func (q *Queries) GetUserByID(ctx context.Context, id pgtype.UUID) (User, error)
 		&i.FirstName,
 		&i.LastName,
 		&i.CreatedAt,
+		&i.TotpSecretEncrypted,
+		&i.TotpEnabledAt,
+		&i.TotpLastStep,
 	)
 	return i, err
 }
 
 const getUserByUsername = `-- name: GetUserByUsername :one
-SELECT id, email, password_hash, role, username, first_name, last_name, created_at FROM users WHERE username = $1
+SELECT id, email, password_hash, role, username, first_name, last_name, created_at, totp_secret_encrypted, totp_enabled_at, totp_last_step FROM users WHERE username = $1
 `
 
 func (q *Queries) GetUserByUsername(ctx context.Context, username string) (User, error) {
@@ -136,6 +145,9 @@ func (q *Queries) GetUserByUsername(ctx context.Context, username string) (User,
 		&i.FirstName,
 		&i.LastName,
 		&i.CreatedAt,
+		&i.TotpSecretEncrypted,
+		&i.TotpEnabledAt,
+		&i.TotpLastStep,
 	)
 	return i, err
 }

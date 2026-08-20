@@ -520,12 +520,23 @@ type Setting struct {
 }
 
 type User struct {
-	ID           pgtype.UUID        `json:"id"`
-	Email        string             `json:"email"`
-	PasswordHash string             `json:"password_hash"`
-	Role         string             `json:"role"`
-	Username     string             `json:"username"`
-	FirstName    string             `json:"first_name"`
-	LastName     string             `json:"last_name"`
-	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+	ID                  pgtype.UUID        `json:"id"`
+	Email               string             `json:"email"`
+	PasswordHash        string             `json:"password_hash"`
+	Role                string             `json:"role"`
+	Username            string             `json:"username"`
+	FirstName           string             `json:"first_name"`
+	LastName            string             `json:"last_name"`
+	CreatedAt           pgtype.Timestamptz `json:"created_at"`
+	TotpSecretEncrypted []byte             `json:"totp_secret_encrypted"`
+	TotpEnabledAt       pgtype.Timestamptz `json:"totp_enabled_at"`
+	TotpLastStep        pgtype.Int8        `json:"totp_last_step"`
+}
+
+type UserRecoveryCode struct {
+	ID        pgtype.UUID        `json:"id"`
+	UserID    pgtype.UUID        `json:"user_id"`
+	CodeHash  []byte             `json:"code_hash"`
+	UsedAt    pgtype.Timestamptz `json:"used_at"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
 }

@@ -25,6 +25,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useSettings, useUpdateSettings } from "@/lib/hooks/use-settings";
+import { useTotpStatus } from "@/lib/hooks/use-totp";
 import { createHostShellSession } from "@/lib/api/maintenance";
 import { Switch } from "@/components/ui/switch";
 
@@ -35,6 +36,8 @@ function wsUrl(sessionId: string) {
 
 export function HostShellBlock() {
   const { data: settings } = useSettings();
+  const { data: totpStatus } = useTotpStatus();
+  const totpEnabled = totpStatus?.enabled ?? false;
   const updateSettings = useUpdateSettings();
   const enabled =
     settings?.find((s) => s.key === "host_shell_enabled")?.value === "true";
@@ -42,6 +45,7 @@ export function HostShellBlock() {
   const [confirmEnable, setConfirmEnable] = useState(false);
   const [passwordOpen, setPasswordOpen] = useState(false);
   const [password, setPassword] = useState("");
+  const [code, setCode] = useState("");
   const [opening, setOpening] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
 
@@ -67,10 +71,11 @@ export function HostShellBlock() {
     if (!password) return;
     setOpening(true);
     try {
-      const res = await createHostShellSession(password);
+      const res = await createHostShellSession(password, code);
       setSessionId(res.session_id);
       setPasswordOpen(false);
       setPassword("");
+      setCode("");
     } catch (err) {
       toast.error(
         err instanceof Error ? err.message : "Failed to open host shell",
@@ -145,14 +150,17 @@ export function HostShellBlock() {
           if (!open) {
             setPasswordOpen(false);
             setPassword("");
+            setCode("");
           }
         }}
       >
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Confirm your password</DialogTitle>
+            <DialogTitle>Confirm it's you</DialogTitle>
             <DialogDescription>
               Re-enter your Belune password to open a root shell on the host.
+              {totpEnabled &&
+                " Your authenticator code is required too — this is the most privileged action here."}
             </DialogDescription>
           </DialogHeader>
           <Input
@@ -165,17 +173,33 @@ export function HostShellBlock() {
               if (e.key === "Enter") openShell();
             }}
           />
+          {totpEnabled && (
+            <Input
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              value={code}
+              placeholder="Verification code"
+              onChange={(e) => setCode(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") openShell();
+              }}
+            />
+          )}
           <DialogFooter>
             <Button
               variant="outline"
               onClick={() => {
                 setPasswordOpen(false);
                 setPassword("");
+                setCode("");
               }}
             >
               Cancel
             </Button>
-            <Button onClick={openShell} disabled={opening || !password}>
+            <Button
+              onClick={openShell}
+              disabled={opening || !password || (totpEnabled && !code)}
+            >
               {opening ? "Opening…" : "Open shell"}
             </Button>
           </DialogFooter>

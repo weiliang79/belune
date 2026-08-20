@@ -11,6 +11,7 @@ import (
 	"github.com/weiliang79/belune/internal/pkg/crypto"
 	"github.com/weiliang79/belune/internal/server"
 	"github.com/weiliang79/belune/internal/store/generated"
+	"github.com/weiliang79/belune/internal/terminal"
 )
 
 // TestEncryptionKey is a valid 32-byte hex-encoded key for AES-256 in tests.
@@ -64,7 +65,11 @@ func SetupTestServer(pool *pgxpool.Pool, queries *generated.Queries) *TestEnv {
 	}
 	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
 
-	srv := server.New(cfg, pool, queries, mockAsynq, mockInspector, mockRuntime, mockProxy, mockReconciler, rdb, nil, nil, nil, nil, nil)
+	// A real terminal manager (over the mock runtime) so the host-shell route
+	// reaches its auth gates instead of short-circuiting on a nil manager.
+	termMgr := terminal.NewManager(2)
+
+	srv := server.New(cfg, pool, queries, mockAsynq, mockInspector, mockRuntime, mockProxy, mockReconciler, rdb, nil, nil, nil, termMgr, nil)
 	ts := httptest.NewServer(srv.Router())
 
 	return &TestEnv{

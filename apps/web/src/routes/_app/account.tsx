@@ -31,6 +31,7 @@ import {
   SegmentedControlItem,
 } from "@/components/ui/segmented-control";
 import { formatDateTimeShort } from "@/lib/utils/format";
+import { TwoFactorCard } from "@/components/account/two-factor-card";
 
 export const Route = createFileRoute("/_app/account")({
   component: SettingsPage,
@@ -81,6 +82,7 @@ function SettingsPage() {
 
       <ProfileCard />
       <ChangePasswordCard />
+      <TwoFactorCard />
       <AlertPreferencesCard />
       <AppearanceCard />
     </div>

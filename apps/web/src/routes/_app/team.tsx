@@ -31,6 +31,7 @@ import {
   UsersIcon,
   MailIcon,
 } from "lucide-react";
+import { useResetUserTotp } from "@/lib/hooks/use-totp";
 import { initialsOf } from "@/lib/utils/initials";
 import { formatDateTime } from "@/lib/utils/format";
 import type { User, Invitation } from "@/lib/types";
@@ -82,6 +83,10 @@ function TeamSettingsPage() {
   const [search, setSearch] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
   const [inviteOpen, setInviteOpen] = useState(false);
+  const [resetTotpUser, setResetTotpUser] = useState<{
+    id: string;
+    email: string;
+  } | null>(null);
   const [resetPasswordUser, setResetPasswordUser] = useState<{
     id: string;
     email: string;
@@ -173,6 +178,15 @@ function TeamSettingsPage() {
                 }
               >
                 Reset Password
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() =>
+                  setResetTotpUser({ id: user.id, email: user.email })
+                }
+              >
+                Reset 2FA
               </Button>
               <Button
                 variant="destructive"
@@ -271,6 +285,15 @@ function TeamSettingsPage() {
         />
       )}
 
+      {resetTotpUser && (
+        <ResetTotpDialog
+          userId={resetTotpUser.id}
+          email={resetTotpUser.email}
+          open={true}
+          onOpenChange={(open) => !open && setResetTotpUser(null)}
+        />
+      )}
+
       {deleteUser && (
         <DeleteUserDialog
           userId={deleteUser.id}
@@ -280,6 +303,54 @@ function TeamSettingsPage() {
         />
       )}
     </div>
+  );
+}
+
+/** The last resort when someone loses their authenticator and their recovery
+ *  codes. An admin can already reset passwords, so this adds no power — but it
+ *  removes a factor from someone else's account, so it is audited and it ends
+ *  their sessions. */
+function ResetTotpDialog({
+  userId,
+  email,
+  open,
+  onOpenChange,
+}: {
+  userId: string;
+  email: string;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const resetTotp = useResetUserTotp();
+
+  return (
+    <AlertDialog open={open} onOpenChange={onOpenChange}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Reset two-factor for {email}?</AlertDialogTitle>
+          <AlertDialogDescription>
+            Their authenticator and recovery codes stop working, and they sign
+            in with their password alone until they set it up again. Every
+            session they have open ends. This is recorded in the audit log.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogAction
+            onClick={() => {
+              toast.promise(resetTotp.mutateAsync(userId), {
+                loading: "Resetting...",
+                success: `Two-factor reset for ${email}`,
+                error: (err) => err.message,
+              });
+              onOpenChange(false);
+            }}
+          >
+            Reset two-factor
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   );
 }
 

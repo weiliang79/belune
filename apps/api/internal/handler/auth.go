@@ -55,7 +55,7 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result, err := h.auth.Login(ctx, req.Email, req.Password, userAgent, clientIP)
+	outcome, err := h.auth.Login(ctx, req.Email, req.Password, userAgent, clientIP)
 	if err != nil {
 		if errors.Is(err, service.ErrInvalidCredentials) {
 			h.recordLoginFailure(ctx, emailKey, clientIP)
@@ -68,12 +68,35 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusUnauthorized, "invalid email or password")
 			return
 		}
+		if errors.Is(err, service.ErrSecondFactorUnavailable) {
+			slog.Error("auth: second factor enrolled but unavailable", "error", err)
+			writeError(w, http.StatusServiceUnavailable, "two-factor verification is unavailable")
+			return
+		}
 		slog.Error("auth: login failed", "error", err)
 		writeError(w, http.StatusInternalServerError, "login failed")
 		return
 	}
 
-	// Successful login → clear any stale lockout state for this email.
+	// The password was right but is not enough on its own: hand back the
+	// challenge and no session at all. The client completes it at
+	// POST /api/auth/login/verify.
+	//
+	// The lockout counter is deliberately NOT cleared here. Clearing it on a
+	// correct password would let anyone holding the password reset the counter
+	// between code guesses by re-posting this endpoint, so the account-level
+	// lockout could never fire against second-factor guessing at all.
+	// CompleteLoginChallenge clears it once the login actually completes.
+	if outcome.Challenge != nil {
+		if h.auditSvc != nil {
+			uid := uuidToString(outcome.UserID)
+			h.auditSvc.Log(uid, clientIP, "login_challenge_issued", "user", uid, nil)
+		}
+		writeJSON(w, http.StatusOK, outcome.Challenge)
+		return
+	}
+
+	// A completed login → clear any stale lockout state for this email.
 	h.auth.ResetLoginAttempts(ctx, emailKey)
 
 	csrfToken, err := middleware.GenerateCSRFToken()
@@ -82,14 +105,14 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.setSessionCookies(w, r, result, csrfToken)
+	h.setSessionCookies(w, r, outcome.Session, csrfToken)
 
 	if h.auditSvc != nil {
-		uid := uuidToString(result.User.ID)
+		uid := uuidToString(outcome.Session.User.ID)
 		h.auditSvc.Log(uid, clientIP, "login", "user", uid, nil)
 	}
 
-	writeJSON(w, http.StatusOK, result)
+	writeJSON(w, http.StatusOK, outcome.Session)
 }
 
 // Refresh exchanges the refresh-token cookie for a fresh access + refresh

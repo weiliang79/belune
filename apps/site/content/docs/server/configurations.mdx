@@ -260,4 +260,4 @@ Postgres and Belune itself are intentionally not restartable from here; to resta
 
 <Screenshot name="server-host-shell" alt="The Host Shell terminal, opened from the Maintenance card." />
 
-Off by default. Turning it on requires an explicit confirmation, since it's a genuine increase in blast radius: once enabled, **Open Host Shell** re-asks for your password (step-up auth) and then opens a full root shell on the host machine.
+Off by default. Turning it on requires an explicit confirmation, since it's a genuine increase in blast radius: once enabled, **Open Host Shell** re-asks for your password (step-up auth) and then opens a full root shell on the host machine. If your account has [two-factor authentication](/docs/server/users#two-factor-authentication) enabled, it asks for a code as well.

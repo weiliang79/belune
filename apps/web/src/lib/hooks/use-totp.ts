@@ -1,0 +1,72 @@
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  disableTotp,
+  enrollTotp,
+  getTotpStatus,
+  regenerateRecoveryCodes,
+  resetUserTotp,
+  verifyTotpEnrollment,
+} from "@/lib/api/totp";
+import { queryKeys } from "./query-keys";
+
+export function useTotpStatus() {
+  return useQuery({
+    queryKey: queryKeys.auth.totp,
+    queryFn: getTotpStatus,
+  });
+}
+
+export function useEnrollTotp() {
+  return useMutation({
+    mutationFn: (password: string) => enrollTotp(password),
+  });
+}
+
+export function useVerifyTotpEnrollment() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (code: string) => verifyTotpEnrollment(code),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.auth.totp });
+    },
+  });
+}
+
+export function useDisableTotp() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      password,
+      code,
+      method,
+    }: {
+      password: string;
+      code: string;
+      method?: string;
+    }) => disableTotp(password, code, method),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.auth.totp });
+    },
+  });
+}
+
+export function useRegenerateRecoveryCodes() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ password, code }: { password: string; code: string }) =>
+      regenerateRecoveryCodes(password, code),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.auth.totp });
+    },
+  });
+}
+
+export function useResetUserTotp() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (userId: string) => resetUserTotp(userId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.users.all });
+    },
+  });
+}

@@ -12,6 +12,7 @@ import (
 
 	"github.com/weiliang79/belune/internal/pkg/metrics"
 	"github.com/weiliang79/belune/internal/server/middleware"
+	"github.com/weiliang79/belune/internal/service"
 )
 
 // settingHostShellEnabled gates the in-UI host shell. Absent or anything other
@@ -41,8 +42,14 @@ func (h *Handler) CreateHostShellSession(w http.ResponseWriter, r *http.Request)
 
 	// Gate 2: step-up re-auth. Even with a valid admin session, opening host root
 	// requires re-proving the password — this defends against a hijacked session.
+	// A password alone does not defend against a stolen one, so anyone with a
+	// second factor enrolled must present that too. It follows from having the
+	// factor rather than from a setting: this is the highest-privilege action in
+	// the product, and the user already said this account needs two.
 	var req struct {
 		Password string `json:"password"`
+		Method   string `json:"method"`
+		Code     string `json:"code"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Password == "" {
 		writeError(w, http.StatusBadRequest, "password required")
@@ -62,6 +69,20 @@ func (h *Handler) CreateHostShellSession(w http.ResponseWriter, r *http.Request)
 	if bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.Password)) != nil {
 		writeError(w, http.StatusUnauthorized, "incorrect password")
 		return
+	}
+	if service.HasMFA(user) {
+		if strings.TrimSpace(req.Code) == "" {
+			writeError(w, http.StatusUnauthorized, "verification code required")
+			return
+		}
+		method := req.Method
+		if method == "" {
+			method = service.MethodTOTP
+		}
+		if err := h.totpSvc.Verify(r.Context(), user, method, req.Code); err != nil {
+			writeSecondFactorError(w, err)
+			return
+		}
 	}
 
 	// Run the helper from Belune's own image — it ships nsenter (Debian base) and

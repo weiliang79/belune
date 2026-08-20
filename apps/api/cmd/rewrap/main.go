@@ -13,11 +13,14 @@ package main
 
 import (
 	"context"
+	"encoding/base64"
+	"errors"
 	"flag"
 	"fmt"
 	"log/slog"
 	"os"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/weiliang79/belune/internal/config"
@@ -32,13 +35,39 @@ type target struct {
 	colEnc string
 }
 
+// Every *_encrypted column in the schema belongs here. A column that is missing
+// is not skipped loudly — rewrap reports success, the operator retires the old
+// KEK, and the secret becomes undecryptable. TestTargetsCoverEveryEncryptedColumn
+// fails when the schema and this list disagree, so add the column here in the
+// same change that creates it.
 var targets = []target{
-	{"git_credentials", "id", "token_encrypted"},
+	// git_credentials is deliberately absent: migration 000020 folded it into
+	// applications.git_credentials_encrypted and dropped the table, so the
+	// target that used to be here made every run fail its select and exit 1.
 	{"applications", "id", "git_credentials_encrypted"},
+	{"applications", "id", "webhook_secret_encrypted"},
+	{"applications", "id", "deploy_hook_token_encrypted"},
+	{"application_file_mounts", "id", "content_encrypted"},
 	{"databases", "id", "credentials_encrypted"},
 	{"domains", "id", "ssl_credentials_encrypted"},
+	{"certificates", "id", "cert_pem_encrypted"},
+	{"certificates", "id", "key_pem_encrypted"},
 	{"env_vars", "id", "value_encrypted"},
 	{"project_env_vars", "id", "value_encrypted"},
+	{"git_provider_configs", "id", "secret_encrypted"},
+	{"git_integrations", "id", "config_encrypted"},
+	{"backup_destinations", "id", "credentials_encrypted"},
+	{"notification_channels", "id", "config_encrypted"},
+	{"users", "id", "totp_secret_encrypted"},
+}
+
+// settingTargets are secrets that live in a settings ROW rather than a column,
+// base64-encoded because the value column is text. They are invisible to the
+// schema — nothing about `settings` says one row holds ciphertext — which is
+// exactly why they need naming here, and why the coverage test checks the rows
+// present in the database as well as the columns.
+var settingTargets = []string{
+	"smtp_password_encrypted",
 }
 
 func main() {
@@ -68,6 +97,23 @@ func main() {
 	)
 
 	var total, rewrapped, skipped, failed int
+	for _, key := range settingTargets {
+		r, err := rewrapSetting(ctx, pool, cfg.Keyring, key, *dryRun)
+		if err != nil {
+			slog.Error("setting failed", "key", key, "error", err)
+			failed++
+			continue
+		}
+		total += r.scanned
+		rewrapped += r.rewrapped
+		skipped += r.skipped
+		slog.Info("setting done",
+			"key", key,
+			"scanned", r.scanned,
+			"rewrapped", r.rewrapped,
+			"skipped_current", r.skipped,
+		)
+	}
 	for _, t := range targets {
 		r, err := rewrapTable(ctx, pool, cfg.Keyring, t, *dryRun)
 		if err != nil {
@@ -99,6 +145,50 @@ func main() {
 
 type result struct {
 	scanned, rewrapped, skipped int
+}
+
+// rewrapSetting re-seals a base64-encoded secret stored in a settings row. A
+// missing row is not an error: the setting simply has never been configured.
+func rewrapSetting(ctx context.Context, pool *pgxpool.Pool, kr *crypto.Keyring, key string, dryRun bool) (result, error) {
+	var res result
+
+	var encoded string
+	err := pool.QueryRow(ctx, "SELECT value FROM settings WHERE key = $1", key).Scan(&encoded)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return res, nil
+		}
+		return res, fmt.Errorf("select: %w", err)
+	}
+	if encoded == "" {
+		return res, nil
+	}
+	res.scanned++
+
+	raw, err := base64.StdEncoding.DecodeString(encoded)
+	if err != nil {
+		return res, fmt.Errorf("decode: %w", err)
+	}
+	if kr.IsCurrent(raw) {
+		res.skipped++
+		return res, nil
+	}
+
+	upgraded, err := kr.Rewrap(raw)
+	if err != nil {
+		return res, fmt.Errorf("rewrap: %w", err)
+	}
+	res.rewrapped++
+	if dryRun {
+		return res, nil
+	}
+	if _, err := pool.Exec(ctx,
+		"UPDATE settings SET value = $2 WHERE key = $1",
+		key, base64.StdEncoding.EncodeToString(upgraded),
+	); err != nil {
+		return res, fmt.Errorf("update: %w", err)
+	}
+	return res, nil
 }
 
 func rewrapTable(ctx context.Context, pool *pgxpool.Pool, kr *crypto.Keyring, t target, dryRun bool) (result, error) {

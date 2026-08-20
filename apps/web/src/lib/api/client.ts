@@ -7,6 +7,11 @@ const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 // single retry after a successful refresh.
 const NO_REFRESH_PATHS = new Set([
   "/auth/login",
+  // The second login step belongs here for a sharper reason than the others: a
+  // 401 means the code was wrong, and retrying after a refresh re-submits that
+  // same wrong code — burning two of the five attempts and two lockout strikes
+  // for one typo.
+  "/auth/login/verify",
   "/auth/refresh",
   "/auth/logout",
   "/auth/setup",
@@ -37,7 +42,9 @@ async function attemptRefresh(): Promise<boolean> {
   if (refreshInFlight) return refreshInFlight;
   refreshInFlight = (async () => {
     try {
-      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+      };
       const csrf = readCsrfToken();
       if (csrf) headers["X-CSRF-Token"] = csrf;
       const res = await fetch(`${BASE_URL}/auth/refresh`, {
@@ -55,8 +62,14 @@ async function attemptRefresh(): Promise<boolean> {
   return refreshInFlight;
 }
 
-async function doFetch(method: string, path: string, body?: unknown): Promise<Response> {
-  const headers: Record<string, string> = { "Content-Type": "application/json" };
+async function doFetch(
+  method: string,
+  path: string,
+  body?: unknown,
+): Promise<Response> {
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
 
   if (!SAFE_METHODS.has(method)) {
     const csrf = readCsrfToken();
@@ -76,7 +89,11 @@ async function doFetch(method: string, path: string, body?: unknown): Promise<Re
   return fetch(`${BASE_URL}${path}`, options);
 }
 
-async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
+async function request<T>(
+  method: string,
+  path: string,
+  body?: unknown,
+): Promise<T> {
   let res = await doFetch(method, path, body);
 
   // 401 → try to refresh once, then retry. Refresh and other auth endpoints

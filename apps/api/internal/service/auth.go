@@ -47,6 +47,10 @@ type AuthService struct {
 	accessExpiry  time.Duration
 	refreshExpiry time.Duration
 	rdb           *redis.Client
+	// secondFactor is nil until wired (see SetSecondFactorVerifier). A user with
+	// a factor enrolled cannot log in while it is nil — the login fails rather
+	// than skipping the factor.
+	secondFactor SecondFactorVerifier
 }
 
 // AuthClaims are the JWT body. UserID + Email + Role are duplicated from the
@@ -141,7 +145,7 @@ func (s *AuthService) Register(ctx context.Context, email, password, role, usern
 // exists. RecordFailedLogin must be called by the handler on credential
 // failure; we deliberately do not couple Login to that path here so the
 // service stays composable.
-func (s *AuthService) Login(ctx context.Context, email, password, userAgent, ip string) (*LoginResult, error) {
+func (s *AuthService) Login(ctx context.Context, email, password, userAgent, ip string) (*LoginOutcome, error) {
 	user, err := s.queries.GetUserByEmail(ctx, email)
 	if err != nil {
 		return nil, ErrInvalidCredentials
@@ -151,7 +155,22 @@ func (s *AuthService) Login(ctx context.Context, email, password, userAgent, ip 
 		return nil, ErrInvalidCredentials
 	}
 
-	return s.issueSession(ctx, user, userAgent, ip)
+	// A correct password is where this stops for anyone with a second factor.
+	// The challenge carries no session, so there is nothing for a client to
+	// mishandle into a bypass.
+	if HasMFA(user) {
+		challenge, err := s.issueChallenge(ctx, user)
+		if err != nil {
+			return nil, err
+		}
+		return &LoginOutcome{Challenge: challenge, UserID: user.ID}, nil
+	}
+
+	session, err := s.issueSession(ctx, user, userAgent, ip)
+	if err != nil {
+		return nil, err
+	}
+	return &LoginOutcome{Session: session, UserID: user.ID}, nil
 }
 
 // Refresh exchanges a refresh token (plaintext, as stored in the cookie)
@@ -182,6 +201,13 @@ func (s *AuthService) Refresh(ctx context.Context, refreshTokenPlain, userAgent,
 		return nil, ErrInvalidToken
 	}
 
+	return s.issueSession(ctx, user, userAgent, ip)
+}
+
+// IssueSessionFor mints a session for a user who has already been authenticated
+// by some other means — a completed second-factor challenge, or a re-auth that
+// deliberately revoked every session and needs to hand this one back.
+func (s *AuthService) IssueSessionFor(ctx context.Context, user generated.User, userAgent, ip string) (*LoginResult, error) {
 	return s.issueSession(ctx, user, userAgent, ip)
 }
 
