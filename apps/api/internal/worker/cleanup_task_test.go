@@ -100,25 +100,35 @@ func TestCleanupOrphanContainers_SparesAHelperStillAtWork(t *testing.T) {
 		"a helper that has exited is leftover and should still be reclaimed")
 }
 
-// TestCleanupOrphanContainers_RefusesAnEmptyAllowlist guards the failure shape
-// rather than one missing table. Every container being unrecognised means the
-// allowlist did not build, not that the host is full of garbage — and acting on
-// that answer is what makes this function dangerous.
-func TestCleanupOrphanContainers_RefusesAnEmptyAllowlist(t *testing.T) {
+// TestCleanupOrphanContainers_ReapsOnAnEmptyInstall pins the case an earlier
+// guard got wrong. Both lookups return on error, so an empty allowlist means
+// there are no applications and no databases — not that the allowlist failed to
+// build. Every managed container is then genuinely leftover, and refusing to
+// act would leave it holding its name and ports for good.
+func TestCleanupOrphanContainers_ReapsOnAnEmptyInstall(t *testing.T) {
 	rt := &testutil.MockContainerRuntime{}
 	h := newTestHandler(rt, nil)
 
-	// Worker tests share a database, so the allowlist is only genuinely empty
+	// Worker tests share a database, so the install is only genuinely empty
 	// once the rows other tests seeded are gone.
 	require.NoError(t, testutil.TruncateAll(context.Background(), testPool))
 
-	// No applications and no databases, but managed containers exist.
 	rt.ListContainers_ = []runtime.ContainerInfo{
-		{Name: "some-managed-container", CreatedAt: time.Now().Add(-24 * time.Hour)},
+		{Name: "left-behind-by-a-deleted-app", CreatedAt: time.Now().Add(-24 * time.Hour)},
+		// A helper still at work is spared even here, which is what makes
+		// reaping on an empty install safe.
+		{
+			Name:      "busy_helper",
+			CreatedAt: time.Now().Add(-24 * time.Hour),
+			Status:    "running",
+			Labels:    map[string]string{"managed-by": "belune", runtime.LabelHelper: "true"},
+		},
 	}
 
 	runFullCleanup(t, h)
 
-	assert.Empty(t, rt.RemoveCalls,
-		"an empty allowlist must stop the sweep, not authorise removing everything")
+	assert.Contains(t, rt.RemoveCalls, "left-behind-by-a-deleted-app",
+		"an install with nothing in it must still reclaim its leftovers")
+	assert.NotContains(t, rt.RemoveCalls, "busy_helper",
+		"a helper still at work is spared by label, not by the allowlist")
 }

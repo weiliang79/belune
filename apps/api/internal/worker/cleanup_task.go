@@ -281,14 +281,14 @@ func (h *TaskHandler) cleanupOrphanContainers(ctx context.Context) {
 		known[db.Slug] = true
 	}
 
-	// Nothing known while managed containers exist means the allowlist failed to
-	// build, not that every container is garbage. Reaping the lot is never a
-	// normal outcome, so refuse rather than act on an answer this suspicious.
-	if len(known) == 0 && len(containers) > 0 {
-		slog.Warn("orphan cleanup: refusing to run with an empty allowlist",
-			"managed_containers", len(containers))
-		return
-	}
+	// There is deliberately no "refuse when the allowlist is empty" guard here.
+	// It reads like cheap insurance, but both lookups above return on error, so
+	// an empty allowlist is not a failed build — it is an install with no
+	// applications and no databases, where every managed container genuinely is
+	// leftover. Refusing there stalls reaping forever on exactly the install
+	// that needs it, and catches nothing that can actually happen. What protects
+	// the dangerous case is above and below: every lookup returns rather than
+	// continuing, and helpers still at work are spared by label.
 
 	removed := 0
 	for _, ctr := range containers {
