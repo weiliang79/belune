@@ -52,6 +52,9 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService,
 				r.Use(httprate.LimitByIP(5, time.Minute))
 			}
 			r.With(withTimeout(handlerTimeout)).Post("/api/auth/login", h.Login)
+			// The second step of the same login, and just as guessable: six
+			// digits deserve the login rate limit, not a laxer one.
+			r.With(withTimeout(handlerTimeout)).Post("/api/auth/login/verify", h.VerifyLogin)
 		})
 
 		r.With(withTimeout(handlerTimeout)).Get("/api/auth/setup", h.Setup)
@@ -150,6 +153,14 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService,
 			r.Put("/api/auth/password", h.ChangeOwnPassword)
 			r.Put("/api/auth/profile", h.UpdateProfile)
 
+			// Two-factor: managing your own factor always needs a live session,
+			// and the mutations re-check the password on top.
+			r.Get("/api/auth/totp", h.GetTOTPStatus)
+			r.Post("/api/auth/totp/enroll", h.EnrollTOTP)
+			r.Post("/api/auth/totp/enroll/verify", h.VerifyTOTPEnrollment)
+			r.Post("/api/auth/totp/disable", h.DisableTOTP)
+			r.Post("/api/auth/totp/recovery-codes", h.RegenerateRecoveryCodes)
+
 			r.Get("/api/account/alert-preferences", h.GetAlertPreferences)
 			r.Put("/api/account/alert-preferences", h.UpdateAlertPreferences)
 
@@ -168,6 +179,7 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService,
 					r.Post("/api/users", h.CreateUser)
 					r.Post("/api/users/invite", h.InviteUser)
 					r.Put("/api/users/{userId}/password", h.ResetUserPassword)
+					r.Post("/api/users/{userId}/totp/reset", h.AdminResetUserTOTP)
 				})
 				r.Get("/api/users/invitations", h.ListPendingInvitations)
 				r.Delete("/api/users/invitations/{invitationId}", h.RevokeInvitation)

@@ -89,6 +89,10 @@ type Handler struct {
 	// serverSvc is built here (like certSvc) from queries alone. It resolves the
 	// local server row that new projects are placed on.
 	serverSvc *service.ServerService
+	// totpSvc owns the second factor. It is also handed to the auth service as
+	// its verifier, so the login challenge and these endpoints agree on what
+	// counts as a valid factor.
+	totpSvc *service.TOTPService
 }
 
 func New(
@@ -142,6 +146,7 @@ func New(
 		notifyChannelSvc:  service.NewNotificationChannelService(queries, cfg.Keyring, service.NewNotifyRegistry(emailSvc), cfg.PublicBaseURL),
 		smtpSettingsSvc:   service.NewSMTPSettingsService(queries, cfg.Keyring, cfg),
 		serverSvc:         service.NewServerService(queries),
+		totpSvc:           service.NewTOTPService(queries, cfg.Keyring),
 	}
 }
 

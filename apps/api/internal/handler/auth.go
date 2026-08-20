@@ -55,7 +55,7 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result, err := h.auth.Login(ctx, req.Email, req.Password, userAgent, clientIP)
+	outcome, err := h.auth.Login(ctx, req.Email, req.Password, userAgent, clientIP)
 	if err != nil {
 		if errors.Is(err, service.ErrInvalidCredentials) {
 			h.recordLoginFailure(ctx, emailKey, clientIP)
@@ -68,6 +68,11 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusUnauthorized, "invalid email or password")
 			return
 		}
+		if errors.Is(err, service.ErrSecondFactorUnavailable) {
+			slog.Error("auth: second factor enrolled but unavailable", "error", err)
+			writeError(w, http.StatusServiceUnavailable, "two-factor verification is unavailable")
+			return
+		}
 		slog.Error("auth: login failed", "error", err)
 		writeError(w, http.StatusInternalServerError, "login failed")
 		return
@@ -76,20 +81,31 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	// Successful login → clear any stale lockout state for this email.
 	h.auth.ResetLoginAttempts(ctx, emailKey)
 
+	// The password was right but is not enough on its own: hand back the
+	// challenge and no session at all. The client completes it at
+	// POST /api/auth/login/verify.
+	if outcome.Challenge != nil {
+		if h.auditSvc != nil {
+			h.auditSvc.Log("", clientIP, "login_challenge_issued", "user", emailKey, nil)
+		}
+		writeJSON(w, http.StatusOK, outcome.Challenge)
+		return
+	}
+
 	csrfToken, err := middleware.GenerateCSRFToken()
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to generate csrf token")
 		return
 	}
 
-	h.setSessionCookies(w, r, result, csrfToken)
+	h.setSessionCookies(w, r, outcome.Session, csrfToken)
 
 	if h.auditSvc != nil {
-		uid := uuidToString(result.User.ID)
+		uid := uuidToString(outcome.Session.User.ID)
 		h.auditSvc.Log(uid, clientIP, "login", "user", uid, nil)
 	}
 
-	writeJSON(w, http.StatusOK, result)
+	writeJSON(w, http.StatusOK, outcome.Session)
 }
 
 // Refresh exchanges the refresh-token cookie for a fresh access + refresh
