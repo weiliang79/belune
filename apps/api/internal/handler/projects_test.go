@@ -1,10 +1,13 @@
 package handler_test
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"testing"
 
+	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -20,12 +23,58 @@ func TestCreateProject(t *testing.T) {
 	assert.Equal(t, "My Project", project["name"])
 	assert.Equal(t, "my-project", project["slug"])
 
+	// Placed on the local server: the caller never picks, and server_id is
+	// NOT NULL, so a project created without one would not have been stored.
+	var placedOn pgtype.UUID
+	require.NoError(t, placedOn.Scan(project["server_id"].(string)))
+	assert.Equal(t, testutil.LocalServerID(t, context.Background(), env.Queries), placedOn)
+
 	// Missing fields
 	resp := env.DoRequest(t, "POST", "/api/projects", map[string]string{
 		"name": "No Slug",
 	}, testutil.AuthHeader(token))
 	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
 	resp.Body.Close()
+}
+
+// TestServerPlacement_RestrictBlocksServersNotOwners pins both halves of the
+// ON DELETE RESTRICT on projects.server_id. v0.1.3 shipped a RESTRICT that
+// looked right and fired during an unrelated cascade, so this one was reasoned
+// about rather than copied: it must stop a server being deleted out from under
+// the projects placed on it, and must never stand in the way of deleting the
+// user who owns them.
+func TestServerPlacement_RestrictBlocksServersNotOwners(t *testing.T) {
+	resetDB(t)
+	ctx := context.Background()
+	adminToken := env.SetupAdmin(t, "admin@test.com", "password123")
+
+	resp := env.DoRequest(t, "POST", "/api/users", map[string]string{
+		"email":    "owner@test.com",
+		"password": "password123",
+		"role":     "member",
+	}, testutil.AuthHeader(adminToken))
+	require.Equal(t, http.StatusCreated, resp.StatusCode)
+	ownerID := extractID(testutil.ReadJSON(t, resp)["id"])
+
+	ownerToken := env.LoginAs(t, "owner@test.com", "password123")
+	env.CreateProject(t, ownerToken, "Owned", "owned")
+
+	// The SQLSTATE, not just any error: ON DELETE SET NULL would also fail here,
+	// with a not-null violation instead of a foreign-key one, and this test would
+	// stay green while the guarantee it exists for was gone.
+	_, err := env.Pool.Exec(ctx, "DELETE FROM servers WHERE is_local")
+	var pgErr *pgconn.PgError
+	require.ErrorAs(t, err, &pgErr, "a server still holding projects must not be deletable")
+	require.Equal(t, "23503", pgErr.Code, "expected a foreign-key violation, got %s", pgErr.Message)
+
+	resp = env.DoRequest(t, "DELETE", "/api/users/"+ownerID, nil, testutil.AuthHeader(adminToken))
+	require.Equal(t, http.StatusOK, resp.StatusCode,
+		"deleting a user who owns projects must not trip the server FK")
+	resp.Body.Close()
+
+	server, err := env.Queries.GetLocalServer(ctx)
+	require.NoError(t, err, "the local server row outlives the projects placed on it")
+	assert.True(t, server.IsLocal)
 }
 
 func TestGetProject(t *testing.T) {
