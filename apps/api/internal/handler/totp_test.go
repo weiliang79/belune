@@ -407,6 +407,35 @@ func TestTOTPLogin_PasswordDoesNotResetTheLockout(t *testing.T) {
 	resp.Body.Close()
 }
 
+// TestTOTPDisable_AcceptsARecoveryCode: the authenticator being gone is the
+// most likely reason someone is turning the factor off, so the way out must not
+// require the very thing they lost. Recovery codes are a method on the same
+// endpoint rather than a separate flow.
+func TestTOTPDisable_AcceptsARecoveryCode(t *testing.T) {
+	resetDB(t)
+	token := env.SetupAdmin(t, "admin@test.com", "password123")
+	_, codes, token := enableTOTP(t, token)
+
+	resp := env.DoRequest(t, "POST", "/api/auth/totp/disable", map[string]string{
+		"password": "password123", "method": "recovery_code", "code": codes[0],
+	}, testutil.AuthHeader(token))
+	require.Equal(t, http.StatusOK, resp.StatusCode,
+		"a recovery code must be able to turn the factor off")
+	resp.Body.Close()
+
+	user, err := env.Queries.GetUserByEmail(context.Background(), "admin@test.com")
+	require.NoError(t, err)
+	assert.False(t, user.TotpEnabledAt.Valid)
+	assert.Empty(t, user.TotpSecretEncrypted)
+
+	// And the password alone gets them back in.
+	resp = env.DoRequest(t, "POST", "/api/auth/login", map[string]string{
+		"email": "admin@test.com", "password": "password123",
+	}, nil)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	assert.NotEmpty(t, testutil.ReadJSON(t, resp)["token"])
+}
+
 // TestAdminResetTOTP_ClearsTheFactorAndIsAudited covers the lost-device case
 // recovery codes did not: an admin can already do nearly anything, so the
 // control here is visibility, not permission.

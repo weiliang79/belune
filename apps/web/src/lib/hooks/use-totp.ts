@@ -35,8 +35,15 @@ export function useVerifyTotpEnrollment() {
 export function useDisableTotp() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ password, code }: { password: string; code: string }) =>
-      disableTotp(password, code),
+    mutationFn: ({
+      password,
+      code,
+      method,
+    }: {
+      password: string;
+      code: string;
+      method?: string;
+    }) => disableTotp(password, code, method),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.auth.totp });
     },

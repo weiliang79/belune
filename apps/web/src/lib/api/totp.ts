@@ -36,10 +36,13 @@ export function verifyTotpEnrollment(code: string) {
   );
 }
 
-export function disableTotp(password: string, code: string) {
+/** A recovery code is accepted here as well as an authenticator code — losing
+ *  the authenticator is the most likely reason to be turning this off. */
+export function disableTotp(password: string, code: string, method = "totp") {
   return api.post<{ status: string } & RotatedSession>("/auth/totp/disable", {
     password,
     code,
+    method,
   });
 }
 

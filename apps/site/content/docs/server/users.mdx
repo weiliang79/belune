@@ -34,6 +34,8 @@ Turning it on hands you ten recovery codes. They are shown once, each works once
 
 With 2FA on, signing in takes a second step: the password alone returns no session, only a short-lived challenge to answer with a code or a recovery code. Enabling or disabling the factor signs out every other session — people usually turn it on precisely because they suspect one of those sessions isn't theirs.
 
+Turning it off asks for your password and a code — and a recovery code is accepted there too, since a lost authenticator is the usual reason to be turning it off. If both are gone, an admin can reset it for you.
+
 It also covers the [host shell](/docs/server/configurations#host-shell), which asks for a code alongside your password. Nothing to configure: the step-up re-auth there defends against a hijacked session, and a second factor is what defends against a stolen password.
 
 Belune does not currently let an admin require 2FA for everyone; each user opts in.

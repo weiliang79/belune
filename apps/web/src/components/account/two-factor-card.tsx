@@ -262,23 +262,39 @@ function DisableDialog() {
   const [open, setOpen] = useState(false);
   const [password, setPassword] = useState("");
   const [code, setCode] = useState("");
+  // Losing the authenticator is the most likely reason to be turning this off,
+  // so the way out cannot itself require the authenticator. The endpoint takes
+  // the method as data, exactly as the login step does.
+  const [useRecoveryCode, setUseRecoveryCode] = useState(false);
   const disable = useDisableTotp();
+
+  const close = () => {
+    setOpen(false);
+    setPassword("");
+    setCode("");
+    setUseRecoveryCode(false);
+  };
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      await disable.mutateAsync({ password, code });
+      await disable.mutateAsync({
+        password,
+        code,
+        method: useRecoveryCode ? "recovery_code" : "totp",
+      });
       toast.success("Two-factor authentication is off");
-      setOpen(false);
-      setPassword("");
-      setCode("");
+      close();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not turn it off");
     }
   };
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog
+      open={open}
+      onOpenChange={(next) => (next ? setOpen(true) : close())}
+    >
       <Button variant="outline" onClick={() => setOpen(true)}>
         Turn off
       </Button>
@@ -288,7 +304,8 @@ function DisableDialog() {
             <DialogTitle>Turn off two-factor authentication</DialogTitle>
             <DialogDescription>
               Your password and a current code — turning this off is the first
-              thing someone using your session would try.
+              thing someone using your session would try. A recovery code works
+              here too, for when the authenticator is the thing you lost.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
@@ -302,23 +319,33 @@ function DisableDialog() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="disable-code">Verification code</Label>
+              <Label htmlFor="disable-code">
+                {useRecoveryCode ? "Recovery code" : "Verification code"}
+              </Label>
               <Input
                 id="disable-code"
-                inputMode="numeric"
+                inputMode={useRecoveryCode ? "text" : "numeric"}
                 autoComplete="one-time-code"
-                placeholder="123456"
+                placeholder={useRecoveryCode ? "XXXX-XXXX-XXXX-XXXX" : "123456"}
                 value={code}
                 onChange={(e) => setCode(e.target.value)}
               />
+              <button
+                type="button"
+                onClick={() => {
+                  setUseRecoveryCode((s) => !s);
+                  setCode("");
+                }}
+                className="text-muted-foreground hover:text-foreground text-sm underline-offset-4 hover:underline"
+              >
+                {useRecoveryCode
+                  ? "Use your authenticator app instead"
+                  : "Lost your device? Use a recovery code"}
+              </button>
             </div>
           </div>
           <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setOpen(false)}
-            >
+            <Button type="button" variant="outline" onClick={close}>
               Cancel
             </Button>
             <Button
