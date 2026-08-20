@@ -48,7 +48,7 @@ func New(cfg *config.Config, db *pgxpool.Pool, queries *generated.Queries, asynq
 	// The login challenge verifies factors through this, so it must be wired
 	// before any request is served: a user with TOTP enabled cannot log in
 	// while it is missing, which is the correct way for this to fail.
-	auth.SetSecondFactorVerifier(service.NewTOTPService(queries, cfg.Keyring))
+	auth.SetSecondFactorVerifier(service.NewTOTPService(db, queries, cfg.Keyring))
 
 	s := &Server{
 		cfg:     cfg,

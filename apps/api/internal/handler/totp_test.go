@@ -33,7 +33,8 @@ func codeAt(t *testing.T, secret string, at time.Time) string {
 // factor — that is the distinction several of these tests are about.
 func enrollTOTP(t *testing.T, token string) string {
 	t.Helper()
-	resp := env.DoRequest(t, "POST", "/api/auth/totp/enroll", nil, testutil.AuthHeader(token))
+	resp := env.DoRequest(t, "POST", "/api/auth/totp/enroll",
+		map[string]string{"password": "password123"}, testutil.AuthHeader(token))
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 	body := testutil.ReadJSON(t, resp)
 	secret, ok := body["secret"].(string)
@@ -276,10 +277,10 @@ func TestRecoveryCode_WorksOnceAndOnlyOnce(t *testing.T) {
 func TestRecoveryCodes_RegenerateKillsThePreviousSet(t *testing.T) {
 	resetDB(t)
 	token := env.SetupAdmin(t, "admin@test.com", "password123")
-	_, old, token := enableTOTP(t, token)
+	secret, old, token := enableTOTP(t, token)
 
 	resp := env.DoRequest(t, "POST", "/api/auth/totp/recovery-codes", map[string]string{
-		"password": "password123",
+		"password": "password123", "code": loginCode(t, secret),
 	}, testutil.AuthHeader(token))
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 	fresh := testutil.ReadJSON(t, resp)["recovery_codes"].([]any)
@@ -334,6 +335,78 @@ func TestTOTPDisable_NeedsPasswordAndCode(t *testing.T) {
 	assert.Zero(t, remaining)
 }
 
+// TestTOTPEnrollment_NeedsThePassword: a hijacked session must not be able to
+// enrol its own authenticator. Enabling revokes every other session and hands
+// this one the only factor, so a session-only enrolment locks the real owner
+// out of their account with no recovery codes and no way back.
+func TestTOTPEnrollment_NeedsThePassword(t *testing.T) {
+	resetDB(t)
+	token := env.SetupAdmin(t, "admin@test.com", "password123")
+
+	resp := env.DoRequest(t, "POST", "/api/auth/totp/enroll", map[string]string{}, testutil.AuthHeader(token))
+	assert.Equal(t, http.StatusUnauthorized, resp.StatusCode,
+		"a session alone must not start enrolment")
+	resp.Body.Close()
+
+	resp = env.DoRequest(t, "POST", "/api/auth/totp/enroll",
+		map[string]string{"password": "not-the-password"}, testutil.AuthHeader(token))
+	assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
+	resp.Body.Close()
+
+	// And nothing was stored: a rejected attempt must not leave a secret behind.
+	user, err := env.Queries.GetUserByEmail(context.Background(), "admin@test.com")
+	require.NoError(t, err)
+	assert.Empty(t, user.TotpSecretEncrypted)
+}
+
+// TestRegenerateRecoveryCodes_NeedsACode: ten fresh recovery codes are ten
+// working second factors, so this endpoint hands out the very thing the factor
+// exists to withhold. It has to cost what disabling costs.
+func TestRegenerateRecoveryCodes_NeedsACode(t *testing.T) {
+	resetDB(t)
+	token := env.SetupAdmin(t, "admin@test.com", "password123")
+	secret, _, token := enableTOTP(t, token)
+
+	resp := env.DoRequest(t, "POST", "/api/auth/totp/recovery-codes",
+		map[string]string{"password": "password123"}, testutil.AuthHeader(token))
+	assert.Equal(t, http.StatusUnauthorized, resp.StatusCode,
+		"the password alone must not mint new recovery codes")
+	resp.Body.Close()
+
+	resp = env.DoRequest(t, "POST", "/api/auth/totp/recovery-codes",
+		map[string]string{"password": "password123", "code": loginCode(t, secret)},
+		testutil.AuthHeader(token))
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	resp.Body.Close()
+}
+
+// TestTOTPLogin_PasswordDoesNotResetTheLockout: the account lockout is the only
+// bound that survives an attacker who already has the password. Clearing it on a
+// correct password let them reset the counter between code guesses simply by
+// posting the first step again.
+func TestTOTPLogin_PasswordDoesNotResetTheLockout(t *testing.T) {
+	resetDB(t)
+	token := env.SetupAdmin(t, "admin@test.com", "password123")
+	enableTOTP(t, token)
+
+	// Five wrong codes, each time starting a brand new challenge with a correct
+	// password — the attack the reset made free.
+	for range 5 {
+		challenge, _ := loginChallenge(t, "admin@test.com", "password123")
+		resp := env.DoRequest(t, "POST", "/api/auth/login/verify", map[string]string{
+			"challenge": challenge, "method": "totp", "code": "000000",
+		}, nil)
+		resp.Body.Close()
+	}
+
+	resp := env.DoRequest(t, "POST", "/api/auth/login", map[string]string{
+		"email": "admin@test.com", "password": "password123",
+	}, nil)
+	assert.Equal(t, http.StatusTooManyRequests, resp.StatusCode,
+		"repeated second-factor failures must lock the account, not be forgiven by the password")
+	resp.Body.Close()
+}
+
 // TestAdminResetTOTP_ClearsTheFactorAndIsAudited covers the lost-device case
 // recovery codes did not: an admin can already do nearly anything, so the
 // control here is visibility, not permission.
@@ -379,6 +452,13 @@ func TestHostShell_RequiresTheSecondFactorWhenEnrolled(t *testing.T) {
 		Key: "host_shell_enabled", Value: "true",
 	})
 	require.NoError(t, err)
+	// TruncateAll does not clear settings, so leaving this on would silently
+	// arm the host shell for every test that runs after this one.
+	t.Cleanup(func() {
+		_, _ = env.Queries.UpsertSetting(context.Background(), generated.UpsertSettingParams{
+			Key: "host_shell_enabled", Value: "false",
+		})
+	})
 
 	resp := env.DoRequest(t, "POST", "/api/maintenance/host-shell", map[string]string{
 		"password": "password123",

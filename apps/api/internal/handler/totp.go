@@ -54,11 +54,16 @@ func (h *Handler) rotateSessionAfterFactorChange(w http.ResponseWriter, r *http.
 	session, err := h.auth.IssueSessionFor(r.Context(), user, r.UserAgent(), middleware.ClientIP(r))
 	if err != nil {
 		slog.Error("totp: failed to re-issue session after a factor change", "error", err)
+		// The revocation already happened, so this browser's token is dead
+		// whatever we do. Clearing the cookies makes that visible immediately
+		// rather than leaving the user to discover it on their next request.
+		h.clearSessionCookies(w, r)
 		return nil
 	}
 	csrfToken, err := middleware.GenerateCSRFToken()
 	if err != nil {
 		slog.Error("totp: failed to generate csrf token after a factor change", "error", err)
+		h.clearSessionCookies(w, r)
 		return nil
 	}
 	h.setSessionCookies(w, r, session, csrfToken)
@@ -92,9 +97,24 @@ func (h *Handler) GetTOTPStatus(w http.ResponseWriter, r *http.Request) {
 // anything: a secret the user's app never actually stored must not be able to
 // lock them out. POST /api/auth/totp/enroll
 func (h *Handler) EnrollTOTP(w http.ResponseWriter, r *http.Request) {
+	var req enrollRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
 	_, user, err := h.currentUser(r)
 	if err != nil {
 		writeError(w, http.StatusUnauthorized, "invalid session")
+		return
+	}
+	// The password, not just a session. Enabling a factor is at least as
+	// dangerous as disabling one: whoever enrolls holds the only authenticator,
+	// and enabling revokes every other session — so a hijacked session alone
+	// must not be able to do it, or the real owner is locked out of their own
+	// account with no recovery codes and no way back short of an admin reset.
+	if bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.Password)) != nil {
+		writeError(w, http.StatusUnauthorized, "incorrect password")
 		return
 	}
 	if service.HasMFA(user) {
@@ -111,6 +131,10 @@ func (h *Handler) EnrollTOTP(w http.ResponseWriter, r *http.Request) {
 
 	h.audit(r, "totp.enrollment_started", "user", uuidToString(user.ID), nil)
 	writeJSON(w, http.StatusOK, enrollment)
+}
+
+type enrollRequest struct {
+	Password string `json:"password"`
 }
 
 type verifyEnrollmentRequest struct {
@@ -201,6 +225,8 @@ func (h *Handler) DisableTOTP(w http.ResponseWriter, r *http.Request) {
 
 type regenerateCodesRequest struct {
 	Password string `json:"password"`
+	Code     string `json:"code"`
+	Method   string `json:"method"`
 }
 
 // RegenerateRecoveryCodes issues a new set and kills the old one — the only
@@ -220,6 +246,17 @@ func (h *Handler) RegenerateRecoveryCodes(w http.ResponseWriter, r *http.Request
 	}
 	if bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.Password)) != nil {
 		writeError(w, http.StatusUnauthorized, "incorrect password")
+		return
+	}
+	// A current code as well, for the same reason disabling needs one: ten fresh
+	// recovery codes are ten working second factors, so without this a stolen
+	// session plus a stolen password walks straight past the factor.
+	method := req.Method
+	if method == "" {
+		method = service.MethodTOTP
+	}
+	if err := h.totpSvc.Verify(r.Context(), user, method, req.Code); err != nil {
+		writeSecondFactorError(w, err)
 		return
 	}
 

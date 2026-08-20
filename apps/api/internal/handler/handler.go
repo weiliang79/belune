@@ -146,7 +146,7 @@ func New(
 		notifyChannelSvc:  service.NewNotificationChannelService(queries, cfg.Keyring, service.NewNotifyRegistry(emailSvc), cfg.PublicBaseURL),
 		smtpSettingsSvc:   service.NewSMTPSettingsService(queries, cfg.Keyring, cfg),
 		serverSvc:         service.NewServerService(queries),
-		totpSvc:           service.NewTOTPService(queries, cfg.Keyring),
+		totpSvc:           service.NewTOTPService(db, queries, cfg.Keyring),
 	}
 }
 

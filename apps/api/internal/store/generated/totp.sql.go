@@ -66,7 +66,7 @@ func (q *Queries) DisableUserTOTP(ctx context.Context, id pgtype.UUID) error {
 	return err
 }
 
-const enableUserTOTP = `-- name: EnableUserTOTP :exec
+const enableUserTOTP = `-- name: EnableUserTOTP :execrows
 UPDATE users
 SET totp_enabled_at = NOW(),
     totp_last_step  = $2
@@ -80,9 +80,12 @@ type EnableUserTOTPParams struct {
 
 // Enables only when a secret is present: the factor cannot be turned on for an
 // account with nothing to verify against.
-func (q *Queries) EnableUserTOTP(ctx context.Context, arg EnableUserTOTPParams) error {
-	_, err := q.db.Exec(ctx, enableUserTOTP, arg.ID, arg.TotpLastStep)
-	return err
+func (q *Queries) EnableUserTOTP(ctx context.Context, arg EnableUserTOTPParams) (int64, error) {
+	result, err := q.db.Exec(ctx, enableUserTOTP, arg.ID, arg.TotpLastStep)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const insertRecoveryCode = `-- name: InsertRecoveryCode :exec
@@ -99,7 +102,7 @@ func (q *Queries) InsertRecoveryCode(ctx context.Context, arg InsertRecoveryCode
 	return err
 }
 
-const setUserTOTPLastStep = `-- name: SetUserTOTPLastStep :exec
+const setUserTOTPLastStep = `-- name: SetUserTOTPLastStep :execrows
 UPDATE users
 SET totp_last_step = $2
 WHERE id = $1 AND (totp_last_step IS NULL OR totp_last_step < $2)
@@ -112,9 +115,12 @@ type SetUserTOTPLastStepParams struct {
 
 // Records the accepted step. Guarded so a slower concurrent request cannot move
 // the marker backwards and re-open a window that has already been spent.
-func (q *Queries) SetUserTOTPLastStep(ctx context.Context, arg SetUserTOTPLastStepParams) error {
-	_, err := q.db.Exec(ctx, setUserTOTPLastStep, arg.ID, arg.TotpLastStep)
-	return err
+func (q *Queries) SetUserTOTPLastStep(ctx context.Context, arg SetUserTOTPLastStepParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setUserTOTPLastStep, arg.ID, arg.TotpLastStep)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const setUserTOTPSecret = `-- name: SetUserTOTPSecret :exec

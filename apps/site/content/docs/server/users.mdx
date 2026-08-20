@@ -28,9 +28,9 @@ Pending invitations are listed with their expiry and can be revoked before they'
 
 ## Two-Factor Authentication
 
-Optional, per account, set up from **Account → Two-Factor Authentication**. Scan the QR code with any authenticator app, then enter a code to confirm — the factor only turns on once a code from that secret checks out, so a scan that silently failed can't lock you out.
+Optional, per account, set up from **Account → Two-Factor Authentication**. Confirm your password, scan the QR code with any authenticator app, then enter a code to confirm — the factor only turns on once a code from that secret checks out, so a scan that silently failed can't lock you out.
 
-Turning it on hands you ten recovery codes. They are shown once, each works once, and they are the way back in if you lose the authenticator. **New recovery codes** replaces the whole set, so any you wrote down stop working.
+Turning it on hands you ten recovery codes. They are shown once, each works once, and they are the way back in if you lose the authenticator. **New recovery codes** replaces the whole set, so any you wrote down stop working; it asks for your password and a current code, because a fresh set is ten working second factors.
 
 With 2FA on, signing in takes a second step: the password alone returns no session, only a short-lived challenge to answer with a code or a recovery code. Enabling or disabling the factor signs out every other session — people usually turn it on precisely because they suspect one of those sessions isn't theirs.
 

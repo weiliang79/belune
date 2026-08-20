@@ -7,7 +7,7 @@ SET totp_secret_encrypted = $2,
     totp_last_step        = NULL
 WHERE id = $1;
 
--- name: EnableUserTOTP :exec
+-- name: EnableUserTOTP :execrows
 -- Enables only when a secret is present: the factor cannot be turned on for an
 -- account with nothing to verify against.
 UPDATE users
@@ -15,7 +15,7 @@ SET totp_enabled_at = NOW(),
     totp_last_step  = $2
 WHERE id = $1 AND totp_secret_encrypted IS NOT NULL;
 
--- name: SetUserTOTPLastStep :exec
+-- name: SetUserTOTPLastStep :execrows
 -- Records the accepted step. Guarded so a slower concurrent request cannot move
 -- the marker backwards and re-open a window that has already been spent.
 UPDATE users

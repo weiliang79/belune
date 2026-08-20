@@ -127,17 +127,20 @@ export function TwoFactorCard() {
 
 function EnableDialog({ onIssued }: { onIssued: (codes: string[]) => void }) {
   const [open, setOpen] = useState(false);
+  const [password, setPassword] = useState("");
   const [enrollment, setEnrollment] = useState<TOTPEnrollment | null>(null);
   const [code, setCode] = useState("");
   const enroll = useEnrollTotp();
   const verify = useVerifyTotpEnrollment();
 
-  const start = async () => {
+  // Two steps in one dialog: the password buys the secret, the code proves the
+  // authenticator holds it.
+  const startEnrollment = async (e: React.FormEvent) => {
+    e.preventDefault();
     try {
-      setEnrollment(await enroll.mutateAsync());
-      setOpen(true);
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Could not start setup");
+      setEnrollment(await enroll.mutateAsync(password));
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not start setup");
     }
   };
 
@@ -157,68 +160,98 @@ function EnableDialog({ onIssued }: { onIssued: (codes: string[]) => void }) {
 
   const close = () => {
     setOpen(false);
+    setPassword("");
     setEnrollment(null);
     setCode("");
   };
 
   return (
     <>
-      <Button onClick={start} disabled={enroll.isPending}>
-        {enroll.isPending ? "Preparing..." : "Set up two-factor"}
-      </Button>
+      <Button onClick={() => setOpen(true)}>Set up two-factor</Button>
 
       <Dialog
         open={open}
         onOpenChange={(next) => (next ? setOpen(true) : close())}
       >
         <DialogContent>
-          <form onSubmit={submit}>
-            <DialogHeader>
-              <DialogTitle>Scan this with your authenticator</DialogTitle>
-              <DialogDescription>
-                Then enter the six-digit code it shows. Nothing changes about
-                how you sign in until that code checks out.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4 py-4">
-              {enrollment && (
-                <div className="flex flex-col items-center gap-3">
-                  <img
-                    src={enrollment.qr_code}
-                    alt="Two-factor setup QR code"
-                    className="size-48 rounded-md bg-white p-2"
-                  />
-                  <div className="text-center">
-                    <p className="text-muted-foreground text-xs">
-                      Can't scan? Enter this key instead:
-                    </p>
-                    <code className="font-mono text-sm break-all">
-                      {enrollment.secret}
-                    </code>
-                  </div>
-                </div>
-              )}
-              <div className="space-y-2">
-                <Label htmlFor="totp-code">Verification code</Label>
+          {!enrollment ? (
+            <form onSubmit={startEnrollment}>
+              <DialogHeader>
+                <DialogTitle>Confirm your password</DialogTitle>
+                <DialogDescription>
+                  Turning on two-factor signs out your other sessions and makes
+                  this device's authenticator the one that counts, so it asks
+                  for your password first.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-2 py-4">
+                <Label htmlFor="enroll-password">Password</Label>
                 <Input
-                  id="totp-code"
-                  inputMode="numeric"
-                  autoComplete="one-time-code"
-                  placeholder="123456"
-                  value={code}
-                  onChange={(e) => setCode(e.target.value)}
+                  id="enroll-password"
+                  type="password"
+                  autoFocus
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
                 />
               </div>
-            </div>
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={close}>
-                Cancel
-              </Button>
-              <Button type="submit" disabled={verify.isPending}>
-                {verify.isPending ? "Verifying..." : "Turn on"}
-              </Button>
-            </DialogFooter>
-          </form>
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={close}>
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={enroll.isPending || !password}>
+                  {enroll.isPending ? "Preparing..." : "Continue"}
+                </Button>
+              </DialogFooter>
+            </form>
+          ) : (
+            <form onSubmit={submit}>
+              <DialogHeader>
+                <DialogTitle>Scan this with your authenticator</DialogTitle>
+                <DialogDescription>
+                  Then enter the six-digit code it shows. Nothing changes about
+                  how you sign in until that code checks out.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4 py-4">
+                {enrollment && (
+                  <div className="flex flex-col items-center gap-3">
+                    <img
+                      src={enrollment.qr_code}
+                      alt="Two-factor setup QR code"
+                      className="size-48 rounded-md bg-white p-2"
+                    />
+                    <div className="text-center">
+                      <p className="text-muted-foreground text-xs">
+                        Can't scan? Enter this key instead:
+                      </p>
+                      <code className="font-mono text-sm break-all">
+                        {enrollment.secret}
+                      </code>
+                    </div>
+                  </div>
+                )}
+                <div className="space-y-2">
+                  <Label htmlFor="totp-code">Verification code</Label>
+                  <Input
+                    id="totp-code"
+                    inputMode="numeric"
+                    autoComplete="one-time-code"
+                    placeholder="123456"
+                    value={code}
+                    onChange={(e) => setCode(e.target.value)}
+                  />
+                </div>
+              </div>
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={close}>
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={verify.isPending}>
+                  {verify.isPending ? "Verifying..." : "Turn on"}
+                </Button>
+              </DialogFooter>
+            </form>
+          )}
         </DialogContent>
       </Dialog>
     </>
@@ -305,15 +338,17 @@ function DisableDialog() {
 function RegenerateCodesDialog() {
   const [open, setOpen] = useState(false);
   const [password, setPassword] = useState("");
+  const [code, setCode] = useState("");
   const [codes, setCodes] = useState<string[] | null>(null);
   const regenerate = useRegenerateRecoveryCodes();
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const result = await regenerate.mutateAsync(password);
+      const result = await regenerate.mutateAsync({ password, code });
       setCodes(result.recovery_codes);
       setPassword("");
+      setCode("");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not regenerate");
     }
@@ -322,6 +357,7 @@ function RegenerateCodesDialog() {
   const close = () => {
     setOpen(false);
     setPassword("");
+    setCode("");
     setCodes(null);
   };
 
@@ -356,20 +392,36 @@ function RegenerateCodesDialog() {
                 stop working.
               </DialogDescription>
             </DialogHeader>
-            <div className="space-y-2 py-4">
-              <Label htmlFor="regen-password">Password</Label>
-              <Input
-                id="regen-password"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-              />
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label htmlFor="regen-password">Password</Label>
+                <Input
+                  id="regen-password"
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="regen-code">Verification code</Label>
+                <Input
+                  id="regen-code"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  placeholder="123456"
+                  value={code}
+                  onChange={(e) => setCode(e.target.value)}
+                />
+              </div>
             </div>
             <DialogFooter>
               <Button type="button" variant="outline" onClick={close}>
                 Cancel
               </Button>
-              <Button type="submit" disabled={regenerate.isPending}>
+              <Button
+                type="submit"
+                disabled={regenerate.isPending || !password || !code}
+              >
                 {regenerate.isPending ? "Generating..." : "Generate"}
               </Button>
             </DialogFooter>

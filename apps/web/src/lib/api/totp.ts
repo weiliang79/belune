@@ -23,9 +23,10 @@ export function getTotpStatus() {
 }
 
 /** Starts enrollment. Enables nothing — the factor is only on once a code from
- *  this secret has been verified. */
-export function enrollTotp() {
-  return api.post<TOTPEnrollment>("/auth/totp/enroll");
+ *  this secret has been verified. Takes the password because enrolling is at
+ *  least as dangerous as disabling: whoever enrolls holds the authenticator. */
+export function enrollTotp(password: string) {
+  return api.post<TOTPEnrollment>("/auth/totp/enroll", { password });
 }
 
 export function verifyTotpEnrollment(code: string) {
@@ -42,9 +43,12 @@ export function disableTotp(password: string, code: string) {
   });
 }
 
-export function regenerateRecoveryCodes(password: string) {
+/** Needs a current code as well as the password: ten fresh recovery codes are
+ *  ten working second factors. */
+export function regenerateRecoveryCodes(password: string, code: string) {
   return api.post<{ recovery_codes: string[] }>("/auth/totp/recovery-codes", {
     password,
+    code,
   });
 }
 

@@ -14,11 +14,14 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/pquerna/otp"
 	"github.com/pquerna/otp/totp"
 
 	"github.com/weiliang79/belune/internal/pkg/crypto"
+	"github.com/weiliang79/belune/internal/store"
 	"github.com/weiliang79/belune/internal/store/generated"
 )
 
@@ -65,12 +68,13 @@ const (
 // TOTPService owns the second-factor secret: enrollment, verification, and the
 // recovery codes that stand in when the authenticator is gone.
 type TOTPService struct {
+	db      *pgxpool.Pool
 	queries *generated.Queries
 	keyring *crypto.Keyring
 }
 
-func NewTOTPService(queries *generated.Queries, keyring *crypto.Keyring) *TOTPService {
-	return &TOTPService{queries: queries, keyring: keyring}
+func NewTOTPService(db *pgxpool.Pool, queries *generated.Queries, keyring *crypto.Keyring) *TOTPService {
+	return &TOTPService{db: db, queries: queries, keyring: keyring}
 }
 
 // HasMFA reports whether a user has any second factor enabled. A helper rather
@@ -163,14 +167,31 @@ func (s *TOTPService) ConfirmEnrollment(ctx context.Context, user generated.User
 		return nil, err
 	}
 
-	if err := s.queries.EnableUserTOTP(ctx, generated.EnableUserTOTPParams{
-		ID:           user.ID,
-		TotpLastStep: pgtype.Int8{Int64: step, Valid: true},
-	}); err != nil {
-		return nil, fmt.Errorf("enable totp: %w", err)
+	// Enabling and issuing the codes are one write. Apart, a failure between
+	// them leaves the factor on with no recovery codes at all, while the user is
+	// told enrollment failed — they would then be asked for a code they were
+	// never given a way back from.
+	var codes []string
+	err = store.WithTx(ctx, s.db, func(q *generated.Queries) error {
+		// The UPDATE is conditional on a secret still being present, so a no-op
+		// means the enrollment is gone, not that it succeeded.
+		enabled, err := q.EnableUserTOTP(ctx, generated.EnableUserTOTPParams{
+			ID:           user.ID,
+			TotpLastStep: pgtype.Int8{Int64: step, Valid: true},
+		})
+		if err != nil {
+			return fmt.Errorf("enable totp: %w", err)
+		}
+		if enabled == 0 {
+			return ErrTOTPNotEnrolled
+		}
+		codes, err = replaceRecoveryCodes(ctx, q, user.ID)
+		return err
+	})
+	if err != nil {
+		return nil, err
 	}
-
-	return s.replaceRecoveryCodes(ctx, user.ID)
+	return codes, nil
 }
 
 // Verify checks one factor of the named kind. The method is data, not a
@@ -185,11 +206,20 @@ func (s *TOTPService) Verify(ctx context.Context, user generated.User, method, c
 		// Burn the step before the caller does anything with the result: a code
 		// accepted twice inside its window is a replay, which is precisely what
 		// this factor is supposed to prevent.
-		if err := s.queries.SetUserTOTPLastStep(ctx, generated.SetUserTOTPLastStepParams{
+		//
+		// The row count decides. Two requests carrying the same code both read
+		// the same pre-update row and both pass checkCode, so it is this
+		// conditional UPDATE that picks a winner — ignoring its result would let
+		// them both through and leave the guard advisory.
+		claimed, err := s.queries.SetUserTOTPLastStep(ctx, generated.SetUserTOTPLastStepParams{
 			ID:           user.ID,
 			TotpLastStep: pgtype.Int8{Int64: step, Valid: true},
-		}); err != nil {
+		})
+		if err != nil {
 			return fmt.Errorf("record totp step: %w", err)
+		}
+		if claimed == 0 {
+			return ErrSecondFactorUsed
 		}
 		return nil
 	case MethodRecoveryCode:
@@ -219,7 +249,16 @@ func (s *TOTPService) RegenerateRecoveryCodes(ctx context.Context, user generate
 	if !HasMFA(user) {
 		return nil, ErrTOTPNotEnrolled
 	}
-	return s.replaceRecoveryCodes(ctx, user.ID)
+	var codes []string
+	err := store.WithTx(ctx, s.db, func(q *generated.Queries) error {
+		var err error
+		codes, err = replaceRecoveryCodes(ctx, q, user.ID)
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+	return codes, nil
 }
 
 // RemainingRecoveryCodes reports how many are still unspent, so the UI can warn
@@ -271,8 +310,8 @@ func (s *TOTPService) checkCode(user generated.User, code string) (int64, error)
 	return 0, ErrInvalidSecondFactor
 }
 
-func (s *TOTPService) replaceRecoveryCodes(ctx context.Context, userID pgtype.UUID) ([]string, error) {
-	if err := s.queries.DeleteRecoveryCodes(ctx, userID); err != nil {
+func replaceRecoveryCodes(ctx context.Context, q *generated.Queries, userID pgtype.UUID) ([]string, error) {
+	if err := q.DeleteRecoveryCodes(ctx, userID); err != nil {
 		return nil, fmt.Errorf("clear recovery codes: %w", err)
 	}
 
@@ -283,7 +322,7 @@ func (s *TOTPService) replaceRecoveryCodes(ctx context.Context, userID pgtype.UU
 			return nil, err
 		}
 		hash := hashRecoveryCode(code)
-		if err := s.queries.InsertRecoveryCode(ctx, generated.InsertRecoveryCodeParams{
+		if err := q.InsertRecoveryCode(ctx, generated.InsertRecoveryCodeParams{
 			UserID:   userID,
 			CodeHash: hash[:],
 		}); err != nil {
@@ -296,13 +335,19 @@ func (s *TOTPService) replaceRecoveryCodes(ctx context.Context, userID pgtype.UU
 
 func (s *TOTPService) consumeRecoveryCode(ctx context.Context, userID pgtype.UUID, code string) error {
 	hash := hashRecoveryCode(code)
-	if _, err := s.queries.ConsumeRecoveryCode(ctx, generated.ConsumeRecoveryCodeParams{
+	_, err := s.queries.ConsumeRecoveryCode(ctx, generated.ConsumeRecoveryCodeParams{
 		UserID:   userID,
 		CodeHash: hash[:],
-	}); err != nil {
-		// No row means no unused code with that hash — wrong code, or one that
-		// has already been spent. Both are the same answer to the caller.
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		// No unused code with that hash — wrong code, or one already spent.
+		// Both are the same answer to the caller.
 		return ErrInvalidSecondFactor
+	}
+	if err != nil {
+		// A dropped connection is not a wrong code. Reporting it as one costs
+		// the user an attempt and a lockout strike for the database's mistake.
+		return fmt.Errorf("consume recovery code: %w", err)
 	}
 	return nil
 }

@@ -17,7 +17,9 @@ export function useTotpStatus() {
 }
 
 export function useEnrollTotp() {
-  return useMutation({ mutationFn: enrollTotp });
+  return useMutation({
+    mutationFn: (password: string) => enrollTotp(password),
+  });
 }
 
 export function useVerifyTotpEnrollment() {
@@ -44,7 +46,8 @@ export function useDisableTotp() {
 export function useRegenerateRecoveryCodes() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (password: string) => regenerateRecoveryCodes(password),
+    mutationFn: ({ password, code }: { password: string; code: string }) =>
+      regenerateRecoveryCodes(password, code),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.auth.totp });
     },

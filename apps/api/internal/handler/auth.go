@@ -78,19 +78,26 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Successful login → clear any stale lockout state for this email.
-	h.auth.ResetLoginAttempts(ctx, emailKey)
-
 	// The password was right but is not enough on its own: hand back the
 	// challenge and no session at all. The client completes it at
 	// POST /api/auth/login/verify.
+	//
+	// The lockout counter is deliberately NOT cleared here. Clearing it on a
+	// correct password would let anyone holding the password reset the counter
+	// between code guesses by re-posting this endpoint, so the account-level
+	// lockout could never fire against second-factor guessing at all.
+	// CompleteLoginChallenge clears it once the login actually completes.
 	if outcome.Challenge != nil {
 		if h.auditSvc != nil {
-			h.auditSvc.Log("", clientIP, "login_challenge_issued", "user", emailKey, nil)
+			uid := uuidToString(outcome.UserID)
+			h.auditSvc.Log(uid, clientIP, "login_challenge_issued", "user", uid, nil)
 		}
 		writeJSON(w, http.StatusOK, outcome.Challenge)
 		return
 	}
+
+	// A completed login → clear any stale lockout state for this email.
+	h.auth.ResetLoginAttempts(ctx, emailKey)
 
 	csrfToken, err := middleware.GenerateCSRFToken()
 	if err != nil {

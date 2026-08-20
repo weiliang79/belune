@@ -54,9 +54,12 @@ type LoginChallenge struct {
 }
 
 // LoginOutcome is exactly one of a finished session or a challenge to complete.
+// UserID is carried for the caller's audit trail and is never serialised: the
+// challenge response must not name the account it belongs to.
 type LoginOutcome struct {
 	Session   *LoginResult
 	Challenge *LoginChallenge
+	UserID    pgtype.UUID
 }
 
 // SetSecondFactorVerifier wires the verifier after construction, which keeps

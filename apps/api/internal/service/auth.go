@@ -163,14 +163,14 @@ func (s *AuthService) Login(ctx context.Context, email, password, userAgent, ip 
 		if err != nil {
 			return nil, err
 		}
-		return &LoginOutcome{Challenge: challenge}, nil
+		return &LoginOutcome{Challenge: challenge, UserID: user.ID}, nil
 	}
 
 	session, err := s.issueSession(ctx, user, userAgent, ip)
 	if err != nil {
 		return nil, err
 	}
-	return &LoginOutcome{Session: session}, nil
+	return &LoginOutcome{Session: session, UserID: user.ID}, nil
 }
 
 // Refresh exchanges a refresh token (plaintext, as stored in the cookie)
