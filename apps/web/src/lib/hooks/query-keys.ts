@@ -2,6 +2,7 @@ export const queryKeys = {
   auth: {
     me: ["auth", "me"] as const,
     setup: ["auth", "setup"] as const,
+    totp: ["auth", "totp"] as const,
   },
   projects: {
     all: ["projects"] as const,
@@ -80,11 +81,7 @@ export const queryKeys = {
       volumeId,
       "backup-configs",
     ] as const,
-  volumeBackups: (
-    projectId: string,
-    applicationId: string,
-    volumeId: string,
-  ) =>
+  volumeBackups: (projectId: string, applicationId: string, volumeId: string) =>
     [
       "projects",
       projectId,
@@ -162,9 +159,21 @@ export const queryKeys = {
     restores: (projectId: string, databaseId: string) =>
       ["projects", projectId, "databases", databaseId, "restores"] as const,
     backupConfigs: (projectId: string, databaseId: string) =>
-      ["projects", projectId, "databases", databaseId, "backup-configs"] as const,
+      [
+        "projects",
+        projectId,
+        "databases",
+        databaseId,
+        "backup-configs",
+      ] as const,
     deletionImpact: (projectId: string, databaseId: string) =>
-      ["projects", projectId, "databases", databaseId, "deletion-impact"] as const,
+      [
+        "projects",
+        projectId,
+        "databases",
+        databaseId,
+        "deletion-impact",
+      ] as const,
   },
   backupDestinations: (projectId: string) =>
     ["projects", projectId, "backup-destinations"] as const,

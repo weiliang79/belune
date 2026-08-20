@@ -1,13 +1,16 @@
 package service
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/base32"
+	"encoding/base64"
 	"errors"
 	"fmt"
+	"image/png"
 	"strings"
 	"time"
 
@@ -78,11 +81,16 @@ func HasMFA(user generated.User) bool {
 }
 
 // Enrollment is what the user needs to add the account to their authenticator:
-// the URI for a QR code, and the same secret in a form they can type when a
-// camera is not an option.
+// a QR code to scan, and the same secret in a form they can type when a camera
+// is not an option.
+//
+// The QR is rendered here, as a data URI, rather than in the browser. The
+// alternative is shipping a QR library to every page load to draw a string the
+// server already has, and the CSP already permits data: images.
 type Enrollment struct {
 	Secret string `json:"secret"`
 	URI    string `json:"uri"`
+	QRCode string `json:"qr_code"`
 }
 
 // Methods lists the ways this user can satisfy a second-factor challenge. The
@@ -115,6 +123,11 @@ func (s *TOTPService) Enroll(ctx context.Context, user generated.User, issuer st
 		return nil, fmt.Errorf("generate totp secret: %w", err)
 	}
 
+	qr, err := qrDataURI(key)
+	if err != nil {
+		return nil, err
+	}
+
 	encrypted, err := s.keyring.Encrypt([]byte(key.Secret()))
 	if err != nil {
 		return nil, fmt.Errorf("encrypt totp secret: %w", err)
@@ -126,7 +139,19 @@ func (s *TOTPService) Enroll(ctx context.Context, user generated.User, issuer st
 		return nil, fmt.Errorf("store totp secret: %w", err)
 	}
 
-	return &Enrollment{Secret: key.Secret(), URI: key.URL()}, nil
+	return &Enrollment{Secret: key.Secret(), URI: key.URL(), QRCode: qr}, nil
+}
+
+func qrDataURI(key *otp.Key) (string, error) {
+	img, err := key.Image(240, 240)
+	if err != nil {
+		return "", fmt.Errorf("render totp qr code: %w", err)
+	}
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, img); err != nil {
+		return "", fmt.Errorf("encode totp qr code: %w", err)
+	}
+	return "data:image/png;base64," + base64.StdEncoding.EncodeToString(buf.Bytes()), nil
 }
 
 // ConfirmEnrollment enables the factor once the user has proved they can

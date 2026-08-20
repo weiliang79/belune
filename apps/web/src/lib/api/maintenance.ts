@@ -57,9 +57,13 @@ export function getServerIP() {
   );
 }
 
-export function createHostShellSession(password: string) {
+/** Step-up re-auth for host root. A code is required of anyone with a second
+ *  factor enabled — the password alone defends against a hijacked session, not
+ *  a stolen password. */
+export function createHostShellSession(password: string, code?: string) {
   return api.post<{ session_id: string }>("/maintenance/host-shell", {
     password,
+    ...(code ? { method: "totp", code } : {}),
   });
 }
 

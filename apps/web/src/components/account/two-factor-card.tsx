@@ -1,0 +1,375 @@
+import { useState } from "react";
+import { toast } from "sonner";
+import { CopyIcon, ShieldCheckIcon } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  useDisableTotp,
+  useEnrollTotp,
+  useRegenerateRecoveryCodes,
+  useTotpStatus,
+  useVerifyTotpEnrollment,
+} from "@/lib/hooks/use-totp";
+import type { TOTPEnrollment } from "@/lib/api/totp";
+
+/** Shown once, at the moment they are generated. There is no endpoint that can
+ *  read them back — only regeneration, which replaces the set. */
+function RecoveryCodes({ codes }: { codes: string[] }) {
+  return (
+    <div className="space-y-3">
+      <div className="bg-muted grid grid-cols-2 gap-2 rounded-md p-3 font-mono text-sm">
+        {codes.map((code) => (
+          <span key={code}>{code}</span>
+        ))}
+      </div>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        onClick={() => {
+          void navigator.clipboard.writeText(codes.join("\n"));
+          toast.success("Recovery codes copied");
+        }}
+      >
+        <CopyIcon aria-hidden="true" className="size-4" />
+        Copy codes
+      </Button>
+      <p className="text-muted-foreground text-sm">
+        Store these somewhere safe. Each one signs you in once if you lose your
+        authenticator, and this is the only time they are shown.
+      </p>
+    </div>
+  );
+}
+
+export function TwoFactorCard() {
+  const { data: status } = useTotpStatus();
+  const enabled = status?.enabled ?? false;
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <ShieldCheckIcon aria-hidden="true" className="size-4" />
+          Two-Factor Authentication
+          {enabled ? (
+            <Badge variant="outline">On</Badge>
+          ) : (
+            <Badge variant="outline" className="text-muted-foreground">
+              Off
+            </Badge>
+          )}
+        </CardTitle>
+        <CardDescription>
+          A code from your authenticator app on top of your password. It also
+          applies to the host shell, the most privileged action here.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {enabled ? (
+          <>
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-muted-foreground">Recovery codes left</span>
+              <span className="font-mono">
+                {status?.recovery_codes_remaining ?? 0} of 10
+              </span>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <RegenerateCodesDialog />
+              <DisableDialog />
+            </div>
+          </>
+        ) : (
+          <EnableDialog />
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function EnableDialog() {
+  const [open, setOpen] = useState(false);
+  const [enrollment, setEnrollment] = useState<TOTPEnrollment | null>(null);
+  const [code, setCode] = useState("");
+  const [codes, setCodes] = useState<string[] | null>(null);
+  const enroll = useEnrollTotp();
+  const verify = useVerifyTotpEnrollment();
+
+  const start = async () => {
+    try {
+      setEnrollment(await enroll.mutateAsync());
+      setOpen(true);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not start setup");
+    }
+  };
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const result = await verify.mutateAsync(code);
+      setCodes(result.recovery_codes);
+      toast.success("Two-factor authentication is on");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Verification failed");
+    }
+  };
+
+  const close = () => {
+    setOpen(false);
+    setEnrollment(null);
+    setCode("");
+    setCodes(null);
+  };
+
+  return (
+    <>
+      <Button onClick={start} disabled={enroll.isPending}>
+        {enroll.isPending ? "Preparing..." : "Set up two-factor"}
+      </Button>
+
+      <Dialog
+        open={open}
+        onOpenChange={(next) => (next ? setOpen(true) : close())}
+      >
+        <DialogContent>
+          {codes ? (
+            <>
+              <DialogHeader>
+                <DialogTitle>Save your recovery codes</DialogTitle>
+                <DialogDescription>
+                  Two-factor authentication is on. Signing in on your other
+                  devices will ask for a code.
+                </DialogDescription>
+              </DialogHeader>
+              <RecoveryCodes codes={codes} />
+              <DialogFooter>
+                <Button onClick={close}>Done</Button>
+              </DialogFooter>
+            </>
+          ) : (
+            <form onSubmit={submit}>
+              <DialogHeader>
+                <DialogTitle>Scan this with your authenticator</DialogTitle>
+                <DialogDescription>
+                  Then enter the six-digit code it shows. Nothing changes about
+                  how you sign in until that code checks out.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4 py-4">
+                {enrollment && (
+                  <div className="flex flex-col items-center gap-3">
+                    <img
+                      src={enrollment.qr_code}
+                      alt="Two-factor setup QR code"
+                      className="size-48 rounded-md bg-white p-2"
+                    />
+                    <div className="text-center">
+                      <p className="text-muted-foreground text-xs">
+                        Can't scan? Enter this key instead:
+                      </p>
+                      <code className="font-mono text-sm break-all">
+                        {enrollment.secret}
+                      </code>
+                    </div>
+                  </div>
+                )}
+                <div className="space-y-2">
+                  <Label htmlFor="totp-code">Verification code</Label>
+                  <Input
+                    id="totp-code"
+                    inputMode="numeric"
+                    autoComplete="one-time-code"
+                    placeholder="123456"
+                    value={code}
+                    onChange={(e) => setCode(e.target.value)}
+                  />
+                </div>
+              </div>
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={close}>
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={verify.isPending}>
+                  {verify.isPending ? "Verifying..." : "Turn on"}
+                </Button>
+              </DialogFooter>
+            </form>
+          )}
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
+function DisableDialog() {
+  const [open, setOpen] = useState(false);
+  const [password, setPassword] = useState("");
+  const [code, setCode] = useState("");
+  const disable = useDisableTotp();
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      await disable.mutateAsync({ password, code });
+      toast.success("Two-factor authentication is off");
+      setOpen(false);
+      setPassword("");
+      setCode("");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not turn it off");
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <Button variant="outline" onClick={() => setOpen(true)}>
+        Turn off
+      </Button>
+      <DialogContent>
+        <form onSubmit={submit}>
+          <DialogHeader>
+            <DialogTitle>Turn off two-factor authentication</DialogTitle>
+            <DialogDescription>
+              Your password and a current code — turning this off is the first
+              thing someone using your session would try.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="disable-password">Password</Label>
+              <Input
+                id="disable-password"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="disable-code">Verification code</Label>
+              <Input
+                id="disable-code"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                placeholder="123456"
+                value={code}
+                onChange={(e) => setCode(e.target.value)}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              variant="destructive"
+              disabled={disable.isPending}
+            >
+              {disable.isPending ? "Turning off..." : "Turn off"}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function RegenerateCodesDialog() {
+  const [open, setOpen] = useState(false);
+  const [password, setPassword] = useState("");
+  const [codes, setCodes] = useState<string[] | null>(null);
+  const regenerate = useRegenerateRecoveryCodes();
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const result = await regenerate.mutateAsync(password);
+      setCodes(result.recovery_codes);
+      setPassword("");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not regenerate");
+    }
+  };
+
+  const close = () => {
+    setOpen(false);
+    setPassword("");
+    setCodes(null);
+  };
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(next) => (next ? setOpen(true) : close())}
+    >
+      <Button variant="outline" onClick={() => setOpen(true)}>
+        New recovery codes
+      </Button>
+      <DialogContent>
+        {codes ? (
+          <>
+            <DialogHeader>
+              <DialogTitle>Your new recovery codes</DialogTitle>
+              <DialogDescription>
+                The previous set no longer works.
+              </DialogDescription>
+            </DialogHeader>
+            <RecoveryCodes codes={codes} />
+            <DialogFooter>
+              <Button onClick={close}>Done</Button>
+            </DialogFooter>
+          </>
+        ) : (
+          <form onSubmit={submit}>
+            <DialogHeader>
+              <DialogTitle>Generate new recovery codes</DialogTitle>
+              <DialogDescription>
+                This replaces your current codes — any you have written down
+                stop working.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-2 py-4">
+              <Label htmlFor="regen-password">Password</Label>
+              <Input
+                id="regen-password"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+              />
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={close}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={regenerate.isPending}>
+                {regenerate.isPending ? "Generating..." : "Generate"}
+              </Button>
+            </DialogFooter>
+          </form>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
