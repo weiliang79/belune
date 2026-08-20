@@ -62,6 +62,10 @@ function RecoveryCodes({ codes }: { codes: string[] }) {
 export function TwoFactorCard() {
   const { data: status } = useTotpStatus();
   const enabled = status?.enabled ?? false;
+  // Held here, not inside the enable dialog. Turning the factor on flips this
+  // card to its enabled branch, which would unmount that dialog — and the
+  // codes are shown exactly once, so unmounting it loses them for good.
+  const [issuedCodes, setIssuedCodes] = useState<string[] | null>(null);
 
   return (
     <Card>
@@ -97,18 +101,36 @@ export function TwoFactorCard() {
             </div>
           </>
         ) : (
-          <EnableDialog />
+          <EnableDialog onIssued={setIssuedCodes} />
         )}
       </CardContent>
+
+      <Dialog
+        open={issuedCodes !== null}
+        onOpenChange={(next) => !next && setIssuedCodes(null)}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Save your recovery codes</DialogTitle>
+            <DialogDescription>
+              Two-factor authentication is on. Signing in on your other devices
+              will ask for a code.
+            </DialogDescription>
+          </DialogHeader>
+          {issuedCodes && <RecoveryCodes codes={issuedCodes} />}
+          <DialogFooter>
+            <Button onClick={() => setIssuedCodes(null)}>Done</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 }
 
-function EnableDialog() {
+function EnableDialog({ onIssued }: { onIssued: (codes: string[]) => void }) {
   const [open, setOpen] = useState(false);
   const [enrollment, setEnrollment] = useState<TOTPEnrollment | null>(null);
   const [code, setCode] = useState("");
-  const [codes, setCodes] = useState<string[] | null>(null);
   const enroll = useEnrollTotp();
   const verify = useVerifyTotpEnrollment();
 
@@ -125,7 +147,10 @@ function EnableDialog() {
     e.preventDefault();
     try {
       const result = await verify.mutateAsync(code);
-      setCodes(result.recovery_codes);
+      // Hand the codes to the card before this dialog goes away with the
+      // card's own re-render, then close.
+      onIssued(result.recovery_codes);
+      close();
       toast.success("Two-factor authentication is on");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Verification failed");
@@ -136,7 +161,6 @@ function EnableDialog() {
     setOpen(false);
     setEnrollment(null);
     setCode("");
-    setCodes(null);
   };
 
   return (
@@ -150,69 +174,53 @@ function EnableDialog() {
         onOpenChange={(next) => (next ? setOpen(true) : close())}
       >
         <DialogContent>
-          {codes ? (
-            <>
-              <DialogHeader>
-                <DialogTitle>Save your recovery codes</DialogTitle>
-                <DialogDescription>
-                  Two-factor authentication is on. Signing in on your other
-                  devices will ask for a code.
-                </DialogDescription>
-              </DialogHeader>
-              <RecoveryCodes codes={codes} />
-              <DialogFooter>
-                <Button onClick={close}>Done</Button>
-              </DialogFooter>
-            </>
-          ) : (
-            <form onSubmit={submit}>
-              <DialogHeader>
-                <DialogTitle>Scan this with your authenticator</DialogTitle>
-                <DialogDescription>
-                  Then enter the six-digit code it shows. Nothing changes about
-                  how you sign in until that code checks out.
-                </DialogDescription>
-              </DialogHeader>
-              <div className="space-y-4 py-4">
-                {enrollment && (
-                  <div className="flex flex-col items-center gap-3">
-                    <img
-                      src={enrollment.qr_code}
-                      alt="Two-factor setup QR code"
-                      className="size-48 rounded-md bg-white p-2"
-                    />
-                    <div className="text-center">
-                      <p className="text-muted-foreground text-xs">
-                        Can't scan? Enter this key instead:
-                      </p>
-                      <code className="font-mono text-sm break-all">
-                        {enrollment.secret}
-                      </code>
-                    </div>
-                  </div>
-                )}
-                <div className="space-y-2">
-                  <Label htmlFor="totp-code">Verification code</Label>
-                  <Input
-                    id="totp-code"
-                    inputMode="numeric"
-                    autoComplete="one-time-code"
-                    placeholder="123456"
-                    value={code}
-                    onChange={(e) => setCode(e.target.value)}
+          <form onSubmit={submit}>
+            <DialogHeader>
+              <DialogTitle>Scan this with your authenticator</DialogTitle>
+              <DialogDescription>
+                Then enter the six-digit code it shows. Nothing changes about
+                how you sign in until that code checks out.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              {enrollment && (
+                <div className="flex flex-col items-center gap-3">
+                  <img
+                    src={enrollment.qr_code}
+                    alt="Two-factor setup QR code"
+                    className="size-48 rounded-md bg-white p-2"
                   />
+                  <div className="text-center">
+                    <p className="text-muted-foreground text-xs">
+                      Can't scan? Enter this key instead:
+                    </p>
+                    <code className="font-mono text-sm break-all">
+                      {enrollment.secret}
+                    </code>
+                  </div>
                 </div>
+              )}
+              <div className="space-y-2">
+                <Label htmlFor="totp-code">Verification code</Label>
+                <Input
+                  id="totp-code"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  placeholder="123456"
+                  value={code}
+                  onChange={(e) => setCode(e.target.value)}
+                />
               </div>
-              <DialogFooter>
-                <Button type="button" variant="outline" onClick={close}>
-                  Cancel
-                </Button>
-                <Button type="submit" disabled={verify.isPending}>
-                  {verify.isPending ? "Verifying..." : "Turn on"}
-                </Button>
-              </DialogFooter>
-            </form>
-          )}
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={close}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={verify.isPending}>
+                {verify.isPending ? "Verifying..." : "Turn on"}
+              </Button>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
     </>
