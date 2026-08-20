@@ -219,9 +219,15 @@ func (h *TaskHandler) cleanupStalePreviews(ctx context.Context) {
 	}
 }
 
-// cleanupOrphanContainers removes managed containers whose name does not match
-// any known application. Only containers older than 1 hour are considered to
-// avoid racing with in-progress deployments.
+// cleanupOrphanContainers removes managed containers that belong to nothing in
+// the database. Only containers older than 1 hour are considered to avoid
+// racing with in-progress deployments.
+//
+// ⚠️ The allowlist must cover EVERY kind of container Belune labels as its own.
+// The label filter and the allowlist are built from different sources, and
+// anything in the first that is missing from the second is destroyed. Managed
+// databases were missing here, so every one of them was stopped and removed on
+// the daily run; their volumes survived, but each needed re-provisioning.
 func (h *TaskHandler) cleanupOrphanContainers(ctx context.Context) {
 	const orphanAge = time.Hour
 
@@ -238,7 +244,17 @@ func (h *TaskHandler) cleanupOrphanContainers(ctx context.Context) {
 		return
 	}
 
-	known := make(map[string]bool, len(allApps))
+	// Databases carry the same managed-by label as applications, so they are in
+	// the list above and must be in the allowlist too. A failure here returns
+	// rather than continuing: a partial allowlist does not skip work, it deletes
+	// live containers.
+	allDatabases, err := h.Queries.ListAllDatabases(ctx)
+	if err != nil {
+		slog.Warn("orphan cleanup: failed to list databases", "error", err)
+		return
+	}
+
+	known := make(map[string]bool, len(allApps)+len(allDatabases))
 	for _, row := range allApps {
 		appIDStr := formatUUID(row.ID)
 		if appIDStr == "" {
@@ -248,6 +264,19 @@ func (h *TaskHandler) cleanupOrphanContainers(ctx context.Context) {
 		// Also mark old naming formats so we don't delete legacy containers.
 		known[naming.IntermediateContainerName(row.ProjectSlug, appIDStr)] = true
 		known[naming.OldContainerName(appIDStr)] = true
+	}
+	for _, db := range allDatabases {
+		// The slug is the container name — see provision_db_task.go.
+		known[db.Slug] = true
+	}
+
+	// Nothing known while managed containers exist means the allowlist failed to
+	// build, not that every container is garbage. Reaping the lot is never a
+	// normal outcome, so refuse rather than act on an answer this suspicious.
+	if len(known) == 0 && len(containers) > 0 {
+		slog.Warn("orphan cleanup: refusing to run with an empty allowlist",
+			"managed_containers", len(containers))
+		return
 	}
 
 	removed := 0
