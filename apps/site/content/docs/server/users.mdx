@@ -26,9 +26,23 @@ Admin and Member are the only two roles.
 
 Pending invitations are listed with their expiry and can be revoked before they're accepted.
 
+## Two-Factor Authentication
+
+Optional, per account, set up from **Account → Two-Factor Authentication**. Scan the QR code with any authenticator app, then enter a code to confirm — the factor only turns on once a code from that secret checks out, so a scan that silently failed can't lock you out.
+
+Turning it on hands you ten recovery codes. They are shown once, each works once, and they are the way back in if you lose the authenticator. **New recovery codes** replaces the whole set, so any you wrote down stop working.
+
+With 2FA on, signing in takes a second step: the password alone returns no session, only a short-lived challenge to answer with a code or a recovery code. Enabling or disabling the factor signs out every other session — people usually turn it on precisely because they suspect one of those sessions isn't theirs.
+
+It also covers the [host shell](/docs/server/configurations#host-shell), which asks for a code alongside your password. Nothing to configure: the step-up re-auth there defends against a hijacked session, and a second factor is what defends against a stolen password.
+
+Belune does not currently let an admin require 2FA for everyone; each user opts in.
+
 ## Password Resets and Role Changes
 
 An admin can reset any other user's password or change their role at any time from the Team table. Both actions immediately revoke that user's existing sessions, so a password reset (say, after a suspected compromise) can't be undone by an already-open browser tab.
+
+**Reset 2FA** is the last resort for a user who has lost both their authenticator and their recovery codes: it clears their second factor, ends their sessions, and is written to the [audit log](/docs/server/audit-log). They sign in with their password alone until they set it up again.
 
 ## Account Protection
 
