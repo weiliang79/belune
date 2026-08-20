@@ -74,11 +74,9 @@ export function TwoFactorCard() {
           <ShieldCheckIcon aria-hidden="true" className="size-4" />
           Two-Factor Authentication
           {enabled ? (
-            <Badge variant="outline">On</Badge>
+            <Badge variant="default">On</Badge>
           ) : (
-            <Badge variant="outline" className="text-muted-foreground">
-              Off
-            </Badge>
+            <Badge variant="outline">Off</Badge>
           )}
         </CardTitle>
         <CardDescription>
