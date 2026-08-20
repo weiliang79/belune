@@ -55,6 +55,7 @@ var targets = []target{
 	{"git_integrations", "id", "config_encrypted"},
 	{"backup_destinations", "id", "credentials_encrypted"},
 	{"notification_channels", "id", "config_encrypted"},
+	{"users", "id", "totp_secret_encrypted"},
 }
 
 func main() {
