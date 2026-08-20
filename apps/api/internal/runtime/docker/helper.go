@@ -31,7 +31,13 @@ func (c *Client) RunHelper(ctx context.Context, cfg runtime.ContainerConfig, std
 			AttachStderr: true,
 			OpenStdin:    stdin != nil,
 			StdinOnce:    stdin != nil,
-			Labels:       map[string]string{labelManagedBy: labelValue},
+			Labels: map[string]string{
+				labelManagedBy: labelValue,
+				// Marks this as work in progress rather than a workload. The
+				// orphan sweep spares a running one: it holds a volume open and
+				// killing it mid-operation is how a restore loses data.
+				runtime.LabelHelper: "true",
+			},
 		},
 		&container.HostConfig{
 			Binds:       binds,

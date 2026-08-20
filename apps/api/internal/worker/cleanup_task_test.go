@@ -60,6 +60,46 @@ func TestCleanupOrphanContainers_SparesManagedDatabases(t *testing.T) {
 		"a genuine orphan must still be reaped")
 }
 
+// TestCleanupOrphanContainers_SparesAHelperStillAtWork is the data-loss case.
+// Helper containers are unnamed, so no allowlist can ever cover one; the sweep
+// has to recognise them by label. A volume restore runs
+// `find . -mindepth 1 -delete && tar xzf -` inside one, so killing it between
+// those two commands leaves the volume empty or half-written — which is worse
+// than the failed job it looks like.
+func TestCleanupOrphanContainers_SparesAHelperStillAtWork(t *testing.T) {
+	rt := &testutil.MockContainerRuntime{}
+	h := newTestHandler(rt, nil)
+
+	app, _ := seedApp(t)
+	old := time.Now().Add(-24 * time.Hour)
+
+	rt.ListContainers_ = []runtime.ContainerInfo{
+		{Name: app.Slug, CreatedAt: old, Status: "running"},
+		// A long restore: unnamed, labelled, and well past the grace period.
+		{
+			Name:      "eloquent_hopper",
+			CreatedAt: old,
+			Status:    "running",
+			Labels:    map[string]string{"managed-by": "belune", runtime.LabelHelper: "true"},
+		},
+		// One that died and left its container behind is genuinely leftover.
+		{
+			Name:      "vigilant_mendel",
+			CreatedAt: old,
+			Status:    "exited",
+			Labels:    map[string]string{"managed-by": "belune", runtime.LabelHelper: "true"},
+		},
+	}
+
+	runFullCleanup(t, h)
+
+	assert.NotContains(t, rt.RemoveCalls, "eloquent_hopper",
+		"a helper still doing work must not be reaped mid-operation")
+	assert.NotContains(t, rt.StopCalls, "eloquent_hopper")
+	assert.Contains(t, rt.RemoveCalls, "vigilant_mendel",
+		"a helper that has exited is leftover and should still be reclaimed")
+}
+
 // TestCleanupOrphanContainers_RefusesAnEmptyAllowlist guards the failure shape
 // rather than one missing table. Every container being unrecognised means the
 // allowlist did not build, not that the host is full of garbage — and acting on
