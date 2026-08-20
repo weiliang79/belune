@@ -32,13 +32,29 @@ type target struct {
 	colEnc string
 }
 
+// Every *_encrypted column in the schema belongs here. A column that is missing
+// is not skipped loudly — rewrap reports success, the operator retires the old
+// KEK, and the secret becomes undecryptable. TestTargetsCoverEveryEncryptedColumn
+// fails when the schema and this list disagree, so add the column here in the
+// same change that creates it.
 var targets = []target{
-	{"git_credentials", "id", "token_encrypted"},
+	// git_credentials is deliberately absent: migration 000020 folded it into
+	// applications.git_credentials_encrypted and dropped the table, so the
+	// target that used to be here made every run fail its select and exit 1.
 	{"applications", "id", "git_credentials_encrypted"},
+	{"applications", "id", "webhook_secret_encrypted"},
+	{"applications", "id", "deploy_hook_token_encrypted"},
+	{"application_file_mounts", "id", "content_encrypted"},
 	{"databases", "id", "credentials_encrypted"},
 	{"domains", "id", "ssl_credentials_encrypted"},
+	{"certificates", "id", "cert_pem_encrypted"},
+	{"certificates", "id", "key_pem_encrypted"},
 	{"env_vars", "id", "value_encrypted"},
 	{"project_env_vars", "id", "value_encrypted"},
+	{"git_provider_configs", "id", "secret_encrypted"},
+	{"git_integrations", "id", "config_encrypted"},
+	{"backup_destinations", "id", "credentials_encrypted"},
+	{"notification_channels", "id", "config_encrypted"},
 }
 
 func main() {

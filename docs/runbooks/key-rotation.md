@@ -79,8 +79,12 @@ task encryption:rewrap
 
 The tool:
 
-- Scans `git_credentials`, `applications`, `databases`, `domains`,
-  `env_vars`, `project_env_vars`.
+- Scans every encrypted column in the schema: application git credentials,
+  webhook secrets and deploy-hook tokens, file-mount contents, database and
+  backup-destination credentials, domain SSL credentials, stored certificates,
+  application and project env vars, git provider and integration secrets,
+  and notification-channel configs. A test asserts this list
+  matches the schema, so a newly added secret column cannot be missed.
 - For each row with a non-current KEK tag (including legacy rows), decrypts
   under the old KEK, re-seals under the current KEK, and updates in place.
 - Skips rows already tagged with the current KEK (idempotent — safe to
