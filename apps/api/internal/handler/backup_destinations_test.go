@@ -131,9 +131,10 @@ func TestDeleteUser_CascadesThroughRecordedBackups(t *testing.T) {
 	require.NoError(t, ownerUUID.Scan(ownerID))
 
 	project, err := env.Queries.CreateProject(ctx, generated.CreateProjectParams{
-		Name:   "Owned",
-		Slug:   "owned",
-		UserID: ownerUUID,
+		Name:     "Owned",
+		Slug:     "owned",
+		UserID:   ownerUUID,
+		ServerID: testutil.LocalServerID(t, ctx, env.Queries),
 	})
 	require.NoError(t, err)
 

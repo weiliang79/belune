@@ -2,14 +2,29 @@ package testutil
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"testing"
 
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
+
+	"github.com/weiliang79/belune/internal/store/generated"
 )
+
+// LocalServerID returns the id of the local server row seeded by the migrations.
+// Tests that insert a project directly through the queries need it, since
+// projects.server_id is NOT NULL and the id is generated rather than fixed.
+func LocalServerID(t *testing.T, ctx context.Context, queries *generated.Queries) pgtype.UUID {
+	t.Helper()
+
+	server, err := queries.GetLocalServer(ctx)
+	require.NoError(t, err)
+	return server.ID
+}
 
 // SetupAdmin creates the first admin user via POST /api/auth/setup and returns the auth token.
 func (e *TestEnv) SetupAdmin(t *testing.T, email, password string) string {

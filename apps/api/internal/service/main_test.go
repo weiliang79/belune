@@ -54,9 +54,10 @@ func seedUserAndProject(t *testing.T) (generated.User, generated.Project) {
 	require.NoError(t, err)
 
 	project, err := testQueries.CreateProject(ctx, generated.CreateProjectParams{
-		Name:   "Test Project",
-		Slug:   "proj-" + suffix,
-		UserID: user.ID,
+		Name:     "Test Project",
+		Slug:     "proj-" + suffix,
+		UserID:   user.ID,
+		ServerID: testutil.LocalServerID(t, ctx, testQueries),
 	})
 	require.NoError(t, err)
 

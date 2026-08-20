@@ -463,6 +463,10 @@ func (h *Handler) resolveTemplateProject(r *http.Request, m *template.Manifest, 
 	if err := userID.Scan(middleware.UserIDFromContext(r.Context())); err != nil {
 		return generated.Project{}, false, fmt.Errorf("invalid user id: %w", err)
 	}
+	serverID, err := h.serverSvc.LocalServerID(r.Context())
+	if err != nil {
+		return generated.Project{}, false, err
+	}
 
 	// Globally-unique slug: try the plain slug, then add short random suffixes.
 	base := naming.Slugify(name)
@@ -475,9 +479,10 @@ func (h *Handler) resolveTemplateProject(r *http.Request, m *template.Manifest, 
 			slug = fmt.Sprintf("%s-%s", base, randSuffix())
 		}
 		p, err := h.queries.CreateProject(r.Context(), generated.CreateProjectParams{
-			Name:   name,
-			Slug:   slug,
-			UserID: userID,
+			Name:     name,
+			Slug:     slug,
+			UserID:   userID,
+			ServerID: serverID,
 		})
 		if err == nil {
 			return p, true, nil

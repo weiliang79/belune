@@ -109,10 +109,11 @@ func (q *Queries) GetLastSucceededDatabaseBackup(ctx context.Context, databaseID
 
 const insertBackupLocation = `-- name: InsertBackupLocation :one
 INSERT INTO backup_locations (
-    database_backup_id, volume_backup_id, destination_id, remote_key, local_path
+    database_backup_id, volume_backup_id, destination_id, remote_key, local_path,
+    server_id
 )
-VALUES ($1, $2, $3, $4, $5)
-RETURNING id, database_backup_id, volume_backup_id, destination_id, remote_key, local_path, uploaded_at
+VALUES ($1, $2, $3, $4, $5, $6)
+RETURNING id, database_backup_id, volume_backup_id, destination_id, remote_key, local_path, uploaded_at, server_id
 `
 
 type InsertBackupLocationParams struct {
@@ -121,10 +122,13 @@ type InsertBackupLocationParams struct {
 	DestinationID    pgtype.UUID `json:"destination_id"`
 	RemoteKey        pgtype.Text `json:"remote_key"`
 	LocalPath        pgtype.Text `json:"local_path"`
+	ServerID         pgtype.UUID `json:"server_id"`
 }
 
 // Records where a backup copy was written. Written at upload time, alongside
 // the legacy remote_key/local_path columns (reads move off those in 0.1.x).
+// server_id names the host holding an on-disk copy and stays NULL for a copy
+// that only lives in a bucket.
 func (q *Queries) InsertBackupLocation(ctx context.Context, arg InsertBackupLocationParams) (BackupLocation, error) {
 	row := q.db.QueryRow(ctx, insertBackupLocation,
 		arg.DatabaseBackupID,
@@ -132,6 +136,7 @@ func (q *Queries) InsertBackupLocation(ctx context.Context, arg InsertBackupLoca
 		arg.DestinationID,
 		arg.RemoteKey,
 		arg.LocalPath,
+		arg.ServerID,
 	)
 	var i BackupLocation
 	err := row.Scan(
@@ -142,6 +147,7 @@ func (q *Queries) InsertBackupLocation(ctx context.Context, arg InsertBackupLoca
 		&i.RemoteKey,
 		&i.LocalPath,
 		&i.UploadedAt,
+		&i.ServerID,
 	)
 	return i, err
 }
@@ -368,7 +374,7 @@ func (q *Queries) ListDestinationNamesForDatabaseBackups(ctx context.Context, da
 }
 
 const listLocationsForDatabaseBackup = `-- name: ListLocationsForDatabaseBackup :many
-SELECT id, database_backup_id, volume_backup_id, destination_id, remote_key, local_path, uploaded_at FROM backup_locations
+SELECT id, database_backup_id, volume_backup_id, destination_id, remote_key, local_path, uploaded_at, server_id FROM backup_locations
 WHERE database_backup_id = $1
 ORDER BY uploaded_at
 `
@@ -390,6 +396,7 @@ func (q *Queries) ListLocationsForDatabaseBackup(ctx context.Context, databaseBa
 			&i.RemoteKey,
 			&i.LocalPath,
 			&i.UploadedAt,
+			&i.ServerID,
 		); err != nil {
 			return nil, err
 		}
@@ -402,7 +409,7 @@ func (q *Queries) ListLocationsForDatabaseBackup(ctx context.Context, databaseBa
 }
 
 const listLocationsForVolumeBackup = `-- name: ListLocationsForVolumeBackup :many
-SELECT id, database_backup_id, volume_backup_id, destination_id, remote_key, local_path, uploaded_at FROM backup_locations
+SELECT id, database_backup_id, volume_backup_id, destination_id, remote_key, local_path, uploaded_at, server_id FROM backup_locations
 WHERE volume_backup_id = $1
 ORDER BY uploaded_at
 `
@@ -424,6 +431,7 @@ func (q *Queries) ListLocationsForVolumeBackup(ctx context.Context, volumeBackup
 			&i.RemoteKey,
 			&i.LocalPath,
 			&i.UploadedAt,
+			&i.ServerID,
 		); err != nil {
 			return nil, err
 		}

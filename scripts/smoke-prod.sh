@@ -143,9 +143,10 @@ INSERT INTO settings (key, value) VALUES ('dashboard_domain', '$DASHBOARD_HOST')
 
 INSERT INTO users (id, email, password_hash)
   VALUES ('11111111-1111-1111-1111-111111111111', 'smoke@belune.invalid', 'x');
-INSERT INTO projects (id, name, slug, user_id)
+INSERT INTO projects (id, name, slug, user_id, server_id)
   VALUES ('22222222-2222-2222-2222-222222222222', 'smoke', 'smoke',
-          '11111111-1111-1111-1111-111111111111');
+          '11111111-1111-1111-1111-111111111111',
+          (SELECT id FROM servers WHERE is_local));
 INSERT INTO applications (id, project_id, name, slug, type, build_type)
   VALUES ('33333333-3333-3333-3333-333333333333',
           '22222222-2222-2222-2222-222222222222', 'smoke', 'smoke', 'image', 'image');

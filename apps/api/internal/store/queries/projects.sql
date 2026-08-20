@@ -13,8 +13,8 @@ ORDER BY p.created_at DESC;
 SELECT * FROM projects WHERE id = $1;
 
 -- name: CreateProject :one
-INSERT INTO projects (name, slug, user_id)
-VALUES ($1, $2, $3)
+INSERT INTO projects (name, slug, user_id, server_id)
+VALUES ($1, $2, $3, $4)
 RETURNING *;
 
 -- name: UpdateProject :one

@@ -113,9 +113,10 @@ func seedRunningApp(t *testing.T, ctx context.Context, queries *generated.Querie
 	require.NoError(t, err)
 
 	project, err := queries.CreateProject(ctx, generated.CreateProjectParams{
-		Name:   "Reconcile Project",
-		Slug:   "reconcile-project",
-		UserID: user.ID,
+		Name:     "Reconcile Project",
+		Slug:     "reconcile-project",
+		UserID:   user.ID,
+		ServerID: testutil.LocalServerID(t, ctx, queries),
 	})
 	require.NoError(t, err)
 
