@@ -492,6 +492,18 @@ func (h *TaskHandler) recordBackupLocation(ctx context.Context, p generated.Inse
 	if !p.RemoteKey.Valid && !p.LocalPath.Valid {
 		return // nothing was written anywhere; has_a_file would reject it
 	}
+	// An on-disk copy belongs to a specific host; a bucket-only copy belongs to
+	// none, and leaving server_id NULL is how that is said. Every backup runs on
+	// the control plane's own host today, so that is the only answer there is —
+	// this is the one place that changes when a copy can be written elsewhere.
+	if p.LocalPath.Valid {
+		if server, err := h.Queries.GetLocalServer(ctx); err == nil {
+			p.ServerID = server.ID
+		} else {
+			// Recording where the archive went still beats recording nothing.
+			slog.Warn("backup: resolve local server for location", "error", err)
+		}
+	}
 	if _, err := h.Queries.InsertBackupLocation(ctx, p); err != nil {
 		slog.Warn("backup: record location",
 			"database_backup_id", formatUUID(p.DatabaseBackupID),

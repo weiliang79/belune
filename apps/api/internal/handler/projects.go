@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/json"
+	"log/slog"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -31,10 +32,20 @@ func (h *Handler) CreateProject(w http.ResponseWriter, r *http.Request) {
 	var userID pgtype.UUID
 	userID.Scan(middleware.UserIDFromContext(r.Context()))
 
+	// Every project is placed on a server. With no agent yet that is always the
+	// control plane's own host; the caller does not get to choose.
+	serverID, err := h.serverSvc.LocalServerID(r.Context())
+	if err != nil {
+		slog.Error("failed to resolve the local server", "error", err)
+		writeError(w, http.StatusInternalServerError, "failed to create project")
+		return
+	}
+
 	project, err := h.queries.CreateProject(r.Context(), generated.CreateProjectParams{
-		Name:   req.Name,
-		Slug:   req.Slug,
-		UserID: userID,
+		Name:     req.Name,
+		Slug:     req.Slug,
+		UserID:   userID,
+		ServerID: serverID,
 	})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to create project")

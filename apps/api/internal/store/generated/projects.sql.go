@@ -23,19 +23,25 @@ func (q *Queries) CountProjects(ctx context.Context) (int64, error) {
 }
 
 const createProject = `-- name: CreateProject :one
-INSERT INTO projects (name, slug, user_id)
-VALUES ($1, $2, $3)
-RETURNING id, name, slug, user_id, created_at, updated_at
+INSERT INTO projects (name, slug, user_id, server_id)
+VALUES ($1, $2, $3, $4)
+RETURNING id, name, slug, user_id, created_at, updated_at, server_id
 `
 
 type CreateProjectParams struct {
-	Name   string      `json:"name"`
-	Slug   string      `json:"slug"`
-	UserID pgtype.UUID `json:"user_id"`
+	Name     string      `json:"name"`
+	Slug     string      `json:"slug"`
+	UserID   pgtype.UUID `json:"user_id"`
+	ServerID pgtype.UUID `json:"server_id"`
 }
 
 func (q *Queries) CreateProject(ctx context.Context, arg CreateProjectParams) (Project, error) {
-	row := q.db.QueryRow(ctx, createProject, arg.Name, arg.Slug, arg.UserID)
+	row := q.db.QueryRow(ctx, createProject,
+		arg.Name,
+		arg.Slug,
+		arg.UserID,
+		arg.ServerID,
+	)
 	var i Project
 	err := row.Scan(
 		&i.ID,
@@ -44,6 +50,7 @@ func (q *Queries) CreateProject(ctx context.Context, arg CreateProjectParams) (P
 		&i.UserID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ServerID,
 	)
 	return i, err
 }
@@ -58,7 +65,7 @@ func (q *Queries) DeleteProject(ctx context.Context, id pgtype.UUID) error {
 }
 
 const getProject = `-- name: GetProject :one
-SELECT id, name, slug, user_id, created_at, updated_at FROM projects WHERE id = $1
+SELECT id, name, slug, user_id, created_at, updated_at, server_id FROM projects WHERE id = $1
 `
 
 func (q *Queries) GetProject(ctx context.Context, id pgtype.UUID) (Project, error) {
@@ -71,12 +78,13 @@ func (q *Queries) GetProject(ctx context.Context, id pgtype.UUID) (Project, erro
 		&i.UserID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ServerID,
 	)
 	return i, err
 }
 
 const listAllProjects = `-- name: ListAllProjects :many
-SELECT p.id, p.name, p.slug, p.user_id, p.created_at, p.updated_at, (
+SELECT p.id, p.name, p.slug, p.user_id, p.created_at, p.updated_at, p.server_id, (
     SELECT max(d.started_at)
     FROM deployments d
     JOIN applications a ON a.id = d.application_id
@@ -93,6 +101,7 @@ type ListAllProjectsRow struct {
 	UserID         pgtype.UUID        `json:"user_id"`
 	CreatedAt      pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+	ServerID       pgtype.UUID        `json:"server_id"`
 	LastDeployedAt interface{}        `json:"last_deployed_at"`
 }
 
@@ -112,6 +121,7 @@ func (q *Queries) ListAllProjects(ctx context.Context) ([]ListAllProjectsRow, er
 			&i.UserID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.ServerID,
 			&i.LastDeployedAt,
 		); err != nil {
 			return nil, err
@@ -125,7 +135,7 @@ func (q *Queries) ListAllProjects(ctx context.Context) ([]ListAllProjectsRow, er
 }
 
 const listProjectsByUser = `-- name: ListProjectsByUser :many
-SELECT p.id, p.name, p.slug, p.user_id, p.created_at, p.updated_at, (
+SELECT p.id, p.name, p.slug, p.user_id, p.created_at, p.updated_at, p.server_id, (
     SELECT max(d.started_at)
     FROM deployments d
     JOIN applications a ON a.id = d.application_id
@@ -143,6 +153,7 @@ type ListProjectsByUserRow struct {
 	UserID         pgtype.UUID        `json:"user_id"`
 	CreatedAt      pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+	ServerID       pgtype.UUID        `json:"server_id"`
 	LastDeployedAt interface{}        `json:"last_deployed_at"`
 }
 
@@ -162,6 +173,7 @@ func (q *Queries) ListProjectsByUser(ctx context.Context, userID pgtype.UUID) ([
 			&i.UserID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.ServerID,
 			&i.LastDeployedAt,
 		); err != nil {
 			return nil, err
@@ -177,7 +189,7 @@ func (q *Queries) ListProjectsByUser(ctx context.Context, userID pgtype.UUID) ([
 const updateProject = `-- name: UpdateProject :one
 UPDATE projects SET name = $2, updated_at = NOW()
 WHERE id = $1
-RETURNING id, name, slug, user_id, created_at, updated_at
+RETURNING id, name, slug, user_id, created_at, updated_at, server_id
 `
 
 type UpdateProjectParams struct {
@@ -195,6 +207,7 @@ func (q *Queries) UpdateProject(ctx context.Context, arg UpdateProjectParams) (P
 		&i.UserID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ServerID,
 	)
 	return i, err
 }
@@ -202,7 +215,7 @@ func (q *Queries) UpdateProject(ctx context.Context, arg UpdateProjectParams) (P
 const updateProjectOwner = `-- name: UpdateProjectOwner :one
 UPDATE projects SET user_id = $2, updated_at = NOW()
 WHERE id = $1
-RETURNING id, name, slug, user_id, created_at, updated_at
+RETURNING id, name, slug, user_id, created_at, updated_at, server_id
 `
 
 type UpdateProjectOwnerParams struct {
@@ -220,6 +233,7 @@ func (q *Queries) UpdateProjectOwner(ctx context.Context, arg UpdateProjectOwner
 		&i.UserID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ServerID,
 	)
 	return i, err
 }

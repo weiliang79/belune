@@ -15,6 +15,7 @@ import (
 
 	"github.com/weiliang79/belune/internal/pkg/crypto"
 	"github.com/weiliang79/belune/internal/runtime"
+	"github.com/weiliang79/belune/internal/service"
 	"github.com/weiliang79/belune/internal/status"
 	"github.com/weiliang79/belune/internal/store/generated"
 	"github.com/weiliang79/belune/internal/testutil"
@@ -68,9 +69,10 @@ func seedDatabase(t *testing.T, opts ...func(*generated.CreateDatabaseParams)) g
 	})
 	require.NoError(t, err)
 	project, err := testQueries.CreateProject(ctx, generated.CreateProjectParams{
-		Name:   "DB Project",
-		Slug:   "dbproj-" + suffix,
-		UserID: user.ID,
+		Name:     "DB Project",
+		Slug:     "dbproj-" + suffix,
+		UserID:   user.ID,
+		ServerID: testutil.LocalServerID(t, ctx, testQueries),
 	})
 	require.NoError(t, err)
 
@@ -129,6 +131,62 @@ func TestHandleBackupDBTask_Logical(t *testing.T) {
 	assert.True(t, backups[0].LocalPath.Valid)
 	_, statErr := os.Stat(backups[0].LocalPath.String)
 	assert.NoError(t, statErr)
+}
+
+// A copy on disk names the host holding it; a copy that only exists in a bucket
+// names none. The servers migration backfilled existing rows on exactly that
+// rule, so the writer has to follow it too — otherwise every backup taken after
+// the upgrade records NULL and claims, in the column's own vocabulary, to be
+// somewhere other than this host.
+func TestHandleBackupDBTask_LocalCopyRecordsItsServer(t *testing.T) {
+	ctx := context.Background()
+	rt := &testutil.MockContainerRuntime{
+		ExecFunc: func(_ context.Context, _ string, _ []string, _ io.Reader, stdout, _ io.Writer) (int, error) {
+			_, _ = stdout.Write([]byte("-- SQL DUMP --"))
+			return 0, nil
+		},
+	}
+	h := newTestHandler(rt, nil)
+	h.Config.DatabaseBackupDir = t.TempDir()
+	keyring, err := crypto.ParseKeyringEnv("", testutil.TestEncryptionKey, "")
+	require.NoError(t, err)
+	h.BackupDestinations = service.NewBackupDestinationService(testQueries, keyring)
+
+	db := seedDatabase(t)
+	// A local destination keeps the staged archive on-host, which is the only
+	// way to get a location row with a local_path.
+	dest, err := testQueries.CreateBackupDestination(ctx, generated.CreateBackupDestinationParams{
+		ProjectID:            db.ProjectID,
+		Name:                 "on-host",
+		Provider:             "local",
+		CredentialsEncrypted: []byte{},
+	})
+	require.NoError(t, err)
+	cfg, err := testQueries.CreateDatabaseBackupConfig(ctx, generated.CreateDatabaseBackupConfigParams{
+		DatabaseID:    db.ID,
+		DestinationID: dest.ID,
+		Schedule:      "0 3 * * *",
+		KeepLatest:    pgtype.Int4{Int32: 3, Valid: true},
+		Enabled:       true,
+	})
+	require.NoError(t, err)
+
+	payload, _ := json.Marshal(map[string]string{
+		"database_id":      dbIDStr(db),
+		"backup_config_id": uuidString(cfg.ID),
+	})
+	require.NoError(t, h.HandleBackupDBTask(ctx, asynq.NewTask("backup_db", payload)))
+
+	backups, err := testQueries.ListDatabaseBackups(ctx, generated.ListDatabaseBackupsParams{DatabaseID: db.ID, Limit: 5})
+	require.NoError(t, err)
+	require.NotEmpty(t, backups)
+
+	locations, err := testQueries.ListLocationsForDatabaseBackup(ctx, backups[0].ID)
+	require.NoError(t, err)
+	require.Len(t, locations, 1)
+	require.True(t, locations[0].LocalPath.Valid, "a local destination keeps the archive on-host")
+	assert.Equal(t, testutil.LocalServerID(t, ctx, testQueries), locations[0].ServerID,
+		"an on-disk copy must record the host that holds it")
 }
 
 // orderRuntime records the relative order of stop/start/tar so the cold-snapshot

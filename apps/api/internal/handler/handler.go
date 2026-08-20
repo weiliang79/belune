@@ -86,6 +86,9 @@ type Handler struct {
 	// smtpSettingsSvc reads/writes DB-backed SMTP config; the same logic is wired
 	// as the email service's resolver in app.go.
 	smtpSettingsSvc *service.SMTPSettingsService
+	// serverSvc is built here (like certSvc) from queries alone. It resolves the
+	// local server row that new projects are placed on.
+	serverSvc *service.ServerService
 }
 
 func New(
@@ -138,6 +141,7 @@ func New(
 		certSvc:           service.NewCertificateService(queries, cfg.Keyring),
 		notifyChannelSvc:  service.NewNotificationChannelService(queries, cfg.Keyring, service.NewNotifyRegistry(emailSvc), cfg.PublicBaseURL),
 		smtpSettingsSvc:   service.NewSMTPSettingsService(queries, cfg.Keyring, cfg),
+		serverSvc:         service.NewServerService(queries),
 	}
 }
 

@@ -159,6 +159,7 @@ type BackupLocation struct {
 	RemoteKey        pgtype.Text        `json:"remote_key"`
 	LocalPath        pgtype.Text        `json:"local_path"`
 	UploadedAt       pgtype.Timestamptz `json:"uploaded_at"`
+	ServerID         pgtype.UUID        `json:"server_id"`
 }
 
 type BackupRun struct {
@@ -433,6 +434,7 @@ type Project struct {
 	UserID    pgtype.UUID        `json:"user_id"`
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+	ServerID  pgtype.UUID        `json:"server_id"`
 }
 
 type ProjectEnvVar struct {
@@ -488,6 +490,27 @@ type RequestLog struct {
 	ClientIp      pgtype.Text        `json:"client_ip"`
 	UserAgent     pgtype.Text        `json:"user_agent"`
 	RecordedAt    pgtype.Timestamptz `json:"recorded_at"`
+}
+
+type Server struct {
+	ID                   pgtype.UUID        `json:"id"`
+	Name                 string             `json:"name"`
+	IsLocal              bool               `json:"is_local"`
+	Lifecycle            string             `json:"lifecycle"`
+	AdvertiseAddress     pgtype.Text        `json:"advertise_address"`
+	LastSeenAt           pgtype.Timestamptz `json:"last_seen_at"`
+	AgentVersion         pgtype.Text        `json:"agent_version"`
+	AgentProtocolVersion pgtype.Int4        `json:"agent_protocol_version"`
+	Arch                 pgtype.Text        `json:"arch"`
+	Os                   pgtype.Text        `json:"os"`
+	DockerVersion        pgtype.Text        `json:"docker_version"`
+	CpuCores             pgtype.Int4        `json:"cpu_cores"`
+	MemoryTotalBytes     pgtype.Int8        `json:"memory_total_bytes"`
+	ClockSkewSeconds     pgtype.Int4        `json:"clock_skew_seconds"`
+	EnrolledAt           pgtype.Timestamptz `json:"enrolled_at"`
+	RevokedAt            pgtype.Timestamptz `json:"revoked_at"`
+	CreatedAt            pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
 }
 
 type Setting struct {

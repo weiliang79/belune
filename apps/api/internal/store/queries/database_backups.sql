@@ -112,10 +112,13 @@ UPDATE database_restores SET log = $2 WHERE id = $1;
 -- name: InsertBackupLocation :one
 -- Records where a backup copy was written. Written at upload time, alongside
 -- the legacy remote_key/local_path columns (reads move off those in 0.1.x).
+-- server_id names the host holding an on-disk copy and stays NULL for a copy
+-- that only lives in a bucket.
 INSERT INTO backup_locations (
-    database_backup_id, volume_backup_id, destination_id, remote_key, local_path
+    database_backup_id, volume_backup_id, destination_id, remote_key, local_path,
+    server_id
 )
-VALUES ($1, $2, $3, $4, $5)
+VALUES ($1, $2, $3, $4, $5, $6)
 RETURNING *;
 
 -- name: ListLocationsForDatabaseBackup :many

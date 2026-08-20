@@ -111,9 +111,10 @@ func seedCollectorApp(t *testing.T) generated.Application {
 	require.NoError(t, err)
 
 	project, err := testQueries.CreateProject(ctx, generated.CreateProjectParams{
-		Name:   "Collector Project",
-		Slug:   "col-" + suffix,
-		UserID: user.ID,
+		Name:     "Collector Project",
+		Slug:     "col-" + suffix,
+		UserID:   user.ID,
+		ServerID: testutil.LocalServerID(t, ctx, testQueries),
 	})
 	require.NoError(t, err)
 
