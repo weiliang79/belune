@@ -13,11 +13,14 @@ package main
 
 import (
 	"context"
+	"encoding/base64"
+	"errors"
 	"flag"
 	"fmt"
 	"log/slog"
 	"os"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/weiliang79/belune/internal/config"
@@ -58,6 +61,15 @@ var targets = []target{
 	{"users", "id", "totp_secret_encrypted"},
 }
 
+// settingTargets are secrets that live in a settings ROW rather than a column,
+// base64-encoded because the value column is text. They are invisible to the
+// schema — nothing about `settings` says one row holds ciphertext — which is
+// exactly why they need naming here, and why the coverage test checks the rows
+// present in the database as well as the columns.
+var settingTargets = []string{
+	"smtp_password_encrypted",
+}
+
 func main() {
 	dryRun := flag.Bool("dry-run", false, "report what would be rewrapped without writing")
 	flag.Parse()
@@ -85,6 +97,23 @@ func main() {
 	)
 
 	var total, rewrapped, skipped, failed int
+	for _, key := range settingTargets {
+		r, err := rewrapSetting(ctx, pool, cfg.Keyring, key, *dryRun)
+		if err != nil {
+			slog.Error("setting failed", "key", key, "error", err)
+			failed++
+			continue
+		}
+		total += r.scanned
+		rewrapped += r.rewrapped
+		skipped += r.skipped
+		slog.Info("setting done",
+			"key", key,
+			"scanned", r.scanned,
+			"rewrapped", r.rewrapped,
+			"skipped_current", r.skipped,
+		)
+	}
 	for _, t := range targets {
 		r, err := rewrapTable(ctx, pool, cfg.Keyring, t, *dryRun)
 		if err != nil {
@@ -116,6 +145,50 @@ func main() {
 
 type result struct {
 	scanned, rewrapped, skipped int
+}
+
+// rewrapSetting re-seals a base64-encoded secret stored in a settings row. A
+// missing row is not an error: the setting simply has never been configured.
+func rewrapSetting(ctx context.Context, pool *pgxpool.Pool, kr *crypto.Keyring, key string, dryRun bool) (result, error) {
+	var res result
+
+	var encoded string
+	err := pool.QueryRow(ctx, "SELECT value FROM settings WHERE key = $1", key).Scan(&encoded)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return res, nil
+		}
+		return res, fmt.Errorf("select: %w", err)
+	}
+	if encoded == "" {
+		return res, nil
+	}
+	res.scanned++
+
+	raw, err := base64.StdEncoding.DecodeString(encoded)
+	if err != nil {
+		return res, fmt.Errorf("decode: %w", err)
+	}
+	if kr.IsCurrent(raw) {
+		res.skipped++
+		return res, nil
+	}
+
+	upgraded, err := kr.Rewrap(raw)
+	if err != nil {
+		return res, fmt.Errorf("rewrap: %w", err)
+	}
+	res.rewrapped++
+	if dryRun {
+		return res, nil
+	}
+	if _, err := pool.Exec(ctx,
+		"UPDATE settings SET value = $2 WHERE key = $1",
+		key, base64.StdEncoding.EncodeToString(upgraded),
+	); err != nil {
+		return res, fmt.Errorf("update: %w", err)
+	}
+	return res, nil
 }
 
 func rewrapTable(ctx context.Context, pool *pgxpool.Pool, kr *crypto.Keyring, t target, dryRun bool) (result, error) {

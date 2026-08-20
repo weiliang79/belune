@@ -66,3 +66,55 @@ func TestTargetsCoverEveryEncryptedColumn(t *testing.T) {
 
 	fmt.Printf("rewrap covers %d encrypted columns\n", len(found))
 }
+
+// TestSettingTargetsCoverEncryptedSettings closes the hole the column test
+// cannot see. A secret stored in a settings ROW (the SMTP password) is
+// invisible to information_schema — nothing about the settings table says one
+// row holds ciphertext — so the coverage claim was false for it while every
+// column-level check passed.
+//
+// ⚠️ This can only check keys that exist in the database it runs against, so it
+// seeds the ones rewrap knows about and asserts every encrypted-looking key
+// present is covered. A brand-new settings secret that nobody registers here
+// will still slip through: the durable fix is to stop putting secrets in
+// settings rows.
+func TestSettingTargetsCoverEncryptedSettings(t *testing.T) {
+	pool, _, teardown := testutil.SetupTestDB()
+	defer teardown()
+	ctx := context.Background()
+
+	// Seed each known target so the query below has something to find, proving
+	// the check is not vacuous.
+	for _, key := range settingTargets {
+		_, err := pool.Exec(ctx,
+			`INSERT INTO settings (key, value) VALUES ($1, 'seeded')
+			 ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`, key)
+		require.NoError(t, err)
+	}
+
+	rows, err := pool.Query(ctx,
+		`SELECT key FROM settings WHERE key LIKE '%\_encrypted' ORDER BY key`)
+	require.NoError(t, err)
+	defer rows.Close()
+
+	covered := make(map[string]bool, len(settingTargets))
+	for _, key := range settingTargets {
+		covered[key] = true
+	}
+
+	var found []string
+	for rows.Next() {
+		var key string
+		require.NoError(t, rows.Scan(&key))
+		found = append(found, key)
+	}
+	require.NoError(t, rows.Err())
+	require.NotEmpty(t, found, "the seeded settings should have been found")
+
+	for _, key := range found {
+		assert.True(t, covered[key],
+			"settings key %s holds an encrypted value that rewrap does not re-seal: "+
+				"key rotation would skip it and retiring the old KEK would make it "+
+				"undecryptable. Add it to settingTargets.", key)
+	}
+}
