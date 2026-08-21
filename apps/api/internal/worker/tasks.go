@@ -9,6 +9,7 @@ const (
 	TypeReloadDB            = "reload_db"
 	TypeBackupDB            = "backup_db"
 	TypeRestoreDB           = "restore_db"
+	TypeReplaceDatabase     = "replace_database"
 	TypeUpgradeDB           = "upgrade_db"
 	TypeRetentionCleanup    = "retention_cleanup"
 	TypeHostMetricsCleanup  = "host_metrics_cleanup"

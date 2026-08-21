@@ -11,6 +11,7 @@ import (
 
 	"github.com/weiliang79/belune/internal/runtime"
 	"github.com/weiliang79/belune/internal/service/backup"
+	"github.com/weiliang79/belune/internal/status"
 	"github.com/weiliang79/belune/internal/store"
 	"github.com/weiliang79/belune/internal/store/generated"
 )
@@ -267,4 +268,73 @@ func (s *DatabaseService) keepBackupsAndDelete(ctx context.Context, db generated
 		}
 		return q.DeleteDatabase(ctx, db.ID)
 	})
+}
+
+// RestoreFromTombstone recreates a deleted database from its tombstone and
+// hands its surviving backups back to it.
+//
+// It comes back under the ORIGINAL slug and credentials. That is the whole
+// point rather than a nicety: the slug is the container name, so it is the
+// hostname every dependent application resolves, and attaching a database
+// injects no connection env vars. A restore into a differently-named database
+// leaves every application in the project pointing at a host that is not there,
+// which is why "restore to a new database" is not offered as the safe option.
+//
+// The row is created here rather than in the worker so the caller gets it back
+// immediately and the UI can show it provisioning. Bringing the container up
+// and applying the archive is the worker's job.
+func (s *DatabaseService) RestoreFromTombstone(ctx context.Context, tombstoneID, backupID pgtype.UUID) (generated.Database, error) {
+	tombstone, err := s.queries.GetDatabaseTombstone(ctx, tombstoneID)
+	if err != nil {
+		return generated.Database{}, fmt.Errorf("get tombstone: %w", err)
+	}
+
+	// The slug is taken verbatim and needs no collision check. Creation builds
+	// it as {projectSlug}-{baseSlug}-{first 8 hex of the database's own id}, so
+	// it is unique by construction and nothing else can occupy it — which also
+	// means the replacement's slug carries the ORIGINAL database's id fragment
+	// rather than its own. That mismatch is the point: the slug is a hostname
+	// applications already resolve, not a description of the row.
+
+	var created generated.Database
+	err = store.WithTx(ctx, s.db, func(q *generated.Queries) error {
+		created, err = q.CreateDatabase(ctx, generated.CreateDatabaseParams{
+			ProjectID: tombstone.ProjectID,
+			Type:      tombstone.Type,
+			Name:      tombstone.Name,
+			Slug:      tombstone.Slug,
+			Version:   tombstone.Version.String,
+			Status:    status.DatabaseCreating,
+			// Left for provisioning to stamp, exactly as a new database does.
+			InternalHost: pgtype.Text{},
+			InternalPort: pgtype.Int4{},
+			// Carried as ciphertext; never decrypted on this path.
+			CredentialsEncrypted: tombstone.CredentialsEncrypted,
+			Image:                tombstone.Image,
+			ContainerPort:        tombstone.ContainerPort,
+			DataDir:              tombstone.DataDir,
+			BackupMode:           tombstone.BackupMode.String,
+			BackupCommand:        tombstone.BackupCommand,
+			RestoreCommand:       tombstone.RestoreCommand,
+		})
+		if err != nil {
+			return fmt.Errorf("recreating the database: %w", err)
+		}
+
+		// The backups move back onto the live database in the same transaction
+		// that creates it. Leaving them on the tombstone would mean the
+		// replacement starts with no history and the tombstone lingers
+		// describing a database that exists again.
+		if err := q.ReclaimBackupsFromTombstone(ctx, generated.ReclaimBackupsFromTombstoneParams{
+			TombstoneID: tombstoneID,
+			DatabaseID:  created.ID,
+		}); err != nil {
+			return fmt.Errorf("returning backups to the database: %w", err)
+		}
+		return q.DeleteDatabaseTombstone(ctx, tombstoneID)
+	})
+	if err != nil {
+		return generated.Database{}, err
+	}
+	return created, nil
 }

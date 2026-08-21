@@ -558,6 +558,25 @@ func (q *Queries) ListDatabasesByStatus(ctx context.Context, status string) ([]D
 	return items, nil
 }
 
+const reclaimBackupsFromTombstone = `-- name: ReclaimBackupsFromTombstone :exec
+UPDATE database_backups
+SET    tombstone_id = NULL, database_id = $2
+WHERE  tombstone_id = $1
+`
+
+type ReclaimBackupsFromTombstoneParams struct {
+	TombstoneID pgtype.UUID `json:"tombstone_id"`
+	DatabaseID  pgtype.UUID `json:"database_id"`
+}
+
+// The inverse of ReparentDatabaseBackupsToTombstone: hands a tombstone's
+// backups back to the database recreated from it. One statement for the same
+// reason — the one_parent CHECK forbids a row holding both.
+func (q *Queries) ReclaimBackupsFromTombstone(ctx context.Context, arg ReclaimBackupsFromTombstoneParams) error {
+	_, err := q.db.Exec(ctx, reclaimBackupsFromTombstone, arg.TombstoneID, arg.DatabaseID)
+	return err
+}
+
 const reparentDatabaseBackupsToTombstone = `-- name: ReparentDatabaseBackupsToTombstone :exec
 UPDATE database_backups
 SET    database_id = NULL, tombstone_id = $2

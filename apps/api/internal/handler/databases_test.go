@@ -315,3 +315,89 @@ func TestDeleteProject_StillPurgesKeptBackups(t *testing.T) {
 	assert.Equal(t, 0, backups, "deleting a project destroys every backup in it")
 	assert.Equal(t, 0, tombstones, "and the tombstones describing them")
 }
+
+// TestRestoreFromTombstone_RecreatesWithOriginalIdentity is what makes keeping
+// backups worth anything. A replacement has to come back as the SAME database:
+// the slug is the container name and therefore the hostname applications
+// resolve, and attaching a database injects no connection env vars — so a
+// replacement under a new name leaves every dependent application pointing at a
+// host that is not there.
+func TestRestoreFromTombstone_RecreatesWithOriginalIdentity(t *testing.T) {
+	resetDB(t)
+	token := env.SetupAdmin(t, "admin@test.com", "password123")
+	project := env.CreateProject(t, token, "Test Project", "test-project")
+	projectID := extractID(project["id"])
+
+	resp := env.DoRequest(t, "POST", fmt.Sprintf("/api/projects/%s/databases", projectID), map[string]any{
+		"name": "orders",
+		"type": "postgres",
+	}, testutil.AuthHeader(token))
+	db := testutil.ReadJSON(t, resp)
+	dbID := extractID(db["id"])
+	originalSlug := db["slug"].(string)
+	backupID := seedBackupRow(t, dbID)
+
+	ctx := context.Background()
+	var originalCreds []byte
+	require.NoError(t, env.Pool.QueryRow(ctx,
+		`SELECT credentials_encrypted FROM databases WHERE id = $1`, dbID).Scan(&originalCreds))
+
+	// Delete, keeping the backups.
+	resp = env.DoRequest(t, "DELETE", fmt.Sprintf("/api/projects/%s/databases/%s", projectID, dbID), nil, testutil.AuthHeader(token))
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	resp.Body.Close()
+
+	// Restore a replacement from the surviving backup.
+	resp = env.DoRequest(t, "POST",
+		fmt.Sprintf("/api/projects/%s/orphaned-backups/%s/restore", projectID, backupID),
+		nil, testutil.AuthHeader(token))
+	require.Equal(t, http.StatusAccepted, resp.StatusCode)
+	replacement := testutil.ReadJSON(t, resp)
+
+	assert.Equal(t, originalSlug, replacement["slug"],
+		"the replacement must reuse the original slug — it is the hostname applications connect to")
+	assert.Equal(t, "orders", replacement["name"])
+	assert.Equal(t, "postgres", replacement["type"])
+
+	newID := extractID(replacement["id"])
+	var newCreds []byte
+	require.NoError(t, env.Pool.QueryRow(ctx,
+		`SELECT credentials_encrypted FROM databases WHERE id = $1`, newID).Scan(&newCreds))
+	assert.Equal(t, originalCreds, newCreds,
+		"credentials must come back byte-identical or applications reconnect and are rejected")
+
+	// The backup belongs to the live database again, and the tombstone is gone.
+	var ownerID *string
+	require.NoError(t, env.Pool.QueryRow(ctx,
+		`SELECT database_id FROM database_backups WHERE id = $1`, backupID).Scan(&ownerID))
+	require.NotNil(t, ownerID)
+	assert.Equal(t, newID, *ownerID, "the replacement inherits its own backup history")
+
+	var tombstones int
+	require.NoError(t, env.Pool.QueryRow(ctx, `SELECT count(*) FROM database_tombstones`).Scan(&tombstones))
+	assert.Equal(t, 0, tombstones, "a tombstone must not linger describing a database that exists again")
+}
+
+// TestRestoreFromTombstone_RefusesALiveBackup pins the boundary between the two
+// restore paths. A backup still attached to a running database is restored from
+// that database; coming through the orphan route would recreate a second copy
+// of something that never went away.
+func TestRestoreFromTombstone_RefusesALiveBackup(t *testing.T) {
+	resetDB(t)
+	token := env.SetupAdmin(t, "admin@test.com", "password123")
+	project := env.CreateProject(t, token, "Test Project", "test-project")
+	projectID := extractID(project["id"])
+
+	resp := env.DoRequest(t, "POST", fmt.Sprintf("/api/projects/%s/databases", projectID), map[string]any{
+		"name": "cache", "type": "redis",
+	}, testutil.AuthHeader(token))
+	db := testutil.ReadJSON(t, resp)
+	backupID := seedBackupRow(t, extractID(db["id"]))
+
+	resp = env.DoRequest(t, "POST",
+		fmt.Sprintf("/api/projects/%s/orphaned-backups/%s/restore", projectID, backupID),
+		nil, testutil.AuthHeader(token))
+	assert.Equal(t, http.StatusBadRequest, resp.StatusCode,
+		"a backup whose database is still running is not an orphan")
+	resp.Body.Close()
+}

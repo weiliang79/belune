@@ -423,6 +423,11 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService,
 			r.Get("/api/projects/{projectId}/databases/{databaseId}/logs/sessions", h.ListDatabaseLogSessions)
 			r.Post("/api/projects/{projectId}/databases/{databaseId}/upgrade", h.UpgradeDatabase)
 			r.Get("/api/projects/{projectId}/databases/{databaseId}/deletion-impact", h.GetDatabaseDeletionImpact)
+
+			// Backups whose database is gone. Project-scoped because the
+			// tombstone they hang off is — the project is the access boundary,
+			// so an orphaned backup has no owner above it.
+			r.Post("/api/projects/{projectId}/orphaned-backups/{backupId}/restore", h.RestoreDatabaseFromTombstone)
 			r.Delete("/api/projects/{projectId}/databases/{databaseId}", h.DeleteDatabase)
 
 			// Scheduled backup configurations per database

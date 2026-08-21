@@ -105,3 +105,11 @@ DELETE FROM database_backups WHERE database_id = $1;
 SELECT count(*) FROM database_backups b
 JOIN database_tombstones t ON t.id = b.tombstone_id
 WHERE t.project_id = $1;
+
+-- name: ReclaimBackupsFromTombstone :exec
+-- The inverse of ReparentDatabaseBackupsToTombstone: hands a tombstone's
+-- backups back to the database recreated from it. One statement for the same
+-- reason — the one_parent CHECK forbids a row holding both.
+UPDATE database_backups
+SET    tombstone_id = NULL, database_id = $2
+WHERE  tombstone_id = $1;

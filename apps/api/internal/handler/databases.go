@@ -20,6 +20,7 @@ import (
 	"github.com/weiliang79/belune/internal/status"
 	"github.com/weiliang79/belune/internal/store"
 	"github.com/weiliang79/belune/internal/store/generated"
+	"github.com/weiliang79/belune/internal/worker"
 )
 
 var defaultVersions = map[string]string{
@@ -1310,4 +1311,88 @@ func buildConnectionString(db generated.Database, creds map[string]string) strin
 	default:
 		return ""
 	}
+}
+
+// RestoreDatabaseFromTombstone recreates a deleted database from the tombstone
+// its backups hang off, and restores the chosen backup into it.
+//
+// The replacement comes back under the original slug and credentials, so
+// applications in the project reconnect without an env-var edit. That is why
+// this is the offered path rather than "restore into a new database": attaching
+// a database injects no connection variables, so a differently-named
+// replacement leaves every dependent application pointing at a host that is not
+// there.
+func (h *Handler) RestoreDatabaseFromTombstone(w http.ResponseWriter, r *http.Request) {
+	projectID := chi.URLParam(r, "projectId")
+	var projectUUID pgtype.UUID
+	if err := projectUUID.Scan(projectID); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid project id")
+		return
+	}
+	backupID := chi.URLParam(r, "backupId")
+	var backupUUID pgtype.UUID
+	if err := backupUUID.Scan(backupID); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid backup id")
+		return
+	}
+	if !h.canAccessProject(r, projectUUID) {
+		writeError(w, http.StatusForbidden, "access denied")
+		return
+	}
+
+	backup, err := h.queries.GetDatabaseBackup(r.Context(), backupUUID)
+	if err != nil {
+		writeError(w, http.StatusNotFound, "backup not found")
+		return
+	}
+	if !backup.TombstoneID.Valid {
+		writeError(w, http.StatusBadRequest, "this backup still belongs to a live database; restore it from there")
+		return
+	}
+	if backup.Status != "succeeded" {
+		writeError(w, http.StatusBadRequest, "only a succeeded backup can be restored")
+		return
+	}
+
+	// The tombstone is the access boundary here: the backup is reachable only
+	// through the project that owns the tombstone, so a backup belonging to
+	// another project must not be restorable through this project's URL.
+	tombstone, err := h.queries.GetDatabaseTombstone(r.Context(), backup.TombstoneID)
+	if err != nil {
+		writeError(w, http.StatusNotFound, "the deleted database's record is gone")
+		return
+	}
+	if tombstone.ProjectID != projectUUID {
+		writeError(w, http.StatusForbidden, "access denied")
+		return
+	}
+
+	db, err := h.dbService.RestoreFromTombstone(r.Context(), tombstone.ID, backupUUID)
+	if err != nil {
+		slog.Error("failed to recreate database from tombstone", "tombstone_id", uuidToString(tombstone.ID), "error", err)
+		writeError(w, http.StatusInternalServerError, "failed to recreate the database")
+		return
+	}
+
+	payload, err := json.Marshal(map[string]string{
+		"database_id": uuidToString(db.ID),
+		"backup_id":   backupID,
+	})
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to schedule the restore")
+		return
+	}
+	if _, err := h.asynq.Enqueue(asynq.NewTask(worker.TypeReplaceDatabase, payload), asynq.Queue("critical")); err != nil {
+		// The row exists and owns its backups again, so this is recoverable:
+		// the database is listed as creating and Reload will provision it.
+		slog.Error("replacement created but could not be scheduled", "database_id", uuidToString(db.ID), "error", err)
+		writeError(w, http.StatusInternalServerError, "the database was recreated but the restore could not be scheduled")
+		return
+	}
+
+	h.audit(r, "restore_database_from_tombstone", "database", uuidToString(db.ID), map[string]any{
+		"backup_id": backupID,
+		"slug":      db.Slug,
+	})
+	writeJSON(w, http.StatusAccepted, databaseResponse{Database: db})
 }
