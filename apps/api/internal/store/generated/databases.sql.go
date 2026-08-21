@@ -22,6 +22,19 @@ func (q *Queries) CountDatabases(ctx context.Context) (int64, error) {
 	return count, err
 }
 
+const countOrphanedBackupsByProject = `-- name: CountOrphanedBackupsByProject :one
+SELECT count(*) FROM database_backups b
+JOIN database_tombstones t ON t.id = b.tombstone_id
+WHERE t.project_id = $1
+`
+
+func (q *Queries) CountOrphanedBackupsByProject(ctx context.Context, projectID pgtype.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countOrphanedBackupsByProject, projectID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createDatabase = `-- name: CreateDatabase :one
 INSERT INTO databases (
     project_id, type, name, slug, version, status, internal_host, internal_port,
@@ -97,12 +110,98 @@ func (q *Queries) CreateDatabase(ctx context.Context, arg CreateDatabaseParams) 
 	return i, err
 }
 
+const createDatabaseTombstone = `-- name: CreateDatabaseTombstone :one
+INSERT INTO database_tombstones (
+    project_id, original_id, slug, name, type, version, credentials_encrypted,
+    image, container_port, data_dir, backup_mode, backup_command, restore_command
+)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+RETURNING id, project_id, original_id, slug, name, type, version, credentials_encrypted, image, container_port, data_dir, backup_mode, backup_command, restore_command, deleted_at
+`
+
+type CreateDatabaseTombstoneParams struct {
+	ProjectID            pgtype.UUID `json:"project_id"`
+	OriginalID           pgtype.UUID `json:"original_id"`
+	Slug                 string      `json:"slug"`
+	Name                 string      `json:"name"`
+	Type                 string      `json:"type"`
+	Version              pgtype.Text `json:"version"`
+	CredentialsEncrypted []byte      `json:"credentials_encrypted"`
+	Image                pgtype.Text `json:"image"`
+	ContainerPort        pgtype.Int4 `json:"container_port"`
+	DataDir              pgtype.Text `json:"data_dir"`
+	BackupMode           pgtype.Text `json:"backup_mode"`
+	BackupCommand        pgtype.Text `json:"backup_command"`
+	RestoreCommand       pgtype.Text `json:"restore_command"`
+}
+
+// Records what a deleted database was, so its backups keep a parent and a
+// replacement can be recreated identically.
+func (q *Queries) CreateDatabaseTombstone(ctx context.Context, arg CreateDatabaseTombstoneParams) (DatabaseTombstone, error) {
+	row := q.db.QueryRow(ctx, createDatabaseTombstone,
+		arg.ProjectID,
+		arg.OriginalID,
+		arg.Slug,
+		arg.Name,
+		arg.Type,
+		arg.Version,
+		arg.CredentialsEncrypted,
+		arg.Image,
+		arg.ContainerPort,
+		arg.DataDir,
+		arg.BackupMode,
+		arg.BackupCommand,
+		arg.RestoreCommand,
+	)
+	var i DatabaseTombstone
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.OriginalID,
+		&i.Slug,
+		&i.Name,
+		&i.Type,
+		&i.Version,
+		&i.CredentialsEncrypted,
+		&i.Image,
+		&i.ContainerPort,
+		&i.DataDir,
+		&i.BackupMode,
+		&i.BackupCommand,
+		&i.RestoreCommand,
+		&i.DeletedAt,
+	)
+	return i, err
+}
+
 const deleteDatabase = `-- name: DeleteDatabase :exec
 DELETE FROM databases WHERE id = $1
 `
 
 func (q *Queries) DeleteDatabase(ctx context.Context, id pgtype.UUID) error {
 	_, err := q.db.Exec(ctx, deleteDatabase, id)
+	return err
+}
+
+const deleteDatabaseBackupsForDatabase = `-- name: DeleteDatabaseBackupsForDatabase :exec
+DELETE FROM database_backups WHERE database_id = $1
+`
+
+// Removes the rows outright, for the purge path. Object deletion stays
+// best-effort, but the rows must go deterministically: a leftover row pointing
+// at a database about to disappear trips the one_parent CHECK and aborts the
+// delete.
+func (q *Queries) DeleteDatabaseBackupsForDatabase(ctx context.Context, databaseID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, deleteDatabaseBackupsForDatabase, databaseID)
+	return err
+}
+
+const deleteDatabaseTombstone = `-- name: DeleteDatabaseTombstone :exec
+DELETE FROM database_tombstones WHERE id = $1
+`
+
+func (q *Queries) DeleteDatabaseTombstone(ctx context.Context, id pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, deleteDatabaseTombstone, id)
 	return err
 }
 
@@ -152,6 +251,33 @@ func (q *Queries) GetDatabaseOwnerUserID(ctx context.Context, id pgtype.UUID) (p
 	var user_id pgtype.UUID
 	err := row.Scan(&user_id)
 	return user_id, err
+}
+
+const getDatabaseTombstone = `-- name: GetDatabaseTombstone :one
+SELECT id, project_id, original_id, slug, name, type, version, credentials_encrypted, image, container_port, data_dir, backup_mode, backup_command, restore_command, deleted_at FROM database_tombstones WHERE id = $1
+`
+
+func (q *Queries) GetDatabaseTombstone(ctx context.Context, id pgtype.UUID) (DatabaseTombstone, error) {
+	row := q.db.QueryRow(ctx, getDatabaseTombstone, id)
+	var i DatabaseTombstone
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.OriginalID,
+		&i.Slug,
+		&i.Name,
+		&i.Type,
+		&i.Version,
+		&i.CredentialsEncrypted,
+		&i.Image,
+		&i.ContainerPort,
+		&i.DataDir,
+		&i.BackupMode,
+		&i.BackupCommand,
+		&i.RestoreCommand,
+		&i.DeletedAt,
+	)
+	return i, err
 }
 
 const getServerIDForDatabase = `-- name: GetServerIDForDatabase :one
@@ -296,6 +422,46 @@ func (q *Queries) ListAllDatabasesWithServerID(ctx context.Context) ([]ListAllDa
 	return items, nil
 }
 
+const listDatabaseTombstonesByProject = `-- name: ListDatabaseTombstonesByProject :many
+SELECT id, project_id, original_id, slug, name, type, version, credentials_encrypted, image, container_port, data_dir, backup_mode, backup_command, restore_command, deleted_at FROM database_tombstones WHERE project_id = $1 ORDER BY deleted_at DESC
+`
+
+func (q *Queries) ListDatabaseTombstonesByProject(ctx context.Context, projectID pgtype.UUID) ([]DatabaseTombstone, error) {
+	rows, err := q.db.Query(ctx, listDatabaseTombstonesByProject, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []DatabaseTombstone{}
+	for rows.Next() {
+		var i DatabaseTombstone
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.OriginalID,
+			&i.Slug,
+			&i.Name,
+			&i.Type,
+			&i.Version,
+			&i.CredentialsEncrypted,
+			&i.Image,
+			&i.ContainerPort,
+			&i.DataDir,
+			&i.BackupMode,
+			&i.BackupCommand,
+			&i.RestoreCommand,
+			&i.DeletedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listDatabasesByProject = `-- name: ListDatabasesByProject :many
 SELECT id, project_id, type, name, slug, version, status, internal_host, internal_port, credentials_encrypted, created_at, cpu_limit, memory_limit, host_port, image, container_port, data_dir, backup_mode, backup_command, restore_command, image_digest, source_kind, source_ref FROM databases WHERE project_id = $1 ORDER BY created_at DESC
 `
@@ -390,6 +556,25 @@ func (q *Queries) ListDatabasesByStatus(ctx context.Context, status string) ([]D
 		return nil, err
 	}
 	return items, nil
+}
+
+const reparentDatabaseBackupsToTombstone = `-- name: ReparentDatabaseBackupsToTombstone :exec
+UPDATE database_backups
+SET    database_id = NULL, tombstone_id = $2
+WHERE  database_id = $1
+`
+
+type ReparentDatabaseBackupsToTombstoneParams struct {
+	DatabaseID  pgtype.UUID `json:"database_id"`
+	TombstoneID pgtype.UUID `json:"tombstone_id"`
+}
+
+// Moves a database's backups onto its tombstone. Both columns are written in
+// one statement because the one_parent CHECK forbids a row holding both, so
+// there is no intermediate state where this could be split in two.
+func (q *Queries) ReparentDatabaseBackupsToTombstone(ctx context.Context, arg ReparentDatabaseBackupsToTombstoneParams) error {
+	_, err := q.db.Exec(ctx, reparentDatabaseBackupsToTombstone, arg.DatabaseID, arg.TombstoneID)
+	return err
 }
 
 const updateDatabaseAfterProvision = `-- name: UpdateDatabaseAfterProvision :one

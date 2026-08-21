@@ -66,3 +66,42 @@ WHERE d.id = $1;
 -- on which server without a lookup per row.
 SELECT d.*, p.server_id FROM databases d
 JOIN projects p ON p.id = d.project_id;
+
+-- name: CreateDatabaseTombstone :one
+-- Records what a deleted database was, so its backups keep a parent and a
+-- replacement can be recreated identically.
+INSERT INTO database_tombstones (
+    project_id, original_id, slug, name, type, version, credentials_encrypted,
+    image, container_port, data_dir, backup_mode, backup_command, restore_command
+)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+RETURNING *;
+
+-- name: GetDatabaseTombstone :one
+SELECT * FROM database_tombstones WHERE id = $1;
+
+-- name: ListDatabaseTombstonesByProject :many
+SELECT * FROM database_tombstones WHERE project_id = $1 ORDER BY deleted_at DESC;
+
+-- name: DeleteDatabaseTombstone :exec
+DELETE FROM database_tombstones WHERE id = $1;
+
+-- name: ReparentDatabaseBackupsToTombstone :exec
+-- Moves a database's backups onto its tombstone. Both columns are written in
+-- one statement because the one_parent CHECK forbids a row holding both, so
+-- there is no intermediate state where this could be split in two.
+UPDATE database_backups
+SET    database_id = NULL, tombstone_id = $2
+WHERE  database_id = $1;
+
+-- name: DeleteDatabaseBackupsForDatabase :exec
+-- Removes the rows outright, for the purge path. Object deletion stays
+-- best-effort, but the rows must go deterministically: a leftover row pointing
+-- at a database about to disappear trips the one_parent CHECK and aborts the
+-- delete.
+DELETE FROM database_backups WHERE database_id = $1;
+
+-- name: CountOrphanedBackupsByProject :one
+SELECT count(*) FROM database_backups b
+JOIN database_tombstones t ON t.id = b.tombstone_id
+WHERE t.project_id = $1;
