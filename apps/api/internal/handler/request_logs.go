@@ -85,7 +85,12 @@ func (h *Handler) StreamRequestLogs(w http.ResponseWriter, r *http.Request) {
 			if err := writer.SendComment("ping"); err != nil {
 				return
 			}
-		case msg := <-ch:
+		case msg, ok := <-ch:
+			// A closed subscription yields a nil message whose payload panics
+			// on read; go-redis closes ch on teardown, so this is not an error.
+			if !ok {
+				return
+			}
 			if err := writer.SendData(msg.Payload); err != nil {
 				return
 			}
@@ -283,7 +288,12 @@ func (h *Handler) StreamAllRequestLogs(w http.ResponseWriter, r *http.Request) {
 			if err := writer.SendComment("ping"); err != nil {
 				return
 			}
-		case msg := <-ch:
+		case msg, ok := <-ch:
+			// A closed subscription yields a nil message whose payload panics
+			// on read; go-redis closes ch on teardown, so this is not an error.
+			if !ok {
+				return
+			}
 			// Enrich with application_id extracted from channel name
 			var payload map[string]any
 			if err := json.Unmarshal([]byte(msg.Payload), &payload); err == nil {
