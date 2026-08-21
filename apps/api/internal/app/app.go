@@ -29,6 +29,7 @@ import (
 	"github.com/weiliang79/belune/internal/proxy"
 	"github.com/weiliang79/belune/internal/proxy/caddy"
 	"github.com/weiliang79/belune/internal/quota"
+	"github.com/weiliang79/belune/internal/runtime"
 	"github.com/weiliang79/belune/internal/runtime/docker"
 	"github.com/weiliang79/belune/internal/server"
 	"github.com/weiliang79/belune/internal/service"
@@ -90,6 +91,13 @@ func New(cfg *config.Config) (*App, error) {
 		return nil, fmt.Errorf("create docker client: %w", err)
 	}
 
+	// Everything that acts on containers goes through the resolver rather than
+	// this client, so the day a second host exists only the resolver changes.
+	// The long-running per-host components below (log collector, event watcher,
+	// metrics broadcaster) are still wired to the local client directly: they
+	// are a "run one of me per server" supervisor problem, not a lookup.
+	runtimes := runtime.NewLocalRuntimes(dockerClient)
+
 	resolveCaddyContainer(cfg, dockerClient)
 
 	caddyClient := caddy.New(cfg.CaddyAdminURL)
@@ -134,7 +142,7 @@ func New(cfg *config.Config) (*App, error) {
 	termMgr := terminal.NewManager(cfg.MaxTerminalSessionsPerUser)
 	hub := ws.NewHub(cfg.MaxWebSocketConnsPerUser)
 
-	appSvc := service.NewApplicationService(db, queries, dockerClient, cfg.Keyring, cfg.FileMountsDir)
+	appSvc := service.NewApplicationService(db, queries, runtimes, cfg.Keyring, cfg.FileMountsDir)
 	gitProviderSvc := service.NewGitProviderConfigService(queries, cfg.Keyring)
 	gitIntegrationSvc := service.NewGitIntegrationService(queries, cfg.Keyring, gitProviderSvc)
 	quotaSvc := quota.NewService(queries)
@@ -156,7 +164,7 @@ func New(cfg *config.Config) (*App, error) {
 	notifyRegistry := service.NewNotifyRegistry(emailSvc)
 	notifyChannelSvc := service.NewNotificationChannelService(queries, cfg.Keyring, notifyRegistry, cfg.PublicBaseURL)
 	taskHandler := &worker.TaskHandler{
-		Runtime:               dockerClient,
+		Runtimes:              runtimes,
 		Proxy:                 caddyClient,
 		DB:                    db,
 		Queries:               queries,
@@ -203,7 +211,7 @@ func New(cfg *config.Config) (*App, error) {
 	}
 
 	broadcaster := ws.NewContainerStatusBroadcaster(hub)
-	httpSrv := server.New(cfg, db, queries, asynqClient, asynqInspector, dockerClient, caddyClient, reconciler, rdb, hub, auditSvc, notifySvc, termMgr, emailSvc)
+	httpSrv := server.New(cfg, db, queries, asynqClient, asynqInspector, runtimes, caddyClient, reconciler, rdb, hub, auditSvc, notifySvc, termMgr, emailSvc)
 
 	// Optional Prometheus-friendly bind. Serves /metrics without auth on the
 	// configured address (typically loopback). Keeps the main /metrics route

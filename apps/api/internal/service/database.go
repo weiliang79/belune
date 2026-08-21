@@ -15,13 +15,13 @@ import (
 
 type DatabaseService struct {
 	queries      *generated.Queries
-	runtime      runtime.ContainerRuntime
+	runtimes     runtime.Runtimes
 	backups      *backup.Service           // optional; nil disables global remote backup cleanup
 	destinations *BackupDestinationService // optional; routes config-backup remote cleanup
 }
 
-func NewDatabaseService(queries *generated.Queries, rt runtime.ContainerRuntime, backups *backup.Service, destinations *BackupDestinationService) *DatabaseService {
-	return &DatabaseService{queries: queries, runtime: rt, backups: backups, destinations: destinations}
+func NewDatabaseService(queries *generated.Queries, rts runtime.Runtimes, backups *backup.Service, destinations *BackupDestinationService) *DatabaseService {
+	return &DatabaseService{queries: queries, runtimes: rts, backups: backups, destinations: destinations}
 }
 
 // deleteRemoteBackup removes a backup's remote object. It routes to the
@@ -185,13 +185,19 @@ func (s *DatabaseService) Delete(ctx context.Context, dbID pgtype.UUID) error {
 		return err
 	}
 
-	if err := s.runtime.StopContainer(ctx, db.Slug); err != nil {
+	// Resolved while the row is still there — the lookup joins projects.
+	rt, err := RuntimeForDatabase(ctx, s.queries, s.runtimes, dbID)
+	if err != nil {
+		return err
+	}
+
+	if err := rt.StopContainer(ctx, db.Slug); err != nil {
 		slog.Warn("could not stop container during db deletion", "container", db.Slug, "error", err)
 	}
-	if err := s.runtime.RemoveContainer(ctx, db.Slug); err != nil {
+	if err := rt.RemoveContainer(ctx, db.Slug); err != nil {
 		slog.Warn("could not remove container during db deletion", "container", db.Slug, "error", err)
 	}
-	if err := s.runtime.RemoveVolume(ctx, db.Slug+"-vol"); err != nil {
+	if err := rt.RemoveVolume(ctx, db.Slug+"-vol"); err != nil {
 		slog.Warn("could not remove volume during db deletion", "volume", db.Slug+"-vol", "error", err)
 	}
 

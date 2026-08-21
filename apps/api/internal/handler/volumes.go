@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -113,7 +114,7 @@ func (h *Handler) ListApplicationVolumes(w http.ResponseWriter, r *http.Request)
 	for _, v := range volumes {
 		names = append(names, naming.AppVolumeName(applicationID, v.Name))
 	}
-	sizes, err := h.runtime.VolumeSizes(r.Context(), names)
+	sizes, err := h.applicationVolumeSizes(r.Context(), applicationUUID, names)
 	if err != nil {
 		slog.Debug("list volumes: failed to fetch sizes", "application_id", applicationID, "error", err)
 		sizes = nil
@@ -250,7 +251,11 @@ func (h *Handler) DeleteApplicationVolume(w http.ResponseWriter, r *http.Request
 	warning := ""
 	if deleteData {
 		volName := naming.AppVolumeName(applicationID, vol.Name)
-		if err := h.runtime.RemoveVolume(r.Context(), volName); err != nil {
+		rt, err := h.runtimeForApplication(r.Context(), applicationUUID)
+		if err != nil {
+			slog.Warn("delete volume: failed to reach the application's server", "volume", volName, "error", err)
+			warning = "volume record deleted, but the underlying data volume could not be removed yet (its server was unreachable)"
+		} else if err := rt.RemoveVolume(r.Context(), volName); err != nil {
 			slog.Warn("delete volume: failed to remove docker volume", "volume", volName, "error", err)
 			warning = "volume record deleted, but the underlying data volume could not be removed yet (it may be in use — redeploy the application, then remove it)"
 		}
@@ -269,4 +274,14 @@ func (h *Handler) DeleteApplicationVolume(w http.ResponseWriter, r *http.Request
 		resp["warning"] = warning
 	}
 	writeJSON(w, http.StatusOK, resp)
+}
+
+// applicationVolumeSizes reads live sizes for an application's data volumes on
+// the host it is placed on.
+func (h *Handler) applicationVolumeSizes(ctx context.Context, appID pgtype.UUID, names []string) (map[string]int64, error) {
+	rt, err := h.runtimeForApplication(ctx, appID)
+	if err != nil {
+		return nil, err
+	}
+	return rt.VolumeSizes(ctx, names)
 }

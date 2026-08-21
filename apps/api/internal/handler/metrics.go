@@ -55,8 +55,12 @@ func (h *Handler) GetMetrics(w http.ResponseWriter, r *http.Request) {
 	}
 
 	stats := containerStats{ByType: map[string]containerTypeCount{}}
-	containers, err := h.runtime.ListContainers(ctx)
-	if err == nil {
+	// The container census is host-wide, so it is the control plane's own
+	// runtime rather than any one resource's placement.
+	rt, err := h.runtimes.Local(ctx)
+	if err != nil {
+		slog.Error("failed to reach the Docker host", "error", err)
+	} else if containers, err := rt.ListContainers(ctx); err == nil {
 		for _, c := range containers {
 			stats.Total++
 			switch c.Status {

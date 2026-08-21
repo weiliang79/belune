@@ -7,6 +7,7 @@ import (
 	"net/http"
 
 	"github.com/hibiken/asynq"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 
@@ -57,7 +58,7 @@ type Handler struct {
 	queries           *generated.Queries
 	asynq             TaskEnqueuer
 	inspector         QueueInspector
-	runtime           runtime.ContainerRuntime
+	runtimes          runtime.Runtimes
 	proxy             proxy.ProxyManager
 	reconciler        ReconcilerStatusProvider
 	auth              *service.AuthService
@@ -101,7 +102,7 @@ func New(
 	queries *generated.Queries,
 	asynqClient TaskEnqueuer,
 	inspector QueueInspector,
-	rt runtime.ContainerRuntime,
+	rts runtime.Runtimes,
 	pm proxy.ProxyManager,
 	reconciler ReconcilerStatusProvider,
 	auth *service.AuthService,
@@ -125,7 +126,7 @@ func New(
 		queries:           queries,
 		asynq:             asynqClient,
 		inspector:         inspector,
-		runtime:           rt,
+		runtimes:          rts,
 		proxy:             pm,
 		reconciler:        reconciler,
 		auth:              auth,
@@ -148,6 +149,21 @@ func New(
 		serverSvc:         service.NewServerService(queries),
 		totpSvc:           service.NewTOTPService(db, queries, cfg.Keyring),
 	}
+}
+
+// runtimeForApplication and runtimeForDatabase resolve the host a resource is
+// placed on. Handlers that already hold a row carrying server_id should call
+// h.runtimes.For with it instead — these exist for the paths that do not.
+func (h *Handler) runtimeForApplication(ctx context.Context, appID pgtype.UUID) (runtime.ContainerRuntime, error) {
+	return service.RuntimeForApplication(ctx, h.queries, h.runtimes, appID)
+}
+
+func (h *Handler) runtimeForDatabase(ctx context.Context, dbID pgtype.UUID) (runtime.ContainerRuntime, error) {
+	return service.RuntimeForDatabase(ctx, h.queries, h.runtimes, dbID)
+}
+
+func (h *Handler) runtimeForProject(ctx context.Context, projectID pgtype.UUID) (runtime.ContainerRuntime, error) {
+	return service.RuntimeForProject(ctx, h.queries, h.runtimes, projectID)
 }
 
 // audit is a nil-safe wrapper for audit logging. Extracts user ID + real client IP from request.

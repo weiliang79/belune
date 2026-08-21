@@ -20,7 +20,9 @@ import (
 	"github.com/weiliang79/belune/internal/naming"
 	"github.com/weiliang79/belune/internal/pkg/metrics"
 	"github.com/weiliang79/belune/internal/pkg/tracing"
+	"github.com/weiliang79/belune/internal/runtime"
 	"github.com/weiliang79/belune/internal/server/middleware"
+	"github.com/weiliang79/belune/internal/terminal"
 )
 
 // termMsg is the JSON envelope for terminal WebSocket messages.
@@ -78,7 +80,13 @@ func (h *Handler) CreateTerminalSession(w http.ResponseWriter, r *http.Request) 
 	}
 	containerName := naming.ContainerName(row.ProjectSlug, row.Slug, applicationID)
 
-	sess, err := h.runtime.ContainerExecTTY(r.Context(), containerName, []string{shell})
+	rt, err := h.runtimes.For(r.Context(), row.ServerID)
+	if err != nil {
+		writeError(w, http.StatusBadGateway, "failed to reach the application's server")
+		return
+	}
+
+	sess, err := rt.ContainerExecTTY(r.Context(), containerName, []string{shell})
 	if err != nil {
 		writeError(w, http.StatusBadGateway, fmt.Sprintf("exec failed: %v", err))
 		return
@@ -189,7 +197,13 @@ func (h *Handler) HandleTerminalWebSocket(w http.ResponseWriter, r *http.Request
 				}
 			case "resize":
 				if msg.Cols > 0 && msg.Rows > 0 {
-					if err := h.runtime.ContainerExecResize(ctx, s.ExecID, uint(msg.Rows), uint(msg.Cols)); err != nil {
+					// Resizing addresses an exec that already exists, so it has
+					// to go to the same host that created it — the session's
+					// own scope, not a fresh guess.
+					rt, err := h.runtimeForSession(ctx, s)
+					if err != nil {
+						slog.Debug("terminal: resize failed to reach the session's server", "error", err)
+					} else if err := rt.ContainerExecResize(ctx, s.ExecID, uint(msg.Rows), uint(msg.Cols)); err != nil {
 						slog.Debug("terminal: resize failed", "error", err)
 					}
 				}
@@ -213,4 +227,18 @@ func (h *Handler) HandleTerminalWebSocket(w http.ResponseWriter, r *http.Request
 			return
 		}
 	}
+}
+
+// runtimeForSession resolves the host a terminal session's exec lives on. A
+// host-shell session is scoped to this machine; an application session follows
+// its application's placement.
+func (h *Handler) runtimeForSession(ctx context.Context, s *terminal.Session) (runtime.ContainerRuntime, error) {
+	if s.ApplicationID == hostShellScope {
+		return h.runtimes.Local(ctx)
+	}
+	var appUUID pgtype.UUID
+	if err := appUUID.Scan(s.ApplicationID); err != nil {
+		return nil, fmt.Errorf("terminal session %s has no resolvable scope: %w", s.ID, err)
+	}
+	return h.runtimeForApplication(ctx, appUUID)
 }

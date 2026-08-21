@@ -82,7 +82,7 @@ func (h *TaskHandler) HandleCleanupTask(ctx context.Context, t *asynq.Task) erro
 			if err != nil {
 				return fmt.Errorf("get application: %w", err)
 			}
-			h.cleanupAppDeployments(ctx, row.ID, row.Type, row.Slug, row.ProjectSlug, payload.RetainCount, &totalRemoved)
+			h.cleanupAppDeployments(ctx, row.ID, row.ServerID, row.Type, row.Slug, row.ProjectSlug, payload.RetainCount, &totalRemoved)
 			appsProcessed = 1
 		} else {
 			// Bulk cleanup: single JOIN query — no per-row GetProject call.
@@ -91,25 +91,35 @@ func (h *TaskHandler) HandleCleanupTask(ctx context.Context, t *asynq.Task) erro
 				return fmt.Errorf("list applications: %w", err)
 			}
 			for _, row := range rows {
-				h.cleanupAppDeployments(ctx, row.ID, row.Type, row.Slug, row.ProjectSlug, payload.RetainCount, &totalRemoved)
+				h.cleanupAppDeployments(ctx, row.ID, row.ServerID, row.Type, row.Slug, row.ProjectSlug, payload.RetainCount, &totalRemoved)
 			}
 			appsProcessed = len(rows)
 		}
 	}
 
-	if wants("images") {
-		if err := h.Runtime.PruneImages(ctx); err != nil {
-			slog.Warn("failed to prune images", "error", err)
-		}
-	}
-	if wants("volumes") {
-		if err := h.Runtime.PruneVolumes(ctx); err != nil {
-			slog.Warn("failed to prune volumes", "error", err)
-		}
-	}
-	if wants("build_cache") {
-		if err := h.Runtime.PruneBuildCache(ctx); err != nil {
-			slog.Warn("failed to prune build cache", "error", err)
+	// Pruning is a whole-host operation, so it addresses the host directly
+	// rather than any one resource's placement. Multi-server turns this into a
+	// sweep per server (see the orphan sweep below).
+	if wants("images") || wants("volumes") || wants("build_cache") {
+		rt, err := h.Runtimes.Local(ctx)
+		if err != nil {
+			slog.Warn("failed to reach the Docker host to prune", "error", err)
+		} else {
+			if wants("images") {
+				if err := rt.PruneImages(ctx); err != nil {
+					slog.Warn("failed to prune images", "error", err)
+				}
+			}
+			if wants("volumes") {
+				if err := rt.PruneVolumes(ctx); err != nil {
+					slog.Warn("failed to prune volumes", "error", err)
+				}
+			}
+			if wants("build_cache") {
+				if err := rt.PruneBuildCache(ctx); err != nil {
+					slog.Warn("failed to prune build cache", "error", err)
+				}
+			}
 		}
 	}
 	if wants("containers") {
@@ -143,7 +153,7 @@ func (h *TaskHandler) dailyCleanupEnabled(ctx context.Context) bool {
 // cleanupAppDeployments removes images and DB records for deployments of a
 // single application beyond the retain count. Errors are logged as warnings
 // and never returned — cleanup is best-effort and must not abort sibling apps.
-func (h *TaskHandler) cleanupAppDeployments(ctx context.Context, appID pgtype.UUID, appType, appSlug, projectSlug string, retainCount int, totalRemoved *int) {
+func (h *TaskHandler) cleanupAppDeployments(ctx context.Context, appID, serverID pgtype.UUID, appType, appSlug, projectSlug string, retainCount int, totalRemoved *int) {
 	applicationIDStr := formatUUID(appID)
 	if applicationIDStr == "" {
 		return
@@ -158,18 +168,30 @@ func (h *TaskHandler) cleanupAppDeployments(ctx context.Context, appID pgtype.UU
 		return
 	}
 
+	// Images live on the host the application is placed on. Resolved once for
+	// the batch; if the host is unreachable the images are left alone, but the
+	// deployment rows must still be pruned.
+	var rt runtime.ContainerRuntime
+	if appType == "git" {
+		var err error
+		if rt, err = h.Runtimes.For(ctx, serverID); err != nil {
+			slog.Warn("cleanup: could not reach the application's server to remove images",
+				"application_id", applicationIDStr, "error", err)
+		}
+	}
+
 	for _, dep := range oldDeployments {
 		deploymentIDStr := formatUUID(dep.ID)
 
-		if appType == "git" && deploymentIDStr != "" {
+		if rt != nil && deploymentIDStr != "" {
 			imageName := naming.ImageTag(projectSlug, appSlug, applicationIDStr, deploymentIDStr)
 			oldImageName := fmt.Sprintf("belune-%s:%s", applicationIDStr[:8], deploymentIDStr[:8])
-			if err := h.Runtime.RemoveImage(ctx, imageName); err != nil {
+			if err := rt.RemoveImage(ctx, imageName); err != nil {
 				slog.Debug("could not remove image", "image", imageName, "error", err)
 			} else {
 				slog.Info("removed old image", "image", imageName)
 			}
-			if err := h.Runtime.RemoveImage(ctx, oldImageName); err != nil {
+			if err := rt.RemoveImage(ctx, oldImageName); err != nil {
 				slog.Debug("could not remove legacy image", "image", oldImageName, "error", err)
 			}
 		}
@@ -242,7 +264,16 @@ func isRunningHelper(ctr runtime.ContainerInfo) bool {
 func (h *TaskHandler) cleanupOrphanContainers(ctx context.Context) {
 	const orphanAge = time.Hour
 
-	containers, err := h.Runtime.ListContainers(ctx)
+	// The sweep compares one host's containers against the rows that claim
+	// them. It is the local host today; multi-server turns this into a loop
+	// over servers, comparing each host against the resources placed there.
+	rt, err := h.Runtimes.Local(ctx)
+	if err != nil {
+		slog.Warn("orphan cleanup: failed to reach the Docker host", "error", err)
+		return
+	}
+
+	containers, err := rt.ListContainers(ctx)
 	if err != nil {
 		slog.Warn("orphan cleanup: failed to list containers", "error", err)
 		return
@@ -309,10 +340,10 @@ func (h *TaskHandler) cleanupOrphanContainers(ctx context.Context) {
 			continue
 		}
 		slog.Info("orphan cleanup: removing container", "container", ctr.Name, "created_at", ctr.CreatedAt)
-		if err := h.Runtime.StopContainer(ctx, ctr.Name); err != nil {
+		if err := rt.StopContainer(ctx, ctr.Name); err != nil {
 			slog.Debug("orphan cleanup: stop failed (may already be stopped)", "container", ctr.Name, "error", err)
 		}
-		if err := h.Runtime.RemoveContainer(ctx, ctr.Name); err != nil {
+		if err := rt.RemoveContainer(ctx, ctr.Name); err != nil {
 			slog.Warn("orphan cleanup: failed to remove container", "container", ctr.Name, "error", err)
 			continue
 		}

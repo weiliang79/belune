@@ -20,13 +20,13 @@ import (
 type ApplicationService struct {
 	db            *pgxpool.Pool
 	queries       *generated.Queries
-	runtime       runtime.ContainerRuntime
+	runtimes      runtime.Runtimes
 	keyring       *crypto.Keyring
 	fileMountsDir string
 }
 
-func NewApplicationService(db *pgxpool.Pool, queries *generated.Queries, rt runtime.ContainerRuntime, keyring *crypto.Keyring, fileMountsDir string) *ApplicationService {
-	return &ApplicationService{db: db, queries: queries, runtime: rt, keyring: keyring, fileMountsDir: fileMountsDir}
+func NewApplicationService(db *pgxpool.Pool, queries *generated.Queries, rts runtime.Runtimes, keyring *crypto.Keyring, fileMountsDir string) *ApplicationService {
+	return &ApplicationService{db: db, queries: queries, runtimes: rts, keyring: keyring, fileMountsDir: fileMountsDir}
 }
 
 // CreateApplicationParams holds the parameters for creating an application.
@@ -195,14 +195,22 @@ func branchValue(branch string) pgtype.Text {
 // The DB delete cascades deployments, env vars, and domains via FK ON DELETE CASCADE.
 func (s *ApplicationService) Delete(ctx context.Context, appID pgtype.UUID, projectSlug, appSlug string) error {
 	appIDStr := uuidToString(appID)
+
+	// Resolved before anything is removed: the lookup joins projects, so it has
+	// to happen while both rows still exist.
+	rt, err := RuntimeForApplication(ctx, s.queries, s.runtimes, appID)
+	if err != nil {
+		return err
+	}
+
 	containerName := naming.ContainerName(projectSlug, appSlug, appIDStr)
 	intermediateContainerName := naming.IntermediateContainerName(projectSlug, appIDStr)
 	oldContainerName := naming.OldContainerName(appIDStr)
 	for _, name := range []string{containerName, intermediateContainerName, oldContainerName} {
-		if err := s.runtime.StopContainer(ctx, name); err != nil {
+		if err := rt.StopContainer(ctx, name); err != nil {
 			slog.Warn("could not stop container during app deletion", "container", name, "error", err)
 		}
-		if err := s.runtime.RemoveContainer(ctx, name); err != nil {
+		if err := rt.RemoveContainer(ctx, name); err != nil {
 			slog.Warn("could not remove container during app deletion", "container", name, "error", err)
 		}
 	}
@@ -214,7 +222,7 @@ func (s *ApplicationService) Delete(ctx context.Context, appID pgtype.UUID, proj
 		naming.CNBCacheVolumeName(appIDStr),
 		naming.CNBLaunchCacheVolumeName(appIDStr),
 	} {
-		if err := s.runtime.RemoveVolume(ctx, vol); err != nil {
+		if err := rt.RemoveVolume(ctx, vol); err != nil {
 			slog.Debug("could not remove cache volume during app deletion (may not exist)", "volume", vol, "error", err)
 		}
 	}
@@ -229,7 +237,7 @@ func (s *ApplicationService) Delete(ctx context.Context, appID pgtype.UUID, proj
 	}
 	for _, v := range dataVols {
 		volName := naming.AppVolumeName(appIDStr, v.Name)
-		if err := s.runtime.RemoveVolume(ctx, volName); err != nil {
+		if err := rt.RemoveVolume(ctx, volName); err != nil {
 			slog.Debug("could not remove data volume during app deletion (may not exist)", "volume", volName, "error", err)
 		}
 	}

@@ -35,7 +35,11 @@ const controlPlaneLockName = ".lock"
 // handler's version lives on Handler, not TaskHandler, and pulling it into a
 // shared package for two callers isn't worth the indirection yet).
 func (h *TaskHandler) resolveInfraContainer(ctx context.Context, svcLabel string) (string, error) {
-	all, err := h.Runtime.ListAllContainers(ctx)
+	rt, err := h.Runtimes.Local(ctx)
+	if err != nil {
+		return "", fmt.Errorf("resolve local runtime: %w", err)
+	}
+	all, err := rt.ListAllContainers(ctx)
 	if err != nil {
 		return "", err
 	}
@@ -155,8 +159,13 @@ func (h *TaskHandler) dumpPostgres(ctx context.Context, container, destPath stri
 	user := envOrDefault("POSTGRES_USER", "belune")
 	db := envOrDefault("POSTGRES_DB", "belune")
 
+	rt, err := h.Runtimes.Local(ctx)
+	if err != nil {
+		return fmt.Errorf("resolve local runtime: %w", err)
+	}
+
 	var stderr bytes.Buffer
-	exit, execErr := h.Runtime.ContainerExec(ctx, container,
+	exit, execErr := rt.ContainerExec(ctx, container,
 		[]string{"pg_dump", "-U", user, "-d", db, "--no-password"}, nil, f, &stderr)
 	if execErr != nil {
 		return execErr
@@ -176,8 +185,13 @@ func (h *TaskHandler) tarCaddyData(ctx context.Context, container, destPath stri
 	}
 	defer f.Close()
 
+	rt, err := h.Runtimes.Local(ctx)
+	if err != nil {
+		return fmt.Errorf("resolve local runtime: %w", err)
+	}
+
 	var stderr bytes.Buffer
-	exit, execErr := h.Runtime.ContainerExec(ctx, container,
+	exit, execErr := rt.ContainerExec(ctx, container,
 		[]string{"tar", "-czf", "-", "/data", "/config"}, nil, f, &stderr)
 	if execErr != nil {
 		return execErr

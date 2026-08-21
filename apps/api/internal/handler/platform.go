@@ -53,7 +53,13 @@ func (h *Handler) GetPlatformLogs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rc, err := h.runtime.ContainerLogsTail(r.Context(), name, platformLogTail)
+	rt, err := h.runtimes.Local(r.Context())
+	if err != nil {
+		writeError(w, http.StatusBadGateway, "failed to reach the Docker host")
+		return
+	}
+
+	rc, err := rt.ContainerLogsTail(r.Context(), name, platformLogTail)
 	if err != nil {
 		writeError(w, http.StatusBadGateway, fmt.Sprintf("failed to read logs: %v", err))
 		return
@@ -160,7 +166,13 @@ func (h *Handler) RestartService(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.runtime.RestartContainer(r.Context(), name, restartTimeout); err != nil {
+	rt, err := h.runtimes.Local(r.Context())
+	if err != nil {
+		writeError(w, http.StatusBadGateway, "failed to reach the Docker host")
+		return
+	}
+
+	if err := rt.RestartContainer(r.Context(), name, restartTimeout); err != nil {
 		writeError(w, http.StatusBadGateway, fmt.Sprintf("failed to restart %s: %v", service, err))
 		return
 	}
@@ -187,7 +199,11 @@ func (h *Handler) resolvePlatformContainer(ctx context.Context, service, svcLabe
 		return "", fmt.Errorf("could not determine belune's own container")
 	}
 
-	all, err := h.runtime.ListAllContainers(ctx)
+	rt, err := h.runtimes.Local(ctx)
+	if err != nil {
+		return "", err
+	}
+	all, err := rt.ListAllContainers(ctx)
 	if err != nil {
 		return "", err
 	}

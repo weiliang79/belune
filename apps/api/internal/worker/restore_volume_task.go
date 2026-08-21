@@ -64,6 +64,11 @@ func (h *TaskHandler) HandleRestoreVolumeTask(ctx context.Context, t *asynq.Task
 	}
 	appIDStr := formatUUID(vol.ApplicationID)
 	containerName := naming.ContainerName(appRow.ProjectSlug, appRow.Slug, appIDStr)
+
+	rt, err := h.Runtimes.For(ctx, appRow.ServerID)
+	if err != nil {
+		return fmt.Errorf("resolve runtime: %w", err)
+	}
 	volumeName := naming.AppVolumeName(appIDStr, vol.Name)
 
 	// Record the restore run so the UI can show progress/outcome.
@@ -94,7 +99,7 @@ func (h *TaskHandler) HandleRestoreVolumeTask(ctx context.Context, t *asynq.Task
 	defer cleanup()
 	lg.step("Backup archive ready")
 
-	if err := h.restoreAppVolume(ctx, volumeName, vol.MountPath, containerName, appRow.Status == "running", archivePath, lg); err != nil {
+	if err := h.restoreAppVolume(ctx, rt, volumeName, vol.MountPath, containerName, appRow.Status == "running", archivePath, lg); err != nil {
 		h.failVolumeRestoreLog(ctx, run.ID, err.Error(), lg)
 		h.notifyApplicationOwner(ctx, vol.ApplicationID, appRow.ProjectID, notify.EventVolumeRestoreFailed,
 			"Volume restore failed",
@@ -163,9 +168,9 @@ func (h *TaskHandler) resolveVolumeBackupFile(ctx context.Context, bk generated.
 // restoreAppVolume stops the app (if running), wipes the named volume, untars
 // the archive into it, then restarts the app. Stopping is mandatory: restoring
 // under a live writer would corrupt the volume.
-func (h *TaskHandler) restoreAppVolume(ctx context.Context, volumeName, mountPath, containerName string, appRunning bool, archivePath string, lg *runLog) error {
+func (h *TaskHandler) restoreAppVolume(ctx context.Context, rt runtime.ContainerRuntime, volumeName, mountPath, containerName string, appRunning bool, archivePath string, lg *runLog) error {
 	helperImage := h.Config.DatabaseBackupHelperImage
-	if err := h.Runtime.PullImage(ctx, helperImage); err != nil {
+	if err := rt.PullImage(ctx, helperImage); err != nil {
 		return fmt.Errorf("pull helper image: %w", err)
 	}
 
@@ -177,11 +182,11 @@ func (h *TaskHandler) restoreAppVolume(ctx context.Context, volumeName, mountPat
 
 	if appRunning {
 		lg.step("Stopping application for restore")
-		if err := h.Runtime.StopContainer(ctx, containerName); err != nil {
+		if err := rt.StopContainer(ctx, containerName); err != nil {
 			slog.Warn("restore volume: stop app (may already be stopped)", "container", containerName, "error", err)
 		}
 		defer func() {
-			if err := h.Runtime.StartContainer(ctx, containerName); err != nil {
+			if err := rt.StartContainer(ctx, containerName); err != nil {
 				slog.Error("restore volume: failed to restart app after restore", "container", containerName, "error", err)
 			}
 			lg.step("Application restarted")
@@ -194,7 +199,7 @@ func (h *TaskHandler) restoreAppVolume(ctx context.Context, volumeName, mountPat
 	// mount dir directly.
 	const script = `cd "$0" && find . -mindepth 1 -delete && tar xzf -`
 	var stderr bytes.Buffer
-	exit, err := h.Runtime.RunHelper(ctx, runtime.ContainerConfig{
+	exit, err := rt.RunHelper(ctx, runtime.ContainerConfig{
 		Image:   helperImage,
 		Cmd:     []string{"sh", "-c", script, mountPath},
 		Volumes: map[string]string{volumeName: mountPath},

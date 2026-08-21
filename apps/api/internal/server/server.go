@@ -34,13 +34,13 @@ type Server struct {
 	auth    *service.AuthService
 }
 
-func New(cfg *config.Config, db *pgxpool.Pool, queries *generated.Queries, asynqClient handler.TaskEnqueuer, inspector handler.QueueInspector, rt runtime.ContainerRuntime, pm proxy.ProxyManager, reconciler handler.ReconcilerStatusProvider, rdb *redis.Client, hub *ws.Hub, auditSvc *service.AuditService, notifySvc *service.NotificationService, termMgr *terminal.Manager, emailSvc *email.Service) *Server {
+func New(cfg *config.Config, db *pgxpool.Pool, queries *generated.Queries, asynqClient handler.TaskEnqueuer, inspector handler.QueueInspector, rts runtime.Runtimes, pm proxy.ProxyManager, reconciler handler.ReconcilerStatusProvider, rdb *redis.Client, hub *ws.Hub, auditSvc *service.AuditService, notifySvc *service.NotificationService, termMgr *terminal.Manager, emailSvc *email.Service) *Server {
 	auth := service.NewAuthService(queries, cfg.JWTSecret, cfg.JWTExpiryHours, cfg.JWTRefreshHours, rdb)
-	appSvc := service.NewApplicationService(db, queries, rt, cfg.Keyring, cfg.FileMountsDir)
+	appSvc := service.NewApplicationService(db, queries, rts, cfg.Keyring, cfg.FileMountsDir)
 	backupDestSvc := service.NewBackupDestinationService(queries, cfg.Keyring)
-	dbSvc := service.NewDatabaseService(queries, rt, backup.New(cfg), backupDestSvc)
+	dbSvc := service.NewDatabaseService(queries, rts, backup.New(cfg), backupDestSvc)
 	// projSvc delegates project deletion to appSvc/dbSvc, so it is built after them.
-	projSvc := service.NewProjectService(queries, rt, appSvc, dbSvc)
+	projSvc := service.NewProjectService(queries, rts, appSvc, dbSvc)
 	gitProviderSvc := service.NewGitProviderConfigService(queries, cfg.Keyring)
 	gitIntegrationSvc := service.NewGitIntegrationService(queries, cfg.Keyring, gitProviderSvc)
 	quotaSvc := quota.NewService(queries)
@@ -54,7 +54,7 @@ func New(cfg *config.Config, db *pgxpool.Pool, queries *generated.Queries, asynq
 		cfg:     cfg,
 		db:      db,
 		auth:    auth,
-		handler: handler.New(cfg, db, queries, asynqClient, inspector, rt, pm, reconciler, auth, rdb, appSvc, projSvc, dbSvc, gitProviderSvc, gitIntegrationSvc, backupDestSvc, hub, auditSvc, notifySvc, termMgr, quotaSvc, emailSvc),
+		handler: handler.New(cfg, db, queries, asynqClient, inspector, rts, pm, reconciler, auth, rdb, appSvc, projSvc, dbSvc, gitProviderSvc, gitIntegrationSvc, backupDestSvc, hub, auditSvc, notifySvc, termMgr, quotaSvc, emailSvc),
 	}
 
 	s.router = s.setupRouter()

@@ -33,8 +33,10 @@ func (h *Handler) HealthCheck(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Docker
-	containers, err := h.runtime.ListContainers(ctx)
+	rt, err := h.runtimes.Local(ctx)
 	if err != nil {
+		checks["docker"] = "unhealthy: " + err.Error()
+	} else if containers, err := rt.ListContainers(ctx); err != nil {
 		checks["docker"] = "unhealthy: " + err.Error()
 	} else {
 		checks["docker"] = fmt.Sprintf("ok (%d containers)", len(containers))

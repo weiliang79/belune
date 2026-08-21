@@ -142,11 +142,13 @@ func newTestHandler(rt runtime.ContainerRuntime, pm proxy.ProxyManager) *worker.
 		panic("build keyring: " + err.Error())
 	}
 	return &worker.TaskHandler{
-		Runtime: rt,
-		Proxy:   pm,
-		DB:      testPool,
-		Queries: testQueries,
-		Keyring: keyring,
+		// One mock runtime behind the resolver: every server resolves to it,
+		// which is exactly what the single-server resolver does in production.
+		Runtimes: runtime.NewLocalRuntimes(rt),
+		Proxy:    pm,
+		DB:       testPool,
+		Queries:  testQueries,
+		Keyring:  keyring,
 		Config: &config.Config{
 			ImagePullTimeoutMinutes: 5,
 			BuildTimeoutMinutes:     10,

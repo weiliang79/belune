@@ -9,6 +9,7 @@ import (
 
 	"github.com/weiliang79/belune/internal/config"
 	"github.com/weiliang79/belune/internal/pkg/crypto"
+	"github.com/weiliang79/belune/internal/runtime"
 	"github.com/weiliang79/belune/internal/server"
 	"github.com/weiliang79/belune/internal/store/generated"
 	"github.com/weiliang79/belune/internal/terminal"
@@ -69,7 +70,7 @@ func SetupTestServer(pool *pgxpool.Pool, queries *generated.Queries) *TestEnv {
 	// reaches its auth gates instead of short-circuiting on a nil manager.
 	termMgr := terminal.NewManager(2)
 
-	srv := server.New(cfg, pool, queries, mockAsynq, mockInspector, mockRuntime, mockProxy, mockReconciler, rdb, nil, nil, nil, termMgr, nil)
+	srv := server.New(cfg, pool, queries, mockAsynq, mockInspector, runtime.NewLocalRuntimes(mockRuntime), mockProxy, mockReconciler, rdb, nil, nil, nil, termMgr, nil)
 	ts := httptest.NewServer(srv.Router())
 
 	return &TestEnv{
