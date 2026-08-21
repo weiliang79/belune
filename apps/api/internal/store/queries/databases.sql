@@ -127,3 +127,18 @@ ORDER  BY b.started_at DESC;
 
 -- name: CountBackupsForTombstone :one
 SELECT count(*) FROM database_backups WHERE tombstone_id = $1;
+
+-- name: ListExpiredOrphanedBackups :many
+-- Orphaned backups whose keeping period is over. The clock runs from when the
+-- database was deleted, not from when the backup was taken: keeping is a
+-- decision made at deletion time, so a two-year-old backup of a database
+-- deleted yesterday has just been kept on purpose and is not expired.
+SELECT b.* FROM database_backups b
+JOIN   database_tombstones t ON t.id = b.tombstone_id
+WHERE  t.deleted_at < $1;
+
+-- name: DeleteEmptyDatabaseTombstones :exec
+-- A tombstone exists to give backups a parent. One with none left describes
+-- nothing, so it goes rather than accumulating forever.
+DELETE FROM database_tombstones t
+WHERE NOT EXISTS (SELECT 1 FROM database_backups b WHERE b.tombstone_id = t.id);

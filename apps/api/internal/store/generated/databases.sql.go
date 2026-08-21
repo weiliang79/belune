@@ -216,6 +216,18 @@ func (q *Queries) DeleteDatabaseTombstone(ctx context.Context, id pgtype.UUID) e
 	return err
 }
 
+const deleteEmptyDatabaseTombstones = `-- name: DeleteEmptyDatabaseTombstones :exec
+DELETE FROM database_tombstones t
+WHERE NOT EXISTS (SELECT 1 FROM database_backups b WHERE b.tombstone_id = t.id)
+`
+
+// A tombstone exists to give backups a parent. One with none left describes
+// nothing, so it goes rather than accumulating forever.
+func (q *Queries) DeleteEmptyDatabaseTombstones(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, deleteEmptyDatabaseTombstones)
+	return err
+}
+
 const getDatabase = `-- name: GetDatabase :one
 SELECT id, project_id, type, name, slug, version, status, internal_host, internal_port, credentials_encrypted, created_at, cpu_limit, memory_limit, host_port, image, container_port, data_dir, backup_mode, backup_command, restore_command, image_digest, source_kind, source_ref FROM databases WHERE id = $1
 `
@@ -558,6 +570,50 @@ func (q *Queries) ListDatabasesByStatus(ctx context.Context, status string) ([]D
 			&i.ImageDigest,
 			&i.SourceKind,
 			&i.SourceRef,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listExpiredOrphanedBackups = `-- name: ListExpiredOrphanedBackups :many
+SELECT b.id, b.database_id, b.started_at, b.finished_at, b.status, b.local_path, b.remote_key, b.size_bytes, b.error, b.backup_config_id, b.log, b.target_database, b.tombstone_id FROM database_backups b
+JOIN   database_tombstones t ON t.id = b.tombstone_id
+WHERE  t.deleted_at < $1
+`
+
+// Orphaned backups whose keeping period is over. The clock runs from when the
+// database was deleted, not from when the backup was taken: keeping is a
+// decision made at deletion time, so a two-year-old backup of a database
+// deleted yesterday has just been kept on purpose and is not expired.
+func (q *Queries) ListExpiredOrphanedBackups(ctx context.Context, deletedAt pgtype.Timestamptz) ([]DatabaseBackup, error) {
+	rows, err := q.db.Query(ctx, listExpiredOrphanedBackups, deletedAt)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []DatabaseBackup{}
+	for rows.Next() {
+		var i DatabaseBackup
+		if err := rows.Scan(
+			&i.ID,
+			&i.DatabaseID,
+			&i.StartedAt,
+			&i.FinishedAt,
+			&i.Status,
+			&i.LocalPath,
+			&i.RemoteKey,
+			&i.SizeBytes,
+			&i.Error,
+			&i.BackupConfigID,
+			&i.Log,
+			&i.TargetDatabase,
+			&i.TombstoneID,
 		); err != nil {
 			return nil, err
 		}
