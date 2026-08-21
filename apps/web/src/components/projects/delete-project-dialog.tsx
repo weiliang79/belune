@@ -59,22 +59,27 @@ export function DeleteProjectDialog({
           <AlertDialogTitle>Delete {projectName}?</AlertDialogTitle>
           <AlertDialogDescription>
             This will permanently delete the project and everything in it —
-            every application and database, their containers and volumes. This
-            action cannot be undone.
+            every application and database, their containers and volumes, and
+            all configuration including environment variables, domains, backup
+            destinations and schedules. This action cannot be undone.
           </AlertDialogDescription>
           {/* Backups are called out separately because they are the one thing
               that survives losing the server, so an operator may reasonably
               believe they are a safety net here. Project deletion removes each
-              database through its own delete path, which erases remote copies
-              too. Static wording, not a count: an accurate number needs impact
+              database and application through its own delete path, and both
+              erase remote copies. ⚠️ Volume backups are named here only
+              because application deletion now actually erases them — before
+              that fix their objects were left behind, so claiming destruction
+              would have been false in a new direction. Static wording, not a
+              count: an accurate number needs impact
               aggregated across databases and volumes (see the project-deletion
               gap), and a partial count on a confirmation dialog would be worse
               than none. Worded so it claims nothing about what the project
               actually contains. */}
           <AlertDialogDescription className="text-destructive font-medium">
-            Any backups taken of its databases are destroyed as well, including
-            copies already uploaded to a remote destination. Restore from them
-            will no longer be possible.
+            Every backup of its databases and volumes is destroyed as well,
+            including copies already uploaded to a remote destination. Restore
+            from them will no longer be possible.
           </AlertDialogDescription>
         </AlertDialogHeader>
 

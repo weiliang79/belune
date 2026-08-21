@@ -145,7 +145,11 @@ func New(cfg *config.Config) (*App, error) {
 	termMgr := terminal.NewManager(cfg.MaxTerminalSessionsPerUser)
 	hub := ws.NewHub(cfg.MaxWebSocketConnsPerUser)
 
-	appSvc := service.NewApplicationService(db, queries, runtimes, cfg.Keyring, cfg.FileMountsDir)
+	// backupDestSvc first: appSvc needs it to erase volume-backup objects when an
+	// application is deleted, rather than leaving them billed with no row
+	// recording their keys.
+	backupDestSvc := service.NewBackupDestinationService(queries, cfg.Keyring)
+	appSvc := service.NewApplicationService(db, queries, runtimes, cfg.Keyring, cfg.FileMountsDir, backupDestSvc)
 	gitProviderSvc := service.NewGitProviderConfigService(queries, cfg.Keyring)
 	gitIntegrationSvc := service.NewGitIntegrationService(queries, cfg.Keyring, gitProviderSvc)
 	quotaSvc := quota.NewService(queries)
@@ -163,7 +167,6 @@ func New(cfg *config.Config) (*App, error) {
 	emailSvc.SetResolver(service.NewSMTPSettingsService(queries, cfg.Keyring, cfg))
 
 	backupSvc := backup.New(cfg)
-	backupDestSvc := service.NewBackupDestinationService(queries, cfg.Keyring)
 	notifyRegistry := service.NewNotifyRegistry(emailSvc)
 	notifyChannelSvc := service.NewNotificationChannelService(queries, cfg.Keyring, notifyRegistry, cfg.PublicBaseURL)
 	taskHandler := &worker.TaskHandler{

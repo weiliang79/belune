@@ -440,6 +440,48 @@ func (q *Queries) ListEnabledApplicationVolumeBackupConfigs(ctx context.Context)
 	return items, nil
 }
 
+const listVolumeBackupsForApplication = `-- name: ListVolumeBackupsForApplication :many
+SELECT b.id, b.application_volume_id, b.backup_config_id, b.started_at, b.finished_at, b.status, b.local_path, b.remote_key, b.size_bytes, b.error, b.log FROM application_volume_backups b
+JOIN   application_volumes v ON v.id = b.application_volume_id
+WHERE  v.application_id = $1
+`
+
+// Every volume backup belonging to an application, across all of its volumes.
+// Application deletion needs this: the rows cascade away with the volumes, so
+// they have to be read before the delete or the objects they point at become
+// unreachable and unprunable while still being billed.
+func (q *Queries) ListVolumeBackupsForApplication(ctx context.Context, applicationID pgtype.UUID) ([]ApplicationVolumeBackup, error) {
+	rows, err := q.db.Query(ctx, listVolumeBackupsForApplication, applicationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ApplicationVolumeBackup{}
+	for rows.Next() {
+		var i ApplicationVolumeBackup
+		if err := rows.Scan(
+			&i.ID,
+			&i.ApplicationVolumeID,
+			&i.BackupConfigID,
+			&i.StartedAt,
+			&i.FinishedAt,
+			&i.Status,
+			&i.LocalPath,
+			&i.RemoteKey,
+			&i.SizeBytes,
+			&i.Error,
+			&i.Log,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const setApplicationVolumeBackupConfigLastRun = `-- name: SetApplicationVolumeBackupConfigLastRun :exec
 UPDATE application_volume_backup_configs
 SET last_run_at = $2, updated_at = NOW()
