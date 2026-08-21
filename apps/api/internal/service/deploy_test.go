@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/weiliang79/belune/internal/runtime"
 	"github.com/weiliang79/belune/internal/service"
 	"github.com/weiliang79/belune/internal/status"
 	"github.com/weiliang79/belune/internal/store/generated"
@@ -59,7 +60,7 @@ func TestDeployService_Deploy_CreatesPendingDeploymentAndEnqueues(t *testing.T) 
 	client, inspector := startAsynqAgainstMiniredis(t)
 	rt := &testutil.MockContainerRuntime{}
 	pm := &testutil.MockProxyManager{}
-	svc := service.NewDeployService(rt, pm, testQueries, client, 30)
+	svc := service.NewDeployService(runtime.NewLocalRuntimes(rt), pm, testQueries, client, 30)
 
 	dep, err := svc.Deploy(context.Background(), app.ID)
 	require.NoError(t, err)
@@ -90,7 +91,7 @@ func TestDeployService_Deploy_SecondCallCollidesOnTaskID(t *testing.T) {
 	client, inspector := startAsynqAgainstMiniredis(t)
 	rt := &testutil.MockContainerRuntime{}
 	pm := &testutil.MockProxyManager{}
-	svc := service.NewDeployService(rt, pm, testQueries, client, 30)
+	svc := service.NewDeployService(runtime.NewLocalRuntimes(rt), pm, testQueries, client, 30)
 
 	// First Deploy enqueues successfully.
 	_, err := svc.Deploy(context.Background(), app.ID)
@@ -115,7 +116,7 @@ func TestDeployService_Stop_StopsContainerAndUpdatesAppStatus(t *testing.T) {
 	client, _ := startAsynqAgainstMiniredis(t)
 	rt := &testutil.MockContainerRuntime{}
 	pm := &testutil.MockProxyManager{}
-	svc := service.NewDeployService(rt, pm, testQueries, client, 30)
+	svc := service.NewDeployService(runtime.NewLocalRuntimes(rt), pm, testQueries, client, 30)
 
 	require.NoError(t, svc.Stop(context.Background(), app.ID))
 

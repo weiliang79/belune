@@ -60,11 +60,22 @@ func (h *Handler) GetProjectMetrics(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Everything in a project shares the project's host, so one resolve covers
+	// the listing and every per-container stats call below.
+	// Live usage is enrichment on top of the DB-derived rows, so an unreachable
+	// host degrades to those rows rather than failing the whole overview.
+	rt, rtErr := h.runtimeForProject(ctx, projectUUID)
+	if rtErr != nil {
+		slog.Warn("project metrics: could not reach the project's server", "project_id", projectID, "error", rtErr)
+	}
+
 	// One container listing, indexed by name (== app slug).
 	containerByName := map[string]runtime.ContainerInfo{}
-	if containers, cerr := h.runtime.ListContainers(ctx); cerr == nil {
-		for _, c := range containers {
-			containerByName[c.Name] = c
+	if rt != nil {
+		if containers, cerr := rt.ListContainers(ctx); cerr == nil {
+			for _, c := range containers {
+				containerByName[c.Name] = c
+			}
 		}
 	}
 
@@ -85,7 +96,7 @@ func (h *Handler) GetProjectMetrics(w http.ResponseWriter, r *http.Request) {
 			// present itself here, as a service reading "Running" with an empty
 			// CPU and memory column.
 			if c.Status == "running" {
-				s, serr := h.runtime.ContainerStats(ctx, app.Slug)
+				s, serr := rt.ContainerStats(ctx, app.Slug)
 				if serr != nil {
 					// Left at zero, which the UI renders the same as a genuinely
 					// idle container — so log it, otherwise a failing stats call

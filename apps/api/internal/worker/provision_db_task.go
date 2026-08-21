@@ -54,6 +54,13 @@ func (h *TaskHandler) HandleProvisionDBTask(ctx context.Context, t *asynq.Task) 
 		return fmt.Errorf("get database: %w", err)
 	}
 
+	// One resolve per task: every step below acts on the same host.
+	rt, err := h.runtimeForDatabase(ctx, dbID)
+	if err != nil {
+		h.failDatabase(ctx, dbID, fmt.Sprintf("resolve server: %v", err))
+		return err
+	}
+
 	creds, err := h.decryptDBCredentials(db)
 	if err != nil {
 		h.failDatabase(ctx, dbID, fmt.Sprintf("credentials: %v", err))
@@ -62,7 +69,7 @@ func (h *TaskHandler) HandleProvisionDBTask(ctx context.Context, t *asynq.Task) 
 
 	// New databases start internal-only (no host port); external access is an
 	// explicit opt-in handled by the reconfigure task.
-	if err := h.provisionDBContainer(ctx, db, creds, 0); err != nil {
+	if err := h.provisionDBContainer(ctx, rt, db, creds, 0); err != nil {
 		h.failDatabase(ctx, dbID, err.Error())
 		return err
 	}
@@ -92,6 +99,13 @@ func (h *TaskHandler) HandleReconfigureDBTask(ctx context.Context, t *asynq.Task
 		return fmt.Errorf("get database: %w", err)
 	}
 
+	// One resolve per task: every step below acts on the same host.
+	rt, err := h.runtimeForDatabase(ctx, dbID)
+	if err != nil {
+		h.failDatabase(ctx, dbID, fmt.Sprintf("resolve server: %v", err))
+		return err
+	}
+
 	creds, err := h.decryptDBCredentials(db)
 	if err != nil {
 		h.failDatabase(ctx, dbID, fmt.Sprintf("credentials: %v", err))
@@ -118,17 +132,17 @@ func (h *TaskHandler) HandleReconfigureDBTask(ctx context.Context, t *asynq.Task
 	}
 
 	// Remove the existing container (best-effort; the volume persists).
-	h.removeDBContainer(ctx, db.Slug)
+	h.removeDBContainer(ctx, rt, db.Slug)
 
-	if err := h.provisionDBContainer(ctx, db, creds, hostPort); err != nil {
+	if err := h.provisionDBContainer(ctx, rt, db, creds, hostPort); err != nil {
 		// A failed external-access toggle must not take the database offline.
 		// Roll back to the prior configuration so the database comes back up;
 		// the toggle simply doesn't take effect. Only if rollback also fails is
 		// the database genuinely broken (and its volume data is still intact).
 		slog.Warn("reconfigure failed; rolling back to previous state",
 			"database_id", payload.DatabaseID, "error", err)
-		h.removeDBContainer(ctx, db.Slug)
-		if rbErr := h.provisionDBContainer(ctx, db, creds, oldHostPort); rbErr != nil {
+		h.removeDBContainer(ctx, rt, db.Slug)
+		if rbErr := h.provisionDBContainer(ctx, rt, db, creds, oldHostPort); rbErr != nil {
 			h.failDatabase(ctx, dbID, fmt.Sprintf("reconfigure failed and rollback failed: %v", rbErr))
 			return fmt.Errorf("reconfigure rollback failed: %w", rbErr)
 		}
@@ -168,6 +182,13 @@ func (h *TaskHandler) HandleReloadDBTask(ctx context.Context, t *asynq.Task) err
 		return fmt.Errorf("get database: %w", err)
 	}
 
+	// One resolve per task: every step below acts on the same host.
+	rt, err := h.runtimeForDatabase(ctx, dbID)
+	if err != nil {
+		h.failDatabase(ctx, dbID, fmt.Sprintf("resolve server: %v", err))
+		return err
+	}
+
 	creds, err := h.decryptDBCredentials(db)
 	if err != nil {
 		h.failDatabase(ctx, dbID, fmt.Sprintf("credentials: %v", err))
@@ -184,9 +205,9 @@ func (h *TaskHandler) HandleReloadDBTask(ctx context.Context, t *asynq.Task) err
 	// Remove any existing/drifted container first (the volume persists), then
 	// recreate. provisionDBContainer also removes by name, so a container that is
 	// already gone just falls through to a fresh create.
-	h.removeDBContainer(ctx, db.Slug)
+	h.removeDBContainer(ctx, rt, db.Slug)
 
-	if err := h.provisionDBContainer(ctx, db, creds, hostPort); err != nil {
+	if err := h.provisionDBContainer(ctx, rt, db, creds, hostPort); err != nil {
 		h.failDatabase(ctx, dbID, err.Error())
 		return err
 	}
@@ -268,7 +289,7 @@ func dbContainerSpec(dbType, version string, creds map[string]string) (image, da
 // idempotent on the network/volume/image so it can be used for both first-time
 // provisioning and reconfigure recreates. On success the database row is stamped
 // running with its connection info and host port.
-func (h *TaskHandler) provisionDBContainer(ctx context.Context, db generated.Database, creds map[string]string, hostPort int32) error {
+func (h *TaskHandler) provisionDBContainer(ctx context.Context, rt runtime.ContainerRuntime, db generated.Database, creds map[string]string, hostPort int32) error {
 	containerName := db.Slug
 	volumeName := fmt.Sprintf("%s-vol", db.Slug)
 
@@ -296,7 +317,7 @@ func (h *TaskHandler) provisionDBContainer(ctx context.Context, db generated.Dat
 		return fmt.Errorf("get project for network setup: %w", err)
 	}
 	projectNetwork := naming.ProjectNetworkName(project.Slug)
-	if netErr := h.Runtime.CreateNetwork(ctx, projectNetwork); netErr != nil {
+	if netErr := rt.CreateNetwork(ctx, projectNetwork); netErr != nil {
 		slog.Debug("could not create project network (may already exist)", "network", projectNetwork, "error", netErr)
 	}
 
@@ -309,11 +330,11 @@ func (h *TaskHandler) provisionDBContainer(ctx context.Context, db generated.Dat
 	if pinned {
 		image = db.ImageDigest.String
 	}
-	if err := h.Runtime.PullImage(ctx, image); err != nil {
+	if err := rt.PullImage(ctx, image); err != nil {
 		return fmt.Errorf("pull image: %w", err)
 	}
 	if !pinned {
-		if digest, derr := h.Runtime.ResolveImageDigest(ctx, image); derr != nil {
+		if digest, derr := rt.ResolveImageDigest(ctx, image); derr != nil {
 			slog.Warn("could not resolve database image digest; using tag", "image", image, "error", derr)
 		} else if digest != "" {
 			if uderr := h.Queries.UpdateDatabaseImageDigest(ctx, generated.UpdateDatabaseImageDigestParams{
@@ -327,7 +348,7 @@ func (h *TaskHandler) provisionDBContainer(ctx context.Context, db generated.Dat
 	}
 	// Label as persistent data so PruneVolumes never reaps the database's data
 	// while its container is momentarily absent (stop/reconfigure/recreate).
-	if err := h.Runtime.CreateDataVolume(ctx, volumeName); err != nil {
+	if err := rt.CreateDataVolume(ctx, volumeName); err != nil {
 		return fmt.Errorf("create volume: %w", err)
 	}
 
@@ -345,9 +366,9 @@ func (h *TaskHandler) provisionDBContainer(ctx context.Context, db generated.Dat
 	// Remove any leftover container with this name first, so provisioning is
 	// idempotent: an asynq retry after a partial failure (or a reconfigure/
 	// upgrade recreate) won't fail with "name in use".
-	h.removeDBContainer(ctx, containerName)
+	h.removeDBContainer(ctx, rt, containerName)
 
-	containerID, err := h.Runtime.CreateContainer(ctx, runtime.ContainerConfig{
+	containerID, err := rt.CreateContainer(ctx, runtime.ContainerConfig{
 		Name:        containerName,
 		Image:       image,
 		Env:         env,
@@ -366,7 +387,7 @@ func (h *TaskHandler) provisionDBContainer(ctx context.Context, db generated.Dat
 		return fmt.Errorf("create container: %w", err)
 	}
 
-	if err := h.Runtime.StartContainer(ctx, containerID); err != nil {
+	if err := rt.StartContainer(ctx, containerID); err != nil {
 		return fmt.Errorf("start container: %w", err)
 	}
 
@@ -382,11 +403,11 @@ func (h *TaskHandler) provisionDBContainer(ctx context.Context, db generated.Dat
 
 // removeDBContainer stops and removes a database container by name. Both steps
 // are best-effort: a missing/stopped container is not an error for the caller.
-func (h *TaskHandler) removeDBContainer(ctx context.Context, name string) {
-	if err := h.Runtime.StopContainer(ctx, name); err != nil {
+func (h *TaskHandler) removeDBContainer(ctx context.Context, rt runtime.ContainerRuntime, name string) {
+	if err := rt.StopContainer(ctx, name); err != nil {
 		slog.Debug("reconfigure: stop container (may already be stopped)", "container", name, "error", err)
 	}
-	if err := h.Runtime.RemoveContainer(ctx, name); err != nil {
+	if err := rt.RemoveContainer(ctx, name); err != nil {
 		slog.Debug("reconfigure: remove container (may already be gone)", "container", name, "error", err)
 	}
 }

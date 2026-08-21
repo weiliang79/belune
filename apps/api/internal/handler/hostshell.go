@@ -93,7 +93,15 @@ func (h *Handler) CreateHostShellSession(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	sess, err := h.runtime.HostShellSession(r.Context(), image)
+	// The host shell is by definition a session on this machine, so it is the
+	// local runtime rather than a placement lookup.
+	rt, err := h.runtimes.Local(r.Context())
+	if err != nil {
+		writeError(w, http.StatusBadGateway, "failed to reach the Docker host")
+		return
+	}
+
+	sess, err := rt.HostShellSession(r.Context(), image)
 	if err != nil {
 		writeError(w, http.StatusBadGateway, fmt.Sprintf("host shell failed: %v", err))
 		return
@@ -119,7 +127,11 @@ func (h *Handler) selfImage(ctx context.Context) string {
 	if id == "" {
 		return ""
 	}
-	all, err := h.runtime.ListAllContainers(ctx)
+	rt, err := h.runtimes.Local(ctx)
+	if err != nil {
+		return ""
+	}
+	all, err := rt.ListAllContainers(ctx)
 	if err != nil {
 		return ""
 	}

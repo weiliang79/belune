@@ -78,6 +78,14 @@ func (h *Handler) StreamApplicationMetrics(w http.ResponseWriter, r *http.Reques
 	}
 	containerName := naming.ContainerName(appRow.ProjectSlug, appRow.Slug, applicationID)
 
+	// Resolved once for the life of the stream: placement does not change under
+	// a live connection, and re-resolving every tick would be a query per tick.
+	rt, err := h.runtimes.For(r.Context(), appRow.ServerID)
+	if err != nil {
+		writeError(w, http.StatusBadGateway, "failed to reach the application's server")
+		return
+	}
+
 	writer, sseErr := sse.NewWriter(w)
 	if sseErr != nil {
 		writeError(w, http.StatusInternalServerError, "streaming not supported")
@@ -114,7 +122,7 @@ func (h *Handler) StreamApplicationMetrics(w http.ResponseWriter, r *http.Reques
 				continue
 			}
 
-			stats, err := h.runtime.ContainerStats(ctx, containerName)
+			stats, err := rt.ContainerStats(ctx, containerName)
 			if err != nil {
 				slog.Debug("failed to collect container stats for stream", "container", containerName, "error", err)
 				continue

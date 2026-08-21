@@ -86,6 +86,11 @@ func (h *TaskHandler) HandleBackupVolumeTask(ctx context.Context, t *asynq.Task)
 	}
 	appIDStr := formatUUID(vol.ApplicationID)
 	containerName := naming.ContainerName(appRow.ProjectSlug, appRow.Slug, appIDStr)
+
+	rt, err := h.Runtimes.For(ctx, appRow.ServerID)
+	if err != nil {
+		return fmt.Errorf("resolve runtime: %w", err)
+	}
 	volumeName := naming.AppVolumeName(appIDStr, vol.Name)
 
 	// Record the run up front so the UI shows a "running" backup immediately.
@@ -118,7 +123,7 @@ func (h *TaskHandler) HandleBackupVolumeTask(ctx context.Context, t *asynq.Task)
 		return fmt.Errorf("create backup file: %w", err)
 	}
 
-	snapErr := h.snapshotAppVolume(ctx, volumeName, vol.MountPath, containerName, cfg.Quiesce, appRow.Status == "running", f, lg)
+	snapErr := h.snapshotAppVolume(ctx, rt, volumeName, vol.MountPath, containerName, cfg.Quiesce, appRow.Status == "running", f, lg)
 	closeErr := f.Close()
 	if snapErr != nil {
 		_ = os.Remove(localPath)
@@ -201,19 +206,19 @@ func (h *TaskHandler) HandleBackupVolumeTask(ctx context.Context, t *asynq.Task)
 // snapshotAppVolume tars the named volume's contents (mounted at mountPath in a
 // short-lived helper) into f. When quiesce is requested and the app is running,
 // the app container is stopped for the tar and restarted afterwards.
-func (h *TaskHandler) snapshotAppVolume(ctx context.Context, volumeName, mountPath, containerName string, quiesce, appRunning bool, f *os.File, lg *runLog) error {
+func (h *TaskHandler) snapshotAppVolume(ctx context.Context, rt runtime.ContainerRuntime, volumeName, mountPath, containerName string, quiesce, appRunning bool, f *os.File, lg *runLog) error {
 	helperImage := h.Config.DatabaseBackupHelperImage
-	if err := h.Runtime.PullImage(ctx, helperImage); err != nil {
+	if err := rt.PullImage(ctx, helperImage); err != nil {
 		return fmt.Errorf("pull helper image: %w", err)
 	}
 
 	if quiesce && appRunning {
 		lg.step("Stopping application for consistent (quiesced) snapshot")
-		if err := h.Runtime.StopContainer(ctx, containerName); err != nil {
+		if err := rt.StopContainer(ctx, containerName); err != nil {
 			slog.Warn("snapshot volume: stop app (may already be stopped)", "container", containerName, "error", err)
 		}
 		defer func() {
-			if err := h.Runtime.StartContainer(ctx, containerName); err != nil {
+			if err := rt.StartContainer(ctx, containerName); err != nil {
 				slog.Error("snapshot volume: failed to restart app after backup", "container", containerName, "error", err)
 			}
 			lg.step("Application restarted")
@@ -223,7 +228,7 @@ func (h *TaskHandler) snapshotAppVolume(ctx context.Context, volumeName, mountPa
 	}
 
 	var stderr bytes.Buffer
-	exit, err := h.Runtime.RunHelper(ctx, runtime.ContainerConfig{
+	exit, err := rt.RunHelper(ctx, runtime.ContainerConfig{
 		Image:   helperImage,
 		Cmd:     []string{"tar", "czf", "-", "-C", mountPath, "."},
 		Volumes: map[string]string{volumeName: mountPath},

@@ -156,14 +156,20 @@ func (h *Handler) GetDockerOverview(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), dockerTimeout)
 	defer cancel()
 
-	info, err := h.runtime.SystemInfo(ctx)
+	rt, err := h.runtimes.Local(ctx)
+	if err != nil {
+		writeError(w, http.StatusBadGateway, "failed to reach the Docker host")
+		return
+	}
+
+	info, err := rt.SystemInfo(ctx)
 	if err != nil {
 		writeError(w, http.StatusBadGateway, "failed to read Docker info")
 		return
 	}
 
 	// May be nil on the first request, while the background refresh runs.
-	du := h.diskUsage.get(ctx, h.runtime)
+	du := h.diskUsage.get(ctx, rt)
 
 	counts := dockerCounts{
 		ContainersRunning: info.ContainersRunning,
@@ -199,7 +205,13 @@ func (h *Handler) ListDockerContainers(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), dockerTimeout)
 	defer cancel()
 
-	containers, err := h.runtime.ListAllContainers(ctx)
+	rt, err := h.runtimes.Local(ctx)
+	if err != nil {
+		writeError(w, http.StatusBadGateway, "failed to reach the Docker host")
+		return
+	}
+
+	containers, err := rt.ListAllContainers(ctx)
 	if err != nil {
 		writeError(w, http.StatusBadGateway, "failed to list containers")
 		return
@@ -307,7 +319,13 @@ func (h *Handler) ListDockerImages(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), dockerTimeout)
 	defer cancel()
 
-	images, err := h.runtime.ListImages(ctx)
+	rt, err := h.runtimes.Local(ctx)
+	if err != nil {
+		writeError(w, http.StatusBadGateway, "failed to reach the Docker host")
+		return
+	}
+
+	images, err := rt.ListImages(ctx)
 	if err != nil {
 		writeError(w, http.StatusBadGateway, "failed to list images")
 		return
@@ -385,7 +403,13 @@ func (h *Handler) ListDockerVolumes(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), dockerTimeout)
 	defer cancel()
 
-	volumes, err := h.runtime.ListVolumes(ctx)
+	rt, err := h.runtimes.Local(ctx)
+	if err != nil {
+		writeError(w, http.StatusBadGateway, "failed to reach the Docker host")
+		return
+	}
+
+	volumes, err := rt.ListVolumes(ctx)
 	if err != nil {
 		writeError(w, http.StatusBadGateway, "failed to list volumes")
 		return
@@ -483,7 +507,13 @@ func (h *Handler) ListDockerNetworks(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), dockerTimeout)
 	defer cancel()
 
-	networks, err := h.runtime.ListNetworks(ctx)
+	rt, err := h.runtimes.Local(ctx)
+	if err != nil {
+		writeError(w, http.StatusBadGateway, "failed to reach the Docker host")
+		return
+	}
+
+	networks, err := rt.ListNetworks(ctx)
 	if err != nil {
 		writeError(w, http.StatusBadGateway, "failed to list networks")
 		return

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/hibiken/asynq"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 
@@ -41,7 +42,7 @@ type TaskEnqueuer interface {
 
 // TaskHandler holds dependencies needed by async task handlers.
 type TaskHandler struct {
-	Runtime               runtime.ContainerRuntime
+	Runtimes              runtime.Runtimes
 	Proxy                 proxy.ProxyManager
 	DB                    *pgxpool.Pool
 	Queries               *generated.Queries
@@ -60,6 +61,17 @@ type TaskHandler struct {
 	AuditLog              auditLogger
 	Notifier              notifier
 	Enqueuer              TaskEnqueuer
+}
+
+// runtimeForDatabase and runtimeForApplication resolve the host a resource runs
+// on. Tasks that already hold a row carrying server_id should call
+// h.Runtimes.For with it instead — these are for the paths that do not.
+func (h *TaskHandler) runtimeForDatabase(ctx context.Context, dbID pgtype.UUID) (runtime.ContainerRuntime, error) {
+	return service.RuntimeForDatabase(ctx, h.Queries, h.Runtimes, dbID)
+}
+
+func (h *TaskHandler) runtimeForApplication(ctx context.Context, appID pgtype.UUID) (runtime.ContainerRuntime, error) {
+	return service.RuntimeForApplication(ctx, h.Queries, h.Runtimes, appID)
 }
 
 type Worker struct {

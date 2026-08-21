@@ -19,7 +19,7 @@ import (
 )
 
 type DeployService struct {
-	runtime     runtime.ContainerRuntime
+	runtimes    runtime.Runtimes
 	proxy       proxy.ProxyManager
 	queries     *generated.Queries
 	asynq       *asynq.Client
@@ -27,14 +27,14 @@ type DeployService struct {
 }
 
 func NewDeployService(
-	rt runtime.ContainerRuntime,
+	rts runtime.Runtimes,
 	pm proxy.ProxyManager,
 	queries *generated.Queries,
 	asynqClient *asynq.Client,
 	taskTimeoutMinutes int,
 ) *DeployService {
 	return &DeployService{
-		runtime:     rt,
+		runtimes:    rts,
 		proxy:       pm,
 		queries:     queries,
 		asynq:       asynqClient,
@@ -91,8 +91,12 @@ func (s *DeployService) Stop(ctx context.Context, applicationID pgtype.UUID) err
 		return fmt.Errorf("get application: %w", err)
 	}
 	applicationIDStr := uuidToString(applicationID)
+	rt, err := s.runtimes.For(ctx, row.ServerID)
+	if err != nil {
+		return err
+	}
 	containerName := naming.ContainerName(row.ProjectSlug, row.Slug, applicationIDStr)
-	if err := s.runtime.StopContainer(ctx, containerName); err != nil {
+	if err := rt.StopContainer(ctx, containerName); err != nil {
 		return fmt.Errorf("stop container: %w", err)
 	}
 	_, err = s.queries.UpdateApplicationStatus(ctx, generated.UpdateApplicationStatusParams{
@@ -109,11 +113,15 @@ func (s *DeployService) Restart(ctx context.Context, applicationID pgtype.UUID) 
 		return generated.Deployment{}, fmt.Errorf("get application: %w", err)
 	}
 	applicationIDStr := uuidToString(applicationID)
+	rt, err := s.runtimes.For(ctx, row.ServerID)
+	if err != nil {
+		return generated.Deployment{}, err
+	}
 	containerName := naming.ContainerName(row.ProjectSlug, row.Slug, applicationIDStr)
-	if err := s.runtime.StopContainer(ctx, containerName); err != nil {
+	if err := rt.StopContainer(ctx, containerName); err != nil {
 		slog.Warn("could not stop container before restart", "container", containerName, "error", err)
 	}
-	if err := s.runtime.RemoveContainer(ctx, containerName); err != nil {
+	if err := rt.RemoveContainer(ctx, containerName); err != nil {
 		slog.Warn("could not remove container before restart", "container", containerName, "error", err)
 	}
 

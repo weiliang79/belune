@@ -16,6 +16,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/weiliang79/belune/internal/naming"
+	"github.com/weiliang79/belune/internal/runtime"
 	"github.com/weiliang79/belune/internal/status"
 	"github.com/weiliang79/belune/internal/store"
 	"github.com/weiliang79/belune/internal/store/generated"
@@ -369,11 +370,27 @@ func (h *Handler) ListDatabases(w http.ResponseWriter, r *http.Request) {
 	// whose container was deleted (the "Reload Needed" badge). Same gating as
 	// GetDatabase: only the steady non-running states are inspected, so a table of
 	// running databases costs zero Docker calls.
+	// Every database in a project shares the project's host, so this resolves
+	// once for the whole list rather than once per row — and only if some row
+	// actually needs inspecting, so a table of running databases still costs
+	// nothing at all.
+	var rt runtime.ContainerRuntime
+	for _, db := range databases {
+		if db.Status == status.DatabaseStopped || db.Status == status.DatabaseFailed {
+			resolved, err := h.runtimeForProject(r.Context(), projectUUID)
+			if err != nil {
+				slog.Warn("list databases: could not reach the project's server", "project_id", projectID, "error", err)
+			}
+			rt = resolved
+			break
+		}
+	}
+
 	resp := make([]databaseResponse, 0, len(databases))
 	for _, db := range databases {
 		item := databaseResponse{Database: db}
-		if db.Status == status.DatabaseStopped || db.Status == status.DatabaseFailed {
-			if exists, err := h.runtime.ContainerExists(r.Context(), db.Slug); err == nil {
+		if rt != nil && (db.Status == status.DatabaseStopped || db.Status == status.DatabaseFailed) {
+			if exists, err := rt.ContainerExists(r.Context(), db.Slug); err == nil {
 				item.ContainerMissing = !exists
 			}
 		}
@@ -446,8 +463,10 @@ func (h *Handler) GetDatabase(w http.ResponseWriter, r *http.Request) {
 	// running database's container is present by definition. A stopped container
 	// is still present, so it does not trip this — only a deleted one does.
 	if db.Status == status.DatabaseStopped || db.Status == status.DatabaseFailed {
-		if exists, err := h.runtime.ContainerExists(r.Context(), db.Slug); err == nil {
-			resp.ContainerMissing = !exists
+		if rt, err := h.runtimeForDatabase(r.Context(), uuid); err == nil {
+			if exists, err := rt.ContainerExists(r.Context(), db.Slug); err == nil {
+				resp.ContainerMissing = !exists
+			}
 		}
 	}
 
@@ -490,8 +509,10 @@ func (h *Handler) GetDatabaseVolume(w http.ResponseWriter, r *http.Request) {
 	// a missing size is a soft state, not a failure.
 	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 	defer cancel()
-	if size, err := h.runtime.VolumeSize(ctx, resp.Name); err == nil {
-		resp.SizeBytes = &size
+	if rt, err := h.runtimeForDatabase(ctx, uuid); err == nil {
+		if size, err := rt.VolumeSize(ctx, resp.Name); err == nil {
+			resp.SizeBytes = &size
+		}
 	}
 
 	writeJSON(w, http.StatusOK, resp)
@@ -609,7 +630,10 @@ func (h *Handler) UpdateDatabase(w http.ResponseWriter, r *http.Request) {
 	// Apply live; a failure here is non-fatal because the persisted limit will
 	// be honoured the next time the container is (re)created.
 	if db.Status == status.DatabaseRunning && db.InternalHost.Valid {
-		if err := h.runtime.UpdateContainerResources(r.Context(), db.InternalHost.String, req.CPULimit, req.MemoryLimit); err != nil {
+		rt, err := h.runtimeForDatabase(r.Context(), dbUUID)
+		if err != nil {
+			slog.Warn("failed to resolve server to apply database resource limits live", "database_id", databaseID, "error", err)
+		} else if err := rt.UpdateContainerResources(r.Context(), db.InternalHost.String, req.CPULimit, req.MemoryLimit); err != nil {
 			slog.Warn("failed to apply database resource limits live", "database_id", databaseID, "error", err)
 		}
 	}
@@ -1003,8 +1027,14 @@ func (h *Handler) StopDatabase(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	rt, err := h.runtimeForDatabase(r.Context(), dbUUID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to reach the database's server")
+		return
+	}
+
 	// The database container name matches its slug (see provision/delete paths).
-	if err := h.runtime.StopContainer(r.Context(), db.Slug); err != nil {
+	if err := rt.StopContainer(r.Context(), db.Slug); err != nil {
 		slog.Error("failed to stop database container", "container", db.Slug, "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to stop database")
 		return
@@ -1043,7 +1073,13 @@ func (h *Handler) StartDatabase(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.runtime.StartContainer(r.Context(), db.Slug); err != nil {
+	rt, err := h.runtimeForDatabase(r.Context(), dbUUID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to reach the database's server")
+		return
+	}
+
+	if err := rt.StartContainer(r.Context(), db.Slug); err != nil {
 		slog.Error("failed to start database container", "container", db.Slug, "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to start database")
 		return
@@ -1082,12 +1118,18 @@ func (h *Handler) RestartDatabase(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.runtime.StopContainer(r.Context(), db.Slug); err != nil {
+	rt, err := h.runtimeForDatabase(r.Context(), dbUUID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to reach the database's server")
+		return
+	}
+
+	if err := rt.StopContainer(r.Context(), db.Slug); err != nil {
 		slog.Error("failed to stop database container for restart", "container", db.Slug, "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to restart database")
 		return
 	}
-	if err := h.runtime.StartContainer(r.Context(), db.Slug); err != nil {
+	if err := rt.StartContainer(r.Context(), db.Slug); err != nil {
 		slog.Error("failed to start database container for restart", "container", db.Slug, "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to restart database")
 		return

@@ -206,7 +206,12 @@ func (h *Handler) RollbackDeployment(w http.ResponseWriter, r *http.Request) {
 	// A transient inspect failure (not a clean "missing") is not treated as
 	// missing — we proceed and let the deploy's own error handling be the
 	// backstop, rather than block a rollback the image may well support.
-	if exists, err := h.runtime.ImageExists(r.Context(), target.ImageTag.String); err != nil {
+	rt, err := h.runtimeForApplication(r.Context(), appUUID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to reach the application's server")
+		return
+	}
+	if exists, err := rt.ImageExists(r.Context(), target.ImageTag.String); err != nil {
 		slog.Warn("rollback: could not verify image presence, proceeding",
 			"image", target.ImageTag.String, "error", err)
 	} else if !exists {

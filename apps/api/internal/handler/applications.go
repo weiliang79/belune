@@ -344,8 +344,14 @@ func (h *Handler) StopApplication(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	rt, err := h.runtimes.For(r.Context(), row.ServerID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to reach the application's server")
+		return
+	}
+
 	containerName := naming.ContainerName(row.ProjectSlug, row.Slug, applicationID)
-	if err := h.runtime.StopContainer(r.Context(), containerName); err != nil {
+	if err := rt.StopContainer(r.Context(), containerName); err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to stop application")
 		return
 	}
@@ -383,8 +389,14 @@ func (h *Handler) StartApplication(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	rt, err := h.runtimes.For(r.Context(), row.ServerID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to reach the application's server")
+		return
+	}
+
 	containerName := naming.ContainerName(row.ProjectSlug, row.Slug, applicationID)
-	if err := h.runtime.StartContainer(r.Context(), containerName); err != nil {
+	if err := rt.StartContainer(r.Context(), containerName); err != nil {
 		slog.Error("failed to start application container", "container", containerName, "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to start application")
 		return
@@ -423,14 +435,20 @@ func (h *Handler) RestartApplication(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	rt, err := h.runtimes.For(r.Context(), row.ServerID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to reach the application's server")
+		return
+	}
+
 	// Stop and start the existing container (no rebuild)
 	containerName := naming.ContainerName(row.ProjectSlug, row.Slug, applicationID)
-	if err := h.runtime.StopContainer(r.Context(), containerName); err != nil {
+	if err := rt.StopContainer(r.Context(), containerName); err != nil {
 		slog.Error("failed to stop container for restart", "container", containerName, "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to stop container")
 		return
 	}
-	if err := h.runtime.StartContainer(r.Context(), containerName); err != nil {
+	if err := rt.StartContainer(r.Context(), containerName); err != nil {
 		slog.Error("failed to start container for restart", "container", containerName, "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to start container")
 		return
@@ -781,15 +799,22 @@ func (h *Handler) GetBuildCache(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if _, err := h.queries.GetApplication(r.Context(), applicationUUID); err != nil {
+	row, err := h.queries.GetApplicationWithProjectSlug(r.Context(), applicationUUID)
+	if err != nil {
 		writeError(w, http.StatusNotFound, "application not found")
+		return
+	}
+
+	rt, err := h.runtimes.For(r.Context(), row.ServerID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to reach the application's server")
 		return
 	}
 
 	buildVol := naming.CNBCacheVolumeName(applicationID)
 	launchVol := naming.CNBLaunchCacheVolumeName(applicationID)
 
-	sizes, err := h.runtime.VolumeSizes(r.Context(), []string{buildVol, launchVol})
+	sizes, err := rt.VolumeSizes(r.Context(), []string{buildVol, launchVol})
 	if err != nil {
 		slog.Warn("failed to read cache volume sizes", "application_id", applicationID, "error", err)
 	}
@@ -820,8 +845,15 @@ func (h *Handler) ClearBuildCache(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if _, err := h.queries.GetApplication(r.Context(), applicationUUID); err != nil {
+	row, err := h.queries.GetApplicationWithProjectSlug(r.Context(), applicationUUID)
+	if err != nil {
 		writeError(w, http.StatusNotFound, "application not found")
+		return
+	}
+
+	rt, err := h.runtimes.For(r.Context(), row.ServerID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to reach the application's server")
 		return
 	}
 
@@ -829,7 +861,7 @@ func (h *Handler) ClearBuildCache(w http.ResponseWriter, r *http.Request) {
 		naming.CNBCacheVolumeName(applicationID),
 		naming.CNBLaunchCacheVolumeName(applicationID),
 	} {
-		if err := h.runtime.RemoveVolume(r.Context(), vol); err != nil {
+		if err := rt.RemoveVolume(r.Context(), vol); err != nil {
 			slog.Debug("could not remove cache volume (may not exist)", "volume", vol, "error", err)
 		}
 	}

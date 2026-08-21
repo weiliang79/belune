@@ -13,6 +13,7 @@ import (
 	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/weiliang79/belune/internal/runtime"
 	statuspkg "github.com/weiliang79/belune/internal/status"
 	"github.com/weiliang79/belune/internal/store/generated"
 )
@@ -54,6 +55,18 @@ func (h *TaskHandler) HandleUpgradeDBTask(ctx context.Context, t *asynq.Task) er
 	if err != nil {
 		return errors.Join(fmt.Errorf("get database: %w", err), asynq.SkipRetry)
 	}
+
+	// One resolve for the upgrade and for any rollback that follows it: the
+	// dump, the recreate and the restore all have to land on the same host.
+	rt, err := h.runtimeForDatabase(ctx, dbID)
+	if err != nil {
+		// Nothing has been dumped, removed or recreated yet, so the database is
+		// still healthy at its current version — return it to running rather
+		// than stamping a permanent failure on an untouched row.
+		h.setDatabaseStatus(ctx, dbID, "running")
+		return errors.Join(fmt.Errorf("resolve server: %w", err), asynq.SkipRetry)
+	}
+
 	if dbBackupMethod(db) != "logical" {
 		h.failDatabase(ctx, dbID, fmt.Sprintf("upgrade not supported for type %s", db.Type))
 		return errors.Join(fmt.Errorf("upgrade not supported for type %s (permanent)", db.Type), asynq.SkipRetry)
@@ -68,7 +81,7 @@ func (h *TaskHandler) HandleUpgradeDBTask(ctx context.Context, t *asynq.Task) er
 	oldVersion := db.Version
 
 	// 1. Pre-upgrade dump — the rollback artifact, recorded as a backup row.
-	dumpPath, err := h.dumpForUpgrade(ctx, db, creds)
+	dumpPath, err := h.dumpForUpgrade(ctx, rt, db, creds)
 	if err != nil {
 		// The database was not touched; return it to running.
 		h.setDatabaseStatus(ctx, dbID, "running")
@@ -92,26 +105,26 @@ func (h *TaskHandler) HandleUpgradeDBTask(ctx context.Context, t *asynq.Task) er
 	// target tag and pins its digest (also covers same-tag "refresh to latest").
 	dbNew.ImageDigest = pgtype.Text{}
 
-	h.removeDBContainer(ctx, db.Slug)
-	if err := h.Runtime.RemoveVolume(ctx, db.Slug+"-vol"); err != nil {
+	h.removeDBContainer(ctx, rt, db.Slug)
+	if err := rt.RemoveVolume(ctx, db.Slug+"-vol"); err != nil {
 		slog.Warn("upgrade: remove old volume (may not exist)", "database_id", payload.DatabaseID, "error", err)
 	}
 
-	if err := h.provisionDBContainer(ctx, dbNew, creds, hostPort); err != nil {
-		return h.rollbackUpgrade(ctx, dbNew, creds, oldVersion, hostPort, dumpPath,
+	if err := h.provisionDBContainer(ctx, rt, dbNew, creds, hostPort); err != nil {
+		return h.rollbackUpgrade(ctx, rt, dbNew, creds, oldVersion, hostPort, dumpPath,
 			fmt.Sprintf("provision target version: %v", err))
 	}
 
 	// The container is started but the engine needs a moment to accept
 	// authenticated connections; restoring before then would fail spuriously.
-	if err := h.waitForDBReady(ctx, dbNew, creds); err != nil {
-		return h.rollbackUpgrade(ctx, dbNew, creds, oldVersion, hostPort, dumpPath,
+	if err := h.waitForDBReady(ctx, rt, dbNew, creds); err != nil {
+		return h.rollbackUpgrade(ctx, rt, dbNew, creds, oldVersion, hostPort, dumpPath,
 			fmt.Sprintf("target version not ready: %v", err))
 	}
 
 	// 3. Restore the dump into the new-version container.
-	if err := h.applyRestoreArchive(ctx, dbNew, creds, "logical", dumpPath, ""); err != nil {
-		return h.rollbackUpgrade(ctx, dbNew, creds, oldVersion, hostPort, dumpPath,
+	if err := h.applyRestoreArchive(ctx, rt, dbNew, creds, "logical", dumpPath, ""); err != nil {
+		return h.rollbackUpgrade(ctx, rt, dbNew, creds, oldVersion, hostPort, dumpPath,
 			fmt.Sprintf("restore into target version: %v", err))
 	}
 
@@ -121,7 +134,7 @@ func (h *TaskHandler) HandleUpgradeDBTask(ctx context.Context, t *asynq.Task) er
 
 // dumpForUpgrade produces a logical dump recorded as a succeeded backup row and
 // returns the local path used as the upgrade's rollback artifact.
-func (h *TaskHandler) dumpForUpgrade(ctx context.Context, db generated.Database, creds map[string]string) (string, error) {
+func (h *TaskHandler) dumpForUpgrade(ctx context.Context, rt runtime.ContainerRuntime, db generated.Database, creds map[string]string) (string, error) {
 	run, err := h.Queries.InsertDatabaseBackup(ctx, generated.InsertDatabaseBackupParams{DatabaseID: db.ID})
 	if err != nil {
 		return "", fmt.Errorf("insert backup run: %w", err)
@@ -142,7 +155,7 @@ func (h *TaskHandler) dumpForUpgrade(ctx context.Context, db generated.Database,
 		h.failDatabaseBackupLog(ctx, run.ID, fmt.Sprintf("create backup file: %v", err), lg)
 		return "", err
 	}
-	archiveErr := h.writeBackupArchive(ctx, db, creds, "logical", f, lg, "")
+	archiveErr := h.writeBackupArchive(ctx, rt, db, creds, "logical", f, lg, "")
 	closeErr := f.Close()
 	if archiveErr != nil {
 		_ = os.Remove(localPath)
@@ -199,7 +212,7 @@ func (h *TaskHandler) dumpForUpgrade(ctx context.Context, db generated.Database,
 // dump after a failed upgrade. Returns nil when the rollback succeeds (the
 // database is healthy at the old version, so there is nothing to retry); returns
 // the error only if the rollback itself fails (database left failed).
-func (h *TaskHandler) rollbackUpgrade(ctx context.Context, db generated.Database, creds map[string]string, oldVersion string, hostPort int32, dumpPath, reason string) error {
+func (h *TaskHandler) rollbackUpgrade(ctx context.Context, rt runtime.ContainerRuntime, db generated.Database, creds map[string]string, oldVersion string, hostPort int32, dumpPath, reason string) error {
 	slog.Warn("upgrade failed; rolling back to previous version", "database_id", formatUUID(db.ID), "reason", reason, "old_version", oldVersion)
 
 	dbOld, err := h.Queries.UpdateDatabaseVersion(ctx, generated.UpdateDatabaseVersionParams{ID: db.ID, Version: oldVersion})
@@ -210,19 +223,19 @@ func (h *TaskHandler) rollbackUpgrade(ctx context.Context, db generated.Database
 	// Re-pin for the restored old version (provision re-resolves the tag digest).
 	dbOld.ImageDigest = pgtype.Text{}
 
-	h.removeDBContainer(ctx, dbOld.Slug)
-	if err := h.Runtime.RemoveVolume(ctx, dbOld.Slug+"-vol"); err != nil {
+	h.removeDBContainer(ctx, rt, dbOld.Slug)
+	if err := rt.RemoveVolume(ctx, dbOld.Slug+"-vol"); err != nil {
 		slog.Warn("rollback: remove volume (may not exist)", "database_id", formatUUID(db.ID), "error", err)
 	}
-	if err := h.provisionDBContainer(ctx, dbOld, creds, hostPort); err != nil {
+	if err := h.provisionDBContainer(ctx, rt, dbOld, creds, hostPort); err != nil {
 		h.failDatabase(ctx, db.ID, fmt.Sprintf("upgrade failed (%s); rollback provision failed: %v", reason, err))
 		return errors.Join(fmt.Errorf("rollback provision: %w", err), asynq.SkipRetry)
 	}
-	if err := h.waitForDBReady(ctx, dbOld, creds); err != nil {
+	if err := h.waitForDBReady(ctx, rt, dbOld, creds); err != nil {
 		h.failDatabase(ctx, db.ID, fmt.Sprintf("upgrade failed (%s); rollback not ready: %v", reason, err))
 		return errors.Join(fmt.Errorf("rollback not ready: %w", err), asynq.SkipRetry)
 	}
-	if err := h.applyRestoreArchive(ctx, dbOld, creds, "logical", dumpPath, ""); err != nil {
+	if err := h.applyRestoreArchive(ctx, rt, dbOld, creds, "logical", dumpPath, ""); err != nil {
 		h.failDatabase(ctx, db.ID, fmt.Sprintf("upgrade failed (%s); rollback restore failed: %v", reason, err))
 		return errors.Join(fmt.Errorf("rollback restore: %w", err), asynq.SkipRetry)
 	}
@@ -235,7 +248,7 @@ func (h *TaskHandler) rollbackUpgrade(ctx context.Context, db generated.Database
 // authenticated connection (or the deadline passes), so a restore that runs
 // immediately after (re)provisioning does not race container startup. Engines
 // without a probe return nil (no wait).
-func (h *TaskHandler) waitForDBReady(ctx context.Context, db generated.Database, creds map[string]string) error {
+func (h *TaskHandler) waitForDBReady(ctx context.Context, rt runtime.ContainerRuntime, db generated.Database, creds map[string]string) error {
 	cmd, ok := dbReadyCmd(db.Type, creds)
 	if !ok {
 		return nil
@@ -243,7 +256,7 @@ func (h *TaskHandler) waitForDBReady(ctx context.Context, db generated.Database,
 	deadline := time.Now().Add(90 * time.Second)
 	var lastErr error
 	for {
-		exit, err := h.Runtime.ContainerExec(ctx, db.Slug, cmd, nil, nil, nil)
+		exit, err := rt.ContainerExec(ctx, db.Slug, cmd, nil, nil, nil)
 		if err == nil && exit == 0 {
 			return nil
 		}
@@ -284,7 +297,12 @@ func (h *TaskHandler) ReconcileInterruptedUpgrades(ctx context.Context) {
 	}
 	for _, db := range backingUp {
 		slog.Warn("reconcile: restarting database left mid-snapshot", "database_id", formatUUID(db.ID), "slug", db.Slug)
-		if err := h.Runtime.StartContainer(ctx, db.Slug); err != nil {
+		// The status is stamped either way. Leaving the row in backing_up is
+		// the exact silent, permanent transitional state this function exists
+		// to clear, and a failed restart already falls through to it.
+		if rt, err := h.runtimeForDatabase(ctx, db.ID); err != nil {
+			slog.Warn("reconcile: could not reach the database's server", "database_id", formatUUID(db.ID), "error", err)
+		} else if err := rt.StartContainer(ctx, db.Slug); err != nil {
 			slog.Warn("reconcile: failed to restart database after snapshot", "database_id", formatUUID(db.ID), "error", err)
 		}
 		h.setDatabaseStatus(ctx, db.ID, statuspkg.DatabaseRunning)

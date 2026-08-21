@@ -7,7 +7,9 @@ ORDER BY created_at DESC;
 SELECT * FROM applications WHERE id = $1;
 
 -- name: GetApplicationWithProjectSlug :one
-SELECT a.*, p.slug as project_slug
+-- server_id rides along because every container operation on this application
+-- has to resolve which host it runs on, and this join is already paid for.
+SELECT a.*, p.slug as project_slug, p.server_id as server_id
 FROM applications a
 JOIN projects p ON p.id = a.project_id
 WHERE a.id = $1;
@@ -128,7 +130,7 @@ WHERE parent_application_id IS NOT NULL
   AND last_activity_at < $1;
 
 -- name: ListAllApplicationsWithProjectSlug :many
-SELECT a.*, p.slug as project_slug
+SELECT a.*, p.slug as project_slug, p.server_id as server_id
 FROM applications a
 JOIN projects p ON p.id = a.project_id;
 
@@ -269,3 +271,11 @@ UPDATE applications SET
     updated_at = NOW()
 WHERE id = $1
 RETURNING *;
+
+-- name: GetServerIDForApplication :one
+-- Placement lookup for paths that hold only an application id. Cheaper than
+-- refetching the row, and it keeps "which host" an explicit question rather
+-- than something a caller assumes.
+SELECT p.server_id FROM applications a
+JOIN projects p ON p.id = a.project_id
+WHERE a.id = $1;

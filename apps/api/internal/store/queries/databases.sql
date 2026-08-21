@@ -53,3 +53,10 @@ WHERE d.id = $1;
 -- name: UpdateDatabaseSource :exec
 UPDATE databases SET source_kind = $2, source_ref = $3, updated_at = NOW()
 WHERE id = $1;
+
+-- name: GetServerIDForDatabase :one
+-- Placement lookup, sibling of GetServerIDForApplication. Databases are fetched
+-- as a bare row everywhere, so their host is resolved from the project here.
+SELECT p.server_id FROM databases d
+JOIN projects p ON p.id = d.project_id
+WHERE d.id = $1;

@@ -292,6 +292,13 @@ func (h *TaskHandler) HandleBackupDBTask(ctx context.Context, t *asynq.Task) err
 		return fmt.Errorf("get database: %w", err)
 	}
 
+	// Resolved once for the whole run: a backup that exec'd into one host and
+	// wrote its volume on another would be silently wrong.
+	rt, err := h.runtimeForDatabase(ctx, dbID)
+	if err != nil {
+		return err
+	}
+
 	method := dbBackupMethod(db)
 	if method == "none" {
 		return errors.Join(fmt.Errorf("backup is not supported for database type %s (permanent)", db.Type), asynq.SkipRetry)
@@ -383,7 +390,7 @@ func (h *TaskHandler) HandleBackupDBTask(ctx context.Context, t *asynq.Task) err
 		return fmt.Errorf("create backup file: %w", err)
 	}
 
-	archiveErr := h.writeBackupArchive(ctx, db, creds, method, f, lg, target)
+	archiveErr := h.writeBackupArchive(ctx, rt, db, creds, method, f, lg, target)
 	closeErr := f.Close()
 	if archiveErr != nil {
 		_ = os.Remove(localPath)
@@ -675,14 +682,14 @@ func (h *TaskHandler) pruneConfigBackups(ctx context.Context, cfg generated.Data
 
 // writeBackupArchive produces the gzipped backup archive into f according to the
 // chosen method. Permanent failures are wrapped with asynq.SkipRetry.
-func (h *TaskHandler) writeBackupArchive(ctx context.Context, db generated.Database, creds map[string]string, method string, f *os.File, lg *runLog, target string) error {
+func (h *TaskHandler) writeBackupArchive(ctx context.Context, rt runtime.ContainerRuntime, db generated.Database, creds map[string]string, method string, f *os.File, lg *runLog, target string) error {
 	switch method {
 	case "logical":
 		lg.step("Running logical dump (%s)", backupScopeLabel(target))
 		spec := dbDumpSpec(db.Type, creds, target)
 		gz := gzip.NewWriter(f)
 		var stderr bytes.Buffer
-		exit, execErr := h.Runtime.ContainerExec(ctx, db.Slug, spec.dump, nil, gz, &stderr)
+		exit, execErr := rt.ContainerExec(ctx, db.Slug, spec.dump, nil, gz, &stderr)
 		gzErr := gz.Close()
 		lg.raw(stderr.String()) // dump tools write warnings/errors to stderr
 		if execErr != nil {
@@ -697,22 +704,22 @@ func (h *TaskHandler) writeBackupArchive(ctx context.Context, db generated.Datab
 		lg.step("Dump completed")
 		return nil
 	case "volume_snapshot":
-		return h.snapshotVolume(ctx, db, f, lg)
+		return h.snapshotVolume(ctx, rt, db, f, lg)
 	case "command":
-		return h.commandBackup(ctx, db, f, lg)
+		return h.commandBackup(ctx, rt, db, f, lg)
 	}
 	return errors.Join(fmt.Errorf("unknown backup method %q", method), asynq.SkipRetry)
 }
 
 // snapshotVolume cold-tars an "other" database's data-dir volume into f. The
 // database container is stopped for a consistent snapshot and always restarted.
-func (h *TaskHandler) snapshotVolume(ctx context.Context, db generated.Database, f *os.File, lg *runLog) error {
+func (h *TaskHandler) snapshotVolume(ctx context.Context, rt runtime.ContainerRuntime, db generated.Database, f *os.File, lg *runLog) error {
 	dataDir := db.DataDir.String
 	if dataDir == "" {
 		return errors.Join(errors.New("data_dir is not set (permanent)"), asynq.SkipRetry)
 	}
 	helperImage := h.Config.DatabaseBackupHelperImage
-	if err := h.Runtime.PullImage(ctx, helperImage); err != nil {
+	if err := rt.PullImage(ctx, helperImage); err != nil {
 		return fmt.Errorf("pull helper image: %w", err)
 	}
 
@@ -721,18 +728,18 @@ func (h *TaskHandler) snapshotVolume(ctx context.Context, db generated.Database,
 	// running (a snapshot is read-only, so the prior state is always "running").
 	lg.step("Stopping database for cold volume snapshot")
 	h.setDatabaseStatus(ctx, db.ID, statuspkg.DatabaseBackingUp)
-	if err := h.Runtime.StopContainer(ctx, db.Slug); err != nil {
+	if err := rt.StopContainer(ctx, db.Slug); err != nil {
 		slog.Warn("snapshot: stop database (may already be stopped)", "database_id", formatUUID(db.ID), "error", err)
 	}
 	defer func() {
-		if err := h.Runtime.StartContainer(ctx, db.Slug); err != nil {
+		if err := rt.StartContainer(ctx, db.Slug); err != nil {
 			slog.Error("snapshot: failed to restart database after backup", "database_id", formatUUID(db.ID), "error", err)
 		}
 		h.setDatabaseStatus(ctx, db.ID, statuspkg.DatabaseRunning)
 	}()
 
 	var stderr bytes.Buffer
-	exit, err := h.Runtime.RunHelper(ctx, runtime.ContainerConfig{
+	exit, err := rt.RunHelper(ctx, runtime.ContainerConfig{
 		Image:   helperImage,
 		Cmd:     []string{"tar", "czf", "-", "-C", dataDir, "."},
 		Volumes: map[string]string{db.Slug + "-vol": dataDir},
@@ -750,7 +757,7 @@ func (h *TaskHandler) snapshotVolume(ctx context.Context, db generated.Database,
 
 // commandBackup runs the user's backup command in the running container (writing
 // into $BELUNE_BACKUP_DIR), then tars that directory into f.
-func (h *TaskHandler) commandBackup(ctx context.Context, db generated.Database, f *os.File, lg *runLog) error {
+func (h *TaskHandler) commandBackup(ctx context.Context, rt runtime.ContainerRuntime, db generated.Database, f *os.File, lg *runLog) error {
 	if !db.BackupCommand.Valid || db.BackupCommand.String == "" {
 		return errors.Join(errors.New("backup_command is not set (permanent)"), asynq.SkipRetry)
 	}
@@ -759,7 +766,7 @@ func (h *TaskHandler) commandBackup(ctx context.Context, db generated.Database, 
 	prep := fmt.Sprintf("rm -rf %s && mkdir -p %s && export BELUNE_BACKUP_DIR=%s && ( %s )",
 		beluneBackupDir, beluneBackupDir, beluneBackupDir, db.BackupCommand.String)
 	var stderr bytes.Buffer
-	exit, err := h.Runtime.ContainerExec(ctx, db.Slug, []string{"sh", "-c", prep}, nil, nil, &stderr)
+	exit, err := rt.ContainerExec(ctx, db.Slug, []string{"sh", "-c", prep}, nil, nil, &stderr)
 	lg.raw(stderr.String())
 	if err != nil {
 		return fmt.Errorf("exec backup command: %w", err)
@@ -773,7 +780,7 @@ func (h *TaskHandler) commandBackup(ctx context.Context, db generated.Database, 
 	// create dialog).
 	lg.step("Archiving $BELUNE_BACKUP_DIR")
 	var terr bytes.Buffer
-	exit, err = h.Runtime.ContainerExec(ctx, db.Slug,
+	exit, err = rt.ContainerExec(ctx, db.Slug,
 		[]string{"sh", "-c", fmt.Sprintf("tar czf - -C %s .", beluneBackupDir)}, nil, f, &terr)
 	lg.raw(terr.String())
 	if err != nil {
@@ -785,7 +792,7 @@ func (h *TaskHandler) commandBackup(ctx context.Context, db generated.Database, 
 	lg.step("Command backup completed")
 
 	// Best-effort cleanup.
-	_, _ = h.Runtime.ContainerExec(ctx, db.Slug, []string{"sh", "-c", "rm -rf " + beluneBackupDir}, nil, nil, nil)
+	_, _ = rt.ContainerExec(ctx, db.Slug, []string{"sh", "-c", "rm -rf " + beluneBackupDir}, nil, nil, nil)
 	return nil
 }
 
@@ -813,6 +820,14 @@ func (h *TaskHandler) HandleRestoreDBTask(ctx context.Context, t *asynq.Task) er
 	if err != nil {
 		return fmt.Errorf("get database: %w", err)
 	}
+
+	// Resolved once for the whole run: a backup that exec'd into one host and
+	// wrote its volume on another would be silently wrong.
+	rt, err := h.runtimeForDatabase(ctx, dbID)
+	if err != nil {
+		return err
+	}
+
 	backup, err := h.Queries.GetDatabaseBackup(ctx, backupID)
 	if err != nil {
 		return fmt.Errorf("get backup: %w", err)
@@ -857,7 +872,7 @@ func (h *TaskHandler) HandleRestoreDBTask(ctx context.Context, t *asynq.Task) er
 	defer cleanup()
 	lg.step("Backup archive ready; applying restore (method=%s)", method)
 
-	if err := h.applyRestoreArchive(ctx, db, creds, method, dumpPath, backup.TargetDatabase); err != nil {
+	if err := h.applyRestoreArchive(ctx, rt, db, creds, method, dumpPath, backup.TargetDatabase); err != nil {
 		h.notifyRestore(ctx, db, false, err.Error())
 		h.failDatabaseRestoreLog(ctx, run.ID, err.Error(), lg)
 		return err
@@ -936,13 +951,13 @@ func (h *TaskHandler) notifyRestore(ctx context.Context, db generated.Database, 
 	}
 }
 
-func (h *TaskHandler) applyRestoreArchive(ctx context.Context, db generated.Database, creds map[string]string, method, dumpPath, target string) error {
+func (h *TaskHandler) applyRestoreArchive(ctx context.Context, rt runtime.ContainerRuntime, db generated.Database, creds map[string]string, method, dumpPath, target string) error {
 	switch method {
 	case "logical":
 		// A single-database dump has no CREATE DATABASE, so restore fails if the
 		// database was dropped. Recreate it first (no-op if it exists). Skipped for
 		// cluster restores (pg_dumpall / --all-databases recreate databases).
-		if err := h.ensureRestoreDatabase(ctx, db, creds, target); err != nil {
+		if err := h.ensureRestoreDatabase(ctx, rt, db, creds, target); err != nil {
 			return err
 		}
 
@@ -959,7 +974,7 @@ func (h *TaskHandler) applyRestoreArchive(ctx context.Context, db generated.Data
 
 		spec := dbDumpSpec(db.Type, creds, target)
 		var stderr bytes.Buffer
-		exit, execErr := h.Runtime.ContainerExec(ctx, db.Slug, spec.restore, gz, nil, &stderr)
+		exit, execErr := rt.ContainerExec(ctx, db.Slug, spec.restore, gz, nil, &stderr)
 		if execErr != nil {
 			return fmt.Errorf("exec restore: %w", execErr)
 		}
@@ -968,9 +983,9 @@ func (h *TaskHandler) applyRestoreArchive(ctx context.Context, db generated.Data
 		}
 		return nil
 	case "volume_snapshot":
-		return h.restoreVolume(ctx, db, dumpPath)
+		return h.restoreVolume(ctx, rt, db, dumpPath)
 	case "command":
-		return h.commandRestore(ctx, db, dumpPath)
+		return h.commandRestore(ctx, rt, db, dumpPath)
 	}
 	return errors.Join(fmt.Errorf("unknown restore method %q", method), asynq.SkipRetry)
 }
@@ -980,7 +995,7 @@ func (h *TaskHandler) applyRestoreArchive(ctx context.Context, db generated.Data
 // cluster restores ("*", which recreate databases) and for engines that create
 // databases implicitly (mongo). Best-effort: a genuine failure surfaces later as
 // a clear restore error.
-func (h *TaskHandler) ensureRestoreDatabase(ctx context.Context, db generated.Database, creds map[string]string, target string) error {
+func (h *TaskHandler) ensureRestoreDatabase(ctx context.Context, rt runtime.ContainerRuntime, db generated.Database, creds map[string]string, target string) error {
 	names, all := dumpTargets(creds, target)
 	// "all" (pg_dumpall / --all-databases) and multi-db dumps (--create /
 	// --databases) already recreate databases; only a single-db dump needs help.
@@ -1009,7 +1024,7 @@ func (h *TaskHandler) ensureRestoreDatabase(ctx context.Context, db generated.Da
 	}
 
 	var stderr bytes.Buffer
-	exit, err := h.Runtime.ContainerExec(ctx, db.Slug, cmd, nil, nil, &stderr)
+	exit, err := rt.ContainerExec(ctx, db.Slug, cmd, nil, nil, &stderr)
 	if err != nil {
 		return fmt.Errorf("ensure restore database: %w", err)
 	}
@@ -1023,13 +1038,13 @@ func (h *TaskHandler) ensureRestoreDatabase(ctx context.Context, db generated.Da
 
 // restoreVolume wipes the data-dir volume and untars the snapshot into it. The
 // database is stopped for the swap and always restarted.
-func (h *TaskHandler) restoreVolume(ctx context.Context, db generated.Database, dumpPath string) error {
+func (h *TaskHandler) restoreVolume(ctx context.Context, rt runtime.ContainerRuntime, db generated.Database, dumpPath string) error {
 	dataDir := db.DataDir.String
 	if dataDir == "" {
 		return errors.Join(errors.New("data_dir is not set (permanent)"), asynq.SkipRetry)
 	}
 	helperImage := h.Config.DatabaseBackupHelperImage
-	if err := h.Runtime.PullImage(ctx, helperImage); err != nil {
+	if err := rt.PullImage(ctx, helperImage); err != nil {
 		return fmt.Errorf("pull helper image: %w", err)
 	}
 
@@ -1039,18 +1054,18 @@ func (h *TaskHandler) restoreVolume(ctx context.Context, db generated.Database, 
 	}
 	defer f.Close()
 
-	if err := h.Runtime.StopContainer(ctx, db.Slug); err != nil {
+	if err := rt.StopContainer(ctx, db.Slug); err != nil {
 		slog.Warn("restore: stop database (may already be stopped)", "database_id", formatUUID(db.ID), "error", err)
 	}
 	defer func() {
-		if err := h.Runtime.StartContainer(ctx, db.Slug); err != nil {
+		if err := rt.StartContainer(ctx, db.Slug); err != nil {
 			slog.Error("restore: failed to restart database after restore", "database_id", formatUUID(db.ID), "error", err)
 		}
 	}()
 
 	script := fmt.Sprintf("find %s -mindepth 1 -delete && tar xzf - -C %s", dataDir, dataDir)
 	var stderr bytes.Buffer
-	exit, err := h.Runtime.RunHelper(ctx, runtime.ContainerConfig{
+	exit, err := rt.RunHelper(ctx, runtime.ContainerConfig{
 		Image:   helperImage,
 		Cmd:     []string{"sh", "-c", script},
 		Volumes: map[string]string{db.Slug + "-vol": dataDir},
@@ -1066,7 +1081,7 @@ func (h *TaskHandler) restoreVolume(ctx context.Context, db generated.Database, 
 
 // commandRestore untars the archive into $BELUNE_BACKUP_DIR in the running
 // container, then runs the user's restore command.
-func (h *TaskHandler) commandRestore(ctx context.Context, db generated.Database, dumpPath string) error {
+func (h *TaskHandler) commandRestore(ctx context.Context, rt runtime.ContainerRuntime, db generated.Database, dumpPath string) error {
 	if !db.RestoreCommand.Valid || db.RestoreCommand.String == "" {
 		return errors.Join(errors.New("restore_command is not set (permanent)"), asynq.SkipRetry)
 	}
@@ -1079,7 +1094,7 @@ func (h *TaskHandler) commandRestore(ctx context.Context, db generated.Database,
 
 	unpack := fmt.Sprintf("rm -rf %s && mkdir -p %s && tar xzf - -C %s", beluneBackupDir, beluneBackupDir, beluneBackupDir)
 	var uerr bytes.Buffer
-	exit, err := h.Runtime.ContainerExec(ctx, db.Slug, []string{"sh", "-c", unpack}, f, nil, &uerr)
+	exit, err := rt.ContainerExec(ctx, db.Slug, []string{"sh", "-c", unpack}, f, nil, &uerr)
 	if err != nil {
 		return fmt.Errorf("exec unpack: %w", err)
 	}
@@ -1089,7 +1104,7 @@ func (h *TaskHandler) commandRestore(ctx context.Context, db generated.Database,
 
 	run := fmt.Sprintf("export BELUNE_BACKUP_DIR=%s && ( %s )", beluneBackupDir, db.RestoreCommand.String)
 	var rerr bytes.Buffer
-	exit, err = h.Runtime.ContainerExec(ctx, db.Slug, []string{"sh", "-c", run}, nil, nil, &rerr)
+	exit, err = rt.ContainerExec(ctx, db.Slug, []string{"sh", "-c", run}, nil, nil, &rerr)
 	if err != nil {
 		return fmt.Errorf("exec restore command: %w", err)
 	}
@@ -1097,7 +1112,7 @@ func (h *TaskHandler) commandRestore(ctx context.Context, db generated.Database,
 		return errors.Join(fmt.Errorf("restore command exited %d: %s", exit, strings.TrimSpace(rerr.String())), asynq.SkipRetry)
 	}
 
-	_, _ = h.Runtime.ContainerExec(ctx, db.Slug, []string{"sh", "-c", "rm -rf " + beluneBackupDir}, nil, nil, nil)
+	_, _ = rt.ContainerExec(ctx, db.Slug, []string{"sh", "-c", "rm -rf " + beluneBackupDir}, nil, nil, nil)
 	return nil
 }
 

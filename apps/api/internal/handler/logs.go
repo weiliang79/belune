@@ -42,7 +42,13 @@ func (h *Handler) StreamLogs(w http.ResponseWriter, r *http.Request) {
 
 	follow := r.URL.Query().Get("follow") == "true"
 
-	logs, err := h.runtime.ContainerLogs(r.Context(), containerName, follow)
+	rt, err := h.runtimes.For(r.Context(), row.ServerID)
+	if err != nil {
+		writer.SendEvent("error", "failed to reach the application's server")
+		return
+	}
+
+	logs, err := rt.ContainerLogs(r.Context(), containerName, follow)
 	if err != nil {
 		writer.SendEvent("error", fmt.Sprintf("failed to get logs: %v", err))
 		return

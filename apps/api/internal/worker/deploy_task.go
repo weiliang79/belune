@@ -48,6 +48,13 @@ type deployContext struct {
 	deploymentID  pgtype.UUID
 	appRow        generated.GetApplicationWithProjectSlugRow
 	app           generated.Application
+	// runtime is the host this application is placed on, resolved once in
+	// loadApplication so no stage can re-resolve to a different host midway.
+	// ⚠️ It does NOT yet cover the build: h.Chain is still wired to the local
+	// Docker client, so a git-source app placed on a remote host would build
+	// its image here and then fail to find that tag there. Offloading the
+	// build is its own piece of work (BUILDKIT_HOST), not this refactor.
+	runtime       runtime.ContainerRuntime
 	containerName string
 	containerID   string
 	env           map[string]string
@@ -289,6 +296,12 @@ func (h *TaskHandler) loadApplication(ctx context.Context, dc *deployContext) er
 	}
 	dc.containerName = naming.ContainerName(appRow.ProjectSlug, appRow.Slug, dc.payload.ApplicationID)
 
+	rt, err := h.Runtimes.For(ctx, appRow.ServerID)
+	if err != nil {
+		return fmt.Errorf("resolve runtime: %w", err)
+	}
+	dc.runtime = rt
+
 	// Decrypt env vars: project-level first (base), then app-level (override)
 	env := make(map[string]string)
 	projectEnvVars, err := h.Queries.ListProjectEnvVars(ctx, dc.app.ProjectID)
@@ -325,10 +338,10 @@ func (h *TaskHandler) cleanupExisting(ctx context.Context, dc *deployContext) {
 	intermediateContainerName := naming.IntermediateContainerName(dc.appRow.ProjectSlug, dc.payload.ApplicationID)
 	oldContainerName := naming.OldContainerName(dc.payload.ApplicationID)
 	for _, name := range []string{oldContainerName, intermediateContainerName, dc.containerName} {
-		if err := h.Runtime.StopContainer(ctx, name); err != nil {
+		if err := dc.runtime.StopContainer(ctx, name); err != nil {
 			slog.Debug("could not stop container before deploy (may not exist)", "container", name, "error", err)
 		}
-		if err := h.Runtime.RemoveContainer(ctx, name); err != nil {
+		if err := dc.runtime.RemoveContainer(ctx, name); err != nil {
 			slog.Debug("could not remove container before deploy (may not exist)", "container", name, "error", err)
 		}
 	}
@@ -344,11 +357,11 @@ func (h *TaskHandler) cleanupExisting(ctx context.Context, dc *deployContext) {
 // each project network on demand.
 func (h *TaskHandler) ensureNetworks(ctx context.Context, dc *deployContext) {
 	projectNetwork := naming.ProjectNetworkName(dc.appRow.ProjectSlug)
-	if err := h.Runtime.CreateNetwork(ctx, projectNetwork); err != nil {
+	if err := dc.runtime.CreateNetwork(ctx, projectNetwork); err != nil {
 		slog.Debug("could not create project network (may already exist)", "network", projectNetwork, "error", err)
 	}
 	if name := h.Config.CaddyContainerName; name != "" {
-		if err := h.Runtime.ConnectContainerToNetwork(ctx, name, projectNetwork); err != nil {
+		if err := dc.runtime.ConnectContainerToNetwork(ctx, name, projectNetwork); err != nil {
 			// Caddy may legitimately be on a different orchestration plane
 			// (e.g. running on the host, not in Docker). Warn rather than
 			// fail — the deploy itself can still succeed.
@@ -361,7 +374,7 @@ func (h *TaskHandler) ensureNetworks(ctx context.Context, dc *deployContext) {
 	// in, which it must to health-check. Idempotent; warn (not fail) when the API
 	// runs outside Docker.
 	if name := h.Config.APIContainerName; name != "" {
-		if err := h.Runtime.ConnectContainerToNetwork(ctx, name, projectNetwork); err != nil {
+		if err := dc.runtime.ConnectContainerToNetwork(ctx, name, projectNetwork); err != nil {
 			slog.Warn("could not attach control-plane container to project network", "api", name, "network", projectNetwork, "error", err)
 		}
 	}
@@ -402,7 +415,7 @@ func (h *TaskHandler) prepareImage(ctx context.Context, dc *deployContext) error
 		fmt.Fprintf(out, "Pulling image %s\n", dc.imageName)
 		slog.Info("pulling image", "image", dc.imageName)
 		pullCtx, pullCancel := context.WithTimeout(ctx, time.Duration(h.Config.ImagePullTimeoutMinutes)*time.Minute)
-		if err := h.Runtime.PullImage(pullCtx, dc.imageName); err != nil {
+		if err := dc.runtime.PullImage(pullCtx, dc.imageName); err != nil {
 			pullCancel()
 			fmt.Fprintf(out, "Failed to pull image: %v\n", err)
 			persistPullLog()
@@ -411,7 +424,7 @@ func (h *TaskHandler) prepareImage(ctx context.Context, dc *deployContext) error
 		// Pin to the resolved digest so a later Reload/rollback recreates the
 		// exact image that was deployed, not whatever the mutable tag (e.g.
 		// :latest) points at by then. Falls back to the tag if no repo digest.
-		if digest, derr := h.Runtime.ResolveImageDigest(pullCtx, dc.imageName); derr != nil {
+		if digest, derr := dc.runtime.ResolveImageDigest(pullCtx, dc.imageName); derr != nil {
 			slog.Warn("could not resolve image digest; using tag", "image", dc.imageName, "error", derr)
 		} else if digest != "" {
 			fmt.Fprintf(out, "Pinned to digest %s\n", digest)
@@ -675,7 +688,7 @@ func (h *TaskHandler) createAndStart(ctx context.Context, dc *deployContext) err
 	volumes := make(map[string]string, len(volRows))
 	for _, v := range volRows {
 		volName := naming.AppVolumeName(dc.payload.ApplicationID, v.Name)
-		if err := h.Runtime.CreateDataVolume(ctx, volName); err != nil {
+		if err := dc.runtime.CreateDataVolume(ctx, volName); err != nil {
 			return fmt.Errorf("ensure volume %s: %w", volName, err)
 		}
 		volumes[volName] = v.MountPath
@@ -706,7 +719,7 @@ func (h *TaskHandler) createAndStart(ctx context.Context, dc *deployContext) err
 
 	hc := healthCheckRuntimeConfig(dc.app)
 
-	containerID, err := h.Runtime.CreateContainer(ctx, runtime.ContainerConfig{
+	containerID, err := dc.runtime.CreateContainer(ctx, runtime.ContainerConfig{
 		Name:    dc.containerName,
 		Image:   dc.imageName,
 		Env:     dc.env,
@@ -747,12 +760,12 @@ func (h *TaskHandler) createAndStart(ctx context.Context, dc *deployContext) err
 		return fmt.Errorf("create container: %w", err)
 	}
 
-	if err := h.Runtime.StartContainer(ctx, containerID); err != nil {
+	if err := dc.runtime.StartContainer(ctx, containerID); err != nil {
 		// Container created but not started — remove it before returning. Use a
 		// fresh bounded context: the parent ctx may already be cancelled or
 		// near-deadline, and we don't want cleanup to be skipped because of it.
 		cleanCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		if rmErr := h.Runtime.RemoveContainer(cleanCtx, containerID); rmErr != nil {
+		if rmErr := dc.runtime.RemoveContainer(cleanCtx, containerID); rmErr != nil {
 			slog.Warn("createAndStart: failed to remove container after start failure",
 				"container", containerID, "error", rmErr)
 		}
@@ -769,10 +782,10 @@ func (h *TaskHandler) createAndStart(ctx context.Context, dc *deployContext) err
 	// Compensator: stop and remove this container if a later stage fails
 	dc.compensators = append(dc.compensators, func() {
 		cleanCtx := context.Background()
-		if err := h.Runtime.StopContainer(cleanCtx, dc.containerID); err != nil {
+		if err := dc.runtime.StopContainer(cleanCtx, dc.containerID); err != nil {
 			slog.Warn("compensator: failed to stop container", "container", dc.containerID, "error", err)
 		}
-		if err := h.Runtime.RemoveContainer(cleanCtx, dc.containerID); err != nil {
+		if err := dc.runtime.RemoveContainer(cleanCtx, dc.containerID); err != nil {
 			slog.Warn("compensator: failed to remove container", "container", dc.containerID, "error", err)
 		}
 	})
@@ -873,7 +886,7 @@ func (h *TaskHandler) verifyCommandHealth(ctx context.Context, dc *deployContext
 	defer ticker.Stop()
 
 	for {
-		switch st, err := h.Runtime.ContainerHealth(ctx, dc.containerName); {
+		switch st, err := dc.runtime.ContainerHealth(ctx, dc.containerName); {
 		case err != nil:
 			// Transient inspect failure — keep trying until the budget runs out.
 			slog.Debug("verifyCommandHealth: inspect failed", "container", dc.containerName, "error", err)

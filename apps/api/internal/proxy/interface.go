@@ -65,10 +65,10 @@ type RouteConfig struct {
 	StripPath    bool   `json:"strip_path"`
 	InternalPath string `json:"internal_path"`
 	TargetURL    string `json:"target_url"`
-	TLS         bool   `json:"tls"`
-	ForceHTTPS  bool   `json:"force_https"`
-	SSLMode     string `json:"ssl_mode"`     // automatic, custom, off (dns_challenge is withdrawn)
-	SSLProvider string `json:"ssl_provider"` // e.g. cloudflare
+	TLS          bool   `json:"tls"`
+	ForceHTTPS   bool   `json:"force_https"`
+	SSLMode      string `json:"ssl_mode"`     // automatic, custom, off (dns_challenge is withdrawn)
+	SSLProvider  string `json:"ssl_provider"` // e.g. cloudflare
 	// CertPEM/KeyPEM carry the decrypted certificate for ssl_mode=custom. They are
 	// pushed to Caddy in-band (load_pem) rather than written to disk, so the key
 	// never touches the proxy's filesystem. Treat as secret: never log them.

@@ -48,7 +48,11 @@ func (h *Handler) GetServerServices(w http.ResponseWriter, r *http.Request) {
 			Name:        "Docker daemon",
 			Description: "Container runtime",
 			Status: statusOf(func() bool {
-				_, err := h.runtime.ListContainers(ctx)
+				rt, err := h.runtimes.Local(ctx)
+				if err != nil {
+					return false
+				}
+				_, err = rt.ListContainers(ctx)
 				return err == nil
 			}()),
 		},

@@ -178,7 +178,7 @@ func (h *Handler) RevealEnvVar(w http.ResponseWriter, r *http.Request) {
 
 	h.audit(r, "reveal_env_var", "env_var", envVarID, map[string]any{
 		"application_id": applicationID,
-		"key":             ev.Key,
+		"key":            ev.Key,
 	})
 
 	writeJSON(w, http.StatusOK, map[string]string{"value": string(decrypted)})

@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/weiliang79/belune/internal/naming"
+	"github.com/weiliang79/belune/internal/runtime"
 	"github.com/weiliang79/belune/internal/service"
 	"github.com/weiliang79/belune/internal/testutil"
 )
@@ -19,7 +20,7 @@ func TestApplicationService_Create_FinalizesSlugAndWebhookSecret(t *testing.T) {
 
 	_, project := seedUserAndProject(t)
 	rt := &testutil.MockContainerRuntime{}
-	svc := service.NewApplicationService(testPool, testQueries, rt, testKeyring, t.TempDir())
+	svc := service.NewApplicationService(testPool, testQueries, runtime.NewLocalRuntimes(rt), testKeyring, t.TempDir())
 
 	app, err := svc.Create(context.Background(), service.CreateApplicationParams{
 		ProjectID:   project.ID,
@@ -56,7 +57,7 @@ func TestApplicationService_Create_EncryptsGitToken(t *testing.T) {
 
 	_, project := seedUserAndProject(t)
 	rt := &testutil.MockContainerRuntime{}
-	svc := service.NewApplicationService(testPool, testQueries, rt, testKeyring, t.TempDir())
+	svc := service.NewApplicationService(testPool, testQueries, runtime.NewLocalRuntimes(rt), testKeyring, t.TempDir())
 
 	const plaintextPAT = "ghp_supersecrettokenvalue123"
 	app, err := svc.Create(context.Background(), service.CreateApplicationParams{
@@ -92,7 +93,7 @@ func TestApplicationService_Delete_StopsAndRemovesAllContainerNames(t *testing.T
 
 	_, project := seedUserAndProject(t)
 	rt := &testutil.MockContainerRuntime{}
-	svc := service.NewApplicationService(testPool, testQueries, rt, testKeyring, t.TempDir())
+	svc := service.NewApplicationService(testPool, testQueries, runtime.NewLocalRuntimes(rt), testKeyring, t.TempDir())
 
 	app, err := svc.Create(context.Background(), service.CreateApplicationParams{
 		ProjectID:   project.ID,
