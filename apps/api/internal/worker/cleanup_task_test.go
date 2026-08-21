@@ -242,3 +242,39 @@ func TestCleanupOrphanContainers_SparesAnUnreadableLabel(t *testing.T) {
 	assert.Empty(t, rt.RemoveCalls,
 		"an unparseable label must fall back to the name, not condemn the container")
 }
+
+// TestCleanupOrphanContainers_SparesContainersClaimedByAnotherServer is the
+// trap that per-host sweeping introduces. The phase-1 resolver returns the same
+// local daemon for every server id, so the moment a second server row exists
+// every host sees the same container list — and sweeping host B against host
+// B's rows alone would delete everything belonging to host A.
+func TestCleanupOrphanContainers_SparesContainersClaimedByAnotherServer(t *testing.T) {
+	ctx := context.Background()
+	rt := &testutil.MockContainerRuntime{}
+	h := newTestHandler(rt, nil)
+
+	app, _ := seedApp(t)
+	db := seedDatabase(t)
+
+	// A second managed host, with nothing placed on it.
+	_, err := testPool.Exec(ctx,
+		`INSERT INTO servers (name, is_local, lifecycle, enrolled_at) VALUES ($1, false, 'active', NOW())`,
+		"second-"+randomSuffix(t))
+	require.NoError(t, err)
+
+	old := time.Now().Add(-24 * time.Hour)
+	rt.ListContainers_ = []runtime.ContainerInfo{
+		{Name: app.Slug, CreatedAt: old, Labels: map[string]string{runtime.LabelApplicationID: uuidString(app.ID)}},
+		{Name: db.Slug, CreatedAt: old, Labels: map[string]string{runtime.LabelDatabaseID: uuidString(db.ID)}},
+		{Name: "genuinely-nobodys", CreatedAt: old},
+	}
+
+	runFullCleanup(t, h)
+
+	assert.NotContains(t, rt.RemoveCalls, app.Slug,
+		"a container claimed by another host must survive that host's sweep")
+	assert.NotContains(t, rt.RemoveCalls, db.Slug,
+		"a database claimed by another host must survive too")
+	assert.Contains(t, rt.RemoveCalls, "genuinely-nobodys",
+		"a container no host claims is still an orphan")
+}

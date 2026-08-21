@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"time"
 
 	"github.com/hibiken/asynq"
@@ -301,28 +302,40 @@ func labelledUUID(labels map[string]string, key string) (string, bool) {
 	return id, id != ""
 }
 
-// collectContainerClaims reads every application and database into the set of
-// things that can vouch for a container.
+// collectClaimsByServer reads every application and database into the set of
+// things that can vouch for a container, grouped by the host they are placed
+// on. A server with nothing placed on it gets an empty set, which is correct:
+// every managed container there is then genuinely leftover.
 //
 // Every lookup returns an error rather than a partial set. A partial set does
 // not skip work here, it deletes live containers — which is exactly how the
 // daily run came to remove every managed database.
-func (h *TaskHandler) collectContainerClaims(ctx context.Context) (containerClaims, error) {
-	claims := containerClaims{
-		applications: map[string]bool{},
-		databases:    map[string]bool{},
-		names:        map[string]bool{},
+func (h *TaskHandler) collectClaimsByServer(ctx context.Context) (map[string]containerClaims, error) {
+	byServer := map[string]containerClaims{}
+	claimsFor := func(serverID pgtype.UUID) (containerClaims, string) {
+		key := formatUUID(serverID)
+		c, ok := byServer[key]
+		if !ok {
+			c = containerClaims{
+				applications: map[string]bool{},
+				databases:    map[string]bool{},
+				names:        map[string]bool{},
+			}
+			byServer[key] = c
+		}
+		return c, key
 	}
 
 	apps, err := h.Queries.ListAllApplicationsWithProjectSlug(ctx)
 	if err != nil {
-		return containerClaims{}, fmt.Errorf("list applications: %w", err)
+		return nil, fmt.Errorf("list applications: %w", err)
 	}
 	for _, row := range apps {
 		appID := formatUUID(row.ID)
 		if appID == "" {
 			continue
 		}
+		claims, _ := claimsFor(row.ServerID)
 		claims.applications[appID] = true
 		// The pre-label fallback, and only that: a container carrying an
 		// application-id is decided by the id above, so these names no longer
@@ -332,11 +345,12 @@ func (h *TaskHandler) collectContainerClaims(ctx context.Context) (containerClai
 		claims.names[naming.OldContainerName(appID)] = true
 	}
 
-	databases, err := h.Queries.ListAllDatabases(ctx)
+	databases, err := h.Queries.ListAllDatabasesWithServerID(ctx)
 	if err != nil {
-		return containerClaims{}, fmt.Errorf("list databases: %w", err)
+		return nil, fmt.Errorf("list databases: %w", err)
 	}
 	for _, db := range databases {
+		claims, _ := claimsFor(db.ServerID)
 		if dbID := formatUUID(db.ID); dbID != "" {
 			claims.databases[dbID] = true
 		}
@@ -344,12 +358,11 @@ func (h *TaskHandler) collectContainerClaims(ctx context.Context) (containerClai
 		claims.names[db.Slug] = true
 	}
 
-	return claims, nil
+	return byServer, nil
 }
 
 // cleanupOrphanContainers removes managed containers that belong to nothing in
-// the database. Only containers older than 1 hour are considered to avoid
-// racing with in-progress deployments.
+// the database, on every host Belune manages.
 //
 // ⚠️ This sweep deletes what it cannot match, so every way of matching has to
 // be right at once. It matches by the id labels a container carries, falling
@@ -357,24 +370,13 @@ func (h *TaskHandler) collectContainerClaims(ctx context.Context) (containerClai
 // are spared by a third label. Anything that lists containers here without
 // teaching this function to recognise them will destroy them.
 func (h *TaskHandler) cleanupOrphanContainers(ctx context.Context) {
-	const orphanAge = time.Hour
-
-	// The sweep compares one host's containers against the rows that claim
-	// them. It is the local host today; multi-server turns this into a loop
-	// over servers, comparing each host against the resources placed there.
-	rt, err := h.Runtimes.Local(ctx)
+	servers, err := h.Queries.ListManagedServers(ctx)
 	if err != nil {
-		slog.Warn("orphan cleanup: failed to reach the Docker host", "error", err)
+		slog.Warn("orphan cleanup: failed to list servers", "error", err)
 		return
 	}
 
-	containers, err := rt.ListContainers(ctx)
-	if err != nil {
-		slog.Warn("orphan cleanup: failed to list containers", "error", err)
-		return
-	}
-
-	claims, err := h.collectContainerClaims(ctx)
+	claimsByServer, err := h.collectClaimsByServer(ctx)
 	if err != nil {
 		slog.Warn("orphan cleanup: failed to read what the database claims", "error", err)
 		return
@@ -382,32 +384,87 @@ func (h *TaskHandler) cleanupOrphanContainers(ctx context.Context) {
 
 	// There is deliberately no "refuse when the allowlist is empty" guard here.
 	// It reads like cheap insurance, but the lookups above return on error, so
-	// an empty set is not a failed build — it is an install with no
-	// applications and no databases, where every managed container genuinely is
-	// leftover. Refusing there stalls reaping forever on exactly the install
-	// that needs it, and catches nothing that can actually happen. What protects
-	// the dangerous case is above and below: every lookup returns rather than
-	// continuing, and helpers still at work are spared by label.
+	// an empty set is not a failed build — it is a host with no applications and
+	// no databases on it, where every managed container genuinely is leftover.
+	// Refusing there stalls reaping forever on exactly the install that needs
+	// it, and catches nothing that can actually happen. What protects the
+	// dangerous case is elsewhere: every lookup returns rather than continuing,
+	// an unreachable host is skipped rather than swept, and helpers still at
+	// work are spared by label.
+
+	// Merged across every host, as a veto below.
+	anywhere := containerClaims{
+		applications: map[string]bool{},
+		databases:    map[string]bool{},
+		names:        map[string]bool{},
+	}
+	for _, c := range claimsByServer {
+		maps.Copy(anywhere.applications, c.applications)
+		maps.Copy(anywhere.databases, c.databases)
+		maps.Copy(anywhere.names, c.names)
+	}
+
+	removed := 0
+	for _, server := range servers {
+		removed += h.reapOrphansOn(ctx, server, claimsByServer[formatUUID(server.ID)], anywhere)
+	}
+
+	if removed > 0 {
+		slog.Info("orphan cleanup: removed containers", "count", removed)
+	}
+}
+
+// reapOrphansOn sweeps a single host, comparing what is running there against
+// what the database places there. Only containers older than 1 hour are
+// considered, to avoid racing with an in-progress deployment.
+//
+// A host that cannot be reached or listed is skipped, never swept: "I could not
+// ask" must not read as "nothing there is claimed".
+func (h *TaskHandler) reapOrphansOn(ctx context.Context, server generated.Server, claims, anywhere containerClaims) int {
+	const orphanAge = time.Hour
+
+	rt, err := h.Runtimes.For(ctx, server.ID)
+	if err != nil {
+		slog.Warn("orphan cleanup: failed to reach a server", "server", server.Name, "error", err)
+		return 0
+	}
+
+	containers, err := rt.ListContainers(ctx)
+	if err != nil {
+		slog.Warn("orphan cleanup: failed to list containers", "server", server.Name, "error", err)
+		return 0
+	}
 
 	removed := 0
 	for _, ctr := range containers {
 		if claims.claimed(ctr) {
 			continue
 		}
-		// A helper doing work inside a volume can never be in the allowlist: it
-		// has no name of its own and no row to vouch for it. While it is running
-		// it is not an orphan, it is a job in progress — and a volume restore
-		// killed between `find -delete` and `tar x` leaves the volume empty. One
-		// that has exited is genuinely leftover and falls through to be reaped.
+		// ⚠️ Claimed, but by a different host. Until the resolver can actually
+		// tell hosts apart every server id resolves to this same daemon, so
+		// without this a second server row would make each host's sweep delete
+		// the other's containers — the whole install, on the second pass. It
+		// stays right once the resolver is real, too: a container running here
+		// but claimed there is a misplacement to look into, not garbage.
+		if anywhere.claimed(ctr) {
+			slog.Warn("orphan cleanup: container is claimed by a different server; leaving it alone",
+				"container", ctr.Name, "server", server.Name)
+			continue
+		}
+		// A helper doing work inside a volume can never be claimed: it has no
+		// name of its own and no row to vouch for it. While it is running it is
+		// not an orphan, it is a job in progress — and a volume restore killed
+		// between `find -delete` and `tar x` leaves the volume empty. One that
+		// has exited is genuinely leftover and falls through to be reaped.
 		if isRunningHelper(ctr) {
-			slog.Debug("orphan cleanup: skipping a helper still at work", "container", ctr.Name)
+			slog.Debug("orphan cleanup: skipping a helper still at work", "container", ctr.Name, "server", server.Name)
 			continue
 		}
 		if time.Since(ctr.CreatedAt) < orphanAge {
 			slog.Debug("orphan cleanup: skipping recent container", "container", ctr.Name, "age", time.Since(ctr.CreatedAt).Round(time.Second))
 			continue
 		}
-		slog.Info("orphan cleanup: removing container", "container", ctr.Name, "created_at", ctr.CreatedAt)
+		slog.Info("orphan cleanup: removing container", "container", ctr.Name, "server", server.Name, "created_at", ctr.CreatedAt)
 		if err := rt.StopContainer(ctx, ctr.Name); err != nil {
 			slog.Debug("orphan cleanup: stop failed (may already be stopped)", "container", ctr.Name, "error", err)
 		}
@@ -417,10 +474,7 @@ func (h *TaskHandler) cleanupOrphanContainers(ctx context.Context) {
 		}
 		removed++
 	}
-
-	if removed > 0 {
-		slog.Info("orphan cleanup: removed containers", "count", removed)
-	}
+	return removed
 }
 
 func formatUUID(u pgtype.UUID) string {

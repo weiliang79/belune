@@ -38,3 +38,49 @@ func (q *Queries) GetLocalServer(ctx context.Context) (Server, error) {
 	)
 	return i, err
 }
+
+const listManagedServers = `-- name: ListManagedServers :many
+SELECT id, name, is_local, lifecycle, advertise_address, last_seen_at, agent_version, agent_protocol_version, arch, os, docker_version, cpu_cores, memory_total_bytes, clock_skew_seconds, enrolled_at, revoked_at, created_at, updated_at FROM servers WHERE lifecycle <> 'revoked' ORDER BY created_at
+`
+
+// Every server Belune still manages, for sweeps that must cover each host.
+// Revoked servers are deliberately excluded: Forget is a revocation rather than
+// a deletion, so that host's containers are no longer ours to act on.
+func (q *Queries) ListManagedServers(ctx context.Context) ([]Server, error) {
+	rows, err := q.db.Query(ctx, listManagedServers)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Server{}
+	for rows.Next() {
+		var i Server
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.IsLocal,
+			&i.Lifecycle,
+			&i.AdvertiseAddress,
+			&i.LastSeenAt,
+			&i.AgentVersion,
+			&i.AgentProtocolVersion,
+			&i.Arch,
+			&i.Os,
+			&i.DockerVersion,
+			&i.CpuCores,
+			&i.MemoryTotalBytes,
+			&i.ClockSkewSeconds,
+			&i.EnrolledAt,
+			&i.RevokedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}

@@ -217,6 +217,85 @@ func (q *Queries) ListAllDatabases(ctx context.Context) ([]Database, error) {
 	return items, nil
 }
 
+const listAllDatabasesWithServerID = `-- name: ListAllDatabasesWithServerID :many
+SELECT d.id, d.project_id, d.type, d.name, d.slug, d.version, d.status, d.internal_host, d.internal_port, d.credentials_encrypted, d.created_at, d.cpu_limit, d.memory_limit, d.host_port, d.image, d.container_port, d.data_dir, d.backup_mode, d.backup_command, d.restore_command, d.image_digest, d.source_kind, d.source_ref, p.server_id FROM databases d
+JOIN projects p ON p.id = d.project_id
+`
+
+type ListAllDatabasesWithServerIDRow struct {
+	ID                   pgtype.UUID        `json:"id"`
+	ProjectID            pgtype.UUID        `json:"project_id"`
+	Type                 string             `json:"type"`
+	Name                 string             `json:"name"`
+	Slug                 string             `json:"slug"`
+	Version              string             `json:"version"`
+	Status               string             `json:"status"`
+	InternalHost         pgtype.Text        `json:"internal_host"`
+	InternalPort         pgtype.Int4        `json:"internal_port"`
+	CredentialsEncrypted []byte             `json:"credentials_encrypted"`
+	CreatedAt            pgtype.Timestamptz `json:"created_at"`
+	CpuLimit             float64            `json:"cpu_limit"`
+	MemoryLimit          int64              `json:"memory_limit"`
+	HostPort             pgtype.Int4        `json:"host_port"`
+	Image                pgtype.Text        `json:"image"`
+	ContainerPort        pgtype.Int4        `json:"container_port"`
+	DataDir              pgtype.Text        `json:"data_dir"`
+	BackupMode           string             `json:"backup_mode"`
+	BackupCommand        pgtype.Text        `json:"backup_command"`
+	RestoreCommand       pgtype.Text        `json:"restore_command"`
+	ImageDigest          pgtype.Text        `json:"image_digest"`
+	SourceKind           pgtype.Text        `json:"source_kind"`
+	SourceRef            pgtype.Text        `json:"source_ref"`
+	ServerID             pgtype.UUID        `json:"server_id"`
+}
+
+// Placement rides along so a host-by-host sweep can tell which databases belong
+// on which server without a lookup per row.
+func (q *Queries) ListAllDatabasesWithServerID(ctx context.Context) ([]ListAllDatabasesWithServerIDRow, error) {
+	rows, err := q.db.Query(ctx, listAllDatabasesWithServerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListAllDatabasesWithServerIDRow{}
+	for rows.Next() {
+		var i ListAllDatabasesWithServerIDRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.Type,
+			&i.Name,
+			&i.Slug,
+			&i.Version,
+			&i.Status,
+			&i.InternalHost,
+			&i.InternalPort,
+			&i.CredentialsEncrypted,
+			&i.CreatedAt,
+			&i.CpuLimit,
+			&i.MemoryLimit,
+			&i.HostPort,
+			&i.Image,
+			&i.ContainerPort,
+			&i.DataDir,
+			&i.BackupMode,
+			&i.BackupCommand,
+			&i.RestoreCommand,
+			&i.ImageDigest,
+			&i.SourceKind,
+			&i.SourceRef,
+			&i.ServerID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listDatabasesByProject = `-- name: ListDatabasesByProject :many
 SELECT id, project_id, type, name, slug, version, status, internal_host, internal_port, credentials_encrypted, created_at, cpu_limit, memory_limit, host_port, image, container_port, data_dir, backup_mode, backup_command, restore_command, image_digest, source_kind, source_ref FROM databases WHERE project_id = $1 ORDER BY created_at DESC
 `
