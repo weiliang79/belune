@@ -729,8 +729,8 @@ func (h *TaskHandler) createAndStart(ctx context.Context, dc *deployContext) err
 		// separates them into per-run sessions so the viewer can isolate one
 		// redeploy/rebuild/rollback from the next.
 		Labels: map[string]string{
-			"application-id": dc.payload.ApplicationID,
-			"deployment-id":  dc.payload.DeploymentID,
+			runtime.LabelApplicationID: dc.payload.ApplicationID,
+			"deployment-id":            dc.payload.DeploymentID,
 		},
 		CPULimit:        dc.app.CpuLimit,
 		MemoryLimit:     dc.app.MemoryLimit,

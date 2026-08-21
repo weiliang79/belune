@@ -27,8 +27,8 @@ import (
 )
 
 const (
-	labelApplicationID = "application-id"
-	labelDatabaseID    = "database-id"
+	labelApplicationID = runtime.LabelApplicationID
+	labelDatabaseID    = runtime.LabelDatabaseID
 	// labelDeploymentID ties an application container to the deployment (image
 	// generation) that created it, so its logs can be grouped into a session
 	// distinct from the previous redeploy/rebuild/rollback. Only application

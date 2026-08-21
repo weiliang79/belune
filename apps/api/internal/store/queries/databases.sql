@@ -60,3 +60,9 @@ WHERE id = $1;
 SELECT p.server_id FROM databases d
 JOIN projects p ON p.id = d.project_id
 WHERE d.id = $1;
+
+-- name: ListAllDatabasesWithServerID :many
+-- Placement rides along so a host-by-host sweep can tell which databases belong
+-- on which server without a lookup per row.
+SELECT d.*, p.server_id FROM databases d
+JOIN projects p ON p.id = d.project_id;

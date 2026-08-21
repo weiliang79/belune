@@ -381,7 +381,7 @@ func (h *TaskHandler) provisionDBContainer(ctx context.Context, rt runtime.Conta
 		MemoryLimit: db.MemoryLimit,
 		// Lets the event watcher map Docker container events back to this
 		// database so its status reflects actual container state.
-		Labels: map[string]string{"database-id": db.ID.String()},
+		Labels: map[string]string{runtime.LabelDatabaseID: db.ID.String()},
 	})
 	if err != nil {
 		return fmt.Errorf("create container: %w", err)

@@ -7,6 +7,7 @@ import (
 
 	"github.com/hibiken/asynq"
 
+	"github.com/weiliang79/belune/internal/runtime"
 	"github.com/weiliang79/belune/internal/status"
 )
 
@@ -73,7 +74,7 @@ func (h *Handler) GetMetrics(w http.ResponseWriter, r *http.Request) {
 			}
 
 			kind := "database"
-			if _, ok := c.Labels["application-id"]; ok {
+			if _, ok := c.Labels[runtime.LabelApplicationID]; ok {
 				kind = "application"
 			}
 			tc := stats.ByType[kind]
