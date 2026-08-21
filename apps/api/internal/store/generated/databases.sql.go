@@ -558,6 +558,76 @@ func (q *Queries) ListDatabasesByStatus(ctx context.Context, status string) ([]D
 	return items, nil
 }
 
+const listOrphanedBackupsByProject = `-- name: ListOrphanedBackupsByProject :many
+SELECT b.id, b.database_id, b.started_at, b.finished_at, b.status, b.local_path, b.remote_key, b.size_bytes, b.error, b.backup_config_id, b.log, b.target_database, b.tombstone_id, t.slug AS database_slug, t.name AS database_name,
+       t.type AS database_type, t.deleted_at AS database_deleted_at
+FROM   database_backups b
+JOIN   database_tombstones t ON t.id = b.tombstone_id
+WHERE  t.project_id = $1
+ORDER  BY b.started_at DESC
+`
+
+type ListOrphanedBackupsByProjectRow struct {
+	ID                pgtype.UUID        `json:"id"`
+	DatabaseID        pgtype.UUID        `json:"database_id"`
+	StartedAt         pgtype.Timestamptz `json:"started_at"`
+	FinishedAt        pgtype.Timestamptz `json:"finished_at"`
+	Status            string             `json:"status"`
+	LocalPath         pgtype.Text        `json:"local_path"`
+	RemoteKey         pgtype.Text        `json:"remote_key"`
+	SizeBytes         int64              `json:"size_bytes"`
+	Error             pgtype.Text        `json:"error"`
+	BackupConfigID    pgtype.UUID        `json:"backup_config_id"`
+	Log               string             `json:"log"`
+	TargetDatabase    string             `json:"target_database"`
+	TombstoneID       pgtype.UUID        `json:"tombstone_id"`
+	DatabaseSlug      string             `json:"database_slug"`
+	DatabaseName      string             `json:"database_name"`
+	DatabaseType      string             `json:"database_type"`
+	DatabaseDeletedAt pgtype.Timestamptz `json:"database_deleted_at"`
+}
+
+// Backups whose database is gone, with enough of the tombstone to say what they
+// came from. Project-scoped because the tombstone is: the project is the access
+// boundary, so an orphaned backup has no owner above it.
+func (q *Queries) ListOrphanedBackupsByProject(ctx context.Context, projectID pgtype.UUID) ([]ListOrphanedBackupsByProjectRow, error) {
+	rows, err := q.db.Query(ctx, listOrphanedBackupsByProject, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListOrphanedBackupsByProjectRow{}
+	for rows.Next() {
+		var i ListOrphanedBackupsByProjectRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.DatabaseID,
+			&i.StartedAt,
+			&i.FinishedAt,
+			&i.Status,
+			&i.LocalPath,
+			&i.RemoteKey,
+			&i.SizeBytes,
+			&i.Error,
+			&i.BackupConfigID,
+			&i.Log,
+			&i.TargetDatabase,
+			&i.TombstoneID,
+			&i.DatabaseSlug,
+			&i.DatabaseName,
+			&i.DatabaseType,
+			&i.DatabaseDeletedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const reclaimBackupsFromTombstone = `-- name: ReclaimBackupsFromTombstone :exec
 UPDATE database_backups
 SET    tombstone_id = NULL, database_id = $2

@@ -113,3 +113,14 @@ WHERE t.project_id = $1;
 UPDATE database_backups
 SET    tombstone_id = NULL, database_id = $2
 WHERE  tombstone_id = $1;
+
+-- name: ListOrphanedBackupsByProject :many
+-- Backups whose database is gone, with enough of the tombstone to say what they
+-- came from. Project-scoped because the tombstone is: the project is the access
+-- boundary, so an orphaned backup has no owner above it.
+SELECT b.*, t.slug AS database_slug, t.name AS database_name,
+       t.type AS database_type, t.deleted_at AS database_deleted_at
+FROM   database_backups b
+JOIN   database_tombstones t ON t.id = b.tombstone_id
+WHERE  t.project_id = $1
+ORDER  BY b.started_at DESC;
