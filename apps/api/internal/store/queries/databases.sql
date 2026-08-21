@@ -72,9 +72,10 @@ JOIN projects p ON p.id = d.project_id;
 -- replacement can be recreated identically.
 INSERT INTO database_tombstones (
     project_id, original_id, slug, name, type, version, credentials_encrypted,
-    image, container_port, data_dir, backup_mode, backup_command, restore_command
+    image, container_port, data_dir, backup_mode, backup_command, restore_command,
+    cpu_limit, memory_limit, image_digest
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
 RETURNING *;
 
 -- name: GetDatabaseTombstone :one
@@ -135,10 +136,16 @@ SELECT count(*) FROM database_backups WHERE tombstone_id = $1;
 -- deleted yesterday has just been kept on purpose and is not expired.
 SELECT b.* FROM database_backups b
 JOIN   database_tombstones t ON t.id = b.tombstone_id
-WHERE  t.deleted_at < $1;
+WHERE  t.deleted_at < $1
+LIMIT  $2;
 
 -- name: DeleteEmptyDatabaseTombstones :exec
 -- A tombstone exists to give backups a parent. One with none left describes
 -- nothing, so it goes rather than accumulating forever.
 DELETE FROM database_tombstones t
 WHERE NOT EXISTS (SELECT 1 FROM database_backups b WHERE b.tombstone_id = t.id);
+
+-- name: CountDatabaseBackups :one
+-- Every backup row for a database, artifacts or not. Deletion uses it to decide
+-- whether a tombstone has anything to parent.
+SELECT count(*) FROM database_backups WHERE database_id = $1;

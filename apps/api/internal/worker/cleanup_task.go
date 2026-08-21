@@ -40,6 +40,10 @@ const settingOrphanedBackupRetentionDays = "orphaned_backup_retention_days"
 // disables expiry entirely, for installs that would rather decide by hand.
 const defaultOrphanedBackupRetentionDays = 90
 
+// expiredBackupPageSize bounds one pass of the expiry sweep. Sibling of
+// cleanupBackupsPageSize in the service, and for the same reason.
+const expiredBackupPageSize = 500
+
 type cleanupPayload struct {
 	ApplicationID string `json:"application_id,omitempty"`
 	RetainCount   int    `json:"retain_count,omitempty"`
@@ -250,6 +254,14 @@ func (h *TaskHandler) orphanedBackupRetentionDays(ctx context.Context) int {
 // Best-effort per backup, like every other prune here: a remote object that
 // cannot be deleted must not stop the rest of the sweep.
 func (h *TaskHandler) cleanupExpiredOrphanedBackups(ctx context.Context) {
+	// First, and unconditionally: a tombstone also empties out when its last
+	// backup is deleted by hand from the project inventory, which has nothing to
+	// do with expiry. Leaving this below the disabled-check would mean turning
+	// retention off also turned off reaping the rows that describe nothing.
+	if err := h.Queries.DeleteEmptyDatabaseTombstones(ctx); err != nil {
+		slog.Warn("orphaned backup cleanup: failed to remove empty tombstones", "error", err)
+	}
+
 	days := h.orphanedBackupRetentionDays(ctx)
 	if days == 0 {
 		// Explicitly disabled. Deliberately silent at info level: this is a
@@ -258,27 +270,56 @@ func (h *TaskHandler) cleanupExpiredOrphanedBackups(ctx context.Context) {
 		return
 	}
 
-	cutoff := time.Now().AddDate(0, 0, -days)
-	rows, err := h.Queries.ListExpiredOrphanedBackups(ctx, pgtype.Timestamptz{Time: cutoff, Valid: true})
-	if err != nil {
-		slog.Warn("orphaned backup cleanup: failed to list expired backups", "error", err)
-		return
-	}
-
+	cutoff := pgtype.Timestamptz{Time: time.Now().AddDate(0, 0, -days), Valid: true}
 	del := h.globalRemoteDeleter()
-	for _, b := range rows {
-		h.deleteBackupArtifacts(ctx, b, del)
+	removed := 0
+	var lastFirstID pgtype.UUID
+
+	// Paged, because each row costs a network round trip to its destination and
+	// an install that has kept backups for months can have a lot of them. An
+	// uncapped listing behind a per-row remote delete is the v0.1.3 shape: a
+	// single task that grows without bound as the install ages.
+	for {
+		rows, err := h.Queries.ListExpiredOrphanedBackups(ctx, generated.ListExpiredOrphanedBackupsParams{
+			DeletedAt: cutoff,
+			Limit:     expiredBackupPageSize,
+		})
+		if err != nil {
+			slog.Warn("orphaned backup cleanup: failed to list expired backups", "error", err)
+			break
+		}
+		if len(rows) == 0 {
+			break
+		}
+		// The listing has no offset, so each pass must shrink the set it walks.
+		// deleteBackupArtifacts logs a failed row delete rather than reporting
+		// it, so progress is measured instead: a page whose first row is the one
+		// we just tried means nothing moved, and looping again would hand back
+		// the same page forever.
+		if rows[0].ID == lastFirstID {
+			slog.Warn("orphaned backup cleanup: stopping, a page could not be removed",
+				"remaining", len(rows))
+			break
+		}
+		lastFirstID = rows[0].ID
+
+		for _, b := range rows {
+			h.deleteBackupArtifacts(ctx, b, del)
+			removed++
+		}
+		if len(rows) < expiredBackupPageSize {
+			break
+		}
 	}
 
-	// Runs whether or not anything expired above: a tombstone also empties out
-	// when its last backup is deleted by hand from the project inventory.
+	// Again, now that expiry has emptied some of them.
 	if err := h.Queries.DeleteEmptyDatabaseTombstones(ctx); err != nil {
 		slog.Warn("orphaned backup cleanup: failed to remove empty tombstones", "error", err)
 	}
 
-	if len(rows) > 0 {
+	if removed > 0 {
 		slog.Info("orphaned backup cleanup: removed expired backups",
-			"count", len(rows), "retention_days", days)
+			"count", removed, "retention_days", days)
 	}
 }
 

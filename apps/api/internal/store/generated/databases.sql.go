@@ -22,6 +22,19 @@ func (q *Queries) CountBackupsForTombstone(ctx context.Context, tombstoneID pgty
 	return count, err
 }
 
+const countDatabaseBackups = `-- name: CountDatabaseBackups :one
+SELECT count(*) FROM database_backups WHERE database_id = $1
+`
+
+// Every backup row for a database, artifacts or not. Deletion uses it to decide
+// whether a tombstone has anything to parent.
+func (q *Queries) CountDatabaseBackups(ctx context.Context, databaseID pgtype.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countDatabaseBackups, databaseID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countDatabases = `-- name: CountDatabases :one
 SELECT count(*) FROM databases
 `
@@ -124,26 +137,30 @@ func (q *Queries) CreateDatabase(ctx context.Context, arg CreateDatabaseParams) 
 const createDatabaseTombstone = `-- name: CreateDatabaseTombstone :one
 INSERT INTO database_tombstones (
     project_id, original_id, slug, name, type, version, credentials_encrypted,
-    image, container_port, data_dir, backup_mode, backup_command, restore_command
+    image, container_port, data_dir, backup_mode, backup_command, restore_command,
+    cpu_limit, memory_limit, image_digest
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
-RETURNING id, project_id, original_id, slug, name, type, version, credentials_encrypted, image, container_port, data_dir, backup_mode, backup_command, restore_command, deleted_at
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+RETURNING id, project_id, original_id, slug, name, type, version, credentials_encrypted, image, container_port, data_dir, backup_mode, backup_command, restore_command, cpu_limit, memory_limit, image_digest, deleted_at
 `
 
 type CreateDatabaseTombstoneParams struct {
-	ProjectID            pgtype.UUID `json:"project_id"`
-	OriginalID           pgtype.UUID `json:"original_id"`
-	Slug                 string      `json:"slug"`
-	Name                 string      `json:"name"`
-	Type                 string      `json:"type"`
-	Version              pgtype.Text `json:"version"`
-	CredentialsEncrypted []byte      `json:"credentials_encrypted"`
-	Image                pgtype.Text `json:"image"`
-	ContainerPort        pgtype.Int4 `json:"container_port"`
-	DataDir              pgtype.Text `json:"data_dir"`
-	BackupMode           pgtype.Text `json:"backup_mode"`
-	BackupCommand        pgtype.Text `json:"backup_command"`
-	RestoreCommand       pgtype.Text `json:"restore_command"`
+	ProjectID            pgtype.UUID   `json:"project_id"`
+	OriginalID           pgtype.UUID   `json:"original_id"`
+	Slug                 string        `json:"slug"`
+	Name                 string        `json:"name"`
+	Type                 string        `json:"type"`
+	Version              pgtype.Text   `json:"version"`
+	CredentialsEncrypted []byte        `json:"credentials_encrypted"`
+	Image                pgtype.Text   `json:"image"`
+	ContainerPort        pgtype.Int4   `json:"container_port"`
+	DataDir              pgtype.Text   `json:"data_dir"`
+	BackupMode           pgtype.Text   `json:"backup_mode"`
+	BackupCommand        pgtype.Text   `json:"backup_command"`
+	RestoreCommand       pgtype.Text   `json:"restore_command"`
+	CpuLimit             pgtype.Float8 `json:"cpu_limit"`
+	MemoryLimit          pgtype.Int8   `json:"memory_limit"`
+	ImageDigest          pgtype.Text   `json:"image_digest"`
 }
 
 // Records what a deleted database was, so its backups keep a parent and a
@@ -163,6 +180,9 @@ func (q *Queries) CreateDatabaseTombstone(ctx context.Context, arg CreateDatabas
 		arg.BackupMode,
 		arg.BackupCommand,
 		arg.RestoreCommand,
+		arg.CpuLimit,
+		arg.MemoryLimit,
+		arg.ImageDigest,
 	)
 	var i DatabaseTombstone
 	err := row.Scan(
@@ -180,6 +200,9 @@ func (q *Queries) CreateDatabaseTombstone(ctx context.Context, arg CreateDatabas
 		&i.BackupMode,
 		&i.BackupCommand,
 		&i.RestoreCommand,
+		&i.CpuLimit,
+		&i.MemoryLimit,
+		&i.ImageDigest,
 		&i.DeletedAt,
 	)
 	return i, err
@@ -277,7 +300,7 @@ func (q *Queries) GetDatabaseOwnerUserID(ctx context.Context, id pgtype.UUID) (p
 }
 
 const getDatabaseTombstone = `-- name: GetDatabaseTombstone :one
-SELECT id, project_id, original_id, slug, name, type, version, credentials_encrypted, image, container_port, data_dir, backup_mode, backup_command, restore_command, deleted_at FROM database_tombstones WHERE id = $1
+SELECT id, project_id, original_id, slug, name, type, version, credentials_encrypted, image, container_port, data_dir, backup_mode, backup_command, restore_command, cpu_limit, memory_limit, image_digest, deleted_at FROM database_tombstones WHERE id = $1
 `
 
 func (q *Queries) GetDatabaseTombstone(ctx context.Context, id pgtype.UUID) (DatabaseTombstone, error) {
@@ -298,6 +321,9 @@ func (q *Queries) GetDatabaseTombstone(ctx context.Context, id pgtype.UUID) (Dat
 		&i.BackupMode,
 		&i.BackupCommand,
 		&i.RestoreCommand,
+		&i.CpuLimit,
+		&i.MemoryLimit,
+		&i.ImageDigest,
 		&i.DeletedAt,
 	)
 	return i, err
@@ -446,7 +472,7 @@ func (q *Queries) ListAllDatabasesWithServerID(ctx context.Context) ([]ListAllDa
 }
 
 const listDatabaseTombstonesByProject = `-- name: ListDatabaseTombstonesByProject :many
-SELECT id, project_id, original_id, slug, name, type, version, credentials_encrypted, image, container_port, data_dir, backup_mode, backup_command, restore_command, deleted_at FROM database_tombstones WHERE project_id = $1 ORDER BY deleted_at DESC
+SELECT id, project_id, original_id, slug, name, type, version, credentials_encrypted, image, container_port, data_dir, backup_mode, backup_command, restore_command, cpu_limit, memory_limit, image_digest, deleted_at FROM database_tombstones WHERE project_id = $1 ORDER BY deleted_at DESC
 `
 
 func (q *Queries) ListDatabaseTombstonesByProject(ctx context.Context, projectID pgtype.UUID) ([]DatabaseTombstone, error) {
@@ -473,6 +499,9 @@ func (q *Queries) ListDatabaseTombstonesByProject(ctx context.Context, projectID
 			&i.BackupMode,
 			&i.BackupCommand,
 			&i.RestoreCommand,
+			&i.CpuLimit,
+			&i.MemoryLimit,
+			&i.ImageDigest,
 			&i.DeletedAt,
 		); err != nil {
 			return nil, err
@@ -585,14 +614,20 @@ const listExpiredOrphanedBackups = `-- name: ListExpiredOrphanedBackups :many
 SELECT b.id, b.database_id, b.started_at, b.finished_at, b.status, b.local_path, b.remote_key, b.size_bytes, b.error, b.backup_config_id, b.log, b.target_database, b.tombstone_id FROM database_backups b
 JOIN   database_tombstones t ON t.id = b.tombstone_id
 WHERE  t.deleted_at < $1
+LIMIT  $2
 `
+
+type ListExpiredOrphanedBackupsParams struct {
+	DeletedAt pgtype.Timestamptz `json:"deleted_at"`
+	Limit     int32              `json:"limit"`
+}
 
 // Orphaned backups whose keeping period is over. The clock runs from when the
 // database was deleted, not from when the backup was taken: keeping is a
 // decision made at deletion time, so a two-year-old backup of a database
 // deleted yesterday has just been kept on purpose and is not expired.
-func (q *Queries) ListExpiredOrphanedBackups(ctx context.Context, deletedAt pgtype.Timestamptz) ([]DatabaseBackup, error) {
-	rows, err := q.db.Query(ctx, listExpiredOrphanedBackups, deletedAt)
+func (q *Queries) ListExpiredOrphanedBackups(ctx context.Context, arg ListExpiredOrphanedBackupsParams) ([]DatabaseBackup, error) {
+	rows, err := q.db.Query(ctx, listExpiredOrphanedBackups, arg.DeletedAt, arg.Limit)
 	if err != nil {
 		return nil, err
 	}

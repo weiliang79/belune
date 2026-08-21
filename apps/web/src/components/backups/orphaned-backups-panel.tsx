@@ -1,5 +1,11 @@
 import { useState } from "react";
-import { Archive, DatabaseIcon, Loader2, RotateCcwIcon, Trash2 } from "lucide-react";
+import {
+  Archive,
+  DatabaseIcon,
+  Loader2,
+  RotateCcwIcon,
+  Trash2,
+} from "lucide-react";
 import { toast } from "sonner";
 import {
   Card,
@@ -46,20 +52,26 @@ export function OrphanedBackupsPanel({ projectId }: { projectId: string }) {
 
   const handleRestore = (backupId: string, name: string) => {
     setPendingId(backupId);
-    toast.promise(restore.mutateAsync(backupId).finally(() => setPendingId(null)), {
-      loading: `Recreating ${name}...`,
-      success: `${name} is being recreated and restored`,
-      error: (err) => err.message,
-    });
+    toast.promise(
+      restore.mutateAsync(backupId).finally(() => setPendingId(null)),
+      {
+        loading: `Recreating ${name}...`,
+        success: `${name} is being recreated and restored`,
+        error: (err) => err.message,
+      },
+    );
   };
 
   const handleDelete = (backupId: string, name: string) => {
     setPendingId(backupId);
-    toast.promise(remove.mutateAsync(backupId).finally(() => setPendingId(null)), {
-      loading: "Deleting backup...",
-      success: `Backup of ${name} deleted`,
-      error: (err) => err.message,
-    });
+    toast.promise(
+      remove.mutateAsync(backupId).finally(() => setPendingId(null)),
+      {
+        loading: "Deleting backup...",
+        success: `Backup of ${name} deleted`,
+        error: (err) => err.message,
+      },
+    );
   };
 
   return (
@@ -95,18 +107,22 @@ export function OrphanedBackupsPanel({ projectId }: { projectId: string }) {
                       {b.database_name}
                     </p>
                     <p className="text-text-faint text-xs">
+                      {b.status !== "succeeded" ? `${b.status} · ` : ""}
                       {b.database_type} &middot; {formatBytes(b.size_bytes)}{" "}
-                      &middot; taken {formatDateTimeShort(b.started_at)} &middot;
-                      database deleted{" "}
+                      &middot; taken {formatDateTimeShort(b.started_at)}{" "}
+                      &middot; database deleted{" "}
                       {formatDateTimeShort(b.database_deleted_at)}
                     </p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
+                  {/* A failed or half-finished run has no archive to restore,
+                      and the API rejects it — an enabled button here could only
+                      ever produce an error toast. */}
                   <Button
                     size="sm"
                     variant="outline"
-                    disabled={pendingId === b.id}
+                    disabled={pendingId === b.id || b.status !== "succeeded"}
                     onClick={() => handleRestore(b.id, b.database_name)}
                   >
                     {pendingId === b.id ? (

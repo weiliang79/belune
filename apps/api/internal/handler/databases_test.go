@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -314,6 +316,52 @@ func TestDeleteProject_StillPurgesKeptBackups(t *testing.T) {
 	require.NoError(t, env.Pool.QueryRow(ctx, `SELECT count(*) FROM database_tombstones`).Scan(&tombstones))
 	assert.Equal(t, 0, backups, "deleting a project destroys every backup in it")
 	assert.Equal(t, 0, tombstones, "and the tombstones describing them")
+}
+
+// TestDeleteProject_ErasesKeptBackupArchives is the row-count assertion above
+// done properly, and it exists because that one is blind to the failure that
+// actually matters.
+//
+// A kept backup's row cascades away with its tombstone inside Postgres. If
+// nothing erases the archive first, the row vanishes and the storage stays —
+// unreachable, unprunable, still billed — while the delete dialog promises the
+// opposite. Asserting on rows would pass against exactly that bug, which is why
+// this asserts on the FILE.
+func TestDeleteProject_ErasesKeptBackupArchives(t *testing.T) {
+	resetDB(t)
+	token := env.SetupAdmin(t, "admin@test.com", "password123")
+	project := env.CreateProject(t, token, "Test Project", "test-project")
+	projectID := extractID(project["id"])
+
+	resp := env.DoRequest(t, "POST", fmt.Sprintf("/api/projects/%s/databases", projectID), map[string]any{
+		"name": "kept", "type": "postgres",
+	}, testutil.AuthHeader(token))
+	db := testutil.ReadJSON(t, resp)
+	dbID := extractID(db["id"])
+
+	// A real archive on disk, standing in for the stored artifact.
+	archive := filepath.Join(t.TempDir(), "kept.sql.gz")
+	require.NoError(t, os.WriteFile(archive, []byte("ARCHIVE"), 0o600))
+	ctx := context.Background()
+	_, err := env.Pool.Exec(ctx,
+		`INSERT INTO database_backups (database_id, status, local_path, size_bytes)
+		 VALUES ($1, 'succeeded', $2, 7)`, dbID, archive)
+	require.NoError(t, err)
+
+	// Keep it, so the project delete walks over a tombstone rather than a live
+	// database — the case the loop over existing databases cannot see.
+	resp = env.DoRequest(t, "DELETE", fmt.Sprintf("/api/projects/%s/databases/%s", projectID, dbID), nil, testutil.AuthHeader(token))
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	resp.Body.Close()
+	require.FileExists(t, archive, "keeping a backup must not erase it")
+
+	resp = env.DoRequest(t, "DELETE", fmt.Sprintf("/api/projects/%s", projectID), nil, testutil.AuthHeader(token))
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	resp.Body.Close()
+
+	_, statErr := os.Stat(archive)
+	assert.True(t, os.IsNotExist(statErr),
+		"deleting a project must erase the archives of databases already deleted from it, not just their rows")
 }
 
 // TestRestoreFromTombstone_RecreatesWithOriginalIdentity is what makes keeping

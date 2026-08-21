@@ -40,6 +40,14 @@ CREATE TABLE database_tombstones (
     backup_mode     TEXT,
     backup_command  TEXT,
     restore_command TEXT,
+    -- Resource limits and the pinned digest come back too. A replacement that
+    -- returns uncapped is not the same database — on a small host the cap was
+    -- the thing keeping the box alive — and an empty digest makes provisioning
+    -- re-resolve a mutable tag, so the replacement can come back on a different
+    -- image than the dump was taken from.
+    cpu_limit       DOUBLE PRECISION,
+    memory_limit    BIGINT,
+    image_digest    TEXT,
     deleted_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 

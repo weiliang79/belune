@@ -249,7 +249,16 @@ func (s *DatabaseService) Delete(ctx context.Context, dbID pgtype.UUID, keepBack
 	}
 
 	if keepBackups {
-		return s.keepBackupsAndDelete(ctx, db)
+		// A tombstone exists to give backups a parent. With none to keep it
+		// would describe nothing while holding a second copy of the database's
+		// credentials, waiting on a sweep an operator is allowed to disable.
+		count, cErr := s.queries.CountDatabaseBackups(ctx, dbID)
+		if cErr != nil {
+			return fmt.Errorf("counting backups before deletion: %w", cErr)
+		}
+		if count > 0 {
+			return s.keepBackupsAndDelete(ctx, db)
+		}
 	}
 
 	s.cleanupBackups(ctx, dbID)
@@ -292,6 +301,9 @@ func (s *DatabaseService) keepBackupsAndDelete(ctx context.Context, db generated
 			BackupMode:     pgtype.Text{String: db.BackupMode, Valid: true},
 			BackupCommand:  db.BackupCommand,
 			RestoreCommand: db.RestoreCommand,
+			CpuLimit:       pgtype.Float8{Float64: db.CpuLimit, Valid: true},
+			MemoryLimit:    pgtype.Int8{Int64: db.MemoryLimit, Valid: true},
+			ImageDigest:    db.ImageDigest,
 		})
 		if err != nil {
 			return fmt.Errorf("recording the deleted database: %w", err)
@@ -355,6 +367,30 @@ func (s *DatabaseService) RestoreFromTombstone(ctx context.Context, tombstoneID,
 		})
 		if err != nil {
 			return fmt.Errorf("recreating the database: %w", err)
+		}
+
+		// Limits and the pinned digest are separate columns from creation's
+		// point of view, but not from the replacement's: a database that comes
+		// back uncapped is not the same database — on a small host the cap is
+		// what keeps the box alive — and an empty digest makes provisioning
+		// re-resolve a mutable tag, so it could come back on a different image
+		// than the dump was taken from.
+		if tombstone.CpuLimit.Valid || tombstone.MemoryLimit.Valid {
+			if created, err = q.UpdateDatabaseResources(ctx, generated.UpdateDatabaseResourcesParams{
+				ID:          created.ID,
+				CpuLimit:    tombstone.CpuLimit.Float64,
+				MemoryLimit: tombstone.MemoryLimit.Int64,
+			}); err != nil {
+				return fmt.Errorf("restoring resource limits: %w", err)
+			}
+		}
+		if tombstone.ImageDigest.Valid {
+			if err := q.UpdateDatabaseImageDigest(ctx, generated.UpdateDatabaseImageDigestParams{
+				ID:          created.ID,
+				ImageDigest: tombstone.ImageDigest,
+			}); err != nil {
+				return fmt.Errorf("restoring the image pin: %w", err)
+			}
 		}
 
 		// The backups move back onto the live database in the same transaction

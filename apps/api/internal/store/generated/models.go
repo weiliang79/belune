@@ -283,6 +283,9 @@ type DatabaseTombstone struct {
 	BackupMode           pgtype.Text        `json:"backup_mode"`
 	BackupCommand        pgtype.Text        `json:"backup_command"`
 	RestoreCommand       pgtype.Text        `json:"restore_command"`
+	CpuLimit             pgtype.Float8      `json:"cpu_limit"`
+	MemoryLimit          pgtype.Int8        `json:"memory_limit"`
+	ImageDigest          pgtype.Text        `json:"image_digest"`
 	DeletedAt            pgtype.Timestamptz `json:"deleted_at"`
 }
 
