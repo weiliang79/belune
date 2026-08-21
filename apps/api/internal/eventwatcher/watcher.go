@@ -17,8 +17,8 @@ import (
 )
 
 const (
-	labelApplicationID = "application-id"
-	labelDatabaseID    = "database-id"
+	labelApplicationID = runtime.LabelApplicationID
+	labelDatabaseID    = runtime.LabelDatabaseID
 	// containerStateRunning is Docker's State value for a container that is
 	// actually up. ContainerInfo.Status carries State ("running", "exited",
 	// "created", "paused", …), not the human-readable "Up 5 minutes" string.

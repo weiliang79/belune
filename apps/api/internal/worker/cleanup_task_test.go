@@ -3,6 +3,7 @@ package worker_test
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
@@ -10,6 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/weiliang79/belune/internal/naming"
 	"github.com/weiliang79/belune/internal/runtime"
 	"github.com/weiliang79/belune/internal/testutil"
 	"github.com/weiliang79/belune/internal/worker"
@@ -131,4 +133,112 @@ func TestCleanupOrphanContainers_ReapsOnAnEmptyInstall(t *testing.T) {
 		"an install with nothing in it must still reclaim its leftovers")
 	assert.NotContains(t, rt.RemoveCalls, "busy_helper",
 		"a helper still at work is spared by label, not by the allowlist")
+}
+
+// TestCleanupOrphanContainers_SparesPreLabelContainers is trap #1 of the
+// rewrite. Belune labelled nothing with an application-id or database-id for
+// its first releases, and containers survive an upgrade untouched — so a
+// label-only rule would have reaped every container on an install that had not
+// redeployed since. The event watcher keeps the same name fallback for exactly
+// this reason.
+func TestCleanupOrphanContainers_SparesPreLabelContainers(t *testing.T) {
+	rt := &testutil.MockContainerRuntime{}
+	h := newTestHandler(rt, nil)
+
+	app, _ := seedApp(t)
+	db := seedDatabase(t)
+	appID := uuidString(app.ID)
+	// seedApp names the app "{projectSlug}-app", and the legacy formats are
+	// built from the project slug — so it has to be the real one, not a guess.
+	projectSlug := strings.TrimSuffix(app.Slug, "-app")
+	old := time.Now().Add(-24 * time.Hour)
+
+	// Not one of these carries an id label; each is a naming format Belune has
+	// actually shipped.
+	rt.ListContainers_ = []runtime.ContainerInfo{
+		{Name: app.Slug, CreatedAt: old},
+		{Name: naming.IntermediateContainerName(projectSlug, appID), CreatedAt: old},
+		{Name: naming.OldContainerName(appID), CreatedAt: old},
+		{Name: db.Slug, CreatedAt: old},
+	}
+
+	runFullCleanup(t, h)
+
+	assert.Empty(t, rt.RemoveCalls,
+		"containers predating the id labels must still be recognised by name")
+}
+
+// TestCleanupOrphanContainers_ReapsByLabelWhateverTheNameIs is the point of the
+// rewrite. The old sweep matched names alone, so a container whose name had
+// moved on was invisible to it and leaked forever. Matching the id label makes
+// a container naming a resource that no longer exists an orphan whatever it is
+// called — which is what carries this across the 0.3.0 container rename.
+func TestCleanupOrphanContainers_ReapsByLabelWhateverTheNameIs(t *testing.T) {
+	rt := &testutil.MockContainerRuntime{}
+	h := newTestHandler(rt, nil)
+
+	app, _ := seedApp(t)
+	db := seedDatabase(t)
+	old := time.Now().Add(-24 * time.Hour)
+
+	rt.ListContainers_ = []runtime.ContainerInfo{
+		// Live rows, but under names no allowlist would ever have produced.
+		{
+			Name:      app.Slug + "-web-2",
+			CreatedAt: old,
+			Labels:    map[string]string{runtime.LabelApplicationID: uuidString(app.ID)},
+		},
+		{
+			Name:      db.Slug + "-primary",
+			CreatedAt: old,
+			Labels:    map[string]string{runtime.LabelDatabaseID: uuidString(db.ID)},
+		},
+		// Deleted rows. The names are irrelevant; the labels are the evidence.
+		{
+			Name:      "some-plausible-name",
+			CreatedAt: old,
+			Labels:    map[string]string{runtime.LabelApplicationID: "6f1c2f6e-0000-4000-8000-000000000000"},
+		},
+		{
+			Name:      "another-plausible-name",
+			CreatedAt: old,
+			Labels:    map[string]string{runtime.LabelDatabaseID: "6f1c2f6e-0000-4000-8000-000000000001"},
+		},
+	}
+
+	runFullCleanup(t, h)
+
+	assert.NotContains(t, rt.RemoveCalls, app.Slug+"-web-2",
+		"a live application's container is claimed by its label, not its name")
+	assert.NotContains(t, rt.RemoveCalls, db.Slug+"-primary",
+		"a live database's container is claimed by its label, not its name")
+	assert.Contains(t, rt.RemoveCalls, "some-plausible-name",
+		"an application-id pointing at nothing is an orphan whatever it is called")
+	assert.Contains(t, rt.RemoveCalls, "another-plausible-name",
+		"a database-id pointing at nothing is an orphan whatever it is called")
+}
+
+// TestCleanupOrphanContainers_SparesAnUnreadableLabel keeps the sweep from
+// treating what it cannot parse as garbage. A container we cannot read is not
+// thereby leftover, so an unusable label falls back to the name check rather
+// than deciding on its own that nothing claims the container.
+func TestCleanupOrphanContainers_SparesAnUnreadableLabel(t *testing.T) {
+	rt := &testutil.MockContainerRuntime{}
+	h := newTestHandler(rt, nil)
+
+	app, _ := seedApp(t)
+	old := time.Now().Add(-24 * time.Hour)
+
+	rt.ListContainers_ = []runtime.ContainerInfo{
+		{
+			Name:      app.Slug,
+			CreatedAt: old,
+			Labels:    map[string]string{runtime.LabelApplicationID: "not-a-uuid"},
+		},
+	}
+
+	runFullCleanup(t, h)
+
+	assert.Empty(t, rt.RemoveCalls,
+		"an unparseable label must fall back to the name, not condemn the container")
 }

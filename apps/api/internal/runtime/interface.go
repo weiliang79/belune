@@ -79,6 +79,17 @@ type ContainerInfo struct {
 // that will drift.
 const LabelHelper = "belune-helper"
 
+// LabelApplicationID and LabelDatabaseID tie a container back to the row that
+// owns it. They live here for the same reason as LabelHelper: the deploy and
+// provision workers write them, the event watcher and the orphan sweep read
+// them, and a constant either side could rename privately is one that will
+// drift. The orphan sweep deletes what it cannot match, so drift there is not
+// a cosmetic bug.
+const (
+	LabelApplicationID = "application-id"
+	LabelDatabaseID    = "database-id"
+)
+
 // ContainerResourceStats holds resource usage stats for a single container.
 type ContainerResourceStats struct {
 	CPUPercent     float64

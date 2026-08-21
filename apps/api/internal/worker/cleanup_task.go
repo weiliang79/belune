@@ -252,15 +252,110 @@ func isRunningHelper(ctr runtime.ContainerInfo) bool {
 	return ctr.Status == "running" || ctr.Status == "created"
 }
 
+// containerClaims is what the database says exists: the ids that can vouch for
+// a container, plus the names that can vouch for one created before those ids
+// were labelled onto it.
+type containerClaims struct {
+	applications map[string]bool
+	databases    map[string]bool
+	// names covers containers carrying neither id label. Belune ran before
+	// either label existed and containers survive an upgrade untouched, so
+	// those are still out there on real installs — the event watcher keeps the
+	// same fallback for exactly this reason (see buildContainerIndex).
+	names map[string]bool
+}
+
+// claimed reports whether a live row vouches for this container.
+//
+// An id label is the primary evidence, and it is decisive in both directions: a
+// container naming an application or database that no longer exists is an
+// orphan whatever the container is called. That is what makes this survive a
+// container rename, and what covers databases structurally instead of by
+// someone remembering to add them to a list.
+//
+// The name fallback is consulted only for containers carrying neither label —
+// and a label that does not parse counts as no label, because a container we
+// cannot read is not thereby garbage.
+func (c containerClaims) claimed(ctr runtime.ContainerInfo) bool {
+	if id, ok := labelledUUID(ctr.Labels, runtime.LabelApplicationID); ok {
+		return c.applications[id]
+	}
+	if id, ok := labelledUUID(ctr.Labels, runtime.LabelDatabaseID); ok {
+		return c.databases[id]
+	}
+	return c.names[ctr.Name]
+}
+
+// labelledUUID reads a label and normalises it, so a comparison never turns on
+// how a particular writer happened to format the same UUID.
+func labelledUUID(labels map[string]string, key string) (string, bool) {
+	raw, present := labels[key]
+	if !present {
+		return "", false
+	}
+	parsed, err := parseUUID(raw)
+	if err != nil {
+		return "", false
+	}
+	id := formatUUID(parsed)
+	return id, id != ""
+}
+
+// collectContainerClaims reads every application and database into the set of
+// things that can vouch for a container.
+//
+// Every lookup returns an error rather than a partial set. A partial set does
+// not skip work here, it deletes live containers — which is exactly how the
+// daily run came to remove every managed database.
+func (h *TaskHandler) collectContainerClaims(ctx context.Context) (containerClaims, error) {
+	claims := containerClaims{
+		applications: map[string]bool{},
+		databases:    map[string]bool{},
+		names:        map[string]bool{},
+	}
+
+	apps, err := h.Queries.ListAllApplicationsWithProjectSlug(ctx)
+	if err != nil {
+		return containerClaims{}, fmt.Errorf("list applications: %w", err)
+	}
+	for _, row := range apps {
+		appID := formatUUID(row.ID)
+		if appID == "" {
+			continue
+		}
+		claims.applications[appID] = true
+		// The pre-label fallback, and only that: a container carrying an
+		// application-id is decided by the id above, so these names no longer
+		// stand between a renamed container and the sweep.
+		claims.names[naming.ContainerName(row.ProjectSlug, row.Slug, appID)] = true
+		claims.names[naming.IntermediateContainerName(row.ProjectSlug, appID)] = true
+		claims.names[naming.OldContainerName(appID)] = true
+	}
+
+	databases, err := h.Queries.ListAllDatabases(ctx)
+	if err != nil {
+		return containerClaims{}, fmt.Errorf("list databases: %w", err)
+	}
+	for _, db := range databases {
+		if dbID := formatUUID(db.ID); dbID != "" {
+			claims.databases[dbID] = true
+		}
+		// The slug is the container name — see provision_db_task.go.
+		claims.names[db.Slug] = true
+	}
+
+	return claims, nil
+}
+
 // cleanupOrphanContainers removes managed containers that belong to nothing in
 // the database. Only containers older than 1 hour are considered to avoid
 // racing with in-progress deployments.
 //
-// ⚠️ The allowlist must cover EVERY kind of container Belune labels as its own.
-// The label filter and the allowlist are built from different sources, and
-// anything in the first that is missing from the second is destroyed. Managed
-// databases were missing here, so every one of them was stopped and removed on
-// the daily run; their volumes survived, but each needed re-provisioning.
+// ⚠️ This sweep deletes what it cannot match, so every way of matching has to
+// be right at once. It matches by the id labels a container carries, falling
+// back to names for containers older than those labels; helpers still at work
+// are spared by a third label. Anything that lists containers here without
+// teaching this function to recognise them will destroy them.
 func (h *TaskHandler) cleanupOrphanContainers(ctx context.Context) {
 	const orphanAge = time.Hour
 
@@ -279,42 +374,15 @@ func (h *TaskHandler) cleanupOrphanContainers(ctx context.Context) {
 		return
 	}
 
-	// Build set of all valid container names from the database (single JOIN query).
-	allApps, err := h.Queries.ListAllApplicationsWithProjectSlug(ctx)
+	claims, err := h.collectContainerClaims(ctx)
 	if err != nil {
-		slog.Warn("orphan cleanup: failed to list applications", "error", err)
+		slog.Warn("orphan cleanup: failed to read what the database claims", "error", err)
 		return
-	}
-
-	// Databases carry the same managed-by label as applications, so they are in
-	// the list above and must be in the allowlist too. A failure here returns
-	// rather than continuing: a partial allowlist does not skip work, it deletes
-	// live containers.
-	allDatabases, err := h.Queries.ListAllDatabases(ctx)
-	if err != nil {
-		slog.Warn("orphan cleanup: failed to list databases", "error", err)
-		return
-	}
-
-	known := make(map[string]bool, len(allApps)+len(allDatabases))
-	for _, row := range allApps {
-		appIDStr := formatUUID(row.ID)
-		if appIDStr == "" {
-			continue
-		}
-		known[naming.ContainerName(row.ProjectSlug, row.Slug, appIDStr)] = true
-		// Also mark old naming formats so we don't delete legacy containers.
-		known[naming.IntermediateContainerName(row.ProjectSlug, appIDStr)] = true
-		known[naming.OldContainerName(appIDStr)] = true
-	}
-	for _, db := range allDatabases {
-		// The slug is the container name — see provision_db_task.go.
-		known[db.Slug] = true
 	}
 
 	// There is deliberately no "refuse when the allowlist is empty" guard here.
-	// It reads like cheap insurance, but both lookups above return on error, so
-	// an empty allowlist is not a failed build — it is an install with no
+	// It reads like cheap insurance, but the lookups above return on error, so
+	// an empty set is not a failed build — it is an install with no
 	// applications and no databases, where every managed container genuinely is
 	// leftover. Refusing there stalls reaping forever on exactly the install
 	// that needs it, and catches nothing that can actually happen. What protects
@@ -323,7 +391,7 @@ func (h *TaskHandler) cleanupOrphanContainers(ctx context.Context) {
 
 	removed := 0
 	for _, ctr := range containers {
-		if known[ctr.Name] {
+		if claims.claimed(ctr) {
 			continue
 		}
 		// A helper doing work inside a volume can never be in the allowlist: it
