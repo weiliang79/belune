@@ -170,3 +170,36 @@ export function getDatabaseDeletionImpact(
     `/projects/${projectId}/databases/${databaseId}/deletion-impact`,
   );
 }
+
+/**
+ * A backup whose database has been deleted. It carries what the database was,
+ * because there is no database page left to read that from.
+ */
+export interface OrphanedBackup {
+  id: string;
+  status: string;
+  size_bytes: number;
+  has_remote: boolean;
+  started_at: string;
+  finished_at?: string;
+  error?: string;
+  tombstone_id: string;
+  database_name: string;
+  database_slug: string;
+  database_type: string;
+  database_deleted_at: string;
+}
+
+export function listOrphanedBackups(projectId: string) {
+  return api.get<OrphanedBackup[]>(`/projects/${projectId}/orphaned-backups`);
+}
+
+export function restoreOrphanedBackup(projectId: string, backupId: string) {
+  return api.post<Database>(
+    `/projects/${projectId}/orphaned-backups/${backupId}/restore`,
+  );
+}
+
+export function deleteOrphanedBackup(projectId: string, backupId: string) {
+  return api.delete<void>(`/projects/${projectId}/orphaned-backups/${backupId}`);
+}

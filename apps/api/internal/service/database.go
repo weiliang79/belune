@@ -100,6 +100,42 @@ func (s *DatabaseService) DeleteBackup(ctx context.Context, dbID, backupID pgtyp
 	return s.queries.DeleteDatabaseBackup(ctx, backupID)
 }
 
+// DeleteOrphanedBackup erases a backup whose database is gone: the archive, any
+// remote copy, and the row. Without it the inventory could only show what an
+// install is paying for, never stop it — the object outlives every screen that
+// used to reach it.
+func (s *DatabaseService) DeleteOrphanedBackup(ctx context.Context, backupID pgtype.UUID) error {
+	b, err := s.queries.GetDatabaseBackup(ctx, backupID)
+	if err != nil {
+		return err
+	}
+	if !b.TombstoneID.Valid {
+		return fmt.Errorf("backup still belongs to a live database")
+	}
+	if b.LocalPath.Valid {
+		if err := os.Remove(b.LocalPath.String); err != nil && !os.IsNotExist(err) {
+			slog.Warn("could not remove orphaned backup file", "path", b.LocalPath.String, "error", err)
+		}
+	}
+	s.deleteRemoteBackup(ctx, b)
+	if err := s.queries.DeleteDatabaseBackup(ctx, backupID); err != nil {
+		return err
+	}
+	// A tombstone exists to give backups a parent. Once its last one is gone it
+	// describes nothing, so it goes too rather than accumulating forever.
+	remaining, err := s.queries.CountBackupsForTombstone(ctx, b.TombstoneID)
+	if err != nil {
+		slog.Warn("could not count remaining backups for tombstone", "error", err)
+		return nil
+	}
+	if remaining == 0 {
+		if err := s.queries.DeleteDatabaseTombstone(ctx, b.TombstoneID); err != nil {
+			slog.Warn("could not remove an empty tombstone", "error", err)
+		}
+	}
+	return nil
+}
+
 // cleanupBackupsPageSize bounds one listing pass; cleanupBackups keeps going
 // until a short page. The old single capped call was silently partial: the
 // delete-confirmation dialog counts every backup, so a database with more than

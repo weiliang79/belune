@@ -124,3 +124,6 @@ FROM   database_backups b
 JOIN   database_tombstones t ON t.id = b.tombstone_id
 WHERE  t.project_id = $1
 ORDER  BY b.started_at DESC;
+
+-- name: CountBackupsForTombstone :one
+SELECT count(*) FROM database_backups WHERE tombstone_id = $1;

@@ -11,6 +11,17 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const countBackupsForTombstone = `-- name: CountBackupsForTombstone :one
+SELECT count(*) FROM database_backups WHERE tombstone_id = $1
+`
+
+func (q *Queries) CountBackupsForTombstone(ctx context.Context, tombstoneID pgtype.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countBackupsForTombstone, tombstoneID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countDatabases = `-- name: CountDatabases :one
 SELECT count(*) FROM databases
 `

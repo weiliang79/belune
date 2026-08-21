@@ -5,6 +5,7 @@ import { CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { DestinationsPanel } from "@/components/backups/destinations-panel";
+import { OrphanedBackupsPanel } from "@/components/backups/orphaned-backups-panel";
 import { useProjectBackups } from "@/lib/hooks/use-project-backups";
 import { formatBytes, formatDateTimeShort } from "@/lib/utils/format";
 import { cn } from "@/lib/utils";
@@ -32,6 +33,8 @@ function ProjectBackupsPage() {
   return (
     <div className="space-y-6">
       <DestinationsPanel projectId={projectId} />
+
+      <OrphanedBackupsPanel projectId={projectId} />
 
       <Card>
         <CardHeader>

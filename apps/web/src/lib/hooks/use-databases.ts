@@ -255,3 +255,38 @@ export function useUpgradeDatabase(projectId: string, databaseId: string) {
     },
   });
 }
+
+/** Backups whose database is gone. They exist and are billed but have no
+ * database page to appear on, which is why the project lists them. */
+export function useOrphanedBackups(projectId: string) {
+  return useQuery({
+    queryKey: queryKeys.databases.orphaned(projectId),
+    queryFn: () => databasesApi.listOrphanedBackups(projectId),
+  });
+}
+
+export function useRestoreOrphanedBackup(projectId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (backupId: string) =>
+      databasesApi.restoreOrphanedBackup(projectId, backupId),
+    onSuccess: () => {
+      // The replacement is a live database again, so both listings move.
+      qc.invalidateQueries({ queryKey: queryKeys.databases.orphaned(projectId) });
+      qc.invalidateQueries({ queryKey: queryKeys.databases.all(projectId) });
+      qc.invalidateQueries({ queryKey: queryKeys.projects.detail(projectId) });
+    },
+  });
+}
+
+export function useDeleteOrphanedBackup(projectId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (backupId: string) =>
+      databasesApi.deleteOrphanedBackup(projectId, backupId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.databases.orphaned(projectId) });
+      qc.invalidateQueries({ queryKey: queryKeys.projectBackups(projectId) });
+    },
+  });
+}
