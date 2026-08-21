@@ -77,4 +77,3 @@ type Provider interface {
 	// surfaced verbatim to the operator (test send) or stamped as last_error.
 	Send(ctx context.Context, raw json.RawMessage, ev Event) error
 }
-

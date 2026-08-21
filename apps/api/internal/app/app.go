@@ -93,9 +93,12 @@ func New(cfg *config.Config) (*App, error) {
 
 	// Everything that acts on containers goes through the resolver rather than
 	// this client, so the day a second host exists only the resolver changes.
-	// The long-running per-host components below (log collector, event watcher,
-	// metrics broadcaster) are still wired to the local client directly: they
-	// are a "run one of me per server" supervisor problem, not a lookup.
+	// Still wired to the local client directly, each for its own reason: the
+	// long-running per-host components below (log collector, event watcher,
+	// metrics broadcaster) are a "run one of me per server" supervisor problem
+	// rather than a lookup, and the build chain and Caddy network attacher are
+	// genuinely single-host today — offloading builds and per-server proxying
+	// are separate pieces of work.
 	runtimes := runtime.NewLocalRuntimes(dockerClient)
 
 	resolveCaddyContainer(cfg, dockerClient)

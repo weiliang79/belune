@@ -16,6 +16,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/weiliang79/belune/internal/naming"
+	"github.com/weiliang79/belune/internal/runtime"
 	"github.com/weiliang79/belune/internal/status"
 	"github.com/weiliang79/belune/internal/store"
 	"github.com/weiliang79/belune/internal/store/generated"
@@ -370,13 +371,25 @@ func (h *Handler) ListDatabases(w http.ResponseWriter, r *http.Request) {
 	// GetDatabase: only the steady non-running states are inspected, so a table of
 	// running databases costs zero Docker calls.
 	// Every database in a project shares the project's host, so this resolves
-	// once for the whole list rather than once per row.
-	rt, rtErr := h.runtimeForProject(r.Context(), projectUUID)
+	// once for the whole list rather than once per row — and only if some row
+	// actually needs inspecting, so a table of running databases still costs
+	// nothing at all.
+	var rt runtime.ContainerRuntime
+	for _, db := range databases {
+		if db.Status == status.DatabaseStopped || db.Status == status.DatabaseFailed {
+			resolved, err := h.runtimeForProject(r.Context(), projectUUID)
+			if err != nil {
+				slog.Warn("list databases: could not reach the project's server", "project_id", projectID, "error", err)
+			}
+			rt = resolved
+			break
+		}
+	}
 
 	resp := make([]databaseResponse, 0, len(databases))
 	for _, db := range databases {
 		item := databaseResponse{Database: db}
-		if rtErr == nil && (db.Status == status.DatabaseStopped || db.Status == status.DatabaseFailed) {
+		if rt != nil && (db.Status == status.DatabaseStopped || db.Status == status.DatabaseFailed) {
 			if exists, err := rt.ContainerExists(r.Context(), db.Slug); err == nil {
 				item.ContainerMissing = !exists
 			}

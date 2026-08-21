@@ -49,8 +49,11 @@ type deployContext struct {
 	appRow        generated.GetApplicationWithProjectSlugRow
 	app           generated.Application
 	// runtime is the host this application is placed on, resolved once in
-	// loadApplication. Every stage acts through it, so a deploy can never be
-	// split across two hosts by a later re-resolve.
+	// loadApplication so no stage can re-resolve to a different host midway.
+	// ⚠️ It does NOT yet cover the build: h.Chain is still wired to the local
+	// Docker client, so a git-source app placed on a remote host would build
+	// its image here and then fail to find that tag there. Offloading the
+	// build is its own piece of work (BUILDKIT_HOST), not this refactor.
 	runtime       runtime.ContainerRuntime
 	containerName string
 	containerID   string

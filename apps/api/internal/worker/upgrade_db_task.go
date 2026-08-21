@@ -60,8 +60,11 @@ func (h *TaskHandler) HandleUpgradeDBTask(ctx context.Context, t *asynq.Task) er
 	// dump, the recreate and the restore all have to land on the same host.
 	rt, err := h.runtimeForDatabase(ctx, dbID)
 	if err != nil {
-		h.failDatabase(ctx, dbID, fmt.Sprintf("resolve server: %v", err))
-		return errors.Join(err, asynq.SkipRetry)
+		// Nothing has been dumped, removed or recreated yet, so the database is
+		// still healthy at its current version — return it to running rather
+		// than stamping a permanent failure on an untouched row.
+		h.setDatabaseStatus(ctx, dbID, "running")
+		return errors.Join(fmt.Errorf("resolve server: %w", err), asynq.SkipRetry)
 	}
 
 	if dbBackupMethod(db) != "logical" {
@@ -294,12 +297,12 @@ func (h *TaskHandler) ReconcileInterruptedUpgrades(ctx context.Context) {
 	}
 	for _, db := range backingUp {
 		slog.Warn("reconcile: restarting database left mid-snapshot", "database_id", formatUUID(db.ID), "slug", db.Slug)
-		rt, err := h.runtimeForDatabase(ctx, db.ID)
-		if err != nil {
+		// The status is stamped either way. Leaving the row in backing_up is
+		// the exact silent, permanent transitional state this function exists
+		// to clear, and a failed restart already falls through to it.
+		if rt, err := h.runtimeForDatabase(ctx, db.ID); err != nil {
 			slog.Warn("reconcile: could not reach the database's server", "database_id", formatUUID(db.ID), "error", err)
-			continue
-		}
-		if err := rt.StartContainer(ctx, db.Slug); err != nil {
+		} else if err := rt.StartContainer(ctx, db.Slug); err != nil {
 			slog.Warn("reconcile: failed to restart database after snapshot", "database_id", formatUUID(db.ID), "error", err)
 		}
 		h.setDatabaseStatus(ctx, db.ID, statuspkg.DatabaseRunning)

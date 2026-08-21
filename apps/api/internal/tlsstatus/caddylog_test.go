@@ -24,8 +24,8 @@ func TestParseCaddyTLSError(t *testing.T) {
 			wantHost: "belune-phase3-nxdomain.example.com",
 			// The ACME problem URN is protocol wrapping; what the operator needs is
 			// the CA's sentence after it.
-			wantIn:   "contact email has forbidden domain",
-			wantOK:   true,
+			wantIn: "contact email has forbidden domain",
+			wantOK: true,
 		},
 		{
 			// No `identifier` field — the hostname is only bracketed in the error.

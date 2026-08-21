@@ -58,11 +58,12 @@ func (s *ProjectService) Delete(ctx context.Context, projectID pgtype.UUID) erro
 	// and the control plane, which are bridged in). Best-effort: a leftover empty
 	// network is cosmetic, so a failure must not block the row delete.
 	netName := naming.ProjectNetworkName(project.Slug)
-	rt, err := s.runtimes.For(ctx, project.ServerID)
-	if err != nil {
-		return err
-	}
-	if err := rt.RemoveNetwork(ctx, netName); err != nil {
+	if rt, err := s.runtimes.For(ctx, project.ServerID); err != nil {
+		// Best-effort like the removal it guards: the applications and databases
+		// are already gone by now, so refusing here would strand the project row
+		// with nothing in it until the host came back.
+		slog.Warn("could not reach the project's server to remove its network", "network", netName, "error", err)
+	} else if err := rt.RemoveNetwork(ctx, netName); err != nil {
 		slog.Warn("could not remove project network during project deletion", "network", netName, "error", err)
 	}
 

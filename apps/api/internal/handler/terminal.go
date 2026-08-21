@@ -161,6 +161,14 @@ func (h *Handler) HandleTerminalWebSocket(w http.ResponseWriter, r *http.Request
 	ctx, cancel := context.WithCancel(sessionCtx)
 	defer cancel()
 
+	// Resolved once for the life of the session: placement cannot change under
+	// a live exec, and the browser's ResizeObserver is not debounced — a lookup
+	// per resize frame would be a database round trip per dragged pixel.
+	rt, err := h.runtimeForSession(ctx, s)
+	if err != nil {
+		slog.Warn("terminal: could not reach the session's server; resize disabled", "session_id", sessionID, "error", err)
+	}
+
 	defer func() {
 		conn.Close(websocket.StatusNormalClosure, "")
 		startedAt := s.CreatedAt
@@ -197,14 +205,13 @@ func (h *Handler) HandleTerminalWebSocket(w http.ResponseWriter, r *http.Request
 				}
 			case "resize":
 				if msg.Cols > 0 && msg.Rows > 0 {
-					// Resizing addresses an exec that already exists, so it has
-					// to go to the same host that created it — the session's
-					// own scope, not a fresh guess.
-					rt, err := h.runtimeForSession(ctx, s)
-					if err != nil {
-						slog.Debug("terminal: resize failed to reach the session's server", "error", err)
-					} else if err := rt.ContainerExecResize(ctx, s.ExecID, uint(msg.Rows), uint(msg.Cols)); err != nil {
-						slog.Debug("terminal: resize failed", "error", err)
+					// Resizing addresses an exec that already exists, so it goes
+					// to the host that created it — rt above, resolved from the
+					// session's own scope.
+					if rt != nil {
+						if err := rt.ContainerExecResize(ctx, s.ExecID, uint(msg.Rows), uint(msg.Cols)); err != nil {
+							slog.Debug("terminal: resize failed", "error", err)
+						}
 					}
 				}
 			}
