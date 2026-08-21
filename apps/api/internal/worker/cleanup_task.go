@@ -312,7 +312,7 @@ func labelledUUID(labels map[string]string, key string) (string, bool) {
 // daily run came to remove every managed database.
 func (h *TaskHandler) collectClaimsByServer(ctx context.Context) (map[string]containerClaims, error) {
 	byServer := map[string]containerClaims{}
-	claimsFor := func(serverID pgtype.UUID) (containerClaims, string) {
+	claimsFor := func(serverID pgtype.UUID) containerClaims {
 		key := formatUUID(serverID)
 		c, ok := byServer[key]
 		if !ok {
@@ -323,7 +323,7 @@ func (h *TaskHandler) collectClaimsByServer(ctx context.Context) (map[string]con
 			}
 			byServer[key] = c
 		}
-		return c, key
+		return c
 	}
 
 	apps, err := h.Queries.ListAllApplicationsWithProjectSlug(ctx)
@@ -335,7 +335,7 @@ func (h *TaskHandler) collectClaimsByServer(ctx context.Context) (map[string]con
 		if appID == "" {
 			continue
 		}
-		claims, _ := claimsFor(row.ServerID)
+		claims := claimsFor(row.ServerID)
 		claims.applications[appID] = true
 		// The pre-label fallback, and only that: a container carrying an
 		// application-id is decided by the id above, so these names no longer
@@ -350,7 +350,7 @@ func (h *TaskHandler) collectClaimsByServer(ctx context.Context) (map[string]con
 		return nil, fmt.Errorf("list databases: %w", err)
 	}
 	for _, db := range databases {
-		claims, _ := claimsFor(db.ServerID)
+		claims := claimsFor(db.ServerID)
 		if dbID := formatUUID(db.ID); dbID != "" {
 			claims.databases[dbID] = true
 		}
@@ -373,6 +373,14 @@ func (h *TaskHandler) cleanupOrphanContainers(ctx context.Context) {
 	servers, err := h.Queries.ListManagedServers(ctx)
 	if err != nil {
 		slog.Warn("orphan cleanup: failed to list servers", "error", err)
+		return
+	}
+	if len(servers) == 0 {
+		// Not reachable by any current path — the local server is seeded active
+		// and nothing revokes it — but if it ever were, reaping would stop dead
+		// and every other exit here logs. Silence is the one outcome nobody
+		// could diagnose.
+		slog.Warn("orphan cleanup: no managed servers, so nothing was swept")
 		return
 	}
 
@@ -435,7 +443,7 @@ func (h *TaskHandler) reapOrphansOn(ctx context.Context, server generated.Server
 		return 0
 	}
 
-	removed := 0
+	removed, claimedElsewhere := 0, 0
 	for _, ctr := range containers {
 		if claims.claimed(ctr) {
 			continue
@@ -447,8 +455,13 @@ func (h *TaskHandler) reapOrphansOn(ctx context.Context, server generated.Server
 		// stays right once the resolver is real, too: a container running here
 		// but claimed there is a misplacement to look into, not garbage.
 		if anywhere.claimed(ctr) {
-			slog.Warn("orphan cleanup: container is claimed by a different server; leaving it alone",
+			// Debug per container, one summary below: while the resolver still
+			// returns the same daemon for every server id this is the expected
+			// case for every container on the box, and a line each would bury
+			// the genuine warnings this function emits.
+			slog.Debug("orphan cleanup: container is claimed by a different server; leaving it alone",
 				"container", ctr.Name, "server", server.Name)
+			claimedElsewhere++
 			continue
 		}
 		// A helper doing work inside a volume can never be claimed: it has no
@@ -473,6 +486,11 @@ func (h *TaskHandler) reapOrphansOn(ctx context.Context, server generated.Server
 			continue
 		}
 		removed++
+	}
+
+	if claimedElsewhere > 0 {
+		slog.Warn("orphan cleanup: containers on this host are claimed by another server",
+			"server", server.Name, "count", claimedElsewhere)
 	}
 	return removed
 }

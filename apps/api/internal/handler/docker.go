@@ -24,8 +24,8 @@ import (
 const (
 	dockerLabelManagedBy    = "managed-by"
 	dockerLabelManagedValue = "belune"
-	dockerLabelAppID        = "application-id"
-	dockerLabelDatabaseID   = "database-id"
+	dockerLabelAppID        = runtime.LabelApplicationID
+	dockerLabelDatabaseID   = runtime.LabelDatabaseID
 	dockerLabelCache        = "belune-cache"
 	dockerLabelData         = "belune-data"
 )

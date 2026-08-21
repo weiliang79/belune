@@ -256,11 +256,19 @@ func TestCleanupOrphanContainers_SparesContainersClaimedByAnotherServer(t *testi
 	app, _ := seedApp(t)
 	db := seedDatabase(t)
 
-	// A second managed host, with nothing placed on it.
+	// A second managed host, with nothing placed on it. TruncateAll leaves
+	// servers alone on purpose — the seeded local row has to survive, since
+	// projects.server_id is NOT NULL — so this one has to clean up after
+	// itself or every later test in the package sweeps two hosts.
+	serverName := "second-" + randomSuffix(t)
 	_, err := testPool.Exec(ctx,
 		`INSERT INTO servers (name, is_local, lifecycle, enrolled_at) VALUES ($1, false, 'active', NOW())`,
-		"second-"+randomSuffix(t))
+		serverName)
 	require.NoError(t, err)
+	t.Cleanup(func() {
+		_, err := testPool.Exec(context.Background(), `DELETE FROM servers WHERE name = $1`, serverName)
+		require.NoError(t, err)
+	})
 
 	old := time.Now().Add(-24 * time.Hour)
 	rt.ListContainers_ = []runtime.ContainerInfo{
