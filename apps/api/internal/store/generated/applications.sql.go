@@ -600,7 +600,7 @@ func (q *Queries) GetApplicationOwnerUserID(ctx context.Context, id pgtype.UUID)
 }
 
 const getApplicationWithProjectSlug = `-- name: GetApplicationWithProjectSlug :one
-SELECT a.id, a.project_id, a.name, a.slug, a.type, a.source_repo, a.source_image, a.dockerfile_path, a.build_type, a.build_type_override, a.builder_image, a.custom_buildpacks, a.cpu_limit, a.memory_limit, a.webhook_secret, a.auto_deploy_branch, a.status, a.git_credentials_encrypted, a.health_check_path, a.created_at, a.updated_at, a.parent_application_id, a.branch, a.preview_branch_pattern, a.preview_domain_template, a.last_activity_at, a.git_integration_id, a.source_kind, a.source_ref, a.readonly_rootfs, a.container_caps, a.container_port, a.health_check_timeout_seconds, a.health_check_expect_status, a.deploy_hook_token_hash, a.deploy_hook_token_encrypted, a.webhook_secret_encrypted, a.config_changed_at, a.source_changed_at, a.last_deployed_at, a.health_check_type, a.health_check_command, a.health_check_interval_seconds, a.health_check_retries, a.health_check_start_period_seconds, a.root_directory, p.slug as project_slug
+SELECT a.id, a.project_id, a.name, a.slug, a.type, a.source_repo, a.source_image, a.dockerfile_path, a.build_type, a.build_type_override, a.builder_image, a.custom_buildpacks, a.cpu_limit, a.memory_limit, a.webhook_secret, a.auto_deploy_branch, a.status, a.git_credentials_encrypted, a.health_check_path, a.created_at, a.updated_at, a.parent_application_id, a.branch, a.preview_branch_pattern, a.preview_domain_template, a.last_activity_at, a.git_integration_id, a.source_kind, a.source_ref, a.readonly_rootfs, a.container_caps, a.container_port, a.health_check_timeout_seconds, a.health_check_expect_status, a.deploy_hook_token_hash, a.deploy_hook_token_encrypted, a.webhook_secret_encrypted, a.config_changed_at, a.source_changed_at, a.last_deployed_at, a.health_check_type, a.health_check_command, a.health_check_interval_seconds, a.health_check_retries, a.health_check_start_period_seconds, a.root_directory, p.slug as project_slug, p.server_id as server_id
 FROM applications a
 JOIN projects p ON p.id = a.project_id
 WHERE a.id = $1
@@ -654,8 +654,11 @@ type GetApplicationWithProjectSlugRow struct {
 	HealthCheckStartPeriodSeconds pgtype.Int4        `json:"health_check_start_period_seconds"`
 	RootDirectory                 pgtype.Text        `json:"root_directory"`
 	ProjectSlug                   string             `json:"project_slug"`
+	ServerID                      pgtype.UUID        `json:"server_id"`
 }
 
+// server_id rides along because every container operation on this application
+// has to resolve which host it runs on, and this join is already paid for.
 func (q *Queries) GetApplicationWithProjectSlug(ctx context.Context, id pgtype.UUID) (GetApplicationWithProjectSlugRow, error) {
 	row := q.db.QueryRow(ctx, getApplicationWithProjectSlug, id)
 	var i GetApplicationWithProjectSlugRow
@@ -707,6 +710,7 @@ func (q *Queries) GetApplicationWithProjectSlug(ctx context.Context, id pgtype.U
 		&i.HealthCheckStartPeriodSeconds,
 		&i.RootDirectory,
 		&i.ProjectSlug,
+		&i.ServerID,
 	)
 	return i, err
 }
@@ -831,6 +835,22 @@ func (q *Queries) GetProjectOwnerInfo(ctx context.Context, id pgtype.UUID) (GetP
 	return i, err
 }
 
+const getServerIDForApplication = `-- name: GetServerIDForApplication :one
+SELECT p.server_id FROM applications a
+JOIN projects p ON p.id = a.project_id
+WHERE a.id = $1
+`
+
+// Placement lookup for paths that hold only an application id. Cheaper than
+// refetching the row, and it keeps "which host" an explicit question rather
+// than something a caller assumes.
+func (q *Queries) GetServerIDForApplication(ctx context.Context, id pgtype.UUID) (pgtype.UUID, error) {
+	row := q.db.QueryRow(ctx, getServerIDForApplication, id)
+	var server_id pgtype.UUID
+	err := row.Scan(&server_id)
+	return server_id, err
+}
+
 const listAllApplications = `-- name: ListAllApplications :many
 SELECT id, project_id, name, slug, type, source_repo, source_image, dockerfile_path, build_type, build_type_override, builder_image, custom_buildpacks, cpu_limit, memory_limit, webhook_secret, auto_deploy_branch, status, git_credentials_encrypted, health_check_path, created_at, updated_at, parent_application_id, branch, preview_branch_pattern, preview_domain_template, last_activity_at, git_integration_id, source_kind, source_ref, readonly_rootfs, container_caps, container_port, health_check_timeout_seconds, health_check_expect_status, deploy_hook_token_hash, deploy_hook_token_encrypted, webhook_secret_encrypted, config_changed_at, source_changed_at, last_deployed_at, health_check_type, health_check_command, health_check_interval_seconds, health_check_retries, health_check_start_period_seconds, root_directory FROM applications
 `
@@ -903,7 +923,7 @@ func (q *Queries) ListAllApplications(ctx context.Context) ([]Application, error
 }
 
 const listAllApplicationsWithProjectSlug = `-- name: ListAllApplicationsWithProjectSlug :many
-SELECT a.id, a.project_id, a.name, a.slug, a.type, a.source_repo, a.source_image, a.dockerfile_path, a.build_type, a.build_type_override, a.builder_image, a.custom_buildpacks, a.cpu_limit, a.memory_limit, a.webhook_secret, a.auto_deploy_branch, a.status, a.git_credentials_encrypted, a.health_check_path, a.created_at, a.updated_at, a.parent_application_id, a.branch, a.preview_branch_pattern, a.preview_domain_template, a.last_activity_at, a.git_integration_id, a.source_kind, a.source_ref, a.readonly_rootfs, a.container_caps, a.container_port, a.health_check_timeout_seconds, a.health_check_expect_status, a.deploy_hook_token_hash, a.deploy_hook_token_encrypted, a.webhook_secret_encrypted, a.config_changed_at, a.source_changed_at, a.last_deployed_at, a.health_check_type, a.health_check_command, a.health_check_interval_seconds, a.health_check_retries, a.health_check_start_period_seconds, a.root_directory, p.slug as project_slug
+SELECT a.id, a.project_id, a.name, a.slug, a.type, a.source_repo, a.source_image, a.dockerfile_path, a.build_type, a.build_type_override, a.builder_image, a.custom_buildpacks, a.cpu_limit, a.memory_limit, a.webhook_secret, a.auto_deploy_branch, a.status, a.git_credentials_encrypted, a.health_check_path, a.created_at, a.updated_at, a.parent_application_id, a.branch, a.preview_branch_pattern, a.preview_domain_template, a.last_activity_at, a.git_integration_id, a.source_kind, a.source_ref, a.readonly_rootfs, a.container_caps, a.container_port, a.health_check_timeout_seconds, a.health_check_expect_status, a.deploy_hook_token_hash, a.deploy_hook_token_encrypted, a.webhook_secret_encrypted, a.config_changed_at, a.source_changed_at, a.last_deployed_at, a.health_check_type, a.health_check_command, a.health_check_interval_seconds, a.health_check_retries, a.health_check_start_period_seconds, a.root_directory, p.slug as project_slug, p.server_id as server_id
 FROM applications a
 JOIN projects p ON p.id = a.project_id
 `
@@ -956,6 +976,7 @@ type ListAllApplicationsWithProjectSlugRow struct {
 	HealthCheckStartPeriodSeconds pgtype.Int4        `json:"health_check_start_period_seconds"`
 	RootDirectory                 pgtype.Text        `json:"root_directory"`
 	ProjectSlug                   string             `json:"project_slug"`
+	ServerID                      pgtype.UUID        `json:"server_id"`
 }
 
 func (q *Queries) ListAllApplicationsWithProjectSlug(ctx context.Context) ([]ListAllApplicationsWithProjectSlugRow, error) {
@@ -1015,6 +1036,7 @@ func (q *Queries) ListAllApplicationsWithProjectSlug(ctx context.Context) ([]Lis
 			&i.HealthCheckStartPeriodSeconds,
 			&i.RootDirectory,
 			&i.ProjectSlug,
+			&i.ServerID,
 		); err != nil {
 			return nil, err
 		}

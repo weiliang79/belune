@@ -154,6 +154,21 @@ func (q *Queries) GetDatabaseOwnerUserID(ctx context.Context, id pgtype.UUID) (p
 	return user_id, err
 }
 
+const getServerIDForDatabase = `-- name: GetServerIDForDatabase :one
+SELECT p.server_id FROM databases d
+JOIN projects p ON p.id = d.project_id
+WHERE d.id = $1
+`
+
+// Placement lookup, sibling of GetServerIDForApplication. Databases are fetched
+// as a bare row everywhere, so their host is resolved from the project here.
+func (q *Queries) GetServerIDForDatabase(ctx context.Context, id pgtype.UUID) (pgtype.UUID, error) {
+	row := q.db.QueryRow(ctx, getServerIDForDatabase, id)
+	var server_id pgtype.UUID
+	err := row.Scan(&server_id)
+	return server_id, err
+}
+
 const listAllDatabases = `-- name: ListAllDatabases :many
 SELECT id, project_id, type, name, slug, version, status, internal_host, internal_port, credentials_encrypted, created_at, cpu_limit, memory_limit, host_port, image, container_port, data_dir, backup_mode, backup_command, restore_command, image_digest, source_kind, source_ref FROM databases
 `
