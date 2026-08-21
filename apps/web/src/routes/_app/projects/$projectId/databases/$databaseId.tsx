@@ -6,7 +6,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ContainerLogViewer } from "@/components/logs/container-log-viewer";
 import { BackupConfigFormDialog } from "@/components/databases/backup-config-form-dialog";
 import { BackupConfigRunsSheet } from "@/components/databases/backup-config-runs-sheet";
@@ -19,6 +19,7 @@ import { useBackupDestinations } from "@/lib/hooks/use-backup-destinations";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import {
@@ -130,11 +131,20 @@ function DatabaseDetailPage() {
   const deleteDb = useDeleteDatabase(projectId);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState("");
+  // Unchecked by default: deleting a database is recoverable from a backup,
+  // deleting the backups with it is not.
+  const [deleteBackups, setDeleteBackups] = useState(false);
   const { data: deleteImpact } = useDatabaseDeletionImpact(
     projectId,
     databaseId,
     deleteOpen,
   );
+  useEffect(() => {
+    if (!deleteOpen) {
+      setDeleteBackups(false);
+      setDeleteConfirm("");
+    }
+  }, [deleteOpen]);
   const stop = useStopDatabase(projectId, databaseId);
   const start = useStartDatabase(projectId, databaseId);
   const restart = useRestartDatabase(projectId, databaseId);
@@ -190,7 +200,7 @@ function DatabaseDetailPage() {
 
   const handleDelete = () => {
     toast.promise(
-      deleteDb.mutateAsync(databaseId).then(() => {
+      deleteDb.mutateAsync({ databaseId, deleteBackups }).then(() => {
         navigate({
           to: "/projects/$projectId",
           params: { projectId },
@@ -555,18 +565,46 @@ function DatabaseDetailPage() {
                         all its data. This action cannot be undone.
                       </AlertDialogDescription>
                       {deleteImpact && deleteImpact.backup_count > 0 ? (
-                        <AlertDialogDescription className="text-destructive font-medium">
-                          Also permanently deletes{" "}
+                        <AlertDialogDescription>
+                          Its{" "}
                           {deleteImpact.backup_count === 1
-                            ? "1 backup"
-                            : `${deleteImpact.backup_count} backups`}
+                            ? "1 backup is"
+                            : `${deleteImpact.backup_count} backups are`}{" "}
+                          kept
                           {deleteImpact.backup_destinations.length > 0
                             ? `, including copies in ${formatList(deleteImpact.backup_destinations)}`
                             : ""}
-                          . Restore from them will no longer be possible.
+                          , and stay listed under the project&apos;s Backups tab.
+                          You can restore a replacement database from them.
                         </AlertDialogDescription>
                       ) : null}
                     </AlertDialogHeader>
+                    {deleteImpact && deleteImpact.backup_count > 0 ? (
+                      <div className="flex items-start gap-2.5">
+                        <Checkbox
+                          id="delete-db-backups"
+                          checked={deleteBackups}
+                          onCheckedChange={(checked) =>
+                            setDeleteBackups(checked === true)
+                          }
+                          className="mt-0.5"
+                        />
+                        <Label
+                          htmlFor="delete-db-backups"
+                          className="font-normal leading-snug"
+                        >
+                          Also delete{" "}
+                          {deleteImpact.backup_count === 1
+                            ? "this backup"
+                            : "these backups"}
+                          <span className="text-text-muted block text-xs">
+                            {deleteImpact.backup_destinations.length > 0
+                              ? "Erases the archives, including the remote copies. This cannot be undone."
+                              : "Erases the archives. This cannot be undone."}
+                          </span>
+                        </Label>
+                      </div>
+                    ) : null}
                     <div className="space-y-2">
                       <Label
                         htmlFor="delete-db-confirm"

@@ -47,7 +47,10 @@ func (s *ProjectService) Delete(ctx context.Context, projectID pgtype.UUID) erro
 
 	if databases, err := s.queries.ListDatabasesByProject(ctx, projectID); err == nil {
 		for _, db := range databases {
-			if err := s.databases.Delete(ctx, db.ID); err != nil {
+			// Purge, not keep: a tombstone is project-scoped and cascades from
+			// the project, so there is nowhere for a kept backup to live once
+			// the project is gone. This is what the dialog already promises.
+			if err := s.databases.Delete(ctx, db.ID, false); err != nil {
 				slog.Warn("could not delete database during project deletion",
 					"database_id", uuidToString(db.ID), "error", err)
 			}

@@ -85,11 +85,18 @@ export function useCreateDatabase(projectId: string) {
 export function useDeleteDatabase(projectId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (databaseId: string) =>
-      databasesApi.deleteDatabase(projectId, databaseId),
+    mutationFn: ({
+      databaseId,
+      deleteBackups = false,
+    }: {
+      databaseId: string;
+      deleteBackups?: boolean;
+    }) => databasesApi.deleteDatabase(projectId, databaseId, deleteBackups),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.databases.all(projectId) });
       qc.invalidateQueries({ queryKey: queryKeys.projects.detail(projectId) });
+      // A kept backup becomes an orphan the project inventory has to show.
+      qc.invalidateQueries({ queryKey: queryKeys.databases.orphaned(projectId) });
     },
   });
 }

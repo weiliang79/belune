@@ -7,21 +7,24 @@ import (
 	"os"
 
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/weiliang79/belune/internal/runtime"
 	"github.com/weiliang79/belune/internal/service/backup"
+	"github.com/weiliang79/belune/internal/store"
 	"github.com/weiliang79/belune/internal/store/generated"
 )
 
 type DatabaseService struct {
+	db           *pgxpool.Pool
 	queries      *generated.Queries
 	runtimes     runtime.Runtimes
 	backups      *backup.Service           // optional; nil disables global remote backup cleanup
 	destinations *BackupDestinationService // optional; routes config-backup remote cleanup
 }
 
-func NewDatabaseService(queries *generated.Queries, rts runtime.Runtimes, backups *backup.Service, destinations *BackupDestinationService) *DatabaseService {
-	return &DatabaseService{queries: queries, runtimes: rts, backups: backups, destinations: destinations}
+func NewDatabaseService(db *pgxpool.Pool, queries *generated.Queries, rts runtime.Runtimes, backups *backup.Service, destinations *BackupDestinationService) *DatabaseService {
+	return &DatabaseService{db: db, queries: queries, runtimes: rts, backups: backups, destinations: destinations}
 }
 
 // deleteRemoteBackup removes a backup's remote object. It routes to the
@@ -178,8 +181,15 @@ func (s *DatabaseService) DeletionImpact(ctx context.Context, dbID pgtype.UUID) 
 	return DeletionImpact{BackupCount: count, Destinations: names}, nil
 }
 
-// Delete stops and removes the database container and its volume, then deletes the DB record.
-func (s *DatabaseService) Delete(ctx context.Context, dbID pgtype.UUID) error {
+// Delete stops and removes the database container and its volume, then deletes
+// the DB record.
+//
+// keepBackups decides what happens to the backups. Keeping them writes a
+// tombstone and re-points them onto it, so they remain listable and restorable
+// after the database is gone; destroying them erases the archives and the rows.
+// The caller states the choice explicitly — there is no default here, because
+// the two outcomes differ by whether yesterday's data still exists.
+func (s *DatabaseService) Delete(ctx context.Context, dbID pgtype.UUID, keepBackups bool) error {
 	db, err := s.queries.GetDatabase(ctx, dbID)
 	if err != nil {
 		return err
@@ -201,7 +211,60 @@ func (s *DatabaseService) Delete(ctx context.Context, dbID pgtype.UUID) error {
 		slog.Warn("could not remove volume during db deletion", "volume", db.Slug+"-vol", "error", err)
 	}
 
+	if keepBackups {
+		return s.keepBackupsAndDelete(ctx, db)
+	}
+
 	s.cleanupBackups(ctx, dbID)
 
-	return s.queries.DeleteDatabase(ctx, dbID)
+	// The rows go deterministically even if an object could not be erased above.
+	// Object cleanup is best-effort by design, but a leftover row still pointing
+	// at this database would trip the one_parent CHECK the moment the delete
+	// nulls its database_id, and abort the whole thing.
+	return store.WithTx(ctx, s.db, func(q *generated.Queries) error {
+		if err := q.DeleteDatabaseBackupsForDatabase(ctx, dbID); err != nil {
+			return fmt.Errorf("removing backup rows: %w", err)
+		}
+		return q.DeleteDatabase(ctx, dbID)
+	})
+}
+
+// keepBackupsAndDelete records what the database was and moves its backups onto
+// that record, then deletes the database.
+//
+// All three steps share a transaction. Half of this is worse than none of it: a
+// tombstone with no backups is a row describing something nobody can restore,
+// and backups whose re-point succeeded while the delete failed would be
+// detached from a database that is still running.
+func (s *DatabaseService) keepBackupsAndDelete(ctx context.Context, db generated.Database) error {
+	return store.WithTx(ctx, s.db, func(q *generated.Queries) error {
+		tombstone, err := q.CreateDatabaseTombstone(ctx, generated.CreateDatabaseTombstoneParams{
+			ProjectID:  db.ProjectID,
+			OriginalID: db.ID,
+			Slug:       db.Slug,
+			Name:       db.Name,
+			Type:       db.Type,
+			Version:    pgtype.Text{String: db.Version, Valid: true},
+			// Carried across as ciphertext: the tombstone column is a rewrap
+			// target like the one it came from, so this is never decrypted here.
+			CredentialsEncrypted: db.CredentialsEncrypted,
+			// What provisioning needs that the engine name does not imply.
+			Image:          db.Image,
+			ContainerPort:  db.ContainerPort,
+			DataDir:        db.DataDir,
+			BackupMode:     pgtype.Text{String: db.BackupMode, Valid: true},
+			BackupCommand:  db.BackupCommand,
+			RestoreCommand: db.RestoreCommand,
+		})
+		if err != nil {
+			return fmt.Errorf("recording the deleted database: %w", err)
+		}
+		if err := q.ReparentDatabaseBackupsToTombstone(ctx, generated.ReparentDatabaseBackupsToTombstoneParams{
+			DatabaseID:  db.ID,
+			TombstoneID: tombstone.ID,
+		}); err != nil {
+			return fmt.Errorf("moving backups onto the tombstone: %w", err)
+		}
+		return q.DeleteDatabase(ctx, db.ID)
+	})
 }

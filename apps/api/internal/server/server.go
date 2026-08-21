@@ -38,7 +38,7 @@ func New(cfg *config.Config, db *pgxpool.Pool, queries *generated.Queries, asynq
 	auth := service.NewAuthService(queries, cfg.JWTSecret, cfg.JWTExpiryHours, cfg.JWTRefreshHours, rdb)
 	appSvc := service.NewApplicationService(db, queries, rts, cfg.Keyring, cfg.FileMountsDir)
 	backupDestSvc := service.NewBackupDestinationService(queries, cfg.Keyring)
-	dbSvc := service.NewDatabaseService(queries, rts, backup.New(cfg), backupDestSvc)
+	dbSvc := service.NewDatabaseService(db, queries, rts, backup.New(cfg), backupDestSvc)
 	// projSvc delegates project deletion to appSvc/dbSvc, so it is built after them.
 	projSvc := service.NewProjectService(queries, rts, appSvc, dbSvc)
 	gitProviderSvc := service.NewGitProviderConfigService(queries, cfg.Keyring)

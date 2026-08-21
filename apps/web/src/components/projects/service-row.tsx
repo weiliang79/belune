@@ -461,7 +461,7 @@ function DatabaseActions({
             <AlertDialogAction
               disabled={!confirmSatisfied}
               onClick={() =>
-                toast.promise(del.mutateAsync(db.id), {
+                toast.promise(del.mutateAsync({ databaseId: db.id }), {
                   loading: "Deleting database…",
                   success: `${db.name} deleted`,
                   error: (err) => err.message,

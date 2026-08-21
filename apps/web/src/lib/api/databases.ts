@@ -114,8 +114,20 @@ export function upgradeDatabase(
   );
 }
 
-export function deleteDatabase(projectId: string, databaseId: string) {
-  return api.delete<void>(`/projects/${projectId}/databases/${databaseId}`);
+/**
+ * Backups outlive the database unless deleteBackups is set. The flag is only
+ * ever sent when true, so an older caller — or a request that loses it — keeps
+ * the data rather than destroying it.
+ */
+export function deleteDatabase(
+  projectId: string,
+  databaseId: string,
+  deleteBackups = false,
+) {
+  const query = deleteBackups ? "?delete_backups=true" : "";
+  return api.delete<void>(
+    `/projects/${projectId}/databases/${databaseId}${query}`,
+  );
 }
 
 export function stopDatabase(projectId: string, databaseId: string) {

@@ -1220,6 +1220,11 @@ func (h *Handler) DeleteDatabase(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Backups are kept unless the caller asks for them to go. The default is the
+	// safe direction on purpose: an omitted parameter from an older client, a
+	// script, or a mistyped request keeps the data rather than destroying it.
+	deleteBackups := r.URL.Query().Get("delete_backups") == "true"
+
 	// Read the impact before the delete cascades it away, so the audit entry can
 	// answer "where did the backups go" afterwards. A failure here must not block
 	// the delete, but it must not vanish either — without this log the audit
@@ -1230,14 +1235,18 @@ func (h *Handler) DeleteDatabase(w http.ResponseWriter, r *http.Request) {
 			"database_id", databaseID, "error", impactErr)
 	}
 
-	if err := h.dbService.Delete(r.Context(), dbUUID); err != nil {
+	if err := h.dbService.Delete(r.Context(), dbUUID, !deleteBackups); err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to delete database")
 		return
 	}
 
-	details := map[string]any{}
+	details := map[string]any{"backups_deleted": deleteBackups}
 	if impactErr == nil {
-		details["backups_destroyed"] = impact.BackupCount
+		if deleteBackups {
+			details["backups_destroyed"] = impact.BackupCount
+		} else {
+			details["backups_kept"] = impact.BackupCount
+		}
 		// Same normalisation the API response uses: a consumer reading both
 		// should not have to handle null here and [] there.
 		details["backup_destinations"] = orEmpty(impact.Destinations)
