@@ -17,11 +17,57 @@ Release notes for each version are also published on the
 <!-- Entries land here between releases; the release workflow generates the
      published notes from the conventional-commit log. -->
 
+### Backups now outlive the database they came from
+
+**Deleting a database no longer destroys its backups.** Until now it did, and
+v0.1.3 only made that consented rather than silent — but consent to an
+irreversible mistake is still irreversible, and the moment you want yesterday's
+backup is right after deleting the database by accident.
+
+- The delete dialog offers **"Also delete these backups"**, unchecked. The API
+  mirrors it: backups are kept unless `delete_backups=true`, so a script or an
+  older client keeps the data rather than destroying it.
+- Kept backups appear under the project's **Backups** page, in a new section for
+  backups whose database is gone. They would otherwise be invisible — the
+  per-database page went with the database — while still costing storage.
+- **Restore a replacement** from any of them. The database comes back under its
+  **original name and credentials**, so applications in the project reconnect
+  with no configuration change. This matters more than it looks: attaching a
+  database injects no connection variables, so a replacement under a new name
+  would leave every dependent application pointing at a host that is not there.
+- Kept backups **expire 90 days after the database was deleted**, so keeping by
+  default cannot quietly grow remote storage forever. Change it with the
+  `orphaned_backup_retention_days` setting, or set it to `0` to keep everything
+  and decide by hand.
+
+**Deleting a project still destroys everything in it**, including kept backups —
+unchanged, and now stated more fully in its confirmation dialog.
+
+### Fixed
+
+- **Deleting an application left its volume backups behind.** The database rows
+  cascaded away with the volumes, but the archives stayed in their destination
+  with nothing left recording where they were: unreachable, unprunable, and
+  still billed. They are now erased with the application. If you have deleted
+  applications that had volume backups, objects from before this release are
+  still in your destination and need removing by hand — Belune no longer has a
+  record of their keys.
+- The daily orphan-container sweep now identifies containers by the labels they
+  carry rather than by name, so a container whose name has changed is no longer
+  invisible to it, and managed databases are covered structurally rather than by
+  a list someone has to remember to update.
+
+### Upgrading
+
+This release adds a migration. `update.sh` takes a backup first, as always.
+Nothing existing is rewritten: the new columns are empty for every backup you
+already have, and every one of them keeps reading exactly as it did before.
+
 ## [0.1.0] — first public release
 
 The first release published to GHCR and the first version installable with the
 one-line installer. Everything below already existed across 36 alpha
-iterations; this is what Belune *is* at launch, not a list of what changed.
+iterations; this is what Belune _is_ at launch, not a list of what changed.
 
 ### Deploying applications
 
