@@ -114,8 +114,20 @@ export function upgradeDatabase(
   );
 }
 
-export function deleteDatabase(projectId: string, databaseId: string) {
-  return api.delete<void>(`/projects/${projectId}/databases/${databaseId}`);
+/**
+ * Backups outlive the database unless deleteBackups is set. The flag is only
+ * ever sent when true, so an older caller — or a request that loses it — keeps
+ * the data rather than destroying it.
+ */
+export function deleteDatabase(
+  projectId: string,
+  databaseId: string,
+  deleteBackups = false,
+) {
+  const query = deleteBackups ? "?delete_backups=true" : "";
+  return api.delete<void>(
+    `/projects/${projectId}/databases/${databaseId}${query}`,
+  );
 }
 
 export function stopDatabase(projectId: string, databaseId: string) {
@@ -157,4 +169,37 @@ export function getDatabaseDeletionImpact(
   return api.get<DatabaseDeletionImpact>(
     `/projects/${projectId}/databases/${databaseId}/deletion-impact`,
   );
+}
+
+/**
+ * A backup whose database has been deleted. It carries what the database was,
+ * because there is no database page left to read that from.
+ */
+export interface OrphanedBackup {
+  id: string;
+  status: string;
+  size_bytes: number;
+  has_remote: boolean;
+  started_at: string;
+  finished_at?: string;
+  error?: string;
+  tombstone_id: string;
+  database_name: string;
+  database_slug: string;
+  database_type: string;
+  database_deleted_at: string;
+}
+
+export function listOrphanedBackups(projectId: string) {
+  return api.get<OrphanedBackup[]>(`/projects/${projectId}/orphaned-backups`);
+}
+
+export function restoreOrphanedBackup(projectId: string, backupId: string) {
+  return api.post<Database>(
+    `/projects/${projectId}/orphaned-backups/${backupId}/restore`,
+  );
+}
+
+export function deleteOrphanedBackup(projectId: string, backupId: string) {
+  return api.delete<void>(`/projects/${projectId}/orphaned-backups/${backupId}`);
 }

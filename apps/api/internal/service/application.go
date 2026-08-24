@@ -23,10 +23,66 @@ type ApplicationService struct {
 	runtimes      runtime.Runtimes
 	keyring       *crypto.Keyring
 	fileMountsDir string
+	// destinations resolves where a volume backup was written, so deleting an
+	// application can erase its archives instead of orphaning them. Optional:
+	// nil means remote objects are left alone, which is the pre-existing
+	// behaviour and is logged rather than silently skipped.
+	destinations *BackupDestinationService
 }
 
-func NewApplicationService(db *pgxpool.Pool, queries *generated.Queries, rts runtime.Runtimes, keyring *crypto.Keyring, fileMountsDir string) *ApplicationService {
-	return &ApplicationService{db: db, queries: queries, runtimes: rts, keyring: keyring, fileMountsDir: fileMountsDir}
+func NewApplicationService(db *pgxpool.Pool, queries *generated.Queries, rts runtime.Runtimes, keyring *crypto.Keyring, fileMountsDir string, destinations *BackupDestinationService) *ApplicationService {
+	return &ApplicationService{
+		db: db, queries: queries, runtimes: rts, keyring: keyring,
+		fileMountsDir: fileMountsDir, destinations: destinations,
+	}
+}
+
+// cleanupVolumeBackups erases the archives taken of an application's volumes.
+//
+// ⚠️ Read BEFORE the application row is deleted. application_volume_backups
+// cascades away with the volumes, so afterwards the remote objects exist with
+// no row anywhere recording their keys: unreachable, unprunable, and still
+// billed. That is the exact mirror of the database bug this release fixes —
+// there the rows cascaded and the objects were destroyed; here they cascaded
+// and the objects were left behind.
+//
+// Best-effort, like the database path: a storage error must not leave an
+// application undeletable.
+func (s *ApplicationService) cleanupVolumeBackups(ctx context.Context, appID pgtype.UUID) {
+	runs, err := s.queries.ListVolumeBackupsForApplication(ctx, appID)
+	if err != nil {
+		slog.Warn("could not list volume backups during app deletion",
+			"application_id", uuidToString(appID), "error", err)
+		return
+	}
+	if len(runs) == 0 {
+		return
+	}
+
+	for _, run := range runs {
+		if run.LocalPath.Valid {
+			if err := os.Remove(run.LocalPath.String); err != nil && !os.IsNotExist(err) {
+				slog.Warn("could not remove volume backup file during app deletion",
+					"path", run.LocalPath.String, "error", err)
+			}
+		}
+	}
+
+	if s.destinations == nil {
+		// Nothing can resolve which bucket these went to. Loud, because the
+		// objects survive and someone has to know they are still being paid for.
+		slog.Warn("volume backups have remote copies but no destination service is wired; their objects are left behind",
+			"application_id", uuidToString(appID), "backups", len(runs))
+		return
+	}
+
+	// The per-run recorded location decides the bucket. No fallback config id:
+	// unlike a config teardown there is no single config here — these runs may
+	// come from several, and guessing one would delete from the wrong bucket.
+	if err := s.destinations.PurgeVolumeBackupObjects(ctx, runs, pgtype.UUID{}); err != nil {
+		slog.Warn("could not remove every volume backup object during app deletion",
+			"application_id", uuidToString(appID), "error", err)
+	}
 }
 
 // CreateApplicationParams holds the parameters for creating an application.
@@ -226,6 +282,11 @@ func (s *ApplicationService) Delete(ctx context.Context, appID pgtype.UUID, proj
 			slog.Debug("could not remove cache volume during app deletion (may not exist)", "volume", vol, "error", err)
 		}
 	}
+
+	// Erase the archives taken of those volumes. Same ordering requirement as
+	// the volumes themselves and for a sharper reason: the backup rows cascade
+	// away with them, taking the only record of where the objects live.
+	s.cleanupVolumeBackups(ctx, appID)
 
 	// Drop persistent data volumes. They are tagged belune-data=true so
 	// PruneVolumes never reclaims them; app deletion is the only point they can

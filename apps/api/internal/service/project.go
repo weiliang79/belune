@@ -47,9 +47,31 @@ func (s *ProjectService) Delete(ctx context.Context, projectID pgtype.UUID) erro
 
 	if databases, err := s.queries.ListDatabasesByProject(ctx, projectID); err == nil {
 		for _, db := range databases {
-			if err := s.databases.Delete(ctx, db.ID); err != nil {
+			// Purge, not keep: a tombstone is project-scoped and cascades from
+			// the project, so there is nowhere for a kept backup to live once
+			// the project is gone. This is what the dialog already promises.
+			if err := s.databases.Delete(ctx, db.ID, false); err != nil {
 				slog.Warn("could not delete database during project deletion",
 					"database_id", uuidToString(db.ID), "error", err)
+			}
+		}
+	}
+
+	// ⚠️ Databases deleted EARLIER, whose backups were kept, are not in the list
+	// above — they no longer exist. Their tombstones cascade with the project
+	// and take the backup rows with them, so without this nothing would ever
+	// erase the archives: the objects would survive with no row recording their
+	// keys, unreachable and still billed. That is precisely the leak this
+	// release fixes on the application path, and the delete dialog promises
+	// these are destroyed.
+	if orphans, err := s.queries.ListOrphanedBackupsByProject(ctx, projectID); err != nil {
+		slog.Warn("could not list kept backups during project deletion",
+			"project_id", uuidToString(projectID), "error", err)
+	} else {
+		for _, o := range orphans {
+			if err := s.databases.DeleteOrphanedBackup(ctx, o.ID); err != nil {
+				slog.Warn("could not delete a kept backup during project deletion",
+					"backup_id", uuidToString(o.ID), "error", err)
 			}
 		}
 	}

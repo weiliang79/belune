@@ -103,3 +103,12 @@ UPDATE application_volume_backups SET log = $2 WHERE id = $1;
 
 -- name: SetApplicationVolumeRestoreLog :exec
 UPDATE application_volume_restores SET log = $2 WHERE id = $1;
+
+-- name: ListVolumeBackupsForApplication :many
+-- Every volume backup belonging to an application, across all of its volumes.
+-- Application deletion needs this: the rows cascade away with the volumes, so
+-- they have to be read before the delete or the objects they point at become
+-- unreachable and unprunable while still being billed.
+SELECT b.* FROM application_volume_backups b
+JOIN   application_volumes v ON v.id = b.application_volume_id
+WHERE  v.application_id = $1;

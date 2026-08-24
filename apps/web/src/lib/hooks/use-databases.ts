@@ -85,11 +85,20 @@ export function useCreateDatabase(projectId: string) {
 export function useDeleteDatabase(projectId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (databaseId: string) =>
-      databasesApi.deleteDatabase(projectId, databaseId),
+    mutationFn: ({
+      databaseId,
+      deleteBackups = false,
+    }: {
+      databaseId: string;
+      deleteBackups?: boolean;
+    }) => databasesApi.deleteDatabase(projectId, databaseId, deleteBackups),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.databases.all(projectId) });
       qc.invalidateQueries({ queryKey: queryKeys.projects.detail(projectId) });
+      // A kept backup becomes an orphan the project inventory has to show.
+      qc.invalidateQueries({
+        queryKey: queryKeys.databases.orphaned(projectId),
+      });
     },
   });
 }
@@ -245,6 +254,49 @@ export function useUpgradeDatabase(projectId: string, databaseId: string) {
       qc.invalidateQueries({
         queryKey: queryKeys.databases.detail(projectId, databaseId),
       });
+    },
+  });
+}
+
+/** Backups whose database is gone. They exist and are billed but have no
+ * database page to appear on, which is why the project lists them. */
+export function useOrphanedBackups(projectId: string) {
+  return useQuery({
+    queryKey: queryKeys.databases.orphaned(projectId),
+    queryFn: () => databasesApi.listOrphanedBackups(projectId),
+  });
+}
+
+export function useRestoreOrphanedBackup(projectId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (backupId: string) =>
+      databasesApi.restoreOrphanedBackup(projectId, backupId),
+    onSuccess: () => {
+      // The replacement is a live database again, so both listings move.
+      qc.invalidateQueries({
+        queryKey: queryKeys.databases.orphaned(projectId),
+      });
+      qc.invalidateQueries({ queryKey: queryKeys.databases.all(projectId) });
+      qc.invalidateQueries({ queryKey: queryKeys.projects.detail(projectId) });
+      // The reclaimed backups rejoin the project's main backup listing, which
+      // joins databases — without this the panel empties and the list below it
+      // still does not show them.
+      qc.invalidateQueries({ queryKey: queryKeys.projectBackups(projectId) });
+    },
+  });
+}
+
+export function useDeleteOrphanedBackup(projectId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (backupId: string) =>
+      databasesApi.deleteOrphanedBackup(projectId, backupId),
+    onSuccess: () => {
+      qc.invalidateQueries({
+        queryKey: queryKeys.databases.orphaned(projectId),
+      });
+      qc.invalidateQueries({ queryKey: queryKeys.projectBackups(projectId) });
     },
   });
 }

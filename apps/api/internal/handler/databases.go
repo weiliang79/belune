@@ -20,6 +20,7 @@ import (
 	"github.com/weiliang79/belune/internal/status"
 	"github.com/weiliang79/belune/internal/store"
 	"github.com/weiliang79/belune/internal/store/generated"
+	"github.com/weiliang79/belune/internal/worker"
 )
 
 var defaultVersions = map[string]string{
@@ -1220,6 +1221,11 @@ func (h *Handler) DeleteDatabase(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Backups are kept unless the caller asks for them to go. The default is the
+	// safe direction on purpose: an omitted parameter from an older client, a
+	// script, or a mistyped request keeps the data rather than destroying it.
+	deleteBackups := r.URL.Query().Get("delete_backups") == "true"
+
 	// Read the impact before the delete cascades it away, so the audit entry can
 	// answer "where did the backups go" afterwards. A failure here must not block
 	// the delete, but it must not vanish either — without this log the audit
@@ -1230,14 +1236,18 @@ func (h *Handler) DeleteDatabase(w http.ResponseWriter, r *http.Request) {
 			"database_id", databaseID, "error", impactErr)
 	}
 
-	if err := h.dbService.Delete(r.Context(), dbUUID); err != nil {
+	if err := h.dbService.Delete(r.Context(), dbUUID, !deleteBackups); err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to delete database")
 		return
 	}
 
-	details := map[string]any{}
+	details := map[string]any{"backups_deleted": deleteBackups}
 	if impactErr == nil {
-		details["backups_destroyed"] = impact.BackupCount
+		if deleteBackups {
+			details["backups_destroyed"] = impact.BackupCount
+		} else {
+			details["backups_kept"] = impact.BackupCount
+		}
 		// Same normalisation the API response uses: a consumer reading both
 		// should not have to handle null here and [] there.
 		details["backup_destinations"] = orEmpty(impact.Destinations)
@@ -1301,4 +1311,195 @@ func buildConnectionString(db generated.Database, creds map[string]string) strin
 	default:
 		return ""
 	}
+}
+
+// RestoreDatabaseFromTombstone recreates a deleted database from the tombstone
+// its backups hang off, and restores the chosen backup into it.
+//
+// The replacement comes back under the original slug and credentials, so
+// applications in the project reconnect without an env-var edit. That is why
+// this is the offered path rather than "restore into a new database": attaching
+// a database injects no connection variables, so a differently-named
+// replacement leaves every dependent application pointing at a host that is not
+// there.
+func (h *Handler) RestoreDatabaseFromTombstone(w http.ResponseWriter, r *http.Request) {
+	projectID := chi.URLParam(r, "projectId")
+	var projectUUID pgtype.UUID
+	if err := projectUUID.Scan(projectID); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid project id")
+		return
+	}
+	backupID := chi.URLParam(r, "backupId")
+	var backupUUID pgtype.UUID
+	if err := backupUUID.Scan(backupID); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid backup id")
+		return
+	}
+	if !h.canAccessProject(r, projectUUID) {
+		writeError(w, http.StatusForbidden, "access denied")
+		return
+	}
+
+	backup, err := h.queries.GetDatabaseBackup(r.Context(), backupUUID)
+	if err != nil {
+		writeError(w, http.StatusNotFound, "backup not found")
+		return
+	}
+	if !backup.TombstoneID.Valid {
+		writeError(w, http.StatusBadRequest, "this backup still belongs to a live database; restore it from there")
+		return
+	}
+	if backup.Status != "succeeded" {
+		writeError(w, http.StatusBadRequest, "only a succeeded backup can be restored")
+		return
+	}
+
+	// The tombstone is the access boundary here: the backup is reachable only
+	// through the project that owns the tombstone, so a backup belonging to
+	// another project must not be restorable through this project's URL.
+	tombstone, err := h.queries.GetDatabaseTombstone(r.Context(), backup.TombstoneID)
+	if err != nil {
+		writeError(w, http.StatusNotFound, "the deleted database's record is gone")
+		return
+	}
+	if tombstone.ProjectID != projectUUID {
+		writeError(w, http.StatusForbidden, "access denied")
+		return
+	}
+
+	db, err := h.dbService.RestoreFromTombstone(r.Context(), tombstone.ID, backupUUID)
+	if err != nil {
+		slog.Error("failed to recreate database from tombstone", "tombstone_id", uuidToString(tombstone.ID), "error", err)
+		writeError(w, http.StatusInternalServerError, "failed to recreate the database")
+		return
+	}
+
+	payload, err := json.Marshal(map[string]string{
+		"database_id": uuidToString(db.ID),
+		"backup_id":   backupID,
+	})
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to schedule the restore")
+		return
+	}
+	if _, err := h.asynq.Enqueue(asynq.NewTask(worker.TypeReplaceDatabase, payload), asynq.Queue("critical")); err != nil {
+		// The row exists and owns its backups again, so this is recoverable:
+		// the database is listed as creating and Reload will provision it.
+		slog.Error("replacement created but could not be scheduled", "database_id", uuidToString(db.ID), "error", err)
+		writeError(w, http.StatusInternalServerError, "the database was recreated but the restore could not be scheduled")
+		return
+	}
+
+	h.audit(r, "restore_database_from_tombstone", "database", uuidToString(db.ID), map[string]any{
+		"backup_id": backupID,
+		"slug":      db.Slug,
+	})
+	writeJSON(w, http.StatusAccepted, databaseResponse{Database: db})
+}
+
+// orphanedBackupResponse is a backup whose database no longer exists. It
+// carries what the database WAS, because there is no resource page left to read
+// that from — which is the whole reason these need their own listing.
+type orphanedBackupResponse struct {
+	databaseBackupResponse
+	TombstoneID       string    `json:"tombstone_id"`
+	DatabaseName      string    `json:"database_name"`
+	DatabaseSlug      string    `json:"database_slug"`
+	DatabaseType      string    `json:"database_type"`
+	DatabaseDeletedAt time.Time `json:"database_deleted_at"`
+}
+
+// ListProjectOrphanedBackups returns the backups in a project whose database has
+// been deleted. Without this they exist and are billed but appear nowhere: the
+// per-database Backups tab is gone along with the database.
+func (h *Handler) ListProjectOrphanedBackups(w http.ResponseWriter, r *http.Request) {
+	projectID := chi.URLParam(r, "projectId")
+	var projectUUID pgtype.UUID
+	if err := projectUUID.Scan(projectID); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid project id")
+		return
+	}
+	if !h.canAccessProject(r, projectUUID) {
+		writeError(w, http.StatusForbidden, "access denied")
+		return
+	}
+
+	rows, err := h.queries.ListOrphanedBackupsByProject(r.Context(), projectUUID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to list backups")
+		return
+	}
+
+	resp := make([]orphanedBackupResponse, 0, len(rows))
+	for _, row := range rows {
+		resp = append(resp, orphanedBackupResponse{
+			databaseBackupResponse: toBackupResponse(generated.DatabaseBackup{
+				ID:             row.ID,
+				Status:         row.Status,
+				SizeBytes:      row.SizeBytes,
+				RemoteKey:      row.RemoteKey,
+				TargetDatabase: row.TargetDatabase,
+				Log:            row.Log,
+				StartedAt:      row.StartedAt,
+				FinishedAt:     row.FinishedAt,
+				Error:          row.Error,
+				BackupConfigID: row.BackupConfigID,
+			}),
+			TombstoneID:       uuidToString(row.TombstoneID),
+			DatabaseName:      row.DatabaseName,
+			DatabaseSlug:      row.DatabaseSlug,
+			DatabaseType:      row.DatabaseType,
+			DatabaseDeletedAt: row.DatabaseDeletedAt.Time,
+		})
+	}
+	writeJSON(w, http.StatusOK, resp)
+}
+
+// DeleteOrphanedBackup erases a backup whose database is gone. The per-database
+// delete cannot reach these — the database it hung off is what disappeared.
+func (h *Handler) DeleteOrphanedBackup(w http.ResponseWriter, r *http.Request) {
+	projectID := chi.URLParam(r, "projectId")
+	var projectUUID pgtype.UUID
+	if err := projectUUID.Scan(projectID); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid project id")
+		return
+	}
+	backupID := chi.URLParam(r, "backupId")
+	var backupUUID pgtype.UUID
+	if err := backupUUID.Scan(backupID); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid backup id")
+		return
+	}
+	if !h.canAccessProject(r, projectUUID) {
+		writeError(w, http.StatusForbidden, "access denied")
+		return
+	}
+
+	backup, err := h.queries.GetDatabaseBackup(r.Context(), backupUUID)
+	if err != nil {
+		writeError(w, http.StatusNotFound, "backup not found")
+		return
+	}
+	if !backup.TombstoneID.Valid {
+		writeError(w, http.StatusBadRequest, "this backup belongs to a live database; delete it from there")
+		return
+	}
+	// Same boundary as the restore path: the tombstone's project is what makes
+	// this backup reachable, so another project's orphan must not be.
+	tombstone, err := h.queries.GetDatabaseTombstone(r.Context(), backup.TombstoneID)
+	if err != nil || tombstone.ProjectID != projectUUID {
+		writeError(w, http.StatusForbidden, "access denied")
+		return
+	}
+
+	if err := h.dbService.DeleteOrphanedBackup(r.Context(), backupUUID); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to delete the backup")
+		return
+	}
+
+	h.audit(r, "delete_orphaned_backup", "project", projectID, map[string]any{
+		"backup_id":     backupID,
+		"database_name": tombstone.Name,
+	})
+	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
 }

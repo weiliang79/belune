@@ -240,6 +240,7 @@ type DatabaseBackup struct {
 	BackupConfigID pgtype.UUID        `json:"backup_config_id"`
 	Log            string             `json:"log"`
 	TargetDatabase string             `json:"target_database"`
+	TombstoneID    pgtype.UUID        `json:"tombstone_id"`
 }
 
 type DatabaseBackupConfig struct {
@@ -265,6 +266,27 @@ type DatabaseRestore struct {
 	Status     string             `json:"status"`
 	Error      pgtype.Text        `json:"error"`
 	Log        pgtype.Text        `json:"log"`
+}
+
+type DatabaseTombstone struct {
+	ID                   pgtype.UUID        `json:"id"`
+	ProjectID            pgtype.UUID        `json:"project_id"`
+	OriginalID           pgtype.UUID        `json:"original_id"`
+	Slug                 string             `json:"slug"`
+	Name                 string             `json:"name"`
+	Type                 string             `json:"type"`
+	Version              pgtype.Text        `json:"version"`
+	CredentialsEncrypted []byte             `json:"credentials_encrypted"`
+	Image                pgtype.Text        `json:"image"`
+	ContainerPort        pgtype.Int4        `json:"container_port"`
+	DataDir              pgtype.Text        `json:"data_dir"`
+	BackupMode           pgtype.Text        `json:"backup_mode"`
+	BackupCommand        pgtype.Text        `json:"backup_command"`
+	RestoreCommand       pgtype.Text        `json:"restore_command"`
+	CpuLimit             pgtype.Float8      `json:"cpu_limit"`
+	MemoryLimit          pgtype.Int8        `json:"memory_limit"`
+	ImageDigest          pgtype.Text        `json:"image_digest"`
+	DeletedAt            pgtype.Timestamptz `json:"deleted_at"`
 }
 
 type Deployment struct {

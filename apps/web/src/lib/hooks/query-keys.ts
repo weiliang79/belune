@@ -174,6 +174,10 @@ export const queryKeys = {
         databaseId,
         "deletion-impact",
       ] as const,
+    // Backups whose database is gone. Project-scoped, because that is the only
+    // level at which an orphan still has an owner.
+    orphaned: (projectId: string) =>
+      ["projects", projectId, "orphaned-backups"] as const,
   },
   backupDestinations: (projectId: string) =>
     ["projects", projectId, "backup-destinations"] as const,

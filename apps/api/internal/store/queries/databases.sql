@@ -66,3 +66,86 @@ WHERE d.id = $1;
 -- on which server without a lookup per row.
 SELECT d.*, p.server_id FROM databases d
 JOIN projects p ON p.id = d.project_id;
+
+-- name: CreateDatabaseTombstone :one
+-- Records what a deleted database was, so its backups keep a parent and a
+-- replacement can be recreated identically.
+INSERT INTO database_tombstones (
+    project_id, original_id, slug, name, type, version, credentials_encrypted,
+    image, container_port, data_dir, backup_mode, backup_command, restore_command,
+    cpu_limit, memory_limit, image_digest
+)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+RETURNING *;
+
+-- name: GetDatabaseTombstone :one
+SELECT * FROM database_tombstones WHERE id = $1;
+
+-- name: ListDatabaseTombstonesByProject :many
+SELECT * FROM database_tombstones WHERE project_id = $1 ORDER BY deleted_at DESC;
+
+-- name: DeleteDatabaseTombstone :exec
+DELETE FROM database_tombstones WHERE id = $1;
+
+-- name: ReparentDatabaseBackupsToTombstone :exec
+-- Moves a database's backups onto its tombstone. Both columns are written in
+-- one statement because the one_parent CHECK forbids a row holding both, so
+-- there is no intermediate state where this could be split in two.
+UPDATE database_backups
+SET    database_id = NULL, tombstone_id = $2
+WHERE  database_id = $1;
+
+-- name: DeleteDatabaseBackupsForDatabase :exec
+-- Removes the rows outright, for the purge path. Object deletion stays
+-- best-effort, but the rows must go deterministically: a leftover row pointing
+-- at a database about to disappear trips the one_parent CHECK and aborts the
+-- delete.
+DELETE FROM database_backups WHERE database_id = $1;
+
+-- name: CountOrphanedBackupsByProject :one
+SELECT count(*) FROM database_backups b
+JOIN database_tombstones t ON t.id = b.tombstone_id
+WHERE t.project_id = $1;
+
+-- name: ReclaimBackupsFromTombstone :exec
+-- The inverse of ReparentDatabaseBackupsToTombstone: hands a tombstone's
+-- backups back to the database recreated from it. One statement for the same
+-- reason — the one_parent CHECK forbids a row holding both.
+UPDATE database_backups
+SET    tombstone_id = NULL, database_id = $2
+WHERE  tombstone_id = $1;
+
+-- name: ListOrphanedBackupsByProject :many
+-- Backups whose database is gone, with enough of the tombstone to say what they
+-- came from. Project-scoped because the tombstone is: the project is the access
+-- boundary, so an orphaned backup has no owner above it.
+SELECT b.*, t.slug AS database_slug, t.name AS database_name,
+       t.type AS database_type, t.deleted_at AS database_deleted_at
+FROM   database_backups b
+JOIN   database_tombstones t ON t.id = b.tombstone_id
+WHERE  t.project_id = $1
+ORDER  BY b.started_at DESC;
+
+-- name: CountBackupsForTombstone :one
+SELECT count(*) FROM database_backups WHERE tombstone_id = $1;
+
+-- name: ListExpiredOrphanedBackups :many
+-- Orphaned backups whose keeping period is over. The clock runs from when the
+-- database was deleted, not from when the backup was taken: keeping is a
+-- decision made at deletion time, so a two-year-old backup of a database
+-- deleted yesterday has just been kept on purpose and is not expired.
+SELECT b.* FROM database_backups b
+JOIN   database_tombstones t ON t.id = b.tombstone_id
+WHERE  t.deleted_at < $1
+LIMIT  $2;
+
+-- name: DeleteEmptyDatabaseTombstones :exec
+-- A tombstone exists to give backups a parent. One with none left describes
+-- nothing, so it goes rather than accumulating forever.
+DELETE FROM database_tombstones t
+WHERE NOT EXISTS (SELECT 1 FROM database_backups b WHERE b.tombstone_id = t.id);
+
+-- name: CountDatabaseBackups :one
+-- Every backup row for a database, artifacts or not. Deletion uses it to decide
+-- whether a tombstone has anything to parent.
+SELECT count(*) FROM database_backups WHERE database_id = $1;

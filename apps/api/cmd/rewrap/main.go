@@ -59,6 +59,10 @@ var targets = []target{
 	{"backup_destinations", "id", "credentials_encrypted"},
 	{"notification_channels", "id", "config_encrypted"},
 	{"users", "id", "totp_secret_encrypted"},
+	// A tombstone holds the deleted database's credentials so a replacement
+	// restore can bring applications back without an env-var edit. Same secret,
+	// same rotation requirement.
+	{"database_tombstones", "id", "credentials_encrypted"},
 }
 
 // settingTargets are secrets that live in a settings ROW rather than a column,

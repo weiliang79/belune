@@ -112,6 +112,7 @@ func (h *Handler) TriggerCleanup(w http.ResponseWriter, r *http.Request) {
 	validActions := map[string]bool{
 		"deployments": true, "images": true, "volumes": true,
 		"containers": true, "build_cache": true,
+		"orphaned_backups": true,
 	}
 	for _, a := range req.Actions {
 		if !validActions[a] {

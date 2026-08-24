@@ -56,7 +56,7 @@ func (q *Queries) DeleteDatabaseBackup(ctx context.Context, id pgtype.UUID) erro
 }
 
 const getDatabaseBackup = `-- name: GetDatabaseBackup :one
-SELECT id, database_id, started_at, finished_at, status, local_path, remote_key, size_bytes, error, backup_config_id, log, target_database FROM database_backups
+SELECT id, database_id, started_at, finished_at, status, local_path, remote_key, size_bytes, error, backup_config_id, log, target_database, tombstone_id FROM database_backups
 WHERE id = $1
 `
 
@@ -76,12 +76,13 @@ func (q *Queries) GetDatabaseBackup(ctx context.Context, id pgtype.UUID) (Databa
 		&i.BackupConfigID,
 		&i.Log,
 		&i.TargetDatabase,
+		&i.TombstoneID,
 	)
 	return i, err
 }
 
 const getLastSucceededDatabaseBackup = `-- name: GetLastSucceededDatabaseBackup :one
-SELECT id, database_id, started_at, finished_at, status, local_path, remote_key, size_bytes, error, backup_config_id, log, target_database FROM database_backups
+SELECT id, database_id, started_at, finished_at, status, local_path, remote_key, size_bytes, error, backup_config_id, log, target_database, tombstone_id FROM database_backups
 WHERE database_id = $1 AND status = 'succeeded'
 ORDER BY finished_at DESC
 LIMIT 1
@@ -103,6 +104,7 @@ func (q *Queries) GetLastSucceededDatabaseBackup(ctx context.Context, databaseID
 		&i.BackupConfigID,
 		&i.Log,
 		&i.TargetDatabase,
+		&i.TombstoneID,
 	)
 	return i, err
 }
@@ -155,7 +157,7 @@ func (q *Queries) InsertBackupLocation(ctx context.Context, arg InsertBackupLoca
 const insertDatabaseBackup = `-- name: InsertDatabaseBackup :one
 INSERT INTO database_backups (database_id, backup_config_id, target_database)
 VALUES ($1, $2, $3)
-RETURNING id, database_id, started_at, finished_at, status, local_path, remote_key, size_bytes, error, backup_config_id, log, target_database
+RETURNING id, database_id, started_at, finished_at, status, local_path, remote_key, size_bytes, error, backup_config_id, log, target_database, tombstone_id
 `
 
 type InsertDatabaseBackupParams struct {
@@ -180,6 +182,7 @@ func (q *Queries) InsertDatabaseBackup(ctx context.Context, arg InsertDatabaseBa
 		&i.BackupConfigID,
 		&i.Log,
 		&i.TargetDatabase,
+		&i.TombstoneID,
 	)
 	return i, err
 }
@@ -212,7 +215,7 @@ func (q *Queries) InsertDatabaseRestore(ctx context.Context, arg InsertDatabaseR
 }
 
 const listDatabaseBackups = `-- name: ListDatabaseBackups :many
-SELECT id, database_id, started_at, finished_at, status, local_path, remote_key, size_bytes, error, backup_config_id, log, target_database FROM database_backups
+SELECT id, database_id, started_at, finished_at, status, local_path, remote_key, size_bytes, error, backup_config_id, log, target_database, tombstone_id FROM database_backups
 WHERE database_id = $1
 ORDER BY started_at DESC
 LIMIT $2
@@ -245,6 +248,7 @@ func (q *Queries) ListDatabaseBackups(ctx context.Context, arg ListDatabaseBacku
 			&i.BackupConfigID,
 			&i.Log,
 			&i.TargetDatabase,
+			&i.TombstoneID,
 		); err != nil {
 			return nil, err
 		}
@@ -257,7 +261,7 @@ func (q *Queries) ListDatabaseBackups(ctx context.Context, arg ListDatabaseBacku
 }
 
 const listDatabaseBackupsByConfig = `-- name: ListDatabaseBackupsByConfig :many
-SELECT id, database_id, started_at, finished_at, status, local_path, remote_key, size_bytes, error, backup_config_id, log, target_database FROM database_backups
+SELECT id, database_id, started_at, finished_at, status, local_path, remote_key, size_bytes, error, backup_config_id, log, target_database, tombstone_id FROM database_backups
 WHERE backup_config_id = $1
 ORDER BY started_at DESC
 LIMIT $2
@@ -290,6 +294,7 @@ func (q *Queries) ListDatabaseBackupsByConfig(ctx context.Context, arg ListDatab
 			&i.BackupConfigID,
 			&i.Log,
 			&i.TargetDatabase,
+			&i.TombstoneID,
 		); err != nil {
 			return nil, err
 		}

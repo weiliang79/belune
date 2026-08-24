@@ -41,6 +41,7 @@ import { queryKeys } from "@/lib/hooks/query-keys";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { StatusPill } from "@/components/ui/status-pill";
 import { PendingChangeBadge } from "@/lib/components/pending-change-badge";
@@ -300,15 +301,20 @@ function DatabaseActions({
   const del = useDeleteDatabase(projectId);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState("");
+  // Unchecked by default, like the detail page: deleting the database is
+  // recoverable from a backup, deleting the backups with it is not.
+  const [deleteBackups, setDeleteBackups] = useState(false);
   const {
     data: deleteImpact,
     isSuccess: impactKnown,
     isError: impactFailed,
   } = useDatabaseDeletionImpact(projectId, db.id, confirmOpen);
 
-  // Backups are destroyed with the database, remote copies included. A quick
-  // action may not delete them on one click — type the name, as on the detail
-  // page. Without backups this stays a one-click delete.
+  // Backups now survive the database, so this gate is no longer about them
+  // being destroyed — it is about a quick action from a list row being a
+  // heavier decision than it looks when there is history attached. Left
+  // deliberately unchanged: correcting the wording below should not also
+  // quietly weaken a confirmation.
   //
   // This gate fails CLOSED. "No backups" is a claim that needs an answer from
   // the server, so until one arrives the button stays disabled, and if the
@@ -407,7 +413,10 @@ function DatabaseActions({
         open={confirmOpen}
         onOpenChange={(o) => {
           setConfirmOpen(o);
-          if (o) setDeleteConfirm("");
+          if (o) {
+            setDeleteConfirm("");
+            setDeleteBackups(false);
+          }
         }}
       >
         <AlertDialogContent>
@@ -418,24 +427,52 @@ function DatabaseActions({
               cannot be undone.
             </AlertDialogDescription>
             {deleteImpact && deleteImpact.backup_count > 0 ? (
-              <AlertDialogDescription className="text-destructive font-medium">
-                Also permanently deletes{" "}
+              <AlertDialogDescription>
+                Its{" "}
                 {deleteImpact.backup_count === 1
-                  ? "1 backup"
-                  : `${deleteImpact.backup_count} backups`}
+                  ? "1 backup is"
+                  : `${deleteImpact.backup_count} backups are`}{" "}
+                kept
                 {deleteImpact.backup_destinations.length > 0
                   ? `, including copies in ${formatList(deleteImpact.backup_destinations)}`
                   : ""}
-                . Restore from them will no longer be possible.
+                , and stay listed under the project&apos;s Backups tab. You can
+                restore a replacement database from them.
               </AlertDialogDescription>
             ) : null}
             {impactFailed ? (
               <AlertDialogDescription className="text-destructive font-medium">
-                Could not check what this deletes. Any backups of this database
-                would be destroyed too, so confirm by name to continue.
+                Could not check what this database has. Its backups are kept
+                either way, but confirm by name to continue.
               </AlertDialogDescription>
             ) : null}
           </AlertDialogHeader>
+          {deleteImpact && deleteImpact.backup_count > 0 ? (
+            <div className="flex items-start gap-2.5">
+              <Checkbox
+                id={`delete-db-backups-${db.id}`}
+                checked={deleteBackups}
+                onCheckedChange={(checked) =>
+                  setDeleteBackups(checked === true)
+                }
+                className="mt-0.5"
+              />
+              <Label
+                htmlFor={`delete-db-backups-${db.id}`}
+                className="leading-snug font-normal"
+              >
+                Also delete{" "}
+                {deleteImpact.backup_count === 1
+                  ? "this backup"
+                  : "these backups"}
+                <span className="text-text-muted block text-xs">
+                  {deleteImpact.backup_destinations.length > 0
+                    ? "Erases the archives, including the remote copies. This cannot be undone."
+                    : "Erases the archives. This cannot be undone."}
+                </span>
+              </Label>
+            </div>
+          ) : null}
           {backupsAtRisk ? (
             <div className="space-y-2">
               <Label
@@ -461,11 +498,14 @@ function DatabaseActions({
             <AlertDialogAction
               disabled={!confirmSatisfied}
               onClick={() =>
-                toast.promise(del.mutateAsync(db.id), {
-                  loading: "Deleting database…",
-                  success: `${db.name} deleted`,
-                  error: (err) => err.message,
-                })
+                toast.promise(
+                  del.mutateAsync({ databaseId: db.id, deleteBackups }),
+                  {
+                    loading: "Deleting database…",
+                    success: `${db.name} deleted`,
+                    error: (err) => err.message,
+                  },
+                )
               }
             >
               Delete

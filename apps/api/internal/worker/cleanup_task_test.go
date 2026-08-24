@@ -286,3 +286,89 @@ func TestCleanupOrphanContainers_SparesContainersClaimedByAnotherServer(t *testi
 	assert.Contains(t, rt.RemoveCalls, "genuinely-nobodys",
 		"a container no host claims is still an orphan")
 }
+
+// seedTombstonedBackup creates a database, a backup of it, then deletes the
+// database keeping the backup — leaving exactly the orphan retention sweeps.
+// deletedDaysAgo backdates the tombstone so expiry can be exercised without
+// waiting.
+func seedTombstonedBackup(t *testing.T, deletedDaysAgo int) (backupID, tombstoneID string) {
+	t.Helper()
+	ctx := context.Background()
+	db := seedDatabase(t)
+
+	var bID string
+	require.NoError(t, testPool.QueryRow(ctx,
+		`INSERT INTO database_backups (database_id, status, size_bytes)
+		 VALUES ($1, 'succeeded', 512) RETURNING id`, uuidString(db.ID)).Scan(&bID))
+
+	var tID string
+	require.NoError(t, testPool.QueryRow(ctx,
+		`INSERT INTO database_tombstones (project_id, original_id, slug, name, type, version, deleted_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, NOW() - make_interval(days => $7)) RETURNING id`,
+		uuidString(db.ProjectID), uuidString(db.ID), db.Slug, db.Name, db.Type, db.Version,
+		deletedDaysAgo).Scan(&tID))
+
+	_, err := testPool.Exec(ctx,
+		`UPDATE database_backups SET database_id = NULL, tombstone_id = $1 WHERE id = $2`, tID, bID)
+	require.NoError(t, err)
+	_, err = testPool.Exec(ctx, `DELETE FROM databases WHERE id = $1`, uuidString(db.ID))
+	require.NoError(t, err)
+
+	return bID, tID
+}
+
+// TestCleanupOrphanedBackups_ExpiresPastRetention is the counterweight to
+// keeping backups by default. Without a bound, reversing the default would mean
+// remote storage that only ever grows — its own kind of surprise bill.
+func TestCleanupOrphanedBackups_ExpiresPastRetention(t *testing.T) {
+	rt := &testutil.MockContainerRuntime{}
+	h := newTestHandler(rt, nil)
+	ctx := context.Background()
+
+	expired, expiredTombstone := seedTombstonedBackup(t, 120)
+	kept, keptTombstone := seedTombstonedBackup(t, 3)
+
+	runFullCleanup(t, h)
+
+	var n int
+	require.NoError(t, testPool.QueryRow(ctx,
+		`SELECT count(*) FROM database_backups WHERE id = $1`, expired).Scan(&n))
+	assert.Equal(t, 0, n, "a backup kept past the retention window is expired")
+	require.NoError(t, testPool.QueryRow(ctx,
+		`SELECT count(*) FROM database_tombstones WHERE id = $1`, expiredTombstone).Scan(&n))
+	assert.Equal(t, 0, n, "the tombstone goes with its last backup — it describes nothing")
+
+	require.NoError(t, testPool.QueryRow(ctx,
+		`SELECT count(*) FROM database_backups WHERE id = $1`, kept).Scan(&n))
+	assert.Equal(t, 1, n, "a recently deleted database's backup is still inside the window")
+	require.NoError(t, testPool.QueryRow(ctx,
+		`SELECT count(*) FROM database_tombstones WHERE id = $1`, keptTombstone).Scan(&n))
+	assert.Equal(t, 1, n, "and its tombstone must stay, or the backup loses its parent")
+}
+
+// TestCleanupOrphanedBackups_RetentionCanBeDisabled pins the escape hatch. An
+// operator who would rather decide by hand sets 0, and nothing expires.
+func TestCleanupOrphanedBackups_RetentionCanBeDisabled(t *testing.T) {
+	rt := &testutil.MockContainerRuntime{}
+	h := newTestHandler(rt, nil)
+	ctx := context.Background()
+
+	_, err := testPool.Exec(ctx,
+		`INSERT INTO settings (key, value) VALUES ('orphaned_backup_retention_days', '0')
+		 ON CONFLICT (key) DO UPDATE SET value = '0'`)
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		_, err := testPool.Exec(context.Background(),
+			`DELETE FROM settings WHERE key = 'orphaned_backup_retention_days'`)
+		require.NoError(t, err)
+	})
+
+	ancient, _ := seedTombstonedBackup(t, 3650)
+
+	runFullCleanup(t, h)
+
+	var n int
+	require.NoError(t, testPool.QueryRow(ctx,
+		`SELECT count(*) FROM database_backups WHERE id = $1`, ancient).Scan(&n))
+	assert.Equal(t, 1, n, "retention 0 means keep, not expire immediately")
+}

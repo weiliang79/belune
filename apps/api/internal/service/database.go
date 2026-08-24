@@ -7,21 +7,25 @@ import (
 	"os"
 
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/weiliang79/belune/internal/runtime"
 	"github.com/weiliang79/belune/internal/service/backup"
+	"github.com/weiliang79/belune/internal/status"
+	"github.com/weiliang79/belune/internal/store"
 	"github.com/weiliang79/belune/internal/store/generated"
 )
 
 type DatabaseService struct {
+	db           *pgxpool.Pool
 	queries      *generated.Queries
 	runtimes     runtime.Runtimes
 	backups      *backup.Service           // optional; nil disables global remote backup cleanup
 	destinations *BackupDestinationService // optional; routes config-backup remote cleanup
 }
 
-func NewDatabaseService(queries *generated.Queries, rts runtime.Runtimes, backups *backup.Service, destinations *BackupDestinationService) *DatabaseService {
-	return &DatabaseService{queries: queries, runtimes: rts, backups: backups, destinations: destinations}
+func NewDatabaseService(db *pgxpool.Pool, queries *generated.Queries, rts runtime.Runtimes, backups *backup.Service, destinations *BackupDestinationService) *DatabaseService {
+	return &DatabaseService{db: db, queries: queries, runtimes: rts, backups: backups, destinations: destinations}
 }
 
 // deleteRemoteBackup removes a backup's remote object. It routes to the
@@ -94,6 +98,42 @@ func (s *DatabaseService) DeleteBackup(ctx context.Context, dbID, backupID pgtyp
 	}
 	s.deleteRemoteBackup(ctx, b)
 	return s.queries.DeleteDatabaseBackup(ctx, backupID)
+}
+
+// DeleteOrphanedBackup erases a backup whose database is gone: the archive, any
+// remote copy, and the row. Without it the inventory could only show what an
+// install is paying for, never stop it — the object outlives every screen that
+// used to reach it.
+func (s *DatabaseService) DeleteOrphanedBackup(ctx context.Context, backupID pgtype.UUID) error {
+	b, err := s.queries.GetDatabaseBackup(ctx, backupID)
+	if err != nil {
+		return err
+	}
+	if !b.TombstoneID.Valid {
+		return fmt.Errorf("backup still belongs to a live database")
+	}
+	if b.LocalPath.Valid {
+		if err := os.Remove(b.LocalPath.String); err != nil && !os.IsNotExist(err) {
+			slog.Warn("could not remove orphaned backup file", "path", b.LocalPath.String, "error", err)
+		}
+	}
+	s.deleteRemoteBackup(ctx, b)
+	if err := s.queries.DeleteDatabaseBackup(ctx, backupID); err != nil {
+		return err
+	}
+	// A tombstone exists to give backups a parent. Once its last one is gone it
+	// describes nothing, so it goes too rather than accumulating forever.
+	remaining, err := s.queries.CountBackupsForTombstone(ctx, b.TombstoneID)
+	if err != nil {
+		slog.Warn("could not count remaining backups for tombstone", "error", err)
+		return nil
+	}
+	if remaining == 0 {
+		if err := s.queries.DeleteDatabaseTombstone(ctx, b.TombstoneID); err != nil {
+			slog.Warn("could not remove an empty tombstone", "error", err)
+		}
+	}
+	return nil
 }
 
 // cleanupBackupsPageSize bounds one listing pass; cleanupBackups keeps going
@@ -178,8 +218,15 @@ func (s *DatabaseService) DeletionImpact(ctx context.Context, dbID pgtype.UUID) 
 	return DeletionImpact{BackupCount: count, Destinations: names}, nil
 }
 
-// Delete stops and removes the database container and its volume, then deletes the DB record.
-func (s *DatabaseService) Delete(ctx context.Context, dbID pgtype.UUID) error {
+// Delete stops and removes the database container and its volume, then deletes
+// the DB record.
+//
+// keepBackups decides what happens to the backups. Keeping them writes a
+// tombstone and re-points them onto it, so they remain listable and restorable
+// after the database is gone; destroying them erases the archives and the rows.
+// The caller states the choice explicitly — there is no default here, because
+// the two outcomes differ by whether yesterday's data still exists.
+func (s *DatabaseService) Delete(ctx context.Context, dbID pgtype.UUID, keepBackups bool) error {
 	db, err := s.queries.GetDatabase(ctx, dbID)
 	if err != nil {
 		return err
@@ -201,7 +248,165 @@ func (s *DatabaseService) Delete(ctx context.Context, dbID pgtype.UUID) error {
 		slog.Warn("could not remove volume during db deletion", "volume", db.Slug+"-vol", "error", err)
 	}
 
+	if keepBackups {
+		// A tombstone exists to give backups a parent. With none to keep it
+		// would describe nothing while holding a second copy of the database's
+		// credentials, waiting on a sweep an operator is allowed to disable.
+		count, cErr := s.queries.CountDatabaseBackups(ctx, dbID)
+		if cErr != nil {
+			return fmt.Errorf("counting backups before deletion: %w", cErr)
+		}
+		if count > 0 {
+			return s.keepBackupsAndDelete(ctx, db)
+		}
+	}
+
 	s.cleanupBackups(ctx, dbID)
 
-	return s.queries.DeleteDatabase(ctx, dbID)
+	// The rows go deterministically even if an object could not be erased above.
+	// Object cleanup is best-effort by design, but a leftover row still pointing
+	// at this database would trip the one_parent CHECK the moment the delete
+	// nulls its database_id, and abort the whole thing.
+	return store.WithTx(ctx, s.db, func(q *generated.Queries) error {
+		if err := q.DeleteDatabaseBackupsForDatabase(ctx, dbID); err != nil {
+			return fmt.Errorf("removing backup rows: %w", err)
+		}
+		return q.DeleteDatabase(ctx, dbID)
+	})
+}
+
+// keepBackupsAndDelete records what the database was and moves its backups onto
+// that record, then deletes the database.
+//
+// All three steps share a transaction. Half of this is worse than none of it: a
+// tombstone with no backups is a row describing something nobody can restore,
+// and backups whose re-point succeeded while the delete failed would be
+// detached from a database that is still running.
+func (s *DatabaseService) keepBackupsAndDelete(ctx context.Context, db generated.Database) error {
+	return store.WithTx(ctx, s.db, func(q *generated.Queries) error {
+		tombstone, err := q.CreateDatabaseTombstone(ctx, generated.CreateDatabaseTombstoneParams{
+			ProjectID:  db.ProjectID,
+			OriginalID: db.ID,
+			Slug:       db.Slug,
+			Name:       db.Name,
+			Type:       db.Type,
+			Version:    pgtype.Text{String: db.Version, Valid: true},
+			// Carried across as ciphertext: the tombstone column is a rewrap
+			// target like the one it came from, so this is never decrypted here.
+			CredentialsEncrypted: db.CredentialsEncrypted,
+			// What provisioning needs that the engine name does not imply.
+			Image:          db.Image,
+			ContainerPort:  db.ContainerPort,
+			DataDir:        db.DataDir,
+			BackupMode:     pgtype.Text{String: db.BackupMode, Valid: true},
+			BackupCommand:  db.BackupCommand,
+			RestoreCommand: db.RestoreCommand,
+			CpuLimit:       pgtype.Float8{Float64: db.CpuLimit, Valid: true},
+			MemoryLimit:    pgtype.Int8{Int64: db.MemoryLimit, Valid: true},
+			ImageDigest:    db.ImageDigest,
+		})
+		if err != nil {
+			return fmt.Errorf("recording the deleted database: %w", err)
+		}
+		if err := q.ReparentDatabaseBackupsToTombstone(ctx, generated.ReparentDatabaseBackupsToTombstoneParams{
+			DatabaseID:  db.ID,
+			TombstoneID: tombstone.ID,
+		}); err != nil {
+			return fmt.Errorf("moving backups onto the tombstone: %w", err)
+		}
+		return q.DeleteDatabase(ctx, db.ID)
+	})
+}
+
+// RestoreFromTombstone recreates a deleted database from its tombstone and
+// hands its surviving backups back to it.
+//
+// It comes back under the ORIGINAL slug and credentials. That is the whole
+// point rather than a nicety: the slug is the container name, so it is the
+// hostname every dependent application resolves, and attaching a database
+// injects no connection env vars. A restore into a differently-named database
+// leaves every application in the project pointing at a host that is not there,
+// which is why "restore to a new database" is not offered as the safe option.
+//
+// The row is created here rather than in the worker so the caller gets it back
+// immediately and the UI can show it provisioning. Bringing the container up
+// and applying the archive is the worker's job.
+func (s *DatabaseService) RestoreFromTombstone(ctx context.Context, tombstoneID, backupID pgtype.UUID) (generated.Database, error) {
+	tombstone, err := s.queries.GetDatabaseTombstone(ctx, tombstoneID)
+	if err != nil {
+		return generated.Database{}, fmt.Errorf("get tombstone: %w", err)
+	}
+
+	// The slug is taken verbatim and needs no collision check. Creation builds
+	// it as {projectSlug}-{baseSlug}-{first 8 hex of the database's own id}, so
+	// it is unique by construction and nothing else can occupy it — which also
+	// means the replacement's slug carries the ORIGINAL database's id fragment
+	// rather than its own. That mismatch is the point: the slug is a hostname
+	// applications already resolve, not a description of the row.
+
+	var created generated.Database
+	err = store.WithTx(ctx, s.db, func(q *generated.Queries) error {
+		created, err = q.CreateDatabase(ctx, generated.CreateDatabaseParams{
+			ProjectID: tombstone.ProjectID,
+			Type:      tombstone.Type,
+			Name:      tombstone.Name,
+			Slug:      tombstone.Slug,
+			Version:   tombstone.Version.String,
+			Status:    status.DatabaseCreating,
+			// Left for provisioning to stamp, exactly as a new database does.
+			InternalHost: pgtype.Text{},
+			InternalPort: pgtype.Int4{},
+			// Carried as ciphertext; never decrypted on this path.
+			CredentialsEncrypted: tombstone.CredentialsEncrypted,
+			Image:                tombstone.Image,
+			ContainerPort:        tombstone.ContainerPort,
+			DataDir:              tombstone.DataDir,
+			BackupMode:           tombstone.BackupMode.String,
+			BackupCommand:        tombstone.BackupCommand,
+			RestoreCommand:       tombstone.RestoreCommand,
+		})
+		if err != nil {
+			return fmt.Errorf("recreating the database: %w", err)
+		}
+
+		// Limits and the pinned digest are separate columns from creation's
+		// point of view, but not from the replacement's: a database that comes
+		// back uncapped is not the same database — on a small host the cap is
+		// what keeps the box alive — and an empty digest makes provisioning
+		// re-resolve a mutable tag, so it could come back on a different image
+		// than the dump was taken from.
+		if tombstone.CpuLimit.Valid || tombstone.MemoryLimit.Valid {
+			if created, err = q.UpdateDatabaseResources(ctx, generated.UpdateDatabaseResourcesParams{
+				ID:          created.ID,
+				CpuLimit:    tombstone.CpuLimit.Float64,
+				MemoryLimit: tombstone.MemoryLimit.Int64,
+			}); err != nil {
+				return fmt.Errorf("restoring resource limits: %w", err)
+			}
+		}
+		if tombstone.ImageDigest.Valid {
+			if err := q.UpdateDatabaseImageDigest(ctx, generated.UpdateDatabaseImageDigestParams{
+				ID:          created.ID,
+				ImageDigest: tombstone.ImageDigest,
+			}); err != nil {
+				return fmt.Errorf("restoring the image pin: %w", err)
+			}
+		}
+
+		// The backups move back onto the live database in the same transaction
+		// that creates it. Leaving them on the tombstone would mean the
+		// replacement starts with no history and the tombstone lingers
+		// describing a database that exists again.
+		if err := q.ReclaimBackupsFromTombstone(ctx, generated.ReclaimBackupsFromTombstoneParams{
+			TombstoneID: tombstoneID,
+			DatabaseID:  created.ID,
+		}); err != nil {
+			return fmt.Errorf("returning backups to the database: %w", err)
+		}
+		return q.DeleteDatabaseTombstone(ctx, tombstoneID)
+	})
+	if err != nil {
+		return generated.Database{}, err
+	}
+	return created, nil
 }

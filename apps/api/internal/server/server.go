@@ -36,9 +36,11 @@ type Server struct {
 
 func New(cfg *config.Config, db *pgxpool.Pool, queries *generated.Queries, asynqClient handler.TaskEnqueuer, inspector handler.QueueInspector, rts runtime.Runtimes, pm proxy.ProxyManager, reconciler handler.ReconcilerStatusProvider, rdb *redis.Client, hub *ws.Hub, auditSvc *service.AuditService, notifySvc *service.NotificationService, termMgr *terminal.Manager, emailSvc *email.Service) *Server {
 	auth := service.NewAuthService(queries, cfg.JWTSecret, cfg.JWTExpiryHours, cfg.JWTRefreshHours, rdb)
-	appSvc := service.NewApplicationService(db, queries, rts, cfg.Keyring, cfg.FileMountsDir)
 	backupDestSvc := service.NewBackupDestinationService(queries, cfg.Keyring)
-	dbSvc := service.NewDatabaseService(queries, rts, backup.New(cfg), backupDestSvc)
+	// appSvc needs backupDestSvc to erase volume-backup objects on delete, so it
+	// is built after it.
+	appSvc := service.NewApplicationService(db, queries, rts, cfg.Keyring, cfg.FileMountsDir, backupDestSvc)
+	dbSvc := service.NewDatabaseService(db, queries, rts, backup.New(cfg), backupDestSvc)
 	// projSvc delegates project deletion to appSvc/dbSvc, so it is built after them.
 	projSvc := service.NewProjectService(queries, rts, appSvc, dbSvc)
 	gitProviderSvc := service.NewGitProviderConfigService(queries, cfg.Keyring)
