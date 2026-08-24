@@ -6,7 +6,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { ContainerLogViewer } from "@/components/logs/container-log-viewer";
 import { BackupConfigFormDialog } from "@/components/databases/backup-config-form-dialog";
 import { BackupConfigRunsSheet } from "@/components/databases/backup-config-runs-sheet";
@@ -80,6 +80,12 @@ import { CopyButton } from "@/lib/components/copy-button";
 import { formatBytes, formatList } from "@/lib/utils/format";
 import { cn } from "@/lib/utils";
 import type { Database, DatabaseBackupConfig } from "@/lib/types";
+import {
+  Field,
+  FieldContent,
+  FieldDescription,
+  FieldLabel,
+} from "@/components/ui/field";
 
 // Engines with an in-image logical-dump tool (pg_dump/mysqldump/mongodump).
 // redis (cache) has no logical backup. "other" is backed up when a backup mode
@@ -139,12 +145,6 @@ function DatabaseDetailPage() {
     databaseId,
     deleteOpen,
   );
-  useEffect(() => {
-    if (!deleteOpen) {
-      setDeleteBackups(false);
-      setDeleteConfirm("");
-    }
-  }, [deleteOpen]);
   const stop = useStopDatabase(projectId, databaseId);
   const start = useStartDatabase(projectId, databaseId);
   const restart = useRestartDatabase(projectId, databaseId);
@@ -549,7 +549,12 @@ function DatabaseDetailPage() {
                   open={deleteOpen}
                   onOpenChange={(o) => {
                     setDeleteOpen(o);
-                    if (o) setDeleteConfirm("");
+                    // Reset on open, so a previous tick or half-typed name can
+                    // never carry into a later, different decision.
+                    if (o) {
+                      setDeleteConfirm("");
+                      setDeleteBackups(false);
+                    }
                   }}
                 >
                   <AlertDialogTrigger
@@ -574,13 +579,13 @@ function DatabaseDetailPage() {
                           {deleteImpact.backup_destinations.length > 0
                             ? `, including copies in ${formatList(deleteImpact.backup_destinations)}`
                             : ""}
-                          , and stay listed under the project&apos;s Backups tab.
-                          You can restore a replacement database from them.
+                          , and stay listed under the project&apos;s Backups
+                          tab. You can restore a replacement database from them.
                         </AlertDialogDescription>
                       ) : null}
                     </AlertDialogHeader>
                     {deleteImpact && deleteImpact.backup_count > 0 ? (
-                      <div className="flex items-start gap-2.5">
+                      <Field orientation="horizontal">
                         <Checkbox
                           id="delete-db-backups"
                           checked={deleteBackups}
@@ -589,21 +594,25 @@ function DatabaseDetailPage() {
                           }
                           className="mt-0.5"
                         />
-                        <Label
-                          htmlFor="delete-db-backups"
-                          className="font-normal leading-snug"
-                        >
-                          Also delete{" "}
-                          {deleteImpact.backup_count === 1
-                            ? "this backup"
-                            : "these backups"}
-                          <span className="text-text-muted block text-xs">
+
+                        <FieldContent>
+                          <FieldLabel
+                            htmlFor="delete-db-backups"
+                            className="leading-snug font-normal"
+                          >
+                            Also delete{" "}
+                            {deleteImpact.backup_count === 1
+                              ? "this backup"
+                              : "these backups"}
+                          </FieldLabel>
+
+                          <FieldDescription>
                             {deleteImpact.backup_destinations.length > 0
                               ? "Erases the archives, including the remote copies. This cannot be undone."
                               : "Erases the archives. This cannot be undone."}
-                          </span>
-                        </Label>
-                      </div>
+                          </FieldDescription>
+                        </FieldContent>
+                      </Field>
                     ) : null}
                     <div className="space-y-2">
                       <Label
