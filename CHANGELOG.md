@@ -17,6 +17,8 @@ Release notes for each version are also published on the
 <!-- Entries land here between releases; the release workflow generates the
      published notes from the conventional-commit log. -->
 
+## [0.1.5]
+
 ### Backups now outlive the database they came from
 
 **Deleting a database no longer destroys its backups.** Until now it did, and
@@ -55,7 +57,11 @@ unchanged, and now stated more fully in its confirmation dialog.
 - The daily orphan-container sweep now identifies containers by the labels they
   carry rather than by name, so a container whose name has changed is no longer
   invisible to it, and managed databases are covered structurally rather than by
-  a list someone has to remember to update.
+  a list someone has to remember to update. It also sweeps each server against
+  what is placed on it, rather than one host against every row.
+- Live log, metric and notification streams no longer die with a nil-pointer
+  panic when their Redis subscription ends — which happens on any ordinary API
+  restart while a stream is open.
 
 ### Upgrading
 
