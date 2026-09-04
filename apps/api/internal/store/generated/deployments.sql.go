@@ -368,7 +368,7 @@ WHERE ($3::uuid IS NULL OR p.id = $3)
   AND ($5::text IS NULL OR d.status = $5)
   AND ($6::timestamptz IS NULL OR d.started_at >= $6)
   AND ($7::timestamptz IS NULL OR d.started_at <= $7)
-  AND ($8::uuid IS NULL OR p.user_id = $8)
+  AND ($8::uuid IS NULL OR p.user_id = $8 OR p.shared)
   AND ($9::text IS NULL
        OR d.commit_sha ILIKE '%' || $9 || '%'
        OR d.commit_message ILIKE '%' || $9 || '%'
@@ -559,7 +559,7 @@ SELECT d.id, d.application_id, d.status, d.triggered_by, d.commit_sha, d.commit_
 FROM deployments d
 JOIN applications a ON a.id = d.application_id
 JOIN projects p ON p.id = a.project_id
-WHERE p.user_id = $1
+WHERE p.user_id = $1 OR p.shared
 ORDER BY d.started_at DESC
 LIMIT $2 OFFSET $3
 `

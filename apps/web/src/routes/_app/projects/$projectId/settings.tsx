@@ -3,6 +3,7 @@ import {
   useProject,
   useUpdateProject,
   useTransferProject,
+  useUpdateProjectSharing,
 } from "@/lib/hooks/use-projects";
 import { useUsers } from "@/lib/hooks/use-users";
 import { useAuthStore } from "@/lib/stores/auth";
@@ -12,6 +13,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Select,
@@ -26,6 +28,7 @@ import {
   Trash2,
   TriangleAlert,
   UserIcon,
+  Users2Icon,
 } from "lucide-react";
 import { DeleteProjectDialog } from "@/components/projects/delete-project-dialog";
 import { Separator } from "@/components/ui/separator";
@@ -131,6 +134,12 @@ function ProjectSettings() {
         </CardContent>
       </Card>
 
+      <SharingCard
+        projectId={projectId}
+        ownerId={project.user_id}
+        shared={project.shared}
+      />
+
       <TransferOwnerCard
         projectId={projectId}
         currentOwnerId={project.user_id}
@@ -188,6 +197,61 @@ function ProjectSettings() {
         onOpenChange={setDeleteOpen}
       />
     </div>
+  );
+}
+
+function SharingCard({
+  projectId,
+  ownerId,
+  shared,
+}: {
+  projectId: string;
+  ownerId: string;
+  shared: boolean;
+}) {
+  const currentUser = useAuthStore((s) => s.user);
+  const isAdmin = currentUser?.role === "admin";
+  const isOwner = currentUser?.id === ownerId;
+  const updateSharing = useUpdateProjectSharing(projectId);
+
+  // Not admin-only: a Member who owns the project must be able to share it,
+  // or the role is hollow. Hidden (rather than disabled) for anyone who is
+  // neither — the API would 403 them anyway.
+  if (!isAdmin && !isOwner) return null;
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Users2Icon aria-hidden="true" className="size-4" />
+          Sharing
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-sm font-medium">Share with every Member</p>
+            <p className="text-muted-foreground mt-1 text-xs">
+              When on, every Member in this install can view and work in this
+              project — deploy, manage databases, edit env vars. Only the owner
+              can delete, transfer, or unshare it.
+            </p>
+          </div>
+          <Switch
+            checked={shared}
+            onCheckedChange={(next) => {
+              toast.promise(updateSharing.mutateAsync(next), {
+                loading: next ? "Sharing project..." : "Unsharing project...",
+                success: next ? "Project shared" : "Project unshared",
+                error: (err) => err.message,
+              });
+            }}
+            disabled={updateSharing.isPending}
+            aria-label="Share project with every Member"
+          />
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 

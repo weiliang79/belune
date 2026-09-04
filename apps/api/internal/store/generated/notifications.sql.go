@@ -78,6 +78,9 @@ type GetDeploymentNotifyInfoRow struct {
 	ProjectName   string      `json:"project_name"`
 }
 
+// Owner-only even for a shared project: fanning notifications out to every
+// member is a new feature (alert_preferences is per-user), not something
+// sharing implies. Revisit with real project membership.
 func (q *Queries) GetDeploymentNotifyInfo(ctx context.Context, id pgtype.UUID) (GetDeploymentNotifyInfoRow, error) {
 	row := q.db.QueryRow(ctx, getDeploymentNotifyInfo, id)
 	var i GetDeploymentNotifyInfoRow

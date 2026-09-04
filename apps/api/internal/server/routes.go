@@ -221,6 +221,7 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService,
 			r.Put("/api/projects/{projectId}", h.UpdateProject)
 			r.Delete("/api/projects/{projectId}", h.DeleteProject)
 			r.Put("/api/projects/{projectId}/transfer", h.TransferProject)
+			r.Put("/api/projects/{projectId}/sharing", h.UpdateProjectSharing)
 
 			// Project runtime metrics snapshot (per-service CPU/mem/uptime/domain)
 			r.Get("/api/projects/{projectId}/metrics", h.GetProjectMetrics)

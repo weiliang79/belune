@@ -18,6 +18,8 @@ export interface Project {
   updated_at: string;
   /** Most recent deployment start across the project's apps; null if never deployed. */
   last_deployed_at: string | null;
+  /** Visible and usable by every Member, not only the owner, when true. */
+  shared: boolean;
 }
 
 export interface Application {

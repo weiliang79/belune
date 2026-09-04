@@ -59,12 +59,32 @@ func (h *Handler) CreateProject(w http.ResponseWriter, r *http.Request) {
 }
 
 // canAccessProject checks if the current user can access the given project.
-// Admins can access all projects; members can only access their own.
+// Admins can access all projects; members can access their own and any shared
+// project. This is read/use access — destructive rights (delete, transfer,
+// change sharing) require isProjectOwner instead.
 func (h *Handler) canAccessProject(r *http.Request, projectID pgtype.UUID) bool {
-	return h.canAccessOwned(r, func(ctx context.Context) (pgtype.UUID, error) {
+	return h.canAccessOwned(r, func(ctx context.Context) (pgtype.UUID, bool, error) {
 		project, err := h.queries.GetProject(ctx, projectID)
-		return project.UserID, err
+		return project.UserID, project.Shared, err
 	})
+}
+
+// isProjectOwner checks if the current user owns the given project. Admins
+// bypass the check. Unlike canAccessProject, sharing does NOT grant this —
+// delete, transfer, and changing sharing itself stay owner-only, or a shared
+// member could unshare or destroy a project they do not own.
+func (h *Handler) isProjectOwner(r *http.Request, projectID pgtype.UUID) bool {
+	role := middleware.RoleFromContext(r.Context())
+	if role == "admin" {
+		return true
+	}
+	project, err := h.queries.GetProject(r.Context(), projectID)
+	if err != nil {
+		return false
+	}
+	var userID pgtype.UUID
+	userID.Scan(middleware.UserIDFromContext(r.Context()))
+	return project.UserID == userID
 }
 
 func (h *Handler) GetProject(w http.ResponseWriter, r *http.Request) {
@@ -164,7 +184,7 @@ func (h *Handler) DeleteProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !h.canAccessProject(r, uuid) {
+	if !h.isProjectOwner(r, uuid) {
 		writeError(w, http.StatusForbidden, "access denied")
 		return
 	}
@@ -229,6 +249,46 @@ func (h *Handler) TransferProject(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "failed to transfer project")
 		return
 	}
+
+	writeJSON(w, http.StatusOK, project)
+}
+
+type updateProjectSharingRequest struct {
+	Shared bool `json:"shared"`
+}
+
+// UpdateProjectSharing turns project sharing on or off. Owner or admin only —
+// a Member who only has shared access must not be able to unshare or reshare
+// a project they do not own.
+func (h *Handler) UpdateProjectSharing(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "projectId")
+	var uuid pgtype.UUID
+	if err := uuid.Scan(id); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid project id")
+		return
+	}
+
+	if !h.isProjectOwner(r, uuid) {
+		writeError(w, http.StatusForbidden, "access denied")
+		return
+	}
+
+	var req updateProjectSharingRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	project, err := h.queries.UpdateProjectSharing(r.Context(), generated.UpdateProjectSharingParams{
+		ID:     uuid,
+		Shared: req.Shared,
+	})
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to update project sharing")
+		return
+	}
+
+	h.audit(r, "update_project_sharing", "project", id, map[string]any{"shared": req.Shared})
 
 	writeJSON(w, http.StatusOK, project)
 }

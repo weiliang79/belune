@@ -283,7 +283,7 @@ func (h *TaskHandler) notifyApplicationOwner(ctx context.Context, appID, project
 		slog.Warn("notify: could not resolve application owner", "application_id", formatUUID(appID), "error", err)
 		return
 	}
-	h.Notifier.Notify(formatUUID(owner), notifType, title, body, link)
+	h.Notifier.Notify(formatUUID(owner.UserID), notifType, title, body, link)
 }
 
 func (h *TaskHandler) finaliseVolumeBackup(ctx context.Context, id pgtype.UUID, params generated.UpdateApplicationVolumeBackupParams) {
