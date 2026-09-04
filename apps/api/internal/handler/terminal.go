@@ -174,7 +174,7 @@ func (h *Handler) HandleTerminalWebSocket(w http.ResponseWriter, r *http.Request
 		startedAt := s.CreatedAt
 		h.termManager.Delete(sessionID)
 		duration := time.Since(startedAt)
-		h.auditSvc.Log(s.UserID, middleware.ClientIP(r), "terminal.session.ended", "application", s.ApplicationID, map[string]any{
+		h.auditSvc.Log(s.UserID, middleware.TokenIDFromContext(r.Context()), middleware.ClientIP(r), "terminal.session.ended", "application", s.ApplicationID, map[string]any{
 			"shell":      s.Shell,
 			"session_id": s.ID,
 			"duration_s": int(duration.Seconds()),

@@ -316,7 +316,7 @@ func (h *Handler) VerifyLogin(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		if h.auditSvc != nil && subjErr == nil {
 			uid := uuidToString(subject.ID)
-			h.auditSvc.Log(uid, clientIP, "login_2fa_failed", "user", uid, map[string]any{"method": method})
+			h.auditSvc.Log(uid, "", clientIP, "login_2fa_failed", "user", uid, map[string]any{"method": method})
 		}
 		writeSecondFactorError(w, err)
 		return
@@ -331,7 +331,7 @@ func (h *Handler) VerifyLogin(w http.ResponseWriter, r *http.Request) {
 
 	if h.auditSvc != nil {
 		uid := uuidToString(result.User.ID)
-		h.auditSvc.Log(uid, clientIP, "login", "user", uid, map[string]any{"method": method})
+		h.auditSvc.Log(uid, "", clientIP, "login", "user", uid, map[string]any{"method": method})
 	}
 
 	writeJSON(w, http.StatusOK, result)
