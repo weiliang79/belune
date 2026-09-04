@@ -118,6 +118,20 @@ func (h *Handler) canAccessDomain(r *http.Request, domainID pgtype.UUID) bool {
 	return h.canAccessOwned(r, h.domainOwner(domainID))
 }
 
+// canAttachGitIntegration reports whether the current user may attach the
+// given git integration to an application. A zero/invalid id (none supplied)
+// always passes — there is nothing to check. Otherwise this is exactly
+// canAccessIntegration: git integrations are user-level, and project sharing
+// does not extend to them, so a shared member reading another user's real
+// git_integration_id off a shared application's JSON must not be able to
+// attach it to an application in a project of their own.
+func (h *Handler) canAttachGitIntegration(r *http.Request, integrationID pgtype.UUID) bool {
+	if !integrationID.Valid {
+		return true
+	}
+	return h.canAccessIntegration(r, integrationID)
+}
+
 // isDomainOwner checks if the current user owns the domain's parent
 // application's parent project. Admins bypass the check. Shared access does
 // NOT pass — gates removing the domain itself, not routine operation.

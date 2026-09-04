@@ -1,13 +1,16 @@
 package handler_test
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"testing"
 
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/weiliang79/belune/internal/store/generated"
 	"github.com/weiliang79/belune/internal/testutil"
 )
 
@@ -22,6 +25,18 @@ func createMember(t *testing.T, adminToken, email string) (string, string) {
 	body := testutil.ReadJSON(t, resp)
 	id := extractID(body["id"])
 	return id, env.LoginAs(t, email, "password123")
+}
+
+// mergeMap returns a new map with base's entries overridden by overrides'.
+func mergeMap(base, overrides map[string]any) map[string]any {
+	out := make(map[string]any, len(base)+len(overrides))
+	for k, v := range base {
+		out[k] = v
+	}
+	for k, v := range overrides {
+		out[k] = v
+	}
+	return out
 }
 
 // TestUpdateProjectSharing_WidensAccessToEveryMember pins the core behaviour:
@@ -244,6 +259,112 @@ func TestUpdateProjectSharing_MemberCanUseButNotDestroy(t *testing.T) {
 
 	resp = env.DoRequest(t, "DELETE", fmt.Sprintf("/api/projects/%s/applications/%s", projectID, appID), nil, testutil.AuthHeader(ownerToken))
 	assert.Equal(t, http.StatusOK, resp.StatusCode, "the owner must still be able to delete the application")
+	resp.Body.Close()
+}
+
+// TestGitIntegration_CannotBeAttachedByNonOwner pins the fix for the review's
+// second finding: a git_integration_id is user-level, not project-level, so
+// sharing must never let it be attached to an application by anyone but the
+// integration's own owner (or an admin) — whether via CreateApplication,
+// UpdateApplication, or ChangeApplicationSource. This predates project
+// sharing, but sharing is what makes a real git_integration_id discoverable
+// (readable off a shared application's JSON) instead of requiring a guess.
+func TestGitIntegration_CannotBeAttachedByNonOwner(t *testing.T) {
+	resetDB(t)
+	ctx := context.Background()
+	adminToken := env.SetupAdmin(t, "admin@test.com", "password123")
+	ownerID, ownerToken := createMember(t, adminToken, "owner@test.com")
+	_, otherToken := createMember(t, adminToken, "other@test.com")
+
+	var ownerUUID pgtype.UUID
+	require.NoError(t, ownerUUID.Scan(ownerID))
+	integration, err := env.Queries.CreateGitIntegration(ctx, generated.CreateGitIntegrationParams{
+		Provider:        "github",
+		BaseUrl:         "https://github.com",
+		AccountLogin:    "owner-account",
+		ConfigEncrypted: []byte("dummy"),
+		CreatedBy:       ownerUUID,
+	})
+	require.NoError(t, err)
+	integrationID := idStr(integration.ID)
+
+	// A second integration, owned by the same user, so the update test below
+	// attempts a real attachment CHANGE — not a same-value resubmit, which the
+	// fix deliberately allows regardless of who sends it.
+	integration2, err := env.Queries.CreateGitIntegration(ctx, generated.CreateGitIntegrationParams{
+		Provider:        "github",
+		BaseUrl:         "https://github.com",
+		AccountLogin:    "owner-account-2",
+		ConfigEncrypted: []byte("dummy"),
+		CreatedBy:       ownerUUID,
+	})
+	require.NoError(t, err)
+	integration2ID := idStr(integration2.ID)
+
+	otherProject := env.CreateProject(t, otherToken, "Other's Project", "others-project")
+	otherProjectID := extractID(otherProject["id"])
+
+	// Cannot attach on create.
+	resp := env.DoRequest(t, "POST", fmt.Sprintf("/api/projects/%s/applications", otherProjectID), map[string]any{
+		"name": "App", "type": "git", "build_type": "dockerfile",
+		"source_repo":        "https://github.com/test/repo",
+		"git_integration_id": integrationID,
+	}, testutil.AuthHeader(otherToken))
+	assert.Equal(t, http.StatusForbidden, resp.StatusCode, "attaching another user's git integration on create must be rejected")
+	resp.Body.Close()
+
+	// The owner CAN use their own integration.
+	ownerProject := env.CreateProject(t, ownerToken, "Owner's Project", "owners-project")
+	ownerProjectID := extractID(ownerProject["id"])
+	ownerApp := env.CreateApplication(t, ownerToken, ownerProjectID, map[string]any{
+		"name":               "App",
+		"type":               "git",
+		"build_type":         "dockerfile",
+		"source_repo":        "https://github.com/test/repo",
+		"git_integration_id": integrationID,
+	})
+	appID := extractID(ownerApp["id"])
+	assert.Equal(t, integrationID, ownerApp["git_integration_id"], "the owner must be able to attach their own integration")
+
+	// Cannot CHANGE the attachment on update, even by a Member who has shared
+	// access to the application's project — sharing is project-level,
+	// integrations are not.
+	shareResp := env.DoRequest(t, "PUT", fmt.Sprintf("/api/projects/%s/sharing", ownerProjectID), map[string]bool{
+		"shared": true,
+	}, testutil.AuthHeader(ownerToken))
+	require.Equal(t, http.StatusOK, shareResp.StatusCode)
+	shareResp.Body.Close()
+
+	// UpdateApplication is a full-row update (see CLAUDE.md): name and
+	// source_repo must ride along on every PUT, or validateSource itself
+	// 400s before the ownership check is even reached. Sending them
+	// unchanged isolates what these assertions are actually testing.
+	baseBody := map[string]any{
+		"name":        "App",
+		"source_repo": "https://github.com/test/repo",
+	}
+
+	resp = env.DoRequest(t, "PUT", fmt.Sprintf("/api/projects/%s/applications/%s", ownerProjectID, appID),
+		mergeMap(baseBody, map[string]any{"git_integration_id": integration2ID}),
+		testutil.AuthHeader(otherToken))
+	assert.Equal(t, http.StatusForbidden, resp.StatusCode, "attaching a different git integration the caller does not own must be rejected, even with shared access to the application")
+	resp.Body.Close()
+
+	// Resubmitting the SAME already-attached integration must NOT be blocked
+	// — that's not an attachment change, just a client PUTing the resource
+	// back unmodified, and a shared member must not be punished for it.
+	resp = env.DoRequest(t, "PUT", fmt.Sprintf("/api/projects/%s/applications/%s", ownerProjectID, appID),
+		mergeMap(baseBody, map[string]any{"git_integration_id": integrationID}),
+		testutil.AuthHeader(otherToken))
+	assert.Equal(t, http.StatusOK, resp.StatusCode, "resubmitting the already-attached integration must not be treated as a new attachment")
+	resp.Body.Close()
+
+	// Omitting the field (preserve current) must NOT be blocked by the shared
+	// member's lack of ownership of the already-attached integration.
+	resp = env.DoRequest(t, "PUT", fmt.Sprintf("/api/projects/%s/applications/%s", ownerProjectID, appID),
+		mergeMap(baseBody, map[string]any{"name": "Renamed"}),
+		testutil.AuthHeader(otherToken))
+	assert.Equal(t, http.StatusOK, resp.StatusCode, "a shared member editing unrelated fields must not be blocked by an integration they don't own")
 	resp.Body.Close()
 }
 
