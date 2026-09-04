@@ -287,16 +287,23 @@ func (q *Queries) GetDatabase(ctx context.Context, id pgtype.UUID) (Database, er
 }
 
 const getDatabaseOwnerUserID = `-- name: GetDatabaseOwnerUserID :one
-SELECT p.user_id FROM databases d
+SELECT p.user_id, p.shared FROM databases d
 JOIN projects p ON p.id = d.project_id
 WHERE d.id = $1
 `
 
-func (q *Queries) GetDatabaseOwnerUserID(ctx context.Context, id pgtype.UUID) (pgtype.UUID, error) {
+type GetDatabaseOwnerUserIDRow struct {
+	UserID pgtype.UUID `json:"user_id"`
+	Shared bool        `json:"shared"`
+}
+
+// shared rides along so canAccessDatabase can grant every Member access to a
+// shared project's databases, not only its owner.
+func (q *Queries) GetDatabaseOwnerUserID(ctx context.Context, id pgtype.UUID) (GetDatabaseOwnerUserIDRow, error) {
 	row := q.db.QueryRow(ctx, getDatabaseOwnerUserID, id)
-	var user_id pgtype.UUID
-	err := row.Scan(&user_id)
-	return user_id, err
+	var i GetDatabaseOwnerUserIDRow
+	err := row.Scan(&i.UserID, &i.Shared)
+	return i, err
 }
 
 const getDatabaseTombstone = `-- name: GetDatabaseTombstone :one

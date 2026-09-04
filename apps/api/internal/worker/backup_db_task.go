@@ -936,7 +936,7 @@ func (h *TaskHandler) notifyDatabaseOwner(ctx context.Context, db generated.Data
 		slog.Warn("notify: could not resolve database owner", "database_id", formatUUID(db.ID), "error", err)
 		return
 	}
-	h.Notifier.Notify(formatUUID(owner), notifType, title, body, link)
+	h.Notifier.Notify(formatUUID(owner.UserID), notifType, title, body, link)
 }
 
 // notifyRestore tells the database owner whether an async restore succeeded or

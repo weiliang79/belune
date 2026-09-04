@@ -28,8 +28,7 @@ export function useCreateProject() {
 export function useUpdateProject(id: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (data: { name: string }) =>
-      projectsApi.updateProject(id, data),
+    mutationFn: (data: { name: string }) => projectsApi.updateProject(id, data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.projects.all });
       qc.invalidateQueries({ queryKey: queryKeys.projects.detail(id) });
@@ -49,6 +48,18 @@ export function useTransferProject(id: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (userId: string) => projectsApi.transferProject(id, userId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.projects.all });
+      qc.invalidateQueries({ queryKey: queryKeys.projects.detail(id) });
+    },
+  });
+}
+
+export function useUpdateProjectSharing(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (shared: boolean) =>
+      projectsApi.updateProjectSharing(id, shared),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.projects.all });
       qc.invalidateQueries({ queryKey: queryKeys.projects.detail(id) });

@@ -1,4 +1,5 @@
 -- name: ListProjectsByUser :many
+-- Owned or shared: a shared project is visible to every Member, not only its owner.
 SELECT p.*, (
     SELECT max(d.started_at)
     FROM deployments d
@@ -6,7 +7,7 @@ SELECT p.*, (
     WHERE a.project_id = p.id
 ) AS last_deployed_at
 FROM projects p
-WHERE p.user_id = $1
+WHERE p.user_id = $1 OR p.shared
 ORDER BY p.created_at DESC;
 
 -- name: GetProject :one
@@ -40,5 +41,12 @@ ORDER BY p.created_at DESC;
 
 -- name: UpdateProjectOwner :one
 UPDATE projects SET user_id = $2, updated_at = NOW()
+WHERE id = $1
+RETURNING *;
+
+-- name: UpdateProjectSharing :one
+-- Owner/admin only — sharing is a destructive-adjacent right, not something a
+-- shared member gains just by having access.
+UPDATE projects SET shared = $2, updated_at = NOW()
 WHERE id = $1
 RETURNING *;

@@ -136,9 +136,11 @@ function formatBytes(bytes: number): string {
 function ApplicationActions({
   projectId,
   app,
+  canDelete,
 }: {
   projectId: string;
   app: Application;
+  canDelete: boolean;
 }) {
   const qc = useQueryClient();
   const navigate = useNavigate();
@@ -247,14 +249,18 @@ function ApplicationActions({
             <RocketIcon aria-hidden="true" />
             Redeploy
           </DropdownMenuItem>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem
-            variant="destructive"
-            onClick={() => setConfirmOpen(true)}
-          >
-            <Trash2Icon aria-hidden="true" />
-            Delete
-          </DropdownMenuItem>
+          {canDelete && (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                variant="destructive"
+                onClick={() => setConfirmOpen(true)}
+              >
+                <Trash2Icon aria-hidden="true" />
+                Delete
+              </DropdownMenuItem>
+            </>
+          )}
         </DropdownMenuContent>
       </DropdownMenu>
 
@@ -290,9 +296,11 @@ function ApplicationActions({
 function DatabaseActions({
   projectId,
   db,
+  canDelete,
 }: {
   projectId: string;
   db: Database;
+  canDelete: boolean;
 }) {
   const navigate = useNavigate();
   const stop = useStopDatabase(projectId, db.id);
@@ -398,14 +406,18 @@ function DatabaseActions({
             <ArrowUpRightIcon aria-hidden="true" />
             Open
           </DropdownMenuItem>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem
-            variant="destructive"
-            onClick={() => setConfirmOpen(true)}
-          >
-            <Trash2Icon aria-hidden="true" />
-            Delete
-          </DropdownMenuItem>
+          {canDelete && (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                variant="destructive"
+                onClick={() => setConfirmOpen(true)}
+              >
+                <Trash2Icon aria-hidden="true" />
+                Delete
+              </DropdownMenuItem>
+            </>
+          )}
         </DropdownMenuContent>
       </DropdownMenu>
 
@@ -521,14 +533,24 @@ function DatabaseActions({
 export function ServiceActions({
   projectId,
   item,
+  canDelete,
 }: {
   projectId: string;
   item: ServiceRowItem;
+  canDelete: boolean;
 }) {
   return item.kind === "application" ? (
-    <ApplicationActions projectId={projectId} app={item.data} />
+    <ApplicationActions
+      projectId={projectId}
+      app={item.data}
+      canDelete={canDelete}
+    />
   ) : (
-    <DatabaseActions projectId={projectId} db={item.data} />
+    <DatabaseActions
+      projectId={projectId}
+      db={item.data}
+      canDelete={canDelete}
+    />
   );
 }
 
@@ -648,6 +670,7 @@ function usageText(item: ServiceRowItem, metrics: ServiceMetrics | undefined) {
  */
 function buildColumns(
   projectId: string,
+  canDelete: boolean,
   metricsFor: (item: ServiceRowItem) => ServiceMetrics | undefined,
 ): ColumnDef<ServiceRowItem>[] {
   return [
@@ -707,7 +730,11 @@ function buildColumns(
       header: "",
       meta: { headerClassName: "text-right", className: "text-right" },
       cell: ({ row }) => (
-        <ServiceActions projectId={projectId} item={row.original} />
+        <ServiceActions
+          projectId={projectId}
+          item={row.original}
+          canDelete={canDelete}
+        />
       ),
     },
   ];
@@ -719,18 +746,20 @@ export function ServicesTable({
   items,
   metrics,
   isLoading,
+  canDelete,
 }: {
   projectId: string;
   items: ServiceRowItem[];
   metrics?: ProjectMetrics;
   isLoading?: boolean;
+  canDelete: boolean;
 }) {
   const columns = useMemo(
     () =>
-      buildColumns(projectId, (item) =>
+      buildColumns(projectId, canDelete, (item) =>
         item.kind === "application" ? metrics?.[item.data.id] : undefined,
       ),
-    [projectId, metrics],
+    [projectId, canDelete, metrics],
   );
 
   return (

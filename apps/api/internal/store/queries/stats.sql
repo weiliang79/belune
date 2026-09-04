@@ -1,5 +1,7 @@
 -- Operator-health aggregates for the dashboard stat strips. Each is optionally
--- scoped to one owner via sqlc.narg('user_id') (NULL = all, for admins).
+-- scoped to one owner via sqlc.narg('user_id') (NULL = all, for admins), and
+-- additionally includes shared projects so a Member's stats reflect what they
+-- can actually reach.
 
 -- name: CountApplicationHealth :one
 -- Parent applications only — preview children are ephemeral and would inflate
@@ -13,7 +15,7 @@ SELECT count(*)                                       AS total,
 FROM applications a
 JOIN projects p ON p.id = a.project_id
 WHERE a.parent_application_id IS NULL
-  AND (sqlc.narg('user_id')::uuid IS NULL OR p.user_id = sqlc.narg('user_id'));
+  AND (sqlc.narg('user_id')::uuid IS NULL OR p.user_id = sqlc.narg('user_id') OR p.shared);
 
 -- name: CountDatabaseHealth :one
 SELECT count(*)                                       AS total,
@@ -22,7 +24,7 @@ SELECT count(*)                                       AS total,
        count(*) FILTER (WHERE db.status = 'stopped')  AS stopped
 FROM databases db
 JOIN projects p ON p.id = db.project_id
-WHERE (sqlc.narg('user_id')::uuid IS NULL OR p.user_id = sqlc.narg('user_id'));
+WHERE (sqlc.narg('user_id')::uuid IS NULL OR p.user_id = sqlc.narg('user_id') OR p.shared);
 
 -- name: CountDeployments7d :one
 -- median_build_ms is the median build duration (build_ended_at - build_started_at)
@@ -40,7 +42,7 @@ FROM deployments d
 JOIN applications a ON a.id = d.application_id
 JOIN projects p ON p.id = a.project_id
 WHERE d.started_at >= now() - interval '7 days'
-  AND (sqlc.narg('user_id')::uuid IS NULL OR p.user_id = sqlc.narg('user_id'));
+  AND (sqlc.narg('user_id')::uuid IS NULL OR p.user_id = sqlc.narg('user_id') OR p.shared);
 
 -- name: CountUnresolvedFailedDeploys :one
 -- Applications that are still serving but whose most recent *resolved*
@@ -70,7 +72,7 @@ FROM (
     WHERE a.parent_application_id IS NULL
       AND a.status NOT IN ('error', 'unhealthy')
       AND d.status IN ('success', 'failed')
-      AND (sqlc.narg('user_id')::uuid IS NULL OR p.user_id = sqlc.narg('user_id'))
+      AND (sqlc.narg('user_id')::uuid IS NULL OR p.user_id = sqlc.narg('user_id') OR p.shared)
     ORDER BY d.application_id, d.started_at DESC
 ) latest
 WHERE latest.status = 'failed';
@@ -96,7 +98,7 @@ WITH latest_db AS (
     JOIN projects p ON p.id = db.project_id
     WHERE c.enabled
       AND b.status IN ('succeeded', 'failed')
-      AND (sqlc.narg('user_id')::uuid IS NULL OR p.user_id = sqlc.narg('user_id'))
+      AND (sqlc.narg('user_id')::uuid IS NULL OR p.user_id = sqlc.narg('user_id') OR p.shared)
     ORDER BY b.backup_config_id, b.started_at DESC
 ), latest_volume AS (
     SELECT DISTINCT ON (v.backup_config_id) v.status
@@ -107,7 +109,7 @@ WITH latest_db AS (
     JOIN projects p ON p.id = a.project_id
     WHERE vc.enabled
       AND v.status IN ('succeeded', 'failed')
-      AND (sqlc.narg('user_id')::uuid IS NULL OR p.user_id = sqlc.narg('user_id'))
+      AND (sqlc.narg('user_id')::uuid IS NULL OR p.user_id = sqlc.narg('user_id') OR p.shared)
     ORDER BY v.backup_config_id, v.started_at DESC
 )
 SELECT (

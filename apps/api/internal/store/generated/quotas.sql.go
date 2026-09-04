@@ -29,6 +29,10 @@ JOIN projects p ON p.id = a.project_id
 WHERE p.user_id = $1
 `
 
+// Deliberately owner-scoped, not shared-inclusive: quotas follow ownership,
+// not access. If a shared project counted against every member, one project
+// would consume N members' quotas simultaneously and sharing would silently
+// shrink everyone's capacity. Do not add "OR p.shared" here.
 func (q *Queries) CountApplicationsByUser(ctx context.Context, userID pgtype.UUID) (int64, error) {
 	row := q.db.QueryRow(ctx, countApplicationsByUser, userID)
 	var count int64
@@ -142,6 +146,8 @@ type SumApplicationResourcesByUserRow struct {
 	MemoryTotalBytes int64   `json:"memory_total_bytes"`
 }
 
+// Owner-scoped for the same reason as CountApplicationsByUser above — quotas
+// follow ownership, not access. Do not add "OR p.shared" here.
 func (q *Queries) SumApplicationResourcesByUser(ctx context.Context, userID pgtype.UUID) (SumApplicationResourcesByUserRow, error) {
 	row := q.db.QueryRow(ctx, sumApplicationResourcesByUser, userID)
 	var i SumApplicationResourcesByUserRow

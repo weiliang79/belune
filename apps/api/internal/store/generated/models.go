@@ -457,6 +457,7 @@ type Project struct {
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
 	ServerID  pgtype.UUID        `json:"server_id"`
+	Shared    bool               `json:"shared"`
 }
 
 type ProjectEnvVar struct {

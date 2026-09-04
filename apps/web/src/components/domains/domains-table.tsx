@@ -63,6 +63,7 @@ export function DomainsTable({
   isLoading,
   onEdit,
   onEditFeatures,
+  canDelete,
 }: {
   projectId: string;
   applicationId: string;
@@ -70,6 +71,7 @@ export function DomainsTable({
   isLoading: boolean;
   onEdit: (domain: DomainExpanded) => void;
   onEditFeatures: (domain: DomainExpanded) => void;
+  canDelete: boolean;
 }) {
   const columns = useMemo<ColumnDef<DomainExpanded>[]>(
     () => [
@@ -139,11 +141,12 @@ export function DomainsTable({
             domain={domain}
             onEdit={() => onEdit(domain)}
             onEditFeatures={() => onEditFeatures(domain)}
+            canDelete={canDelete}
           />
         ),
       }),
     ],
-    [projectId, applicationId, onEdit, onEditFeatures],
+    [projectId, applicationId, onEdit, onEditFeatures, canDelete],
   );
 
   return (
@@ -258,12 +261,14 @@ function DomainActions({
   applicationId,
   onEdit,
   onEditFeatures,
+  canDelete,
 }: {
   domain: DomainExpanded;
   projectId: string;
   applicationId: string;
   onEdit: () => void;
   onEditFeatures: () => void;
+  canDelete: boolean;
 }) {
   const removeDomain = useRemoveDomain(projectId, applicationId);
 
@@ -296,14 +301,18 @@ function DomainActions({
               <CopyIcon aria-hidden="true" />
               Copy hostname
             </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <AlertDialogTrigger
-              render={<DropdownMenuItem variant="destructive" />}
-              nativeButton={false}
-            >
-              <Trash2Icon aria-hidden="true" />
-              Delete
-            </AlertDialogTrigger>
+            {canDelete && (
+              <>
+                <DropdownMenuSeparator />
+                <AlertDialogTrigger
+                  render={<DropdownMenuItem variant="destructive" />}
+                  nativeButton={false}
+                >
+                  <Trash2Icon aria-hidden="true" />
+                  Delete
+                </AlertDialogTrigger>
+              </>
+            )}
           </DropdownMenuContent>
         </DropdownMenu>
         <AlertDialogContent>

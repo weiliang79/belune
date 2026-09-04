@@ -112,6 +112,12 @@ func (h *Handler) CreateApplication(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	gitIntegrationID := parseOptionalUUID(req.GitIntegrationID)
+	if !h.canAttachGitIntegration(r, gitIntegrationID) {
+		writeError(w, http.StatusForbidden, "access denied to git integration")
+		return
+	}
+
 	// Fetch project to get its slug for the final slug format
 	project, err := h.queries.GetProject(r.Context(), projectUUID)
 	if err != nil {
@@ -150,7 +156,7 @@ func (h *Handler) CreateApplication(w http.ResponseWriter, r *http.Request) {
 		MemoryLimit:      req.MemoryLimit,
 		GitToken:         req.GitToken,
 		HealthCheckPath:  req.HealthCheckPath,
-		GitIntegrationID: parseOptionalUUID(req.GitIntegrationID),
+		GitIntegrationID: gitIntegrationID,
 		Branch:           req.Branch,
 		RootDirectory:    req.RootDirectory,
 	})
@@ -712,6 +718,18 @@ func (h *Handler) UpdateApplication(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Only checked when the resolved value actually CHANGES the attached
+	// integration — not merely whether the field is present in the request.
+	// A client that PUTs the full resource back (unchanged git_integration_id
+	// included) must not be rejected for an attachment nobody is touching,
+	// and a shared member editing unrelated fields must not be blocked by an
+	// integration they don't own but didn't attach.
+	gitIntegrationID := resolveOptionalUUID(req.GitIntegrationID, current.GitIntegrationID)
+	if gitIntegrationID != current.GitIntegrationID && !h.canAttachGitIntegration(r, gitIntegrationID) {
+		writeError(w, http.StatusForbidden, "access denied to git integration")
+		return
+	}
+
 	// type and build_type are not updatable, so they come from the stored row:
 	// the request only ever moves the fields that have to stay coherent with
 	// them.
@@ -738,7 +756,7 @@ func (h *Handler) UpdateApplication(w http.ResponseWriter, r *http.Request) {
 		MemoryLimit:       req.MemoryLimit,
 		GitToken:          req.GitToken,
 		HealthCheckPath:   req.HealthCheckPath,
-		GitIntegrationID:  resolveOptionalUUID(req.GitIntegrationID, current.GitIntegrationID),
+		GitIntegrationID:  gitIntegrationID,
 		Branch:            req.Branch,
 		RootDirectory:     req.RootDirectory,
 	})
@@ -762,7 +780,9 @@ func (h *Handler) DeleteApplication(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !h.canAccessApplication(r, applicationUUID) {
+	// Owner-only: shared access grants full operational use of the project's
+	// applications, but not the right to destroy one.
+	if !h.isApplicationOwner(r, applicationUUID) {
 		writeError(w, http.StatusForbidden, "access denied")
 		return
 	}

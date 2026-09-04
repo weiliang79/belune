@@ -800,14 +800,14 @@ func (h *TaskHandler) checkDeployQuota(ctx context.Context, dc *deployContext) e
 	if h.QuotaService == nil {
 		return nil
 	}
-	userID, err := h.Queries.GetApplicationOwnerUserID(ctx, dc.applicationID)
+	owner, err := h.Queries.GetApplicationOwnerUserID(ctx, dc.applicationID)
 	if err != nil {
 		// Owner lookup failure shouldn't block deploys — log and proceed.
 		slog.Warn("quota: failed to resolve application owner, skipping check",
 			"application_id", dc.payload.ApplicationID, "error", err)
 		return nil
 	}
-	return h.QuotaService.CheckCurrentUsage(ctx, dc.app.ProjectID, userID)
+	return h.QuotaService.CheckCurrentUsage(ctx, dc.app.ProjectID, owner.UserID)
 }
 
 // healthVerifyTimeout is the upper bound for post-deploy probing.
