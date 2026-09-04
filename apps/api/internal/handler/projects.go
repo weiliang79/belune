@@ -58,15 +58,19 @@ func (h *Handler) CreateProject(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, project)
 }
 
+func (h *Handler) projectOwner(projectID pgtype.UUID) ownerLookup {
+	return func(ctx context.Context) (pgtype.UUID, bool, error) {
+		project, err := h.queries.GetProject(ctx, projectID)
+		return project.UserID, project.Shared, err
+	}
+}
+
 // canAccessProject checks if the current user can access the given project.
 // Admins can access all projects; members can access their own and any shared
 // project. This is read/use access — destructive rights (delete, transfer,
 // change sharing) require isProjectOwner instead.
 func (h *Handler) canAccessProject(r *http.Request, projectID pgtype.UUID) bool {
-	return h.canAccessOwned(r, func(ctx context.Context) (pgtype.UUID, bool, error) {
-		project, err := h.queries.GetProject(ctx, projectID)
-		return project.UserID, project.Shared, err
-	})
+	return h.canAccessOwned(r, h.projectOwner(projectID))
 }
 
 // isProjectOwner checks if the current user owns the given project. Admins
@@ -74,17 +78,7 @@ func (h *Handler) canAccessProject(r *http.Request, projectID pgtype.UUID) bool 
 // delete, transfer, and changing sharing itself stay owner-only, or a shared
 // member could unshare or destroy a project they do not own.
 func (h *Handler) isProjectOwner(r *http.Request, projectID pgtype.UUID) bool {
-	role := middleware.RoleFromContext(r.Context())
-	if role == "admin" {
-		return true
-	}
-	project, err := h.queries.GetProject(r.Context(), projectID)
-	if err != nil {
-		return false
-	}
-	var userID pgtype.UUID
-	userID.Scan(middleware.UserIDFromContext(r.Context()))
-	return project.UserID == userID
+	return h.isOwnerOnly(r, h.projectOwner(projectID))
 }
 
 func (h *Handler) GetProject(w http.ResponseWriter, r *http.Request) {

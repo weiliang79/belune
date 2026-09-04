@@ -762,7 +762,9 @@ func (h *Handler) DeleteApplication(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !h.canAccessApplication(r, applicationUUID) {
+	// Owner-only: shared access grants full operational use of the project's
+	// applications, but not the right to destroy one.
+	if !h.isApplicationOwner(r, applicationUUID) {
 		writeError(w, http.StatusForbidden, "access denied")
 		return
 	}

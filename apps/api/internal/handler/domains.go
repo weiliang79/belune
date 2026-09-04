@@ -723,7 +723,9 @@ func (h *Handler) RemoveDomain(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !h.canAccessDomain(r, domainUUID) {
+	// Owner-only: shared access grants full operational use of the project's
+	// domains, but not the right to remove one.
+	if !h.isDomainOwner(r, domainUUID) {
 		writeError(w, http.StatusForbidden, "access denied")
 		return
 	}

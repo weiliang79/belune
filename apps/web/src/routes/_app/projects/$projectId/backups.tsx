@@ -7,6 +7,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { DestinationsPanel } from "@/components/backups/destinations-panel";
 import { OrphanedBackupsPanel } from "@/components/backups/orphaned-backups-panel";
 import { useProjectBackups } from "@/lib/hooks/use-project-backups";
+import { useProject } from "@/lib/hooks/use-projects";
+import { useAuthStore } from "@/lib/stores/auth";
 import { formatBytes, formatDateTimeShort } from "@/lib/utils/format";
 import { cn } from "@/lib/utils";
 import type { ProjectBackupActivity } from "@/lib/types";
@@ -29,12 +31,16 @@ function statusTone(status: ProjectBackupActivity["status"]): string {
 function ProjectBackupsPage() {
   const { projectId } = Route.useParams();
   const { data: activity, isLoading } = useProjectBackups(projectId);
+  const { data: project } = useProject(projectId);
+  const currentUser = useAuthStore((s) => s.user);
+  const canDelete =
+    currentUser?.role === "admin" || currentUser?.id === project?.user_id;
 
   return (
     <div className="space-y-6">
       <DestinationsPanel projectId={projectId} />
 
-      <OrphanedBackupsPanel projectId={projectId} />
+      <OrphanedBackupsPanel projectId={projectId} canDelete={canDelete} />
 
       <Card>
         <CardHeader>

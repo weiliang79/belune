@@ -221,7 +221,9 @@ func (h *Handler) DeleteApplicationVolume(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	if !h.canAccessApplication(r, applicationUUID) {
+	// Owner-only: destroying a volume destroys the data on it, unlike routine
+	// application operation which shared access already covers.
+	if !h.isApplicationOwner(r, applicationUUID) {
 		writeError(w, http.StatusForbidden, "access denied")
 		return
 	}

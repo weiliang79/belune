@@ -795,7 +795,9 @@ func (h *Handler) DeleteDatabaseBackup(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid backup id")
 		return
 	}
-	if !h.canAccessDatabase(r, dbUUID) {
+	// Owner-only: destroying a backup is irreversible, unlike routine database
+	// operation which shared access already covers.
+	if !h.isDatabaseOwner(r, dbUUID) {
 		writeError(w, http.StatusForbidden, "access denied")
 		return
 	}
@@ -1216,7 +1218,9 @@ func (h *Handler) DeleteDatabase(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !h.canAccessDatabase(r, dbUUID) {
+	// Owner-only: shared access grants full operational use of the project's
+	// databases, but not the right to destroy one.
+	if !h.isDatabaseOwner(r, dbUUID) {
 		writeError(w, http.StatusForbidden, "access denied")
 		return
 	}
@@ -1470,7 +1474,9 @@ func (h *Handler) DeleteOrphanedBackup(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid backup id")
 		return
 	}
-	if !h.canAccessProject(r, projectUUID) {
+	// Owner-only: destroying a backup is irreversible, unlike routine project
+	// operation which shared access already covers.
+	if !h.isProjectOwner(r, projectUUID) {
 		writeError(w, http.StatusForbidden, "access denied")
 		return
 	}

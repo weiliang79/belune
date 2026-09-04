@@ -69,6 +69,7 @@ interface Props {
   destinationName?: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  canDelete: boolean;
 }
 
 export function BackupConfigRunsSheet({
@@ -77,6 +78,7 @@ export function BackupConfigRunsSheet({
   destinationName,
   open,
   onOpenChange,
+  canDelete,
 }: Props) {
   const { data: allBackups, isLoading } = useDatabaseBackups(
     db.project_id,
@@ -291,8 +293,8 @@ export function BackupConfigRunsSheet({
                                 This replaces the current contents of{" "}
                                 <span className="font-medium">{db.name}</span>{" "}
                                 with the backup from{" "}
-                                {formatDateTimeShort(b.started_at)}. Data written
-                                since then will be lost.
+                                {formatDateTimeShort(b.started_at)}. Data
+                                written since then will be lost.
                               </AlertDialogDescription>
                             </AlertDialogHeader>
                             <AlertDialogFooter>
@@ -306,7 +308,7 @@ export function BackupConfigRunsSheet({
                           </AlertDialogContent>
                         </AlertDialog>
                       )}
-                      {b.status !== "running" && (
+                      {b.status !== "running" && canDelete && (
                         <AlertDialog>
                           <Tooltip>
                             <TooltipTrigger

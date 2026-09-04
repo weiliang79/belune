@@ -44,6 +44,9 @@ function ProjectSettings() {
   const { data: project } = useProject(projectId);
   const updateProject = useUpdateProject(projectId);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const currentUser = useAuthStore((s) => s.user);
+  const canDelete =
+    currentUser?.role === "admin" || currentUser?.id === project?.user_id;
 
   const form = useForm({
     defaultValues: {
@@ -145,57 +148,62 @@ function ProjectSettings() {
         currentOwnerId={project.user_id}
       />
 
-      <Separator />
+      {canDelete && (
+        <>
+          <Separator />
 
-      {/* ring-, not border-: Card draws its edge with `ring-1` (a box-shadow)
-          and Tailwind's preflight zeroes border-width, so the previous
-          `border-destructive/50` set a colour on a 0px border and rendered
-          nothing. Matches the application Danger Zone. */}
-      <Card className="bg-status-error-soft ring-status-error-line">
-        <CardHeader>
-          <CardTitle className="text-destructive flex items-center gap-2">
-            <TriangleAlert aria-hidden="true" className="size-4" />
-            Danger Zone
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-6">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="min-w-0">
-                <div className="flex items-center gap-2">
-                  <Trash2
-                    aria-hidden="true"
-                    className="text-destructive size-4"
-                  />
-                  <p className="text-sm font-medium">Delete Project</p>
+          {/* ring-, not border-: Card draws its edge with `ring-1` (a box-shadow)
+              and Tailwind's preflight zeroes border-width, so the previous
+              `border-destructive/50` set a colour on a 0px border and rendered
+              nothing. Matches the application Danger Zone. */}
+          <Card className="bg-status-error-soft ring-status-error-line">
+            <CardHeader>
+              <CardTitle className="text-destructive flex items-center gap-2">
+                <TriangleAlert aria-hidden="true" className="size-4" />
+                Danger Zone
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-6">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <Trash2
+                        aria-hidden="true"
+                        className="text-destructive size-4"
+                      />
+                      <p className="text-sm font-medium">Delete Project</p>
+                    </div>
+                    <p className="text-muted-foreground mt-1 text-xs">
+                      Permanently deletes the project and everything in it —
+                      every application and database, their containers and
+                      volumes, and every backup taken of those databases. This
+                      cannot be undone.
+                    </p>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="destructive-solid"
+                    onClick={() => setDeleteOpen(true)}
+                    // "Delete" alone is ambiguous out of context, and this is the
+                    // most destructive control in the product.
+                    aria-label="Delete project"
+                  >
+                    Delete
+                  </Button>
                 </div>
-                <p className="text-muted-foreground mt-1 text-xs">
-                  Permanently deletes the project and everything in it — every
-                  application and database, their containers and volumes, and
-                  every backup taken of those databases. This cannot be undone.
-                </p>
               </div>
-              <Button
-                size="sm"
-                variant="destructive-solid"
-                onClick={() => setDeleteOpen(true)}
-                // "Delete" alone is ambiguous out of context, and this is the
-                // most destructive control in the product.
-                aria-label="Delete project"
-              >
-                Delete
-              </Button>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+            </CardContent>
+          </Card>
 
-      <DeleteProjectDialog
-        projectId={projectId}
-        projectName={project.name}
-        open={deleteOpen}
-        onOpenChange={setDeleteOpen}
-      />
+          <DeleteProjectDialog
+            projectId={projectId}
+            projectName={project.name}
+            open={deleteOpen}
+            onOpenChange={setDeleteOpen}
+          />
+        </>
+      )}
     </div>
   );
 }
@@ -233,8 +241,9 @@ function SharingCard({
             <p className="text-sm font-medium">Share with every Member</p>
             <p className="text-muted-foreground mt-1 text-xs">
               When on, every Member in this install can view and work in this
-              project — deploy, manage databases, edit env vars. Only the owner
-              can delete, transfer, or unshare it.
+              project — deploy, create databases, edit env vars. Deleting an
+              application, database, or domain, transferring the project, and
+              unsharing it stay owner-only.
             </p>
           </div>
           <Switch

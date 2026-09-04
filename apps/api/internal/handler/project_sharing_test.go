@@ -165,3 +165,109 @@ func TestUpdateProjectSharing_QuotaStaysOwnerScoped(t *testing.T) {
 	assert.EqualValues(t, 0, otherUsage["applications"],
 		"a shared project's applications must NOT count against a non-owner's quota")
 }
+
+// TestUpdateProjectSharing_MemberCanUseButNotDestroy pins the boundary a code
+// review caught: sharing must grant a Member full operational use of the
+// project's applications, databases, and domains, but NEVER the right to
+// destroy them. Only the owner (or an admin) may delete an application,
+// delete a database, or remove a domain — even once shared access already
+// lets that Member reach, deploy, and manage those resources.
+func TestUpdateProjectSharing_MemberCanUseButNotDestroy(t *testing.T) {
+	resetDB(t)
+	adminToken := env.SetupAdmin(t, "admin@test.com", "password123")
+	_, ownerToken := createMember(t, adminToken, "owner@test.com")
+	_, otherToken := createMember(t, adminToken, "other@test.com")
+
+	project := env.CreateProject(t, ownerToken, "Use Not Destroy", "use-not-destroy")
+	projectID := extractID(project["id"])
+
+	app := env.CreateApplication(t, ownerToken, projectID, map[string]any{
+		"name":        "App",
+		"type":        "git",
+		"build_type":  "dockerfile",
+		"source_repo": "https://github.com/test/repo",
+	})
+	appID := extractID(app["id"])
+
+	dbResp := env.DoRequest(t, "POST", fmt.Sprintf("/api/projects/%s/databases", projectID), map[string]any{
+		"name": "db", "type": "postgres",
+	}, testutil.AuthHeader(ownerToken))
+	require.Equal(t, http.StatusAccepted, dbResp.StatusCode)
+	dbID := extractID(testutil.ReadJSON(t, dbResp)["id"])
+
+	domainResp := env.DoRequest(t, "POST", fmt.Sprintf("/api/projects/%s/applications/%s/domains", projectID, appID), map[string]any{
+		"hostname": "shared.example.com",
+	}, testutil.AuthHeader(ownerToken))
+	require.Equal(t, http.StatusCreated, domainResp.StatusCode)
+	domainID := extractID(testutil.ReadJSON(t, domainResp)["id"])
+
+	shareResp := env.DoRequest(t, "PUT", fmt.Sprintf("/api/projects/%s/sharing", projectID), map[string]bool{
+		"shared": true,
+	}, testutil.AuthHeader(ownerToken))
+	require.Equal(t, http.StatusOK, shareResp.StatusCode)
+	shareResp.Body.Close()
+
+	// Positive: shared access reaches the application, database, and domain.
+	resp := env.DoRequest(t, "GET", fmt.Sprintf("/api/projects/%s/applications/%s", projectID, appID), nil, testutil.AuthHeader(otherToken))
+	assert.Equal(t, http.StatusOK, resp.StatusCode, "a shared member must be able to read the application")
+	resp.Body.Close()
+
+	resp = env.DoRequest(t, "GET", fmt.Sprintf("/api/projects/%s/databases/%s", projectID, dbID), nil, testutil.AuthHeader(otherToken))
+	assert.Equal(t, http.StatusOK, resp.StatusCode, "a shared member must be able to read the database")
+	resp.Body.Close()
+
+	resp = env.DoRequest(t, "GET", fmt.Sprintf("/api/projects/%s/applications/%s/domains", projectID, appID), nil, testutil.AuthHeader(otherToken))
+	assert.Equal(t, http.StatusOK, resp.StatusCode, "a shared member must be able to list domains")
+	resp.Body.Close()
+
+	// Negative: shared access does NOT reach delete.
+	resp = env.DoRequest(t, "DELETE", fmt.Sprintf("/api/projects/%s/applications/%s", projectID, appID), nil, testutil.AuthHeader(otherToken))
+	assert.Equal(t, http.StatusForbidden, resp.StatusCode, "a shared member must not be able to delete the application")
+	resp.Body.Close()
+
+	resp = env.DoRequest(t, "DELETE", fmt.Sprintf("/api/projects/%s/databases/%s", projectID, dbID), nil, testutil.AuthHeader(otherToken))
+	assert.Equal(t, http.StatusForbidden, resp.StatusCode, "a shared member must not be able to delete the database")
+	resp.Body.Close()
+
+	resp = env.DoRequest(t, "DELETE", fmt.Sprintf("/api/projects/%s/applications/%s/domains/%s", projectID, appID, domainID), nil, testutil.AuthHeader(otherToken))
+	assert.Equal(t, http.StatusForbidden, resp.StatusCode, "a shared member must not be able to remove the domain")
+	resp.Body.Close()
+
+	// The owner retains full destroy rights throughout.
+	resp = env.DoRequest(t, "DELETE", fmt.Sprintf("/api/projects/%s/applications/%s/domains/%s", projectID, appID, domainID), nil, testutil.AuthHeader(ownerToken))
+	assert.Equal(t, http.StatusOK, resp.StatusCode, "the owner must still be able to remove the domain")
+	resp.Body.Close()
+
+	resp = env.DoRequest(t, "DELETE", fmt.Sprintf("/api/projects/%s/databases/%s", projectID, dbID), nil, testutil.AuthHeader(ownerToken))
+	assert.Equal(t, http.StatusOK, resp.StatusCode, "the owner must still be able to delete the database")
+	resp.Body.Close()
+
+	resp = env.DoRequest(t, "DELETE", fmt.Sprintf("/api/projects/%s/applications/%s", projectID, appID), nil, testutil.AuthHeader(ownerToken))
+	assert.Equal(t, http.StatusOK, resp.StatusCode, "the owner must still be able to delete the application")
+	resp.Body.Close()
+}
+
+// TestCanAccessApplication_NotShared_StillBlocked is the negative-direction
+// coverage a review flagged as missing: a Member with no relationship to a
+// PRIVATE project's application must stay blocked, so a bug that widened
+// canAccessOwned's "OR shared" branch unconditionally would be caught here.
+func TestCanAccessApplication_NotShared_StillBlocked(t *testing.T) {
+	resetDB(t)
+	adminToken := env.SetupAdmin(t, "admin@test.com", "password123")
+	_, ownerToken := createMember(t, adminToken, "owner@test.com")
+	_, otherToken := createMember(t, adminToken, "other@test.com")
+
+	project := env.CreateProject(t, ownerToken, "Private", "private")
+	projectID := extractID(project["id"])
+	app := env.CreateApplication(t, ownerToken, projectID, map[string]any{
+		"name":        "App",
+		"type":        "git",
+		"build_type":  "dockerfile",
+		"source_repo": "https://github.com/test/repo",
+	})
+	appID := extractID(app["id"])
+
+	resp := env.DoRequest(t, "GET", fmt.Sprintf("/api/projects/%s/applications/%s", projectID, appID), nil, testutil.AuthHeader(otherToken))
+	assert.Equal(t, http.StatusForbidden, resp.StatusCode, "a non-member must stay blocked from a private project's application")
+	resp.Body.Close()
+}

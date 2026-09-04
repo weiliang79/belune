@@ -50,6 +50,7 @@ import {
   useReloadDatabase,
 } from "@/lib/hooks/use-databases";
 import { useProject } from "@/lib/hooks/use-projects";
+import { useAuthStore } from "@/lib/stores/auth";
 import {
   Database as DatabaseIcon,
   Loader2,
@@ -134,6 +135,9 @@ function DatabaseDetailPage() {
   const navigate = useNavigate();
   const { data: db, isLoading } = useDatabase(projectId, databaseId);
   const { data: project } = useProject(projectId);
+  const currentUser = useAuthStore((s) => s.user);
+  const canDelete =
+    currentUser?.role === "admin" || currentUser?.id === project?.user_id;
   const deleteDb = useDeleteDatabase(projectId);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState("");
@@ -502,7 +506,7 @@ function DatabaseDetailPage() {
       {activeTab === "backups" && (
         <div className="space-y-6">
           {db.status === "running" && dbBackupEnabled(db) ? (
-            <BackupsTab db={db} />
+            <BackupsTab db={db} canDelete={canDelete} />
           ) : (
             <Card>
               <CardContent className="text-muted-foreground py-6 text-sm">
@@ -519,142 +523,151 @@ function DatabaseDetailPage() {
         <div className="space-y-6">
           {db.status === "running" && <AdvancedCard db={db} />}
 
-          {/* ring-, not border-: Card draws its edge with `ring-1`, and Tailwind
+          {canDelete && (
+            <>
+              {/* ring-, not border-: Card draws its edge with `ring-1`, and Tailwind
               preflight zeroes border-width, so a `border-*` colour never renders.
               bg/ring use the status-error soft/line tokens so both themes get a
               red chosen for them. Mirrors the App Details Danger Zone. */}
-          <Card className="bg-status-error-soft ring-status-error-line">
-            <CardHeader>
-              <CardTitle className="text-destructive flex items-center gap-2">
-                <AlertTriangleIcon aria-hidden="true" className="size-4" />
-                Danger Zone
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    <Trash2
-                      aria-hidden="true"
-                      className="text-destructive size-4"
-                    />
-                    <p className="text-sm font-medium">Delete this database</p>
-                  </div>
-                  <p className="text-muted-foreground mt-1 text-xs">
-                    This will permanently delete the database, its data, its
-                    container, and every backup taken of it.
-                  </p>
-                </div>
-                <AlertDialog
-                  open={deleteOpen}
-                  onOpenChange={(o) => {
-                    setDeleteOpen(o);
-                    // Reset on open, so a previous tick or half-typed name can
-                    // never carry into a later, different decision.
-                    if (o) {
-                      setDeleteConfirm("");
-                      setDeleteBackups(false);
-                    }
-                  }}
-                >
-                  <AlertDialogTrigger
-                    render={<Button variant="destructive-solid" size="sm" />}
-                  >
-                    Delete
-                  </AlertDialogTrigger>
-                  <AlertDialogContent>
-                    <AlertDialogHeader>
-                      <AlertDialogTitle>Delete database?</AlertDialogTitle>
-                      <AlertDialogDescription>
-                        This will permanently delete &quot;{db.name}&quot; and
-                        all its data. This action cannot be undone.
-                      </AlertDialogDescription>
-                      {deleteImpact && deleteImpact.backup_count > 0 ? (
-                        <AlertDialogDescription>
-                          Its{" "}
-                          {deleteImpact.backup_count === 1
-                            ? "1 backup is"
-                            : `${deleteImpact.backup_count} backups are`}{" "}
-                          kept
-                          {deleteImpact.backup_destinations.length > 0
-                            ? `, including copies in ${formatList(deleteImpact.backup_destinations)}`
-                            : ""}
-                          , and stay listed under the project&apos;s Backups
-                          tab. You can restore a replacement database from them.
-                        </AlertDialogDescription>
-                      ) : null}
-                    </AlertDialogHeader>
-                    {deleteImpact && deleteImpact.backup_count > 0 ? (
-                      <Field orientation="horizontal">
-                        <Checkbox
-                          id="delete-db-backups"
-                          checked={deleteBackups}
-                          onCheckedChange={(checked) =>
-                            setDeleteBackups(checked === true)
-                          }
-                          className="mt-0.5"
+              <Card className="bg-status-error-soft ring-status-error-line">
+                <CardHeader>
+                  <CardTitle className="text-destructive flex items-center gap-2">
+                    <AlertTriangleIcon aria-hidden="true" className="size-4" />
+                    Danger Zone
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <Trash2
+                          aria-hidden="true"
+                          className="text-destructive size-4"
                         />
-
-                        <FieldContent>
-                          <FieldLabel
-                            htmlFor="delete-db-backups"
-                            className="leading-snug font-normal"
-                          >
-                            Also delete{" "}
-                            {deleteImpact.backup_count === 1
-                              ? "this backup"
-                              : "these backups"}
-                          </FieldLabel>
-
-                          <FieldDescription>
-                            {deleteImpact.backup_destinations.length > 0
-                              ? "Erases the archives, including the remote copies. This cannot be undone."
-                              : "Erases the archives. This cannot be undone."}
-                          </FieldDescription>
-                        </FieldContent>
-                      </Field>
-                    ) : null}
-                    <div className="space-y-2">
-                      <Label
-                        htmlFor="delete-db-confirm"
-                        className="font-normal"
-                      >
-                        Type{" "}
-                        <span className="text-foreground font-medium">
-                          {db.name}
-                        </span>{" "}
-                        to confirm.
-                      </Label>
-                      <Input
-                        id="delete-db-confirm"
-                        value={deleteConfirm}
-                        onChange={(e) => setDeleteConfirm(e.target.value)}
-                        autoComplete="off"
-                        autoCorrect="off"
-                        spellCheck={false}
-                      />
+                        <p className="text-sm font-medium">
+                          Delete this database
+                        </p>
+                      </div>
+                      <p className="text-muted-foreground mt-1 text-xs">
+                        This will permanently delete the database, its data, its
+                        container, and every backup taken of it.
+                      </p>
                     </div>
-                    <AlertDialogFooter>
-                      <AlertDialogCancel>Cancel</AlertDialogCancel>
-                      <AlertDialogAction
-                        onClick={handleDelete}
-                        disabled={
-                          deleteConfirm.trim() !== db.name.trim() ||
-                          deleteDb.isPending
+                    <AlertDialog
+                      open={deleteOpen}
+                      onOpenChange={(o) => {
+                        setDeleteOpen(o);
+                        // Reset on open, so a previous tick or half-typed name can
+                        // never carry into a later, different decision.
+                        if (o) {
+                          setDeleteConfirm("");
+                          setDeleteBackups(false);
                         }
-                        className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                      }}
+                    >
+                      <AlertDialogTrigger
+                        render={
+                          <Button variant="destructive-solid" size="sm" />
+                        }
                       >
-                        {deleteDb.isPending ? (
-                          <Loader2 className="mr-1 h-4 w-4 animate-spin" />
-                        ) : null}
                         Delete
-                      </AlertDialogAction>
-                    </AlertDialogFooter>
-                  </AlertDialogContent>
-                </AlertDialog>
-              </div>
-            </CardContent>
-          </Card>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>Delete database?</AlertDialogTitle>
+                          <AlertDialogDescription>
+                            This will permanently delete &quot;{db.name}&quot;
+                            and all its data. This action cannot be undone.
+                          </AlertDialogDescription>
+                          {deleteImpact && deleteImpact.backup_count > 0 ? (
+                            <AlertDialogDescription>
+                              Its{" "}
+                              {deleteImpact.backup_count === 1
+                                ? "1 backup is"
+                                : `${deleteImpact.backup_count} backups are`}{" "}
+                              kept
+                              {deleteImpact.backup_destinations.length > 0
+                                ? `, including copies in ${formatList(deleteImpact.backup_destinations)}`
+                                : ""}
+                              , and stay listed under the project&apos;s Backups
+                              tab. You can restore a replacement database from
+                              them.
+                            </AlertDialogDescription>
+                          ) : null}
+                        </AlertDialogHeader>
+                        {deleteImpact && deleteImpact.backup_count > 0 ? (
+                          <Field orientation="horizontal">
+                            <Checkbox
+                              id="delete-db-backups"
+                              checked={deleteBackups}
+                              onCheckedChange={(checked) =>
+                                setDeleteBackups(checked === true)
+                              }
+                              className="mt-0.5"
+                            />
+
+                            <FieldContent>
+                              <FieldLabel
+                                htmlFor="delete-db-backups"
+                                className="leading-snug font-normal"
+                              >
+                                Also delete{" "}
+                                {deleteImpact.backup_count === 1
+                                  ? "this backup"
+                                  : "these backups"}
+                              </FieldLabel>
+
+                              <FieldDescription>
+                                {deleteImpact.backup_destinations.length > 0
+                                  ? "Erases the archives, including the remote copies. This cannot be undone."
+                                  : "Erases the archives. This cannot be undone."}
+                              </FieldDescription>
+                            </FieldContent>
+                          </Field>
+                        ) : null}
+                        <div className="space-y-2">
+                          <Label
+                            htmlFor="delete-db-confirm"
+                            className="font-normal"
+                          >
+                            Type{" "}
+                            <span className="text-foreground font-medium">
+                              {db.name}
+                            </span>{" "}
+                            to confirm.
+                          </Label>
+                          <Input
+                            id="delete-db-confirm"
+                            value={deleteConfirm}
+                            onChange={(e) => setDeleteConfirm(e.target.value)}
+                            autoComplete="off"
+                            autoCorrect="off"
+                            spellCheck={false}
+                          />
+                        </div>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>Cancel</AlertDialogCancel>
+                          <AlertDialogAction
+                            onClick={handleDelete}
+                            disabled={
+                              deleteConfirm.trim() !== db.name.trim() ||
+                              deleteDb.isPending
+                            }
+                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                          >
+                            {deleteDb.isPending ? (
+                              <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                            ) : null}
+                            Delete
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
+                  </div>
+                </CardContent>
+              </Card>
+            </>
+          )}
         </div>
       )}
     </div>
@@ -1052,7 +1065,7 @@ function AdvancedCard({ db }: { db: Database }) {
   );
 }
 
-function BackupsTab({ db }: { db: Database }) {
+function BackupsTab({ db, canDelete }: { db: Database; canDelete: boolean }) {
   const { data: configs, isLoading } = useDatabaseBackupConfigs(
     db.project_id,
     db.id,
@@ -1240,6 +1253,7 @@ function BackupsTab({ db }: { db: Database }) {
         }
         open={sheetOpen}
         onOpenChange={setSheetOpen}
+        canDelete={canDelete}
       />
 
       <AlertDialog
