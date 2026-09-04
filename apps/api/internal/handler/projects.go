@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"log/slog"
 	"net/http"
@@ -60,17 +61,10 @@ func (h *Handler) CreateProject(w http.ResponseWriter, r *http.Request) {
 // canAccessProject checks if the current user can access the given project.
 // Admins can access all projects; members can only access their own.
 func (h *Handler) canAccessProject(r *http.Request, projectID pgtype.UUID) bool {
-	role := middleware.RoleFromContext(r.Context())
-	if role == "admin" {
-		return true
-	}
-	project, err := h.queries.GetProject(r.Context(), projectID)
-	if err != nil {
-		return false
-	}
-	var userID pgtype.UUID
-	userID.Scan(middleware.UserIDFromContext(r.Context()))
-	return project.UserID == userID
+	return h.canAccessOwned(r, func(ctx context.Context) (pgtype.UUID, error) {
+		project, err := h.queries.GetProject(ctx, projectID)
+		return project.UserID, err
+	})
 }
 
 func (h *Handler) GetProject(w http.ResponseWriter, r *http.Request) {
