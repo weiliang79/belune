@@ -59,7 +59,7 @@ func New(cfg *config.Config, db *pgxpool.Pool, queries *generated.Queries, asynq
 		db:      db,
 		auth:    auth,
 		tokens:  tokens,
-		handler: handler.New(cfg, db, queries, asynqClient, inspector, rts, pm, reconciler, auth, rdb, appSvc, projSvc, dbSvc, gitProviderSvc, gitIntegrationSvc, backupDestSvc, hub, auditSvc, notifySvc, termMgr, quotaSvc, emailSvc, tokens),
+		handler: handler.New(cfg, db, queries, asynqClient, inspector, rts, pm, reconciler, auth, rdb, appSvc, projSvc, dbSvc, gitProviderSvc, gitIntegrationSvc, backupDestSvc, hub, auditSvc, notifySvc, termMgr, quotaSvc, emailSvc),
 	}
 
 	s.router = s.setupRouter()

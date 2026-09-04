@@ -192,3 +192,89 @@ func TestAuditLog_AttributesToToken(t *testing.T) {
 	assert.Equal(t, memberID, idStr(gotUserID))
 	assert.Equal(t, tokenID, idStr(gotTokenID), "the audit entry must attribute the action to the token, not just the owning user")
 }
+
+// TestAuditLog_SessionActionLeavesTokenIDNull is TestAuditLog_AttributesToToken's
+// negative twin: a session (no PAT) action must leave token_id NULL, not some
+// zero-value UUID that would misattribute it to a real token.
+func TestAuditLog_SessionActionLeavesTokenIDNull(t *testing.T) {
+	resetDB(t)
+	adminToken := env.SetupAdmin(t, "admin@test.com", "password123")
+	memberID, _ := createMember(t, adminToken, "member@test.com")
+
+	auditSvc := service.NewAuditService(env.Queries)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go auditSvc.Run(ctx)
+
+	auditSvc.Log(memberID, "", "127.0.0.1", "create_project", "project", "via-session-project", nil)
+
+	var gotTokenID pgtype.UUID
+	require.Eventually(t, func() bool {
+		row := env.Pool.QueryRow(context.Background(),
+			"SELECT token_id FROM audit_logs WHERE action = 'create_project' AND resource_id = 'via-session-project'")
+		return row.Scan(&gotTokenID) == nil
+	}, 2*time.Second, 10*time.Millisecond, "audit entry should appear once the async writer drains it")
+
+	assert.False(t, gotTokenID.Valid, "a session-authenticated action must leave token_id NULL")
+}
+
+// TestDeleteProject_CascadesPinnedTokenAndAuditStillWrites is a regression
+// test for a bug a code review caught: audit_logs.token_id must NOT be a
+// foreign key. Audit writes are async, so "delete a project (which CASCADEs
+// away any token pinned to it), then audit the delete" would insert a
+// token_id that no longer exists by the time the async writer drains it —
+// with an FK in place, that INSERT fails and the entire audit row silently
+// vanishes (not just its attribution), which is exactly the "must never
+// disappear" guarantee AuditService.Log documents for itself. This asserts
+// both halves: the token really is gone (proving CASCADE, not SET NULL —
+// the whole point of that choice), and the audit write for the same action
+// still succeeds with the dangling id intact.
+func TestDeleteProject_CascadesPinnedTokenAndAuditStillWrites(t *testing.T) {
+	resetDB(t)
+	adminToken := env.SetupAdmin(t, "admin@test.com", "password123")
+	memberID, _ := createMember(t, adminToken, "member@test.com")
+
+	project := env.CreateProject(t, adminToken, "Pin Target", "pin-target")
+	projectID := extractID(project["id"])
+
+	var uid, pid pgtype.UUID
+	require.NoError(t, uid.Scan(memberID))
+	require.NoError(t, pid.Scan(projectID))
+	plainTok, hash, err := service.GenerateToken()
+	require.NoError(t, err)
+	tok, err := env.Queries.CreateAPIToken(context.Background(), generated.CreateAPITokenParams{
+		UserID:      uid,
+		Name:        "pinned token",
+		TokenHash:   hash,
+		Scopes:      []string{"read"},
+		ProjectID:   pid,
+		RoleAtIssue: "member",
+	})
+	require.NoError(t, err)
+	_ = plainTok
+
+	resp := env.DoRequest(t, "DELETE", "/api/projects/"+projectID, nil, testutil.AuthHeader(adminToken))
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	resp.Body.Close()
+
+	// The pinned token is really gone (CASCADE), not just unpinned.
+	var count int
+	require.NoError(t, env.Pool.QueryRow(context.Background(),
+		"SELECT count(*) FROM api_tokens WHERE id = $1", tok.ID).Scan(&count))
+	assert.Equal(t, 0, count, "a token pinned to a deleted project must be gone, not merely unpinned")
+
+	// An audit write naming that now-gone token as the actor must still
+	// succeed — this is what an FK on token_id would have broken.
+	auditSvc := service.NewAuditService(env.Queries)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go auditSvc.Run(ctx)
+	auditSvc.Log(memberID, idStr(tok.ID), "127.0.0.1", "delete_project", "project", projectID, nil)
+
+	require.Eventually(t, func() bool {
+		var n int
+		_ = env.Pool.QueryRow(context.Background(),
+			"SELECT count(*) FROM audit_logs WHERE action = 'delete_project' AND resource_id = $1", projectID).Scan(&n)
+		return n == 1
+	}, 2*time.Second, 10*time.Millisecond, "the audit row for the delete must not be dropped just because its token is gone")
+}

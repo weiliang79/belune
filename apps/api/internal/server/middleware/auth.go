@@ -2,6 +2,8 @@ package middleware
 
 import (
 	"context"
+	"errors"
+	"log/slog"
 	"net/http"
 	"strings"
 
@@ -21,22 +23,30 @@ const (
 )
 
 // Auth returns a middleware that authenticates a session JWT or a personal
-// access token, both read from the same Authorization header. The PAT branch
-// is a prefix check on the already-extracted value, not a new route group —
+// access token. The PAT branch is a prefix check, not a new route group —
 // every route already behind Auth gains PAT support with no further wiring.
+//
+// A PAT is only ever accepted from the Authorization header, never the
+// session cookie extractToken also falls back to — unlike a JWT, a PAT is
+// never meant to be an ambient browser credential, so it must come from
+// somewhere a script explicitly put it.
 func Auth(authService *service.AuthService, tokenService *service.TokenService) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			tokenString := extractToken(r)
-			if tokenString == "" {
-				http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
-				return
-			}
-
-			if service.HasTokenPrefix(tokenString) {
-				tok, err := tokenService.Authenticate(r.Context(), tokenString)
+			if bearer, ok := bearerToken(r); ok && service.HasTokenPrefix(bearer) {
+				tok, err := tokenService.Authenticate(r.Context(), bearer)
 				if err != nil {
-					http.Error(w, `{"error":"invalid or expired token"}`, http.StatusUnauthorized)
+					if errors.Is(err, service.ErrInvalidAPIToken) {
+						http.Error(w, `{"error":"invalid or expired token"}`, http.StatusUnauthorized)
+						return
+					}
+					// A lookup failure (DB down, pool exhausted) is not the
+					// token's fault — reporting it as 401 tells a CI/CLI
+					// client its credential was rejected, and such clients
+					// are built to react by rotating or deleting it instead
+					// of retrying a transient failure.
+					slog.Error("auth: token lookup failed", "error", err)
+					http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)
 					return
 				}
 
@@ -45,6 +55,12 @@ func Auth(authService *service.AuthService, tokenService *service.TokenService) 
 				ctx = context.WithValue(ctx, ctxTokenID, uuid.UUID(tok.TokenID.Bytes).String())
 				ctx = context.WithValue(ctx, ctxScopes, tok.Scopes)
 				next.ServeHTTP(w, r.WithContext(ctx))
+				return
+			}
+
+			tokenString := extractToken(r)
+			if tokenString == "" {
+				http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
 				return
 			}
 
@@ -62,11 +78,21 @@ func Auth(authService *service.AuthService, tokenService *service.TokenService) 
 	}
 }
 
-func extractToken(r *http.Request) string {
-	// Check Authorization header first
+// bearerToken returns the Authorization header's Bearer value only — no
+// cookie fallback. Used by the PAT branch, which must never accept a token
+// from an ambient credential.
+func bearerToken(r *http.Request) (string, bool) {
 	auth := r.Header.Get("Authorization")
 	if strings.HasPrefix(auth, "Bearer ") {
-		return strings.TrimPrefix(auth, "Bearer ")
+		return strings.TrimPrefix(auth, "Bearer "), true
+	}
+	return "", false
+}
+
+func extractToken(r *http.Request) string {
+	// Check Authorization header first
+	if v, ok := bearerToken(r); ok {
+		return v
 	}
 
 	// Fall back to cookie
