@@ -90,7 +90,7 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	if outcome.Challenge != nil {
 		if h.auditSvc != nil {
 			uid := uuidToString(outcome.UserID)
-			h.auditSvc.Log(uid, clientIP, "login_challenge_issued", "user", uid, nil)
+			h.auditSvc.Log(uid, "", clientIP, "login_challenge_issued", "user", uid, nil)
 		}
 		writeJSON(w, http.StatusOK, outcome.Challenge)
 		return
@@ -109,7 +109,7 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 
 	if h.auditSvc != nil {
 		uid := uuidToString(outcome.Session.User.ID)
-		h.auditSvc.Log(uid, clientIP, "login", "user", uid, nil)
+		h.auditSvc.Log(uid, "", clientIP, "login", "user", uid, nil)
 	}
 
 	writeJSON(w, http.StatusOK, outcome.Session)
@@ -284,7 +284,7 @@ func (h *Handler) recordLoginFailure(ctx context.Context, emailKey, clientIP str
 	// Audit *before* writing the failure counter so the audit row exists even
 	// if the lockout write fails.
 	if h.auditSvc != nil {
-		h.auditSvc.Log("", clientIP, "login_failed", "user", emailKey, map[string]any{"email": emailKey})
+		h.auditSvc.Log("", "", clientIP, "login_failed", "user", emailKey, map[string]any{"email": emailKey})
 	}
 	if _, _, err := h.auth.RecordFailedLogin(ctx, emailKey); err != nil {
 		slog.Warn("auth: failed to record login failure", "error", err)

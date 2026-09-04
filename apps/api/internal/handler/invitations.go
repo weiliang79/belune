@@ -132,7 +132,7 @@ func (h *Handler) InviteUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if h.auditSvc != nil {
-		h.auditSvc.Log(inviterID, clientIP, "invitation_sent", "invitation", uuidToString(inv.ID), nil)
+		h.auditSvc.Log(inviterID, middleware.TokenIDFromContext(ctx), clientIP, "invitation_sent", "invitation", uuidToString(inv.ID), nil)
 	}
 
 	writeJSON(w, http.StatusCreated, toInvitationResponse(inv))
@@ -175,7 +175,7 @@ func (h *Handler) RevokeInvitation(w http.ResponseWriter, r *http.Request) {
 
 	if h.auditSvc != nil {
 		callerID := middleware.UserIDFromContext(ctx)
-		h.auditSvc.Log(callerID, clientIP, "invitation_revoked", "invitation", invID, nil)
+		h.auditSvc.Log(callerID, middleware.TokenIDFromContext(ctx), clientIP, "invitation_revoked", "invitation", invID, nil)
 	}
 
 	w.WriteHeader(http.StatusNoContent)
@@ -323,7 +323,7 @@ func (h *Handler) AcceptInvitation(w http.ResponseWriter, r *http.Request) {
 
 	if h.auditSvc != nil {
 		uid := uuidToString(user.ID)
-		h.auditSvc.Log(uid, clientIP, "invitation_accepted", "user", uid, nil)
+		h.auditSvc.Log(uid, "", clientIP, "invitation_accepted", "user", uid, nil)
 	}
 
 	writeJSON(w, http.StatusCreated, result)

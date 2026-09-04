@@ -36,6 +36,7 @@ var sensitiveDetailKey = regexp.MustCompile(`(?i)password|token|secret|credentia
 // auditEntry is an internal type for the buffered channel.
 type auditEntry struct {
 	UserID       string
+	TokenID      string
 	Action       string
 	ResourceType string
 	ResourceID   string
@@ -97,6 +98,11 @@ func (s *AuditService) insert(ctx context.Context, entry auditEntry) {
 		_ = userUUID.Scan(entry.UserID)
 	}
 
+	var tokenUUID pgtype.UUID
+	if entry.TokenID != "" {
+		_ = tokenUUID.Scan(entry.TokenID)
+	}
+
 	var detailsJSON []byte
 	if entry.Details != nil {
 		detailsJSON, _ = json.Marshal(entry.Details)
@@ -109,6 +115,7 @@ func (s *AuditService) insert(ctx context.Context, entry auditEntry) {
 		ResourceID:   pgtype.Text{String: entry.ResourceID, Valid: entry.ResourceID != ""},
 		Details:      detailsJSON,
 		IpAddress:    pgtype.Text{String: entry.IPAddress, Valid: entry.IPAddress != ""},
+		TokenID:      tokenUUID,
 	})
 	if err != nil {
 		slog.Warn("audit: failed to insert log", "action", entry.Action, "error", err)
@@ -123,10 +130,14 @@ func (s *AuditService) insert(ctx context.Context, entry auditEntry) {
 // Audit entries must never silently disappear, so a slow consumer turns into
 // caller back-pressure rather than data loss.
 //
-// Caller provides userID and ipAddress directly (avoids import cycle with middleware).
-func (s *AuditService) Log(userID, ipAddress, action, resourceType, resourceID string, details map[string]any) {
+// Caller provides userID, tokenID, and ipAddress directly (avoids import
+// cycle with middleware). tokenID is "" for a session JWT — it cannot be
+// backfilled onto rows written before api_tokens existed, so an empty string
+// here correctly means "this was a human action", not "unknown".
+func (s *AuditService) Log(userID, tokenID, ipAddress, action, resourceType, resourceID string, details map[string]any) {
 	entry := auditEntry{
 		UserID:       userID,
+		TokenID:      tokenID,
 		Action:       action,
 		ResourceType: resourceType,
 		ResourceID:   resourceID,

@@ -89,7 +89,7 @@ func (h *TaskHandler) maybeSendQuotaAlert(ctx context.Context, projectID, ownerU
 	)
 
 	if h.AuditLog != nil {
-		h.AuditLog.Log("system", "", "alert_sent", "project",
+		h.AuditLog.Log("system", "", "", "alert_sent", "project",
 			fmt.Sprintf("%v", projectID),
 			map[string]any{"kind": "quota_threshold", "recipient_id": fmt.Sprintf("%v", ownerUserID)},
 		)

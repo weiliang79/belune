@@ -62,6 +62,7 @@ type Handler struct {
 	proxy             proxy.ProxyManager
 	reconciler        ReconcilerStatusProvider
 	auth              *service.AuthService
+	tokenSvc          *service.TokenService
 	rdb               *redis.Client
 	appService        *service.ApplicationService
 	projService       *service.ProjectService
@@ -119,6 +120,7 @@ func New(
 	termMgr *terminal.Manager,
 	quotaSvc *quota.Service,
 	emailSvc *email.Service,
+	tokenSvc *service.TokenService,
 ) *Handler {
 	return &Handler{
 		cfg:               cfg,
@@ -130,6 +132,7 @@ func New(
 		proxy:             pm,
 		reconciler:        reconciler,
 		auth:              auth,
+		tokenSvc:          tokenSvc,
 		rdb:               rdb,
 		appService:        appSvc,
 		projService:       projSvc,
@@ -166,11 +169,14 @@ func (h *Handler) runtimeForProject(ctx context.Context, projectID pgtype.UUID) 
 	return service.RuntimeForProject(ctx, h.queries, h.runtimes, projectID)
 }
 
-// audit is a nil-safe wrapper for audit logging. Extracts user ID + real client IP from request.
+// audit is a nil-safe wrapper for audit logging. Extracts user ID, the
+// authenticating PAT's id (empty for a session), and real client IP from the
+// request.
 func (h *Handler) audit(r *http.Request, action, resourceType, resourceID string, details map[string]any) {
 	if h.auditSvc != nil {
 		userID := middleware.UserIDFromContext(r.Context())
-		h.auditSvc.Log(userID, middleware.ClientIP(r), action, resourceType, resourceID, details)
+		tokenID := middleware.TokenIDFromContext(r.Context())
+		h.auditSvc.Log(userID, tokenID, middleware.ClientIP(r), action, resourceType, resourceID, details)
 	}
 }
 

@@ -17,6 +17,19 @@ type AlertPreference struct {
 	DeploySuccess         bool        `json:"deploy_success"`
 }
 
+type ApiToken struct {
+	ID          pgtype.UUID        `json:"id"`
+	UserID      pgtype.UUID        `json:"user_id"`
+	Name        string             `json:"name"`
+	TokenHash   []byte             `json:"token_hash"`
+	Scopes      []string           `json:"scopes"`
+	ProjectID   pgtype.UUID        `json:"project_id"`
+	RoleAtIssue string             `json:"role_at_issue"`
+	ExpiresAt   pgtype.Timestamptz `json:"expires_at"`
+	LastUsedAt  pgtype.Timestamptz `json:"last_used_at"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+}
+
 type Application struct {
 	ID                            pgtype.UUID        `json:"id"`
 	ProjectID                     pgtype.UUID        `json:"project_id"`
@@ -134,6 +147,7 @@ type AuditLog struct {
 	Details      []byte             `json:"details"`
 	IpAddress    pgtype.Text        `json:"ip_address"`
 	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+	TokenID      pgtype.UUID        `json:"token_id"`
 }
 
 type BackupDestination struct {

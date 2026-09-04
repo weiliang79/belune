@@ -24,8 +24,10 @@ import (
 )
 
 // auditLogger is the narrow interface the worker needs to emit audit entries.
+// tokenID is always "" here — background jobs run under no request, so there
+// is never an authenticating PAT to attribute an entry to.
 type auditLogger interface {
-	Log(userID, ip, action, resourceType, resourceID string, details map[string]any)
+	Log(userID, tokenID, ip, action, resourceType, resourceID string, details map[string]any)
 }
 
 // notifier is the narrow interface the worker needs to emit user-facing

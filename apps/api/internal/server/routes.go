@@ -19,10 +19,15 @@ const (
 	handlerTimeout   = 15 * time.Second
 )
 
-// keyByUserIDOrIP keys rate limiting by authenticated user ID, falling back to
-// IP address for unauthenticated requests. This ensures per-user limits rather
-// than per-IP limits on protected routes.
-func keyByUserIDOrIP(r *http.Request) (string, error) {
+// rateLimitKey keys rate limiting by the authenticating PAT's id first, then
+// falls back to the session user id, then to IP for unauthenticated requests.
+// Token id takes priority over user id so a runaway script on one token
+// cannot starve the same user's other tokens (or their human session) —
+// separate buckets, per the PAT design.
+func rateLimitKey(r *http.Request) (string, error) {
+	if tokenID := middleware.TokenIDFromContext(r.Context()); tokenID != "" {
+		return "token:" + tokenID, nil
+	}
 	if userID := middleware.UserIDFromContext(r.Context()); userID != "" {
 		return "user:" + userID, nil
 	}
@@ -37,7 +42,7 @@ func withTimeout(d time.Duration) func(http.Handler) http.Handler {
 	}
 }
 
-func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService, disableRateLimit bool) {
+func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService, tokens *service.TokenService, disableRateLimit bool) {
 	// Health check (unauthenticated; no body limit needed, no timeout applied so
 	// health-check pollers with long intervals are not artificially rejected).
 	r.Get("/healthz", h.HealthCheck)
@@ -139,17 +144,17 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService,
 	// httprate must NOT be applied here — it wraps ResponseWriter in a way that
 	// breaks Hijacker and prevents the protocol upgrade.
 	r.Group(func(r chi.Router) {
-		r.Use(middleware.Auth(auth))
+		r.Use(middleware.Auth(auth, tokens))
 		r.Get("/api/ws", h.HandleWebSocket)
 		r.Get("/api/ws/terminal/{sessionId}", h.HandleTerminalWebSocket)
 	})
 
 	// Protected routes
 	r.Group(func(r chi.Router) {
-		r.Use(middleware.Auth(auth))
+		r.Use(middleware.Auth(auth, tokens))
 		r.Use(middleware.CSRF())
 		if !disableRateLimit {
-			r.Use(httprate.Limit(100, time.Minute, httprate.WithKeyFuncs(keyByUserIDOrIP)))
+			r.Use(httprate.Limit(100, time.Minute, httprate.WithKeyFuncs(rateLimitKey)))
 		}
 
 		// Standard JSON routes: 1 MB body limit + 15 s timeout.

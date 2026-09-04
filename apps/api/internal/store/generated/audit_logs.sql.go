@@ -57,8 +57,8 @@ func (q *Queries) CountAuditLogsFiltered(ctx context.Context, arg CountAuditLogs
 }
 
 const createAuditLog = `-- name: CreateAuditLog :exec
-INSERT INTO audit_logs (user_id, action, resource_type, resource_id, details, ip_address)
-VALUES ($1, $2, $3, $4, $5, $6)
+INSERT INTO audit_logs (user_id, action, resource_type, resource_id, details, ip_address, token_id)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
 `
 
 type CreateAuditLogParams struct {
@@ -68,8 +68,12 @@ type CreateAuditLogParams struct {
 	ResourceID   pgtype.Text `json:"resource_id"`
 	Details      []byte      `json:"details"`
 	IpAddress    pgtype.Text `json:"ip_address"`
+	TokenID      pgtype.UUID `json:"token_id"`
 }
 
+// token_id is nullable: NULL means the action came from a human session, not
+// a PAT. It cannot be backfilled onto rows written before this column
+// existed — see migration 000066.
 func (q *Queries) CreateAuditLog(ctx context.Context, arg CreateAuditLogParams) error {
 	_, err := q.db.Exec(ctx, createAuditLog,
 		arg.UserID,
@@ -78,6 +82,7 @@ func (q *Queries) CreateAuditLog(ctx context.Context, arg CreateAuditLogParams) 
 		arg.ResourceID,
 		arg.Details,
 		arg.IpAddress,
+		arg.TokenID,
 	)
 	return err
 }
@@ -92,7 +97,7 @@ func (q *Queries) DeleteOldAuditLogs(ctx context.Context, dollar_1 pgtype.Text) 
 }
 
 const listAuditLogs = `-- name: ListAuditLogs :many
-SELECT al.id, al.user_id, al.action, al.resource_type, al.resource_id, al.details, al.ip_address, al.created_at, u.email AS user_email, u.username AS user_username
+SELECT al.id, al.user_id, al.action, al.resource_type, al.resource_id, al.details, al.ip_address, al.created_at, al.token_id, u.email AS user_email, u.username AS user_username
 FROM audit_logs al
 LEFT JOIN users u ON u.id = al.user_id
 ORDER BY al.created_at DESC
@@ -113,6 +118,7 @@ type ListAuditLogsRow struct {
 	Details      []byte             `json:"details"`
 	IpAddress    pgtype.Text        `json:"ip_address"`
 	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+	TokenID      pgtype.UUID        `json:"token_id"`
 	UserEmail    pgtype.Text        `json:"user_email"`
 	UserUsername pgtype.Text        `json:"user_username"`
 }
@@ -135,6 +141,7 @@ func (q *Queries) ListAuditLogs(ctx context.Context, arg ListAuditLogsParams) ([
 			&i.Details,
 			&i.IpAddress,
 			&i.CreatedAt,
+			&i.TokenID,
 			&i.UserEmail,
 			&i.UserUsername,
 		); err != nil {
@@ -151,14 +158,14 @@ func (q *Queries) ListAuditLogs(ctx context.Context, arg ListAuditLogsParams) ([
 const listAuditLogsFiltered = `-- name: ListAuditLogsFiltered :many
 SELECT al.id, al.user_id, al.action, al.resource_type, al.resource_id, al.details, al.ip_address, al.created_at,
        u.email AS user_email, u.username AS user_username,
-       -- Empty-string fallback so sqlc's non-null string scan never hits a NULL
-       -- (rows whose resource isn't an app/project/db resolve to no name).
-       COALESCE(app.name, proj.name, db.name, '')::text AS resource_name
+       COALESCE(app.name, proj.name, db.name, '')::text AS resource_name,
+       al.token_id, COALESCE(t.name, '')::text AS token_name
 FROM audit_logs al
 LEFT JOIN users u ON u.id = al.user_id
 LEFT JOIN applications app ON al.resource_type = 'application' AND app.id::text = al.resource_id
 LEFT JOIN projects proj ON al.resource_type = 'project' AND proj.id::text = al.resource_id
 LEFT JOIN databases db ON al.resource_type = 'database' AND db.id::text = al.resource_id
+LEFT JOIN api_tokens t ON t.id = al.token_id
 WHERE ($3::uuid IS NULL OR al.user_id = $3)
   AND ($4::text IS NULL OR al.action = $4)
   AND ($5::text IS NULL OR al.resource_type = $5)
@@ -192,11 +199,17 @@ type ListAuditLogsFilteredRow struct {
 	UserEmail    pgtype.Text        `json:"user_email"`
 	UserUsername pgtype.Text        `json:"user_username"`
 	ResourceName string             `json:"resource_name"`
+	TokenID      pgtype.UUID        `json:"token_id"`
+	TokenName    string             `json:"token_name"`
 }
 
 // resource_name resolves resource_id to the app/project/db name. Comparing
 // <table>.id::text = resource_id avoids casting the (possibly non-uuid)
 // resource_id to uuid, which would error for ids like 'settings'.
+//
+// token_name rides along so the admin view can show "Alice's CI token" rather
+// than a bare token_id — empty string (not NULL) for the common case where the
+// action came from a human session, matching resource_name's convention.
 func (q *Queries) ListAuditLogsFiltered(ctx context.Context, arg ListAuditLogsFilteredParams) ([]ListAuditLogsFilteredRow, error) {
 	rows, err := q.db.Query(ctx, listAuditLogsFiltered,
 		arg.Limit,
@@ -227,6 +240,8 @@ func (q *Queries) ListAuditLogsFiltered(ctx context.Context, arg ListAuditLogsFi
 			&i.UserEmail,
 			&i.UserUsername,
 			&i.ResourceName,
+			&i.TokenID,
+			&i.TokenName,
 		); err != nil {
 			return nil, err
 		}
