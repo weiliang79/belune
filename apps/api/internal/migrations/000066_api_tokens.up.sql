@@ -35,12 +35,27 @@ CREATE TABLE api_tokens (
 );
 
 CREATE INDEX idx_api_tokens_user_id ON api_tokens(user_id);
+CREATE INDEX idx_api_tokens_project_id ON api_tokens(project_id) WHERE project_id IS NOT NULL;
 
 -- Attribution must exist before the first token can be issued: a row written
 -- before this column exists correctly has no token (it was a session), and a
 -- row written after tokens exist but before this column landed would falsely
 -- read as a human action forever — audit history cannot be corrected after
--- the fact. ON DELETE SET NULL, not CASCADE: deleting a token must not erase
--- the history of what it did, and unlike the projects/databases cascade
--- lesson from v0.1.5, nothing downstream needs this row to survive.
-ALTER TABLE audit_logs ADD COLUMN token_id UUID REFERENCES api_tokens(id) ON DELETE SET NULL;
+-- the fact.
+--
+-- Deliberately NO foreign key, matching resource_id (audit_logs is an
+-- append-only log whose rows must survive their referent, never depend on
+-- it, and AuditService.Log's own contract is that an entry must never
+-- silently disappear). A real FK here is actively wrong, not just
+-- unnecessary: audit writes are asynchronous, so "delete a project, which
+-- CASCADEs away any token pinned to it, then audit the delete" would insert
+-- a token_id that no longer exists by the time the write lands — an FK
+-- violation on the single INSERT statement, which drops the ENTIRE row
+-- (not just the attribution) with only a log warning. The same window hits
+-- self-revocation (deleting the very token authenticating the request) once
+-- that endpoint exists. A dangling token_id is fine: the row is looked up by
+-- LEFT JOIN (ListAuditLogsFiltered) exactly like resource_id already is, so
+-- a token that no longer exists just shows no token_name, same as a
+-- long-deleted application shows no resource_name.
+ALTER TABLE audit_logs ADD COLUMN token_id UUID;
+CREATE INDEX idx_audit_logs_token_id ON audit_logs(token_id) WHERE token_id IS NOT NULL;

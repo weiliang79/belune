@@ -108,13 +108,12 @@ func (s *TokenService) Authenticate(ctx context.Context, plain string) (*Authent
 	}
 
 	now := time.Now()
-	if !row.LastUsedAt.Valid || now.Sub(row.LastUsedAt.Time) > lastUsedCoarsen {
-		if err := s.queries.UpdateAPITokenLastUsed(ctx, generated.UpdateAPITokenLastUsedParams{
-			ID:         row.ID,
-			LastUsedAt: pgtype.Timestamptz{Time: now, Valid: true},
-		}); err != nil {
-			slog.Warn("token: failed to update last_used_at", "token_id", uuidString(row.ID), "error", err)
-		}
+	if err := s.queries.UpdateAPITokenLastUsed(ctx, generated.UpdateAPITokenLastUsedParams{
+		ID:         row.ID,
+		LastUsedAt: pgtype.Timestamptz{Time: now, Valid: true},
+		Threshold:  pgtype.Timestamptz{Time: now.Add(-lastUsedCoarsen), Valid: true},
+	}); err != nil {
+		slog.Warn("token: failed to update last_used_at", "token_id", uuidString(row.ID), "error", err)
 	}
 
 	return &AuthenticatedToken{

@@ -98,15 +98,24 @@ func (q *Queries) GetAPITokenByHash(ctx context.Context, tokenHash []byte) (GetA
 }
 
 const updateAPITokenLastUsed = `-- name: UpdateAPITokenLastUsed :exec
-UPDATE api_tokens SET last_used_at = $2 WHERE id = $1
+UPDATE api_tokens
+SET last_used_at = $2
+WHERE id = $1
+  AND (last_used_at IS NULL OR last_used_at < $3::timestamptz)
 `
 
 type UpdateAPITokenLastUsedParams struct {
 	ID         pgtype.UUID        `json:"id"`
 	LastUsedAt pgtype.Timestamptz `json:"last_used_at"`
+	Threshold  pgtype.Timestamptz `json:"threshold"`
 }
 
+// Self-guarding: only writes when unset or older than the caller-supplied
+// coarsening threshold, so the write-coarsening window is one atomic
+// statement rather than a separate read-then-write race in Go (benign
+// either way, since the value only ever moves forward, but this removes the
+// redundant write entirely instead of relying on that).
 func (q *Queries) UpdateAPITokenLastUsed(ctx context.Context, arg UpdateAPITokenLastUsedParams) error {
-	_, err := q.db.Exec(ctx, updateAPITokenLastUsed, arg.ID, arg.LastUsedAt)
+	_, err := q.db.Exec(ctx, updateAPITokenLastUsed, arg.ID, arg.LastUsedAt, arg.Threshold)
 	return err
 }

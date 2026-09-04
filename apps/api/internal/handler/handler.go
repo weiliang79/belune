@@ -62,7 +62,6 @@ type Handler struct {
 	proxy             proxy.ProxyManager
 	reconciler        ReconcilerStatusProvider
 	auth              *service.AuthService
-	tokenSvc          *service.TokenService
 	rdb               *redis.Client
 	appService        *service.ApplicationService
 	projService       *service.ProjectService
@@ -120,7 +119,6 @@ func New(
 	termMgr *terminal.Manager,
 	quotaSvc *quota.Service,
 	emailSvc *email.Service,
-	tokenSvc *service.TokenService,
 ) *Handler {
 	return &Handler{
 		cfg:               cfg,
@@ -132,7 +130,6 @@ func New(
 		proxy:             pm,
 		reconciler:        reconciler,
 		auth:              auth,
-		tokenSvc:          tokenSvc,
 		rdb:               rdb,
 		appService:        appSvc,
 		projService:       projSvc,

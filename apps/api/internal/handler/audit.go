@@ -166,7 +166,7 @@ func (h *Handler) ExportAuditLogs(w http.ResponseWriter, r *http.Request) {
 
 	cw := csv.NewWriter(w)
 	defer cw.Flush()
-	_ = cw.Write([]string{"time", "action", "actor", "resource_type", "resource", "ip"})
+	_ = cw.Write([]string{"time", "action", "actor", "token", "resource_type", "resource", "ip"})
 	for _, l := range logs {
 		resource := l.ResourceID.String
 		if l.ResourceName != "" {
@@ -177,7 +177,7 @@ func (h *Handler) ExportAuditLogs(w http.ResponseWriter, r *http.Request) {
 			ts = l.CreatedAt.Time.UTC().Format(time.RFC3339)
 		}
 		_ = cw.Write([]string{
-			ts, l.Action, l.UserEmail.String, l.ResourceType, resource, l.IpAddress.String,
+			ts, l.Action, l.UserEmail.String, l.TokenName, l.ResourceType, resource, l.IpAddress.String,
 		})
 	}
 }

@@ -14,4 +14,12 @@ JOIN users u ON u.id = t.user_id
 WHERE t.token_hash = $1;
 
 -- name: UpdateAPITokenLastUsed :exec
-UPDATE api_tokens SET last_used_at = $2 WHERE id = $1;
+-- Self-guarding: only writes when unset or older than the caller-supplied
+-- coarsening threshold, so the write-coarsening window is one atomic
+-- statement rather than a separate read-then-write race in Go (benign
+-- either way, since the value only ever moves forward, but this removes the
+-- redundant write entirely instead of relying on that).
+UPDATE api_tokens
+SET last_used_at = $2
+WHERE id = $1
+  AND (last_used_at IS NULL OR last_used_at < sqlc.arg('threshold')::timestamptz);
