@@ -440,6 +440,12 @@ var errForbidden = errors.New("forbidden")
 // request does not name an existing project. The bool reports whether it was
 // newly created (so a failed instantiation can roll it back).
 func (h *Handler) resolveTemplateProject(r *http.Request, m *template.Manifest, req instantiateTemplateRequest) (generated.Project, bool, error) {
+	// The target project arrives in the body here, not a {projectId} URL
+	// param, so middleware.RequireProjectAccess never sees it — check the pin
+	// directly. A pinned token targeting a DIFFERENT existing project, or
+	// creating a brand new one (project_id empty), are both a reach outside
+	// the pin.
+	pinned := middleware.TokenProjectFromContext(r.Context())
 	if strings.TrimSpace(req.ProjectID) != "" {
 		var id pgtype.UUID
 		if err := id.Scan(req.ProjectID); err != nil {
@@ -448,11 +454,18 @@ func (h *Handler) resolveTemplateProject(r *http.Request, m *template.Manifest, 
 		if !h.canAccessProject(r, id) {
 			return generated.Project{}, false, errForbidden
 		}
+		if pinned != "" && pinned != req.ProjectID {
+			return generated.Project{}, false, errForbidden
+		}
 		p, err := h.queries.GetProject(r.Context(), id)
 		if err != nil {
 			return generated.Project{}, false, fmt.Errorf("get project: %w", err)
 		}
 		return p, false, nil
+	}
+
+	if pinned != "" {
+		return generated.Project{}, false, errForbidden
 	}
 
 	name := strings.TrimSpace(req.NewProjectName)

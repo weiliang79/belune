@@ -69,13 +69,45 @@ func (h *Handler) ListAPITokens(w http.ResponseWriter, r *http.Request) {
 }
 
 type createTokenRequest struct {
-	Name          string `json:"name"`
-	ExpiresInDays *int   `json:"expires_in_days"`
+	Name          string   `json:"name"`
+	ExpiresInDays *int     `json:"expires_in_days"`
+	Scopes        []string `json:"scopes"`
 }
 
-// CreateAPIToken mints a token for the current user. No scope picker exists
-// yet — every token gets service.AllScopes and is unpinned (every project the
-// owner can reach, evaluated at use time) until PR4 adds real narrowing.
+// validScopes indexes service.AllScopes for membership checks below.
+var validScopes = func() map[string]bool {
+	m := make(map[string]bool, len(service.AllScopes))
+	for _, s := range service.AllScopes {
+		m[s] = true
+	}
+	return m
+}()
+
+// normalizeScopes validates that every requested scope is a known one and
+// returns the deduplicated set. An empty or all-invalid request is rejected
+// outright — a token with zero scopes is a footgun (it authenticates but can
+// do literally nothing), not a narrower valid choice.
+func normalizeScopes(requested []string) ([]string, bool) {
+	seen := make(map[string]bool, len(requested))
+	out := make([]string, 0, len(requested))
+	for _, s := range requested {
+		if !validScopes[s] || seen[s] {
+			continue
+		}
+		seen[s] = true
+		out = append(out, s)
+	}
+	if len(out) == 0 {
+		return nil, false
+	}
+	return out, true
+}
+
+// CreateAPIToken mints a token for the current user with exactly the scopes
+// it requests — validated against service.AllScopes, so a client cannot smuggle
+// in a value PR4's enforcement doesn't know about. Unpinned to any project
+// (every project the owner can reach, evaluated at use time); narrowing by
+// project has no UI yet.
 // POST /api/tokens
 func (h *Handler) CreateAPIToken(w http.ResponseWriter, r *http.Request) {
 	userUUID, ok := currentUserUUID(r)
@@ -92,6 +124,12 @@ func (h *Handler) CreateAPIToken(w http.ResponseWriter, r *http.Request) {
 	req.Name = strings.TrimSpace(req.Name)
 	if req.Name == "" {
 		writeError(w, http.StatusBadRequest, "name is required")
+		return
+	}
+
+	scopes, ok := normalizeScopes(req.Scopes)
+	if !ok {
+		writeError(w, http.StatusBadRequest, "select at least one valid scope")
 		return
 	}
 
@@ -112,6 +150,7 @@ func (h *Handler) CreateAPIToken(w http.ResponseWriter, r *http.Request) {
 		Name:        req.Name,
 		RoleAtIssue: middleware.RoleFromContext(r.Context()),
 		ExpiresAt:   expiresAt,
+		Scopes:      scopes,
 	})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to create token")

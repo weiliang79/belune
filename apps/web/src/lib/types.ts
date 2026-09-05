@@ -578,12 +578,15 @@ export interface Notification {
   created_at: string;
 }
 
+// "write" grants "read" and "deploy" too, and "read" grants "metrics" —
+// deploy and metrics are narrower, independent carve-outs, not steps on a
+// ladder. See middleware.scopeGrants (apps/api) for the authoritative table.
+export type TokenScope = "read" | "write" | "deploy" | "metrics";
+
 export interface ApiToken {
   id: string;
   name: string;
-  // Always {read, write, deploy, metrics} until PR4 adds a scope picker —
-  // there is no way yet to mint anything narrower.
-  scopes: string[];
+  scopes: TokenScope[];
   role_at_issue: "admin" | "member";
   expires_at: string | null;
   last_used_at: string | null;

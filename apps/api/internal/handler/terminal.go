@@ -129,8 +129,9 @@ func (h *Handler) HandleTerminalWebSocket(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// Auth: the WS route group already requires a valid session, but confirm
-	// the requesting user owns this terminal session.
+	// Auth: the route carries middleware.RequireSession (Auth() alone accepts
+	// a PAT too, since PR2), so this is really reached with a session — confirm
+	// the requesting user owns this terminal session on top of that.
 	userID := middleware.UserIDFromContext(r.Context())
 	role := middleware.RoleFromContext(r.Context())
 	if role != "admin" && s.UserID != userID {

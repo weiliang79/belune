@@ -121,6 +121,24 @@ func (h *Handler) GetGlobalDeployments(w http.ResponseWriter, r *http.Request) {
 		params.To = pgtype.Timestamptz{Time: t, Valid: true}
 	}
 
+	// project_id here is a query filter, not a {projectId} URL param, so
+	// middleware.RequireProjectAccess never sees it — enforce the pin
+	// directly. A mismatched explicit filter is rejected; an absent one is
+	// silently narrowed to the pin rather than left to fall through to every
+	// project the token's owner can otherwise reach.
+	if pinned := middleware.TokenProjectFromContext(r.Context()); pinned != "" {
+		var pinnedUUID pgtype.UUID
+		if err := pinnedUUID.Scan(pinned); err != nil {
+			writeError(w, http.StatusInternalServerError, "invalid pinned project")
+			return
+		}
+		if params.ProjectID.Valid && params.ProjectID != pinnedUUID {
+			writeError(w, http.StatusForbidden, "token is pinned to a different project")
+			return
+		}
+		params.ProjectID = pinnedUUID
+	}
+
 	// Non-admins are scoped to their own projects
 	if role != "admin" {
 		userIDStr := middleware.UserIDFromContext(r.Context())
