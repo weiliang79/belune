@@ -23,3 +23,17 @@ UPDATE api_tokens
 SET last_used_at = $2
 WHERE id = $1
   AND (last_used_at IS NULL OR last_used_at < sqlc.arg('threshold')::timestamptz);
+
+-- name: ListAPITokensByUser :many
+-- The settings-page list: newest first, token_hash never selected — nothing
+-- past the create response ever needs anything derived from it.
+SELECT id, name, scopes, project_id, role_at_issue, expires_at, last_used_at, created_at
+FROM api_tokens
+WHERE user_id = $1
+ORDER BY created_at DESC;
+
+-- name: DeleteAPIToken :execrows
+-- Scoped by user_id, not just id: the affected-row count is how the handler
+-- tells "not found" apart from "not yours" — both must read the same to the
+-- caller, so there is no separate ownership lookup to get out of sync with it.
+DELETE FROM api_tokens WHERE id = $1 AND user_id = $2;
