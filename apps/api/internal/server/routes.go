@@ -178,6 +178,12 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService,
 			r.Get("/api/account/alert-preferences", h.GetAlertPreferences)
 			r.Put("/api/account/alert-preferences", h.UpdateAlertPreferences)
 
+			// Personal access tokens: self-service, scoped to the caller. No
+			// admin oversight view exists in v1 — see project_v016_plan.
+			r.Get("/api/tokens", h.ListAPITokens)
+			r.Post("/api/tokens", h.CreateAPIToken)
+			r.Delete("/api/tokens/{tokenId}", h.DeleteAPIToken)
+
 			// Admin-only routes
 			r.Group(func(r chi.Router) {
 				r.Use(middleware.RequireRole("admin"))

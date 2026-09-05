@@ -578,6 +578,23 @@ export interface Notification {
   created_at: string;
 }
 
+export interface ApiToken {
+  id: string;
+  name: string;
+  // Always {read, write, deploy, metrics} until PR4 adds a scope picker —
+  // there is no way yet to mint anything narrower.
+  scopes: string[];
+  role_at_issue: "admin" | "member";
+  expires_at: string | null;
+  last_used_at: string | null;
+  created_at: string;
+}
+
+// Only the create response carries the plaintext, and only once.
+export interface CreatedApiToken extends ApiToken {
+  token: string;
+}
+
 export interface HostResources {
   cpu_percent: number;
   memory_used: number;
