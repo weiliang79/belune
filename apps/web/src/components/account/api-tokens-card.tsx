@@ -37,6 +37,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -51,7 +52,7 @@ import {
   useTokens,
 } from "@/lib/hooks/use-tokens";
 import { formatDateTimeShort, formatRelativeTime } from "@/lib/utils/format";
-import type { ApiToken } from "@/lib/types";
+import type { TokenScope, ApiToken } from "@/lib/types";
 
 // Mirrors the backend's validTokenExpiryDays exactly — the API rejects
 // anything else, so offering it here would just be a confusing round trip.
@@ -63,6 +64,39 @@ const EXPIRY_OPTIONS = [
   { value: "60", label: "60 days" },
   { value: "90", label: "90 days" },
   { value: "never", label: "No expiry" },
+];
+
+// Mirrors middleware.scopeGrants: write also covers read and deploy, and
+// read also covers metrics — deploy and metrics are narrower carve-outs, not
+// rungs on a ladder. Order here is display order, all checked by default so
+// an unchanged submission keeps today's full-access behavior.
+const SCOPE_OPTIONS: {
+  value: TokenScope;
+  label: string;
+  description: string;
+}[] = [
+  {
+    value: "read",
+    label: "Read",
+    description: "View projects, applications, and their data.",
+  },
+  {
+    value: "write",
+    label: "Write",
+    description: "Everything Read can do, plus create, update, and configure.",
+  },
+  {
+    value: "deploy",
+    label: "Deploy",
+    description:
+      "Trigger deploys, restarts, and other runtime actions — without general write access.",
+  },
+  {
+    value: "metrics",
+    label: "Metrics",
+    description:
+      "Read metrics only — narrower than Read, for a monitoring scraper.",
+  },
 ];
 
 export function ApiTokensCard() {
@@ -79,8 +113,8 @@ export function ApiTokensCard() {
           Personal Access Tokens
         </CardTitle>
         <CardDescription>
-          Tokens authenticate as you, for everything you have access to. There
-          is no way yet to narrow one to less than that.
+          Tokens authenticate as you, scoped to whatever you choose when
+          creating one — for all projects you have access to.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -148,8 +182,17 @@ function TokenRow({ token }: { token: ApiToken }) {
   return (
     <div className="flex items-center justify-between gap-4 py-3 first:pt-0 last:pb-0">
       <div className="min-w-0 space-y-1">
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <span className="truncate text-sm font-medium">{token.name}</span>
+          {token.scopes.map((scope) => (
+            <Badge
+              key={scope}
+              variant="secondary"
+              className="text-xs capitalize"
+            >
+              {scope}
+            </Badge>
+          ))}
           {!token.expires_at && (
             <Badge variant="outline" className="text-xs">
               Never expires
@@ -213,6 +256,8 @@ function TokenRow({ token }: { token: ApiToken }) {
   );
 }
 
+const ALL_SCOPES = SCOPE_OPTIONS.map((o) => o.value);
+
 function CreateTokenDialog({
   onIssued,
 }: {
@@ -221,12 +266,27 @@ function CreateTokenDialog({
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const [expiry, setExpiry] = useState("30");
+  // Every scope checked by default — an unchanged submission keeps the
+  // full-access behavior tokens have always had; unchecking narrows it.
+  const [scopes, setScopes] = useState<Set<TokenScope>>(
+    () => new Set(ALL_SCOPES),
+  );
   const createToken = useCreateToken();
 
   const close = () => {
     setOpen(false);
     setName("");
     setExpiry("30");
+    setScopes(new Set(ALL_SCOPES));
+  };
+
+  const toggleScope = (scope: TokenScope, checked: boolean) => {
+    setScopes((prev) => {
+      const next = new Set(prev);
+      if (checked) next.add(scope);
+      else next.delete(scope);
+      return next;
+    });
   };
 
   const submit = async (e: React.FormEvent) => {
@@ -234,6 +294,7 @@ function CreateTokenDialog({
     try {
       const result = await createToken.mutateAsync({
         name,
+        scopes: Array.from(scopes),
         expiresInDays: expiry === "never" ? undefined : Number(expiry),
       });
       onIssued(result.token);
@@ -288,6 +349,36 @@ function CreateTokenDialog({
                   </SelectContent>
                 </Select>
               </div>
+              <div className="space-y-2">
+                <Label>Scope</Label>
+                <div className="space-y-2.5">
+                  {SCOPE_OPTIONS.map((o) => (
+                    <label
+                      key={o.value}
+                      className="flex items-start gap-2.5 text-sm"
+                    >
+                      <Checkbox
+                        className="mt-0.5"
+                        checked={scopes.has(o.value)}
+                        onCheckedChange={(checked) =>
+                          toggleScope(o.value, checked === true)
+                        }
+                      />
+                      <span>
+                        <span className="font-medium">{o.label}</span>
+                        <span className="text-muted-foreground block text-xs">
+                          {o.description}
+                        </span>
+                      </span>
+                    </label>
+                  ))}
+                </div>
+                {scopes.size === 0 && (
+                  <p className="text-destructive text-xs">
+                    Select at least one scope.
+                  </p>
+                )}
+              </div>
             </div>
             <DialogFooter>
               <Button type="button" variant="outline" onClick={close}>
@@ -295,7 +386,9 @@ function CreateTokenDialog({
               </Button>
               <Button
                 type="submit"
-                disabled={createToken.isPending || !name.trim()}
+                disabled={
+                  createToken.isPending || !name.trim() || scopes.size === 0
+                }
               >
                 {createToken.isPending ? "Creating..." : "Create"}
               </Button>

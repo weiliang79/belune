@@ -145,8 +145,14 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService,
 	// breaks Hijacker and prevents the protocol upgrade.
 	r.Group(func(r chi.Router) {
 		r.Use(middleware.Auth(auth, tokens))
-		r.Get("/api/ws", h.HandleWebSocket)
-		r.Get("/api/ws/terminal/{sessionId}", h.HandleTerminalWebSocket)
+		r.With(middleware.RequireScope("read")).Get("/api/ws", h.HandleWebSocket)
+		// Session-only: an interactive shell into a running container is far
+		// more than any scope was ever meant to convey, and a PAT attaching to
+		// another user's live terminal tunnel is exactly the gap a 2026-09-05
+		// review found — Auth() now accepts PATs too, so "the WS group already
+		// requires a valid session" (the old assumption here) stopped being
+		// true the moment PR2 landed. See also CreateTerminalSession below.
+		r.With(middleware.RequireSession()).Get("/api/ws/terminal/{sessionId}", h.HandleTerminalWebSocket)
 	})
 
 	// Protected routes
@@ -162,35 +168,10 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService,
 			r.Use(middleware.BodyLimit(defaultBodyLimit))
 			r.Use(withTimeout(handlerTimeout))
 
-			r.Post("/api/auth/logout", h.Logout)
-			r.Get("/api/auth/me", h.Me)
-			r.Put("/api/auth/password", h.ChangeOwnPassword)
-			r.Put("/api/auth/profile", h.UpdateProfile)
-
-			// Two-factor: managing your own factor always needs a live session,
-			// and the mutations re-check the password on top.
-			r.Get("/api/auth/totp", h.GetTOTPStatus)
-			r.Post("/api/auth/totp/enroll", h.EnrollTOTP)
-			r.Post("/api/auth/totp/enroll/verify", h.VerifyTOTPEnrollment)
-			r.Post("/api/auth/totp/disable", h.DisableTOTP)
-			r.Post("/api/auth/totp/recovery-codes", h.RegenerateRecoveryCodes)
-
-			r.Get("/api/account/alert-preferences", h.GetAlertPreferences)
-			r.Put("/api/account/alert-preferences", h.UpdateAlertPreferences)
-
-			// Personal access tokens: self-service, scoped to the caller. No
-			// admin oversight view exists in v1 — see project_v016_plan.
-			// Minting and revoking require a live session — a PAT calling
-			// these would be a self-propagation path (mint a longer-lived
-			// replacement, revoke the original) that scope enforcement alone
-			// cannot close. Listing stays PAT-accessible: it is read-only.
-			r.Get("/api/tokens", h.ListAPITokens)
-			r.With(middleware.RequireSession()).Post("/api/tokens", h.CreateAPIToken)
-			r.With(middleware.RequireSession()).Delete("/api/tokens/{tokenId}", h.DeleteAPIToken)
-
 			// Admin-only routes
 			r.Group(func(r chi.Router) {
 				r.Use(middleware.RequireRole("admin"))
+				r.Use(middleware.RequireScopeByMethod())
 
 				r.Get("/api/users", h.ListUsers)
 				r.Put("/api/users/{userId}/role", h.UpdateUserRole)
@@ -216,191 +197,270 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService,
 				r.Put("/api/backups/remote", h.UpdateBackupRemote)
 			})
 
-			// Git connections (per-user connected provider accounts)
-			r.Get("/api/git/integrations", h.ListGitIntegrations)
-			r.Get("/api/git/integrations/available", h.ListAvailableProviders)
-			r.Get("/api/git/integrations/connect", h.StartGitIntegrationConnect)
-			r.Get("/api/git/integrations/{integrationId}/repos", h.ListIntegrationRepos)
-			r.Get("/api/git/integrations/{integrationId}/branches", h.ListIntegrationBranches)
-			r.Delete("/api/git/integrations/{integrationId}", h.DeleteGitIntegration)
+			// The bulk of the authenticated surface: scope defaults to "read"
+			// for a safe method and "write" otherwise, and a project-pinned
+			// token is rejected outside its pin. A new route added inside this
+			// group needs no scope annotation to be safe by default — routes
+			// needing something else (deploy actions, metrics reads, or a
+			// session instead of any token) are carved out below, or gated
+			// in place with an extra .With(...) on that one line.
+			r.Group(func(r chi.Router) {
+				r.Use(middleware.RequireScopeByMethod())
+				r.Use(middleware.RequireProjectAccess())
 
-			// App templates (catalog + one-click instantiation)
-			r.Get("/api/templates", h.ListTemplates)
-			r.Get("/api/templates/{templateId}", h.GetTemplate)
-			r.Post("/api/templates/{templateId}/instantiate", h.InstantiateTemplate)
+				r.Post("/api/auth/logout", h.Logout)
+				r.Get("/api/auth/me", h.Me)
+				r.Put("/api/auth/password", h.ChangeOwnPassword)
+				r.Put("/api/auth/profile", h.UpdateProfile)
 
-			// Projects
-			r.Get("/api/projects", h.ListProjects)
-			r.Post("/api/projects", h.CreateProject)
-			r.Get("/api/projects/{projectId}", h.GetProject)
-			r.Put("/api/projects/{projectId}", h.UpdateProject)
-			r.Delete("/api/projects/{projectId}", h.DeleteProject)
-			r.Put("/api/projects/{projectId}/transfer", h.TransferProject)
-			r.Put("/api/projects/{projectId}/sharing", h.UpdateProjectSharing)
+				// Two-factor: managing your own factor always needs a live session,
+				// and the mutations re-check the password on top.
+				r.Get("/api/auth/totp", h.GetTOTPStatus)
+				r.Post("/api/auth/totp/enroll", h.EnrollTOTP)
+				r.Post("/api/auth/totp/enroll/verify", h.VerifyTOTPEnrollment)
+				r.Post("/api/auth/totp/disable", h.DisableTOTP)
+				r.Post("/api/auth/totp/recovery-codes", h.RegenerateRecoveryCodes)
 
-			// Project runtime metrics snapshot (per-service CPU/mem/uptime/domain)
-			r.Get("/api/projects/{projectId}/metrics", h.GetProjectMetrics)
+				r.Get("/api/account/alert-preferences", h.GetAlertPreferences)
+				r.Put("/api/account/alert-preferences", h.UpdateAlertPreferences)
 
-			// Applications
-			r.Get("/api/projects/{projectId}/applications", h.ListApplications)
-			r.Post("/api/projects/{projectId}/applications", h.CreateApplication)
-			r.Get("/api/projects/{projectId}/applications/{applicationId}", h.GetApplication)
-			r.Put("/api/projects/{projectId}/applications/{applicationId}", h.UpdateApplication)
-			r.Put("/api/projects/{projectId}/applications/{applicationId}/runtime", h.UpdateApplicationRuntime)
-			r.Delete("/api/projects/{projectId}/applications/{applicationId}", h.DeleteApplication)
-			r.Put("/api/projects/{projectId}/applications/{applicationId}/webhook", h.UpdateApplicationWebhook)
-			r.Get("/api/projects/{projectId}/applications/{applicationId}/webhook/reveal", h.RevealWebhookSecret)
-			r.Get("/api/projects/{projectId}/applications/{applicationId}/deploy-hook", h.GetDeployHook)
-			r.Get("/api/projects/{projectId}/applications/{applicationId}/deploy-hook/reveal", h.RevealDeployHook)
-			r.Post("/api/projects/{projectId}/applications/{applicationId}/deploy-hook", h.GenerateDeployHook)
-			r.Delete("/api/projects/{projectId}/applications/{applicationId}/deploy-hook", h.DeleteDeployHook)
-			r.Post("/api/projects/{projectId}/applications/{applicationId}/deploy", h.DeployApplication)
-			r.Post("/api/projects/{projectId}/applications/{applicationId}/stop", h.StopApplication)
-			r.Post("/api/projects/{projectId}/applications/{applicationId}/start", h.StartApplication)
-			r.Post("/api/projects/{projectId}/applications/{applicationId}/restart", h.RestartApplication)
-			r.Post("/api/projects/{projectId}/applications/{applicationId}/reload", h.ReloadApplication)
-			r.Post("/api/projects/{projectId}/applications/{applicationId}/rebuild", h.RebuildApplication)
-			r.Post("/api/projects/{projectId}/applications/{applicationId}/build", h.BuildApplication)
-			r.Post("/api/projects/{projectId}/applications/{applicationId}/change-source", h.ChangeApplicationSource)
-			r.Put("/api/projects/{projectId}/applications/{applicationId}/health-check", h.SetHealthCheck)
-			r.Put("/api/projects/{projectId}/applications/{applicationId}/resources", h.SetResources)
-			r.Post("/api/projects/{projectId}/applications/{applicationId}/rollback", h.RollbackDeployment)
-			r.Get("/api/projects/{projectId}/applications/{applicationId}/cache", h.GetBuildCache)
-			r.Delete("/api/projects/{projectId}/applications/{applicationId}/cache", h.ClearBuildCache)
+				// Personal access tokens: self-service, scoped to the caller. No
+				// admin oversight view exists in v1 — see project_v016_plan.
+				// Minting and revoking require a live session — a PAT calling
+				// these would be a self-propagation path (mint a longer-lived
+				// replacement, revoke the original) that scope enforcement alone
+				// cannot close. Listing stays PAT-accessible: it is read-only.
+				r.Get("/api/tokens", h.ListAPITokens)
+				r.With(middleware.RequireSession()).Post("/api/tokens", h.CreateAPIToken)
+				r.With(middleware.RequireSession()).Delete("/api/tokens/{tokenId}", h.DeleteAPIToken)
 
-			// Preview environments: parent config + child list + child delete
-			r.Put("/api/projects/{projectId}/applications/{applicationId}/previews/config", h.UpdatePreviewConfig)
-			r.Get("/api/projects/{projectId}/applications/{applicationId}/previews", h.ListPreviews)
-			r.Delete("/api/projects/{projectId}/applications/{applicationId}/previews/{previewId}", h.DeletePreview)
+				// Git connections (per-user connected provider accounts)
+				r.Get("/api/git/integrations", h.ListGitIntegrations)
+				r.Get("/api/git/integrations/available", h.ListAvailableProviders)
+				r.Get("/api/git/integrations/connect", h.StartGitIntegrationConnect)
+				r.Get("/api/git/integrations/{integrationId}/repos", h.ListIntegrationRepos)
+				r.Get("/api/git/integrations/{integrationId}/branches", h.ListIntegrationBranches)
+				r.Delete("/api/git/integrations/{integrationId}", h.DeleteGitIntegration)
 
-			// Deployments
-			r.Get("/api/projects/{projectId}/applications/{applicationId}/deployments", h.ListDeployments)
-			r.Get("/api/projects/{projectId}/applications/{applicationId}/deployments/{deploymentId}", h.GetDeployment)
+				// App templates (catalog + one-click instantiation)
+				r.Get("/api/templates", h.ListTemplates)
+				r.Get("/api/templates/{templateId}", h.GetTemplate)
+				r.Post("/api/templates/{templateId}/instantiate", h.InstantiateTemplate)
 
-			// Latest post-deploy health-probe result
-			r.Get("/api/projects/{projectId}/applications/{applicationId}/health", h.GetApplicationHealth)
+				// Projects
+				r.Get("/api/projects", h.ListProjects)
+				r.Post("/api/projects", h.CreateProject)
+				r.Get("/api/projects/{projectId}", h.GetProject)
+				r.Put("/api/projects/{projectId}", h.UpdateProject)
+				// Destroying the project itself needs a session — see the
+				// destroy-boundary test, which discovers this route (and every
+				// other one below carrying RequireSession) mechanically rather
+				// than off a hand-maintained list.
+				r.With(middleware.RequireSession()).Delete("/api/projects/{projectId}", h.DeleteProject)
+				r.Put("/api/projects/{projectId}/transfer", h.TransferProject)
+				r.Put("/api/projects/{projectId}/sharing", h.UpdateProjectSharing)
 
-			// Terminal session creation (exec is short; websocket tunnel is in the WS group)
-			r.Post("/api/projects/{projectId}/applications/{applicationId}/terminal", h.CreateTerminalSession)
+				// Applications
+				r.Get("/api/projects/{projectId}/applications", h.ListApplications)
+				r.Post("/api/projects/{projectId}/applications", h.CreateApplication)
+				r.Get("/api/projects/{projectId}/applications/{applicationId}", h.GetApplication)
+				r.Put("/api/projects/{projectId}/applications/{applicationId}", h.UpdateApplication)
+				r.Put("/api/projects/{projectId}/applications/{applicationId}/runtime", h.UpdateApplicationRuntime)
+				r.With(middleware.RequireSession()).Delete("/api/projects/{projectId}/applications/{applicationId}", h.DeleteApplication)
+				r.Put("/api/projects/{projectId}/applications/{applicationId}/webhook", h.UpdateApplicationWebhook)
+				r.Get("/api/projects/{projectId}/applications/{applicationId}/webhook/reveal", h.RevealWebhookSecret)
+				r.Get("/api/projects/{projectId}/applications/{applicationId}/deploy-hook", h.GetDeployHook)
+				r.Get("/api/projects/{projectId}/applications/{applicationId}/deploy-hook/reveal", h.RevealDeployHook)
+				r.Post("/api/projects/{projectId}/applications/{applicationId}/deploy-hook", h.GenerateDeployHook)
+				r.Delete("/api/projects/{projectId}/applications/{applicationId}/deploy-hook", h.DeleteDeployHook)
+				r.Post("/api/projects/{projectId}/applications/{applicationId}/change-source", h.ChangeApplicationSource)
+				r.Put("/api/projects/{projectId}/applications/{applicationId}/health-check", h.SetHealthCheck)
+				r.Put("/api/projects/{projectId}/applications/{applicationId}/resources", h.SetResources)
+				r.Get("/api/projects/{projectId}/applications/{applicationId}/cache", h.GetBuildCache)
+				r.Delete("/api/projects/{projectId}/applications/{applicationId}/cache", h.ClearBuildCache)
 
-			// Application logs history (paginated query, not a stream)
-			r.Get("/api/projects/{projectId}/applications/{applicationId}/logs/history", h.ListApplicationLogs)
-			r.Get("/api/projects/{projectId}/applications/{applicationId}/logs/sessions", h.ListApplicationLogSessions)
+				// Preview environments: parent config + child list + child delete
+				r.Put("/api/projects/{projectId}/applications/{applicationId}/previews/config", h.UpdatePreviewConfig)
+				r.Get("/api/projects/{projectId}/applications/{applicationId}/previews", h.ListPreviews)
+				r.Delete("/api/projects/{projectId}/applications/{applicationId}/previews/{previewId}", h.DeletePreview)
 
-			// Request logs (paginated)
-			r.Get("/api/projects/{projectId}/applications/{applicationId}/requests", h.ListRequestLogs)
+				// Deployments
+				r.Get("/api/projects/{projectId}/applications/{applicationId}/deployments", h.ListDeployments)
+				r.Get("/api/projects/{projectId}/applications/{applicationId}/deployments/{deploymentId}", h.GetDeployment)
 
-			// Domains
-			r.Get("/api/projects/{projectId}/applications/{applicationId}/domains", h.ListDomains)
-			r.Post("/api/projects/{projectId}/applications/{applicationId}/domains", h.AddDomain)
-			r.Put("/api/projects/{projectId}/applications/{applicationId}/domains/{domainId}", h.UpdateDomain)
-			r.Delete("/api/projects/{projectId}/applications/{applicationId}/domains/{domainId}", h.RemoveDomain)
+				// Latest post-deploy health-probe result
+				r.Get("/api/projects/{projectId}/applications/{applicationId}/health", h.GetApplicationHealth)
 
-			// Domain route features
-			r.Post("/api/projects/{projectId}/applications/{applicationId}/domains/{domainId}/tls/recheck", h.RecheckDomainTLS)
-			r.Get("/api/projects/{projectId}/applications/{applicationId}/domains/{domainId}/features", h.ListRouteFeatures)
-			r.Put("/api/projects/{projectId}/applications/{applicationId}/domains/{domainId}/features", h.UpsertRouteFeature)
-			r.Delete("/api/projects/{projectId}/applications/{applicationId}/domains/{domainId}/features/{featureId}", h.DeleteRouteFeature)
+				// Terminal session creation: session-only, same reasoning as the
+				// WS tunnel above (exec is short; the tunnel itself is in the WS
+				// group, gated there too).
+				r.With(middleware.RequireSession()).Post("/api/projects/{projectId}/applications/{applicationId}/terminal", h.CreateTerminalSession)
 
-			// Application persistent volumes
-			r.Get("/api/projects/{projectId}/applications/{applicationId}/volumes", h.ListApplicationVolumes)
-			r.Post("/api/projects/{projectId}/applications/{applicationId}/volumes", h.CreateApplicationVolume)
-			r.Delete("/api/projects/{projectId}/applications/{applicationId}/volumes/{volumeId}", h.DeleteApplicationVolume)
+				// Application logs history (paginated query, not a stream)
+				r.Get("/api/projects/{projectId}/applications/{applicationId}/logs/history", h.ListApplicationLogs)
+				r.Get("/api/projects/{projectId}/applications/{applicationId}/logs/sessions", h.ListApplicationLogSessions)
 
-			// Application volume backups
-			r.Get("/api/projects/{projectId}/applications/{applicationId}/volumes/{volumeId}/backup-configs", h.ListVolumeBackupConfigs)
-			r.Post("/api/projects/{projectId}/applications/{applicationId}/volumes/{volumeId}/backup-configs", h.CreateVolumeBackupConfig)
-			r.Put("/api/projects/{projectId}/applications/{applicationId}/volumes/{volumeId}/backup-configs/{configId}", h.UpdateVolumeBackupConfig)
-			r.Delete("/api/projects/{projectId}/applications/{applicationId}/volumes/{volumeId}/backup-configs/{configId}", h.DeleteVolumeBackupConfig)
-			r.Post("/api/projects/{projectId}/applications/{applicationId}/volumes/{volumeId}/backup-configs/{configId}/run", h.RunVolumeBackupConfig)
-			r.Get("/api/projects/{projectId}/applications/{applicationId}/volumes/{volumeId}/backups", h.ListVolumeBackups)
-			r.Post("/api/projects/{projectId}/applications/{applicationId}/volumes/{volumeId}/backups/{backupId}/restore", h.RestoreVolumeBackup)
-			r.Get("/api/projects/{projectId}/applications/{applicationId}/volumes/{volumeId}/restores", h.ListVolumeRestores)
-			r.Get("/api/projects/{projectId}/applications/{applicationId}/volume-backup-configs", h.ListAppVolumeBackupConfigs)
+				// Request logs (paginated)
+				r.Get("/api/projects/{projectId}/applications/{applicationId}/requests", h.ListRequestLogs)
 
-			// Application file/config mounts
-			r.Get("/api/projects/{projectId}/applications/{applicationId}/file-mounts", h.ListFileMounts)
-			r.Get("/api/projects/{projectId}/applications/{applicationId}/file-mounts/{fileMountId}/reveal", h.RevealFileMount)
-			r.Post("/api/projects/{projectId}/applications/{applicationId}/file-mounts", h.CreateFileMount)
-			r.Put("/api/projects/{projectId}/applications/{applicationId}/file-mounts/{fileMountId}", h.UpdateFileMount)
-			r.Delete("/api/projects/{projectId}/applications/{applicationId}/file-mounts/{fileMountId}", h.DeleteFileMount)
+				// Domains
+				r.Get("/api/projects/{projectId}/applications/{applicationId}/domains", h.ListDomains)
+				r.Post("/api/projects/{projectId}/applications/{applicationId}/domains", h.AddDomain)
+				r.Put("/api/projects/{projectId}/applications/{applicationId}/domains/{domainId}", h.UpdateDomain)
+				r.With(middleware.RequireSession()).Delete("/api/projects/{projectId}/applications/{applicationId}/domains/{domainId}", h.RemoveDomain)
 
-			// Global deployments
-			r.Get("/api/deployments", h.GetGlobalDeployments)
+				// Domain route features
+				r.Post("/api/projects/{projectId}/applications/{applicationId}/domains/{domainId}/tls/recheck", h.RecheckDomainTLS)
+				r.Get("/api/projects/{projectId}/applications/{applicationId}/domains/{domainId}/features", h.ListRouteFeatures)
+				r.Put("/api/projects/{projectId}/applications/{applicationId}/domains/{domainId}/features", h.UpsertRouteFeature)
+				r.Delete("/api/projects/{projectId}/applications/{applicationId}/domains/{domainId}/features/{featureId}", h.DeleteRouteFeature)
 
-			// Operator-health stat strip (member-scoped; admins see host + backups)
-			r.Get("/api/stats", h.GetStats)
+				// Application persistent volumes
+				r.Get("/api/projects/{projectId}/applications/{applicationId}/volumes", h.ListApplicationVolumes)
+				r.Post("/api/projects/{projectId}/applications/{applicationId}/volumes", h.CreateApplicationVolume)
+				r.With(middleware.RequireSession()).Delete("/api/projects/{projectId}/applications/{applicationId}/volumes/{volumeId}", h.DeleteApplicationVolume)
 
-			// Notifications — per-user feed (recipient is the current user).
-			r.Get("/api/notifications", h.ListNotifications)
-			r.Get("/api/notifications/unread-count", h.UnreadNotificationCount)
-			r.Post("/api/notifications/{notificationId}/read", h.MarkNotificationRead)
-			r.Post("/api/notifications/read-all", h.MarkAllNotificationsRead)
+				// Application volume backups
+				r.Get("/api/projects/{projectId}/applications/{applicationId}/volumes/{volumeId}/backup-configs", h.ListVolumeBackupConfigs)
+				r.Post("/api/projects/{projectId}/applications/{applicationId}/volumes/{volumeId}/backup-configs", h.CreateVolumeBackupConfig)
+				r.Put("/api/projects/{projectId}/applications/{applicationId}/volumes/{volumeId}/backup-configs/{configId}", h.UpdateVolumeBackupConfig)
+				r.Delete("/api/projects/{projectId}/applications/{applicationId}/volumes/{volumeId}/backup-configs/{configId}", h.DeleteVolumeBackupConfig)
+				r.Post("/api/projects/{projectId}/applications/{applicationId}/volumes/{volumeId}/backup-configs/{configId}/run", h.RunVolumeBackupConfig)
+				r.Get("/api/projects/{projectId}/applications/{applicationId}/volumes/{volumeId}/backups", h.ListVolumeBackups)
+				r.With(middleware.RequireSession()).Post("/api/projects/{projectId}/applications/{applicationId}/volumes/{volumeId}/backups/{backupId}/restore", h.RestoreVolumeBackup)
+				r.Get("/api/projects/{projectId}/applications/{applicationId}/volumes/{volumeId}/restores", h.ListVolumeRestores)
+				r.Get("/api/projects/{projectId}/applications/{applicationId}/volume-backup-configs", h.ListAppVolumeBackupConfigs)
+
+				// Application file/config mounts
+				r.Get("/api/projects/{projectId}/applications/{applicationId}/file-mounts", h.ListFileMounts)
+				r.Get("/api/projects/{projectId}/applications/{applicationId}/file-mounts/{fileMountId}/reveal", h.RevealFileMount)
+				r.Post("/api/projects/{projectId}/applications/{applicationId}/file-mounts", h.CreateFileMount)
+				r.Put("/api/projects/{projectId}/applications/{applicationId}/file-mounts/{fileMountId}", h.UpdateFileMount)
+				r.Delete("/api/projects/{projectId}/applications/{applicationId}/file-mounts/{fileMountId}", h.DeleteFileMount)
+
+				// Global deployments
+				r.Get("/api/deployments", h.GetGlobalDeployments)
+
+				// Operator-health stat strip (member-scoped; admins see host + backups)
+				r.Get("/api/stats", h.GetStats)
+
+				// Notifications — per-user feed (recipient is the current user).
+				r.Get("/api/notifications", h.ListNotifications)
+				r.Get("/api/notifications/unread-count", h.UnreadNotificationCount)
+				r.Post("/api/notifications/{notificationId}/read", h.MarkNotificationRead)
+				r.Post("/api/notifications/read-all", h.MarkAllNotificationsRead)
+			})
+
+			// Project/application runtime metrics snapshot: its own scope so a
+			// Prometheus-style token narrowed to "metrics" (and nothing else)
+			// can still reach it — "read" or "write" also satisfy it (see
+			// middleware.scopeGrants), so this changes nothing for a general
+			// token, only adds a narrower option.
+			r.With(middleware.RequireScope("metrics"), middleware.RequireProjectAccess()).
+				Get("/api/projects/{projectId}/metrics", h.GetProjectMetrics)
+
+			// Deploy actions: a runtime operation on an already-stored
+			// application or database, distinct from writing its
+			// configuration. Narrower than "write" on purpose — the design's
+			// own CI use case ("let CI deploy app X") should not also hand out
+			// the ability to rewrite env vars or delete a backup. "write"
+			// still satisfies this (see middleware.scopeGrants), so nothing
+			// with a general-purpose token changes.
+			r.Group(func(r chi.Router) {
+				r.Use(middleware.RequireScope("deploy"))
+				r.Use(middleware.RequireProjectAccess())
+
+				r.Post("/api/projects/{projectId}/applications/{applicationId}/deploy", h.DeployApplication)
+				r.Post("/api/projects/{projectId}/applications/{applicationId}/stop", h.StopApplication)
+				r.Post("/api/projects/{projectId}/applications/{applicationId}/start", h.StartApplication)
+				r.Post("/api/projects/{projectId}/applications/{applicationId}/restart", h.RestartApplication)
+				r.Post("/api/projects/{projectId}/applications/{applicationId}/reload", h.ReloadApplication)
+				r.Post("/api/projects/{projectId}/applications/{applicationId}/rebuild", h.RebuildApplication)
+				r.Post("/api/projects/{projectId}/applications/{applicationId}/build", h.BuildApplication)
+				r.Post("/api/projects/{projectId}/applications/{applicationId}/rollback", h.RollbackDeployment)
+
+				r.Post("/api/projects/{projectId}/databases/{databaseId}/stop", h.StopDatabase)
+				r.Post("/api/projects/{projectId}/databases/{databaseId}/start", h.StartDatabase)
+				r.Post("/api/projects/{projectId}/databases/{databaseId}/restart", h.RestartDatabase)
+				r.Post("/api/projects/{projectId}/databases/{databaseId}/reload", h.ReloadDatabase)
+			})
 
 			// Admin-only: metrics snapshots, settings, cleanup, audit
 			r.Group(func(r chi.Router) {
 				r.Use(middleware.RequireRole("admin"))
-				r.Get("/api/metrics", h.GetMetrics)
-				r.Get("/api/metrics/host", h.GetHostHistoricalMetrics)
-				r.Post("/api/cleanup", h.TriggerCleanup)
-				r.Get("/api/settings", h.ListSettings)
-				r.Put("/api/settings", h.UpdateSettings)
-				// SMTP config: dedicated endpoints so the password stays
-				// keyring-encrypted and masked (never in the generic settings list).
-				r.Get("/api/settings/smtp", h.GetSMTPSettings)
-				r.Put("/api/settings/smtp", h.UpdateSMTPSettings)
-				r.Post("/api/settings/smtp/test", h.TestSMTPSettings)
-				r.Get("/api/requests", h.ListAllRequestLogs)
-				r.Get("/api/requests/summary", h.GetAllRequestsSummary)
-				r.Get("/api/server/services", h.GetServerServices)
-				// Live TLS state of the dashboard's own domain.
-				r.Get("/api/server/dashboard-tls", h.GetDashboardTLS)
-				// Read-only Docker inspect pages (containers/images/volumes/networks).
-				r.Get("/api/docker/overview", h.GetDockerOverview)
-				r.Get("/api/docker/containers", h.ListDockerContainers)
-				r.Get("/api/docker/images", h.ListDockerImages)
-				r.Get("/api/docker/volumes", h.ListDockerVolumes)
-				r.Get("/api/docker/networks", h.ListDockerNetworks)
-				r.Get("/api/audit-logs", h.ListAuditLogs)
-				r.Get("/api/audit-logs/actions", h.ListAuditActions)
-				r.Get("/api/audit-logs/export", h.ExportAuditLogs)
-				r.Get("/api/proxy/reconciler", h.GetProxyReconcilerStatus)
-				r.Post("/api/proxy/reconcile", h.ReconcileProxy)
-				r.Get("/api/maintenance/queue", h.GetQueueStatus)
-				r.Post("/api/maintenance/queue/clear", h.ClearQueue)
-				r.Post("/api/maintenance/queue/clear-pending", h.ClearPendingQueue)
-				r.Get("/api/maintenance/logs", h.GetPlatformLogs)
-				r.Get("/api/maintenance/server-ip", h.GetServerIP)
-				r.Post("/api/maintenance/restart", h.RestartService)
-				r.Post("/api/maintenance/host-shell", h.CreateHostShellSession)
-				r.Get("/api/quotas", h.ListQuotas)
-				r.Get("/api/quotas/{scope}/{scopeId}", h.GetQuota)
-				r.Put("/api/quotas/{scope}/{scopeId}", h.UpsertQuota)
-				r.Delete("/api/quotas/{scope}/{scopeId}", h.DeleteQuota)
-				// Centralised TLS certificate store (upload once, use per-domain)
-				r.Get("/api/certificates", h.ListCertificates)
-				// Every domain's observed TLS state in one view.
-				r.Get("/api/domains/tls", h.ListDomainTLSStatus)
-				r.Post("/api/certificates", h.UploadCertificate)
-				r.Delete("/api/certificates/{certificateId}", h.DeleteCertificate)
-				// Notification channels: route existing events out to providers.
-				r.Get("/api/notification-events", h.ListNotificationEvents)
-				r.Get("/api/notification-channels", h.ListNotificationChannels)
-				r.Post("/api/notification-channels", h.CreateNotificationChannel)
-				r.Post("/api/notification-channels/test", h.TestNotificationChannelParams)
-				r.Put("/api/notification-channels/{channelId}", h.UpdateNotificationChannel)
-				r.Patch("/api/notification-channels/{channelId}", h.SetNotificationChannelEnabled)
-				r.Delete("/api/notification-channels/{channelId}", h.DeleteNotificationChannel)
-				r.Post("/api/notification-channels/{channelId}/test", h.TestNotificationChannel)
-				// Git provider app configs (per-instance GitHub App / OAuth clients)
-				r.Get("/api/git/providers", h.ListGitProviderConfigs)
-				r.Put("/api/git/providers", h.SaveGitProviderConfig)
-				r.Delete("/api/git/providers/{configId}", h.DeleteGitProviderConfig)
-				r.Get("/api/git/providers/github/manifest", h.GetGitHubAppManifest)
-				// Prometheus scrape endpoint. When METRICS_BIND is configured
-				// the metrics are also exposed anonymously on that listener;
-				// this admin-gated copy is for operators browsing via the UI.
-				r.Method("GET", "/metrics", metrics.Handler())
+
+				// Split the same way as the non-admin metrics route above:
+				// GetMetrics/GetHostHistoricalMetrics accept a "metrics" token,
+				// everything else in this block defaults to read/write by method.
+				r.Group(func(r chi.Router) {
+					r.Use(middleware.RequireScope("metrics"))
+					r.Get("/api/metrics", h.GetMetrics)
+					r.Get("/api/metrics/host", h.GetHostHistoricalMetrics)
+				})
+
+				r.Group(func(r chi.Router) {
+					r.Use(middleware.RequireScopeByMethod())
+
+					r.Post("/api/cleanup", h.TriggerCleanup)
+					r.Get("/api/settings", h.ListSettings)
+					r.Put("/api/settings", h.UpdateSettings)
+					// SMTP config: dedicated endpoints so the password stays
+					// keyring-encrypted and masked (never in the generic settings list).
+					r.Get("/api/settings/smtp", h.GetSMTPSettings)
+					r.Put("/api/settings/smtp", h.UpdateSMTPSettings)
+					r.Post("/api/settings/smtp/test", h.TestSMTPSettings)
+					r.Get("/api/requests", h.ListAllRequestLogs)
+					r.Get("/api/requests/summary", h.GetAllRequestsSummary)
+					r.Get("/api/server/services", h.GetServerServices)
+					// Live TLS state of the dashboard's own domain.
+					r.Get("/api/server/dashboard-tls", h.GetDashboardTLS)
+					// Read-only Docker inspect pages (containers/images/volumes/networks).
+					r.Get("/api/docker/overview", h.GetDockerOverview)
+					r.Get("/api/docker/containers", h.ListDockerContainers)
+					r.Get("/api/docker/images", h.ListDockerImages)
+					r.Get("/api/docker/volumes", h.ListDockerVolumes)
+					r.Get("/api/docker/networks", h.ListDockerNetworks)
+					r.Get("/api/audit-logs", h.ListAuditLogs)
+					r.Get("/api/audit-logs/actions", h.ListAuditActions)
+					r.Get("/api/audit-logs/export", h.ExportAuditLogs)
+					r.Get("/api/proxy/reconciler", h.GetProxyReconcilerStatus)
+					r.Post("/api/proxy/reconcile", h.ReconcileProxy)
+					r.Get("/api/maintenance/queue", h.GetQueueStatus)
+					r.Post("/api/maintenance/queue/clear", h.ClearQueue)
+					r.Post("/api/maintenance/queue/clear-pending", h.ClearPendingQueue)
+					r.Get("/api/maintenance/logs", h.GetPlatformLogs)
+					r.Get("/api/maintenance/server-ip", h.GetServerIP)
+					r.Post("/api/maintenance/restart", h.RestartService)
+					r.Post("/api/maintenance/host-shell", h.CreateHostShellSession)
+					r.Get("/api/quotas", h.ListQuotas)
+					r.Get("/api/quotas/{scope}/{scopeId}", h.GetQuota)
+					r.Put("/api/quotas/{scope}/{scopeId}", h.UpsertQuota)
+					r.Delete("/api/quotas/{scope}/{scopeId}", h.DeleteQuota)
+					// Centralised TLS certificate store (upload once, use per-domain)
+					r.Get("/api/certificates", h.ListCertificates)
+					// Every domain's observed TLS state in one view.
+					r.Get("/api/domains/tls", h.ListDomainTLSStatus)
+					r.Post("/api/certificates", h.UploadCertificate)
+					r.Delete("/api/certificates/{certificateId}", h.DeleteCertificate)
+					// Notification channels: route existing events out to providers.
+					r.Get("/api/notification-events", h.ListNotificationEvents)
+					r.Get("/api/notification-channels", h.ListNotificationChannels)
+					r.Post("/api/notification-channels", h.CreateNotificationChannel)
+					r.Post("/api/notification-channels/test", h.TestNotificationChannelParams)
+					r.Put("/api/notification-channels/{channelId}", h.UpdateNotificationChannel)
+					r.Patch("/api/notification-channels/{channelId}", h.SetNotificationChannelEnabled)
+					r.Delete("/api/notification-channels/{channelId}", h.DeleteNotificationChannel)
+					r.Post("/api/notification-channels/{channelId}/test", h.TestNotificationChannel)
+					// Git provider app configs (per-instance GitHub App / OAuth clients)
+					r.Get("/api/git/providers", h.ListGitProviderConfigs)
+					r.Put("/api/git/providers", h.SaveGitProviderConfig)
+					r.Delete("/api/git/providers/{configId}", h.DeleteGitProviderConfig)
+					r.Get("/api/git/providers/github/manifest", h.GetGitHubAppManifest)
+					// Prometheus scrape endpoint. When METRICS_BIND is configured
+					// the metrics are also exposed anonymously on that listener;
+					// this admin-gated copy is for operators browsing via the UI.
+					r.Method("GET", "/metrics", metrics.Handler())
+				})
 			})
 		})
 
@@ -408,6 +468,8 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService,
 		r.Group(func(r chi.Router) {
 			r.Use(middleware.BodyLimit(envBodyLimit))
 			r.Use(withTimeout(handlerTimeout))
+			r.Use(middleware.RequireScopeByMethod())
+			r.Use(middleware.RequireProjectAccess())
 			r.Get("/api/projects/{projectId}/env", h.ListProjectEnvVars)
 			r.Put("/api/projects/{projectId}/env", h.UpdateProjectEnvVars)
 			r.Get("/api/projects/{projectId}/env/{envVarId}/reveal", h.RevealProjectEnvVar)
@@ -420,20 +482,18 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService,
 		r.Group(func(r chi.Router) {
 			r.Use(middleware.BodyLimit(defaultBodyLimit))
 			r.Use(withTimeout(handlerTimeout))
+			r.Use(middleware.RequireScopeByMethod())
+			r.Use(middleware.RequireProjectAccess())
 			r.Get("/api/projects/{projectId}/databases", h.ListDatabases)
 			r.Post("/api/projects/{projectId}/databases", h.CreateDatabase)
 			r.Get("/api/projects/{projectId}/databases/{databaseId}", h.GetDatabase)
 			r.Get("/api/projects/{projectId}/databases/{databaseId}/volume", h.GetDatabaseVolume)
 			r.Put("/api/projects/{projectId}/databases/{databaseId}", h.UpdateDatabase)
 			r.Post("/api/projects/{projectId}/databases/{databaseId}/external-access", h.SetDatabaseExternalAccess)
-			r.Post("/api/projects/{projectId}/databases/{databaseId}/stop", h.StopDatabase)
-			r.Post("/api/projects/{projectId}/databases/{databaseId}/start", h.StartDatabase)
-			r.Post("/api/projects/{projectId}/databases/{databaseId}/restart", h.RestartDatabase)
-			r.Post("/api/projects/{projectId}/databases/{databaseId}/reload", h.ReloadDatabase)
 			r.Get("/api/projects/{projectId}/databases/{databaseId}/backups", h.ListDatabaseBackups)
 			r.Post("/api/projects/{projectId}/databases/{databaseId}/backups", h.BackupDatabase)
-			r.Delete("/api/projects/{projectId}/databases/{databaseId}/backups/{backupId}", h.DeleteDatabaseBackup)
-			r.Post("/api/projects/{projectId}/databases/{databaseId}/restore", h.RestoreDatabase)
+			r.With(middleware.RequireSession()).Delete("/api/projects/{projectId}/databases/{databaseId}/backups/{backupId}", h.DeleteDatabaseBackup)
+			r.With(middleware.RequireSession()).Post("/api/projects/{projectId}/databases/{databaseId}/restore", h.RestoreDatabase)
 			r.Get("/api/projects/{projectId}/databases/{databaseId}/restores", h.ListDatabaseRestores)
 			r.Get("/api/projects/{projectId}/databases/{databaseId}/logs/history", h.ListDatabaseLogs)
 			r.Get("/api/projects/{projectId}/databases/{databaseId}/logs/sessions", h.ListDatabaseLogSessions)
@@ -444,9 +504,9 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService,
 			// tombstone they hang off is — the project is the access boundary,
 			// so an orphaned backup has no owner above it.
 			r.Get("/api/projects/{projectId}/orphaned-backups", h.ListProjectOrphanedBackups)
-			r.Post("/api/projects/{projectId}/orphaned-backups/{backupId}/restore", h.RestoreDatabaseFromTombstone)
-			r.Delete("/api/projects/{projectId}/orphaned-backups/{backupId}", h.DeleteOrphanedBackup)
-			r.Delete("/api/projects/{projectId}/databases/{databaseId}", h.DeleteDatabase)
+			r.With(middleware.RequireSession()).Post("/api/projects/{projectId}/orphaned-backups/{backupId}/restore", h.RestoreDatabaseFromTombstone)
+			r.With(middleware.RequireSession()).Delete("/api/projects/{projectId}/orphaned-backups/{backupId}", h.DeleteOrphanedBackup)
+			r.With(middleware.RequireSession()).Delete("/api/projects/{projectId}/databases/{databaseId}", h.DeleteDatabase)
 
 			// Scheduled backup configurations per database
 			r.Get("/api/projects/{projectId}/databases/{databaseId}/backup-configs", h.ListDatabaseBackupConfigs)
@@ -468,15 +528,23 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService,
 		})
 
 		// Streaming routes: SSE / long-poll — no timeout, no body limit.
-		r.Get("/api/projects/{projectId}/applications/{applicationId}/deployments/{deploymentId}/build-logs", h.StreamBuildLogs)
-		r.Get("/api/projects/{projectId}/applications/{applicationId}/logs", h.StreamLogs)
-		r.Get("/api/projects/{projectId}/applications/{applicationId}/requests/stream", h.StreamRequestLogs)
-		r.Get("/api/projects/{projectId}/applications/{applicationId}/metrics/stream", h.StreamApplicationMetrics)
-		r.Get("/api/notifications/stream", h.StreamNotifications)
+		r.Group(func(r chi.Router) {
+			r.Use(middleware.RequireScopeByMethod())
+			r.Use(middleware.RequireProjectAccess())
+			r.Get("/api/projects/{projectId}/applications/{applicationId}/deployments/{deploymentId}/build-logs", h.StreamBuildLogs)
+			r.Get("/api/projects/{projectId}/applications/{applicationId}/logs", h.StreamLogs)
+			r.Get("/api/projects/{projectId}/applications/{applicationId}/requests/stream", h.StreamRequestLogs)
+			r.Get("/api/notifications/stream", h.StreamNotifications)
+		})
+		// Application metrics stream: same "metrics" carve-out as the
+		// snapshot endpoint above, kept outside the group above because it
+		// needs a different scope than the blanket read/write default.
+		r.With(middleware.RequireScope("metrics"), middleware.RequireProjectAccess()).
+			Get("/api/projects/{projectId}/applications/{applicationId}/metrics/stream", h.StreamApplicationMetrics)
 		r.Group(func(r chi.Router) {
 			r.Use(middleware.RequireRole("admin"))
-			r.Get("/api/metrics/host/stream", h.StreamHostMetrics)
-			r.Get("/api/requests/stream", h.StreamAllRequestLogs)
+			r.With(middleware.RequireScope("metrics")).Get("/api/metrics/host/stream", h.StreamHostMetrics)
+			r.With(middleware.RequireScopeByMethod()).Get("/api/requests/stream", h.StreamAllRequestLogs)
 		})
 	})
 }

@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createToken, deleteToken, listTokens } from "@/lib/api/tokens";
+import type { TokenScope } from "@/lib/types";
 import { queryKeys } from "./query-keys";
 
 export function useTokens() {
@@ -14,11 +15,13 @@ export function useCreateToken() {
   return useMutation({
     mutationFn: ({
       name,
+      scopes,
       expiresInDays,
     }: {
       name: string;
+      scopes: TokenScope[];
       expiresInDays?: number;
-    }) => createToken(name, expiresInDays),
+    }) => createToken(name, scopes, expiresInDays),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.tokens });
     },
