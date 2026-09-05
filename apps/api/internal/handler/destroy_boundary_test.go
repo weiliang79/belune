@@ -21,6 +21,13 @@ import (
 // "backup-configs" or "backup-destinations", which are schedule/destination
 // config and deliberately stay reachable, same as PR1's treatment of
 // deploy-hooks/file-mounts/route-features/preview environments).
+//
+// "users" and "certificates" were added after a review found DeleteUser
+// (cascades away every project the target owns — projects.user_id is
+// ON DELETE CASCADE) and DeleteCertificate (an uploaded cert+key is
+// unrecoverable) were both missing RequireSession AND missing from this set,
+// so the structural test that exists specifically to catch such omissions
+// had itself been blind to them.
 var destroyResourceKinds = map[string]bool{
 	"projects":         true,
 	"applications":     true,
@@ -29,6 +36,8 @@ var destroyResourceKinds = map[string]bool{
 	"domains":          true,
 	"backups":          true,
 	"orphaned-backups": true,
+	"users":            true,
+	"certificates":     true,
 }
 
 // destroyRouteResourceKind classifies a chi route pattern as a delete/restore
@@ -108,13 +117,14 @@ func TestDestroyRoutes_RequireSession(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// Sanity floor: the ten routes this PR added RequireSession to
+	// Sanity floor: the twelve routes RequireSession is known to be on
 	// (DeleteProject, DeleteApplication, RemoveDomain, DeleteApplicationVolume,
 	// RestoreVolumeBackup, DeleteDatabaseBackup, RestoreDatabase,
-	// RestoreDatabaseFromTombstone, DeleteOrphanedBackup, DeleteDatabase). If
-	// this drops, either a route's path changed shape or one was removed —
-	// worth knowing either way, not silently passing on zero routes checked.
-	assert.GreaterOrEqual(t, tested, 10, "the walk should discover at least the ten known destroy/restore routes")
+	// RestoreDatabaseFromTombstone, DeleteOrphanedBackup, DeleteDatabase,
+	// DeleteUser, DeleteCertificate). If this drops, either a route's path
+	// changed shape or one was removed — worth knowing either way, not
+	// silently passing on zero routes checked.
+	assert.GreaterOrEqual(t, tested, 12, "the walk should discover at least the twelve known destroy/restore routes")
 }
 
 // TestDestroyRoutes_ClassifierExcludesOperationalConfig pins the negative
@@ -133,6 +143,10 @@ func TestDestroyRoutes_ClassifierExcludesOperationalConfig(t *testing.T) {
 		{http.MethodDelete, "/api/projects/{projectId}/applications/{applicationId}/file-mounts/{fileMountId}"},
 		{http.MethodDelete, "/api/tokens/{tokenId}"},
 		{http.MethodGet, "/api/projects/{projectId}/databases/{databaseId}/restores"},
+		// Revoking a pending invitation only reduces access — the "users"
+		// addition to destroyResourceKinds must not accidentally sweep this
+		// in just because it shares a path prefix with DeleteUser.
+		{http.MethodDelete, "/api/users/invitations/{invitationId}"},
 	}
 	for _, tc := range cases {
 		assert.Equal(t, "", destroyRouteResourceKind(tc.method, tc.route), "%s %s must not classify as a destroy route", tc.method, tc.route)

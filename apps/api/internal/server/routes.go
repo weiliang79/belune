@@ -173,18 +173,26 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService,
 				r.Use(middleware.RequireRole("admin"))
 				r.Use(middleware.RequireScopeByMethod())
 
+				// User management is credential issuance — an admin-role PAT
+				// creating a fresh admin account (with a password it chose)
+				// and logging in as it would sail straight through every
+				// RequireSession gate below as a real session, making this
+				// the same self-propagation class PR3's review closed for
+				// /api/tokens itself. ResetUserPassword and AdminResetUserTOTP
+				// are worse: they take over an EXISTING admin account with no
+				// re-verification at all. All require a session.
 				r.Get("/api/users", h.ListUsers)
-				r.Put("/api/users/{userId}/role", h.UpdateUserRole)
-				r.Delete("/api/users/{userId}", h.DeleteUser)
+				r.With(middleware.RequireSession()).Put("/api/users/{userId}/role", h.UpdateUserRole)
+				r.With(middleware.RequireSession()).Delete("/api/users/{userId}", h.DeleteUser)
 
 				r.Group(func(r chi.Router) {
 					if !disableRateLimit {
 						r.Use(httprate.LimitByIP(10, time.Minute))
 					}
-					r.Post("/api/users", h.CreateUser)
-					r.Post("/api/users/invite", h.InviteUser)
-					r.Put("/api/users/{userId}/password", h.ResetUserPassword)
-					r.Post("/api/users/{userId}/totp/reset", h.AdminResetUserTOTP)
+					r.With(middleware.RequireSession()).Post("/api/users", h.CreateUser)
+					r.With(middleware.RequireSession()).Post("/api/users/invite", h.InviteUser)
+					r.With(middleware.RequireSession()).Put("/api/users/{userId}/password", h.ResetUserPassword)
+					r.With(middleware.RequireSession()).Post("/api/users/{userId}/totp/reset", h.AdminResetUserTOTP)
 				})
 				r.Get("/api/users/invitations", h.ListPendingInvitations)
 				r.Delete("/api/users/invitations/{invitationId}", h.RevokeInvitation)
@@ -441,7 +449,10 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService,
 					// Every domain's observed TLS state in one view.
 					r.Get("/api/domains/tls", h.ListDomainTLSStatus)
 					r.Post("/api/certificates", h.UploadCertificate)
-					r.Delete("/api/certificates/{certificateId}", h.DeleteCertificate)
+					// An uploaded cert+key is unrecoverable once deleted — the
+					// same "destroys real stored data" category as the
+					// project/app/db/volume/domain/backup set below.
+					r.With(middleware.RequireSession()).Delete("/api/certificates/{certificateId}", h.DeleteCertificate)
 					// Notification channels: route existing events out to providers.
 					r.Get("/api/notification-events", h.ListNotificationEvents)
 					r.Get("/api/notification-channels", h.ListNotificationChannels)
