@@ -180,9 +180,13 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService,
 
 			// Personal access tokens: self-service, scoped to the caller. No
 			// admin oversight view exists in v1 — see project_v016_plan.
+			// Minting and revoking require a live session — a PAT calling
+			// these would be a self-propagation path (mint a longer-lived
+			// replacement, revoke the original) that scope enforcement alone
+			// cannot close. Listing stays PAT-accessible: it is read-only.
 			r.Get("/api/tokens", h.ListAPITokens)
-			r.Post("/api/tokens", h.CreateAPIToken)
-			r.Delete("/api/tokens/{tokenId}", h.DeleteAPIToken)
+			r.With(middleware.RequireSession()).Post("/api/tokens", h.CreateAPIToken)
+			r.With(middleware.RequireSession()).Delete("/api/tokens/{tokenId}", h.DeleteAPIToken)
 
 			// Admin-only routes
 			r.Group(func(r chi.Router) {

@@ -32,8 +32,10 @@ FROM api_tokens
 WHERE user_id = $1
 ORDER BY created_at DESC;
 
--- name: DeleteAPIToken :execrows
--- Scoped by user_id, not just id: the affected-row count is how the handler
--- tells "not found" apart from "not yours" — both must read the same to the
--- caller, so there is no separate ownership lookup to get out of sync with it.
-DELETE FROM api_tokens WHERE id = $1 AND user_id = $2;
+-- name: DeleteAPIToken :one
+-- Scoped by user_id, not just id: pgx.ErrNoRows is how the handler tells
+-- "not found" apart from "not yours" — both must read the same to the
+-- caller, so there is no separate ownership lookup to get out of sync with
+-- it. RETURNING name so the audit entry for the delete can carry it, the same
+-- way create's does — one statement, not a second lookup.
+DELETE FROM api_tokens WHERE id = $1 AND user_id = $2 RETURNING name;
