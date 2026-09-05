@@ -22,7 +22,8 @@ func TestCreateAPIToken_ReturnsPlaintextOnceAndAuthenticates(t *testing.T) {
 	adminToken := env.SetupAdmin(t, "admin@test.com", "password123")
 
 	resp := env.DoRequest(t, "POST", "/api/tokens", map[string]any{
-		"name": "ci token",
+		"name":   "ci token",
+		"scopes": service.AllScopes,
 	}, testutil.AuthHeader(adminToken))
 	require.Equal(t, http.StatusCreated, resp.StatusCode)
 	body := testutil.ReadJSON(t, resp)
@@ -45,7 +46,8 @@ func TestCreateAPIToken_ListNeverCarriesSecret(t *testing.T) {
 	adminToken := env.SetupAdmin(t, "admin@test.com", "password123")
 
 	createResp := env.DoRequest(t, "POST", "/api/tokens", map[string]any{
-		"name": "list-secret-check",
+		"name":   "list-secret-check",
+		"scopes": service.AllScopes,
 	}, testutil.AuthHeader(adminToken))
 	require.Equal(t, http.StatusCreated, createResp.StatusCode)
 	created := testutil.ReadJSON(t, createResp)
@@ -72,7 +74,8 @@ func TestCreateAPIToken_StoresSHA256HashOfPlaintext(t *testing.T) {
 	adminToken := env.SetupAdmin(t, "admin@test.com", "password123")
 
 	resp := env.DoRequest(t, "POST", "/api/tokens", map[string]any{
-		"name": "hash-check",
+		"name":   "hash-check",
+		"scopes": service.AllScopes,
 	}, testutil.AuthHeader(adminToken))
 	require.Equal(t, http.StatusCreated, resp.StatusCode)
 	body := testutil.ReadJSON(t, resp)
@@ -97,7 +100,8 @@ func TestCreateAPIToken_RequiresName(t *testing.T) {
 	adminToken := env.SetupAdmin(t, "admin@test.com", "password123")
 
 	resp := env.DoRequest(t, "POST", "/api/tokens", map[string]any{
-		"name": "   ",
+		"name":   "   ",
+		"scopes": service.AllScopes,
 	}, testutil.AuthHeader(adminToken))
 	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
 	resp.Body.Close()
@@ -113,6 +117,7 @@ func TestCreateAPIToken_RejectsExpiryOutsideThePicker(t *testing.T) {
 	resp := env.DoRequest(t, "POST", "/api/tokens", map[string]any{
 		"name":            "bad-expiry",
 		"expires_in_days": 5,
+		"scopes":          service.AllScopes,
 	}, testutil.AuthHeader(adminToken))
 	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
 	resp.Body.Close()
@@ -125,24 +130,24 @@ func TestCreateAPIToken_OmittedExpiryNeverExpires(t *testing.T) {
 	adminToken := env.SetupAdmin(t, "admin@test.com", "password123")
 
 	resp := env.DoRequest(t, "POST", "/api/tokens", map[string]any{
-		"name": "forever",
+		"name":   "forever",
+		"scopes": service.AllScopes,
 	}, testutil.AuthHeader(adminToken))
 	require.Equal(t, http.StatusCreated, resp.StatusCode)
 	body := testutil.ReadJSON(t, resp)
 	assert.Nil(t, body["expires_at"])
 }
 
-// TestCreateAPIToken_IgnoresClientSuppliedScopes is the structural half of
-// the PR3 decision recorded in project_v016_plan: there is no scope picker,
-// and this proves it is not merely absent from the UI — a client that sends a
-// scopes field anyway gets AllScopes back, never what it asked for.
-func TestCreateAPIToken_IgnoresClientSuppliedScopes(t *testing.T) {
+// TestCreateAPIToken_HonorsRequestedScopes pins PR4's picker: the scopes on
+// the created token are exactly what the caller asked for, not automatically
+// AllScopes (that was PR3, before the picker existed).
+func TestCreateAPIToken_HonorsRequestedScopes(t *testing.T) {
 	resetDB(t)
 	adminToken := env.SetupAdmin(t, "admin@test.com", "password123")
 
 	resp := env.DoRequest(t, "POST", "/api/tokens", map[string]any{
-		"name":   "scope-smuggle",
-		"scopes": []string{"admin"},
+		"name":   "narrow",
+		"scopes": []string{"read"},
 	}, testutil.AuthHeader(adminToken))
 	require.Equal(t, http.StatusCreated, resp.StatusCode)
 	body := testutil.ReadJSON(t, resp)
@@ -153,7 +158,54 @@ func TestCreateAPIToken_IgnoresClientSuppliedScopes(t *testing.T) {
 	for i, s := range gotScopes {
 		got[i] = s.(string)
 	}
-	assert.ElementsMatch(t, service.AllScopes, got)
+	assert.ElementsMatch(t, []string{"read"}, got)
+}
+
+// TestCreateAPIToken_RejectsUnknownScope pins that a scope name outside
+// service.AllScopes is rejected, not silently dropped or stored verbatim —
+// PR4's enforcement only knows about the four canonical values.
+func TestCreateAPIToken_RejectsUnknownScope(t *testing.T) {
+	resetDB(t)
+	adminToken := env.SetupAdmin(t, "admin@test.com", "password123")
+
+	resp := env.DoRequest(t, "POST", "/api/tokens", map[string]any{
+		"name":   "scope-smuggle",
+		"scopes": []string{"admin"},
+	}, testutil.AuthHeader(adminToken))
+	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+	resp.Body.Close()
+}
+
+// TestCreateAPIToken_RejectsEmptyScopes pins that a token cannot be minted
+// with zero scopes — it would authenticate but be able to do nothing, which
+// is a footgun rather than a legitimately narrow choice.
+func TestCreateAPIToken_RejectsEmptyScopes(t *testing.T) {
+	resetDB(t)
+	adminToken := env.SetupAdmin(t, "admin@test.com", "password123")
+
+	resp := env.DoRequest(t, "POST", "/api/tokens", map[string]any{
+		"name":   "no-scopes",
+		"scopes": []string{},
+	}, testutil.AuthHeader(adminToken))
+	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+	resp.Body.Close()
+}
+
+// TestCreateAPIToken_DeduplicatesScopes pins that repeating a scope in the
+// request does not produce a duplicate entry in the stored array.
+func TestCreateAPIToken_DeduplicatesScopes(t *testing.T) {
+	resetDB(t)
+	adminToken := env.SetupAdmin(t, "admin@test.com", "password123")
+
+	resp := env.DoRequest(t, "POST", "/api/tokens", map[string]any{
+		"name":   "dupe-scopes",
+		"scopes": []string{"read", "read", "write"},
+	}, testutil.AuthHeader(adminToken))
+	require.Equal(t, http.StatusCreated, resp.StatusCode)
+	body := testutil.ReadJSON(t, resp)
+
+	gotScopes := body["scopes"].([]any)
+	assert.Len(t, gotScopes, 2)
 }
 
 // TestCreateAPIToken_UnpinnedByDefault pins that a PR3-minted token has no
@@ -164,7 +216,8 @@ func TestCreateAPIToken_UnpinnedByDefault(t *testing.T) {
 	adminToken := env.SetupAdmin(t, "admin@test.com", "password123")
 
 	resp := env.DoRequest(t, "POST", "/api/tokens", map[string]any{
-		"name": "unpinned",
+		"name":   "unpinned",
+		"scopes": service.AllScopes,
 	}, testutil.AuthHeader(adminToken))
 	require.Equal(t, http.StatusCreated, resp.StatusCode)
 	body := testutil.ReadJSON(t, resp)
@@ -186,7 +239,8 @@ func TestListAPITokens_ScopedToCallingUser(t *testing.T) {
 	_, memberToken := createMember(t, adminToken, "member@test.com")
 
 	resp := env.DoRequest(t, "POST", "/api/tokens", map[string]any{
-		"name": "admin token",
+		"name":   "admin token",
+		"scopes": service.AllScopes,
 	}, testutil.AuthHeader(adminToken))
 	require.Equal(t, http.StatusCreated, resp.StatusCode)
 	resp.Body.Close()
@@ -207,7 +261,8 @@ func TestDeleteAPIToken_OwnerCanDeleteAndItStopsAuthenticating(t *testing.T) {
 	adminToken := env.SetupAdmin(t, "admin@test.com", "password123")
 
 	createResp := env.DoRequest(t, "POST", "/api/tokens", map[string]any{
-		"name": "revoke-me",
+		"name":   "revoke-me",
+		"scopes": service.AllScopes,
 	}, testutil.AuthHeader(adminToken))
 	require.Equal(t, http.StatusCreated, createResp.StatusCode)
 	created := testutil.ReadJSON(t, createResp)
@@ -232,7 +287,8 @@ func TestDeleteAPIToken_CannotDeleteAnotherUsersToken(t *testing.T) {
 	_, memberToken := createMember(t, adminToken, "member@test.com")
 
 	createResp := env.DoRequest(t, "POST", "/api/tokens", map[string]any{
-		"name": "admin-owned",
+		"name":   "admin-owned",
+		"scopes": service.AllScopes,
 	}, testutil.AuthHeader(adminToken))
 	require.Equal(t, http.StatusCreated, createResp.StatusCode)
 	created := testutil.ReadJSON(t, createResp)
@@ -274,7 +330,8 @@ func TestDeleteAPIToken_PATCannotRevokeItself(t *testing.T) {
 	adminToken := env.SetupAdmin(t, "admin@test.com", "password123")
 
 	createResp := env.DoRequest(t, "POST", "/api/tokens", map[string]any{
-		"name": "self-revoke",
+		"name":   "self-revoke",
+		"scopes": service.AllScopes,
 	}, testutil.AuthHeader(adminToken))
 	require.Equal(t, http.StatusCreated, createResp.StatusCode)
 	created := testutil.ReadJSON(t, createResp)
@@ -301,13 +358,15 @@ func TestDeleteAPIToken_PATCannotRevokeAnyToken(t *testing.T) {
 	adminToken := env.SetupAdmin(t, "admin@test.com", "password123")
 
 	authTokenResp := env.DoRequest(t, "POST", "/api/tokens", map[string]any{
-		"name": "authenticator",
+		"name":   "authenticator",
+		"scopes": service.AllScopes,
 	}, testutil.AuthHeader(adminToken))
 	require.Equal(t, http.StatusCreated, authTokenResp.StatusCode)
 	authPlain := testutil.ReadJSON(t, authTokenResp)["token"].(string)
 
 	targetResp := env.DoRequest(t, "POST", "/api/tokens", map[string]any{
-		"name": "target",
+		"name":   "target",
+		"scopes": service.AllScopes,
 	}, testutil.AuthHeader(adminToken))
 	require.Equal(t, http.StatusCreated, targetResp.StatusCode)
 	targetID := testutil.ReadJSON(t, targetResp)["id"].(string)
@@ -324,13 +383,15 @@ func TestCreateAPIToken_RequiresSession(t *testing.T) {
 	adminToken := env.SetupAdmin(t, "admin@test.com", "password123")
 
 	createResp := env.DoRequest(t, "POST", "/api/tokens", map[string]any{
-		"name": "authenticator",
+		"name":   "authenticator",
+		"scopes": service.AllScopes,
 	}, testutil.AuthHeader(adminToken))
 	require.Equal(t, http.StatusCreated, createResp.StatusCode)
 	plain := testutil.ReadJSON(t, createResp)["token"].(string)
 
 	resp := env.DoRequest(t, "POST", "/api/tokens", map[string]any{
-		"name": "smuggled-replacement",
+		"name":   "smuggled-replacement",
+		"scopes": service.AllScopes,
 	}, testutil.AuthHeader(plain))
 	assert.Equal(t, http.StatusForbidden, resp.StatusCode)
 	resp.Body.Close()
@@ -344,7 +405,8 @@ func TestListAPITokens_AllowsPATAuth(t *testing.T) {
 	adminToken := env.SetupAdmin(t, "admin@test.com", "password123")
 
 	createResp := env.DoRequest(t, "POST", "/api/tokens", map[string]any{
-		"name": "list-via-pat",
+		"name":   "list-via-pat",
+		"scopes": service.AllScopes,
 	}, testutil.AuthHeader(adminToken))
 	require.Equal(t, http.StatusCreated, createResp.StatusCode)
 	plain := testutil.ReadJSON(t, createResp)["token"].(string)
