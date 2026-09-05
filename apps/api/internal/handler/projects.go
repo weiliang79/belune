@@ -19,6 +19,17 @@ type createProjectRequest struct {
 }
 
 func (h *Handler) CreateProject(w http.ResponseWriter, r *http.Request) {
+	// middleware.RequireProjectAccess only ever compares against a
+	// {projectId} URL param, so it has nothing to check here — creating a
+	// project has no existing id to pin against, but a new project is by
+	// definition not the one a pinned token was narrowed to. Reject
+	// explicitly rather than let a pinned token escape its pin by creating
+	// somewhere new to work.
+	if middleware.TokenProjectFromContext(r.Context()) != "" {
+		writeError(w, http.StatusForbidden, "token is pinned to a different project")
+		return
+	}
+
 	var req createProjectRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request body")
@@ -105,6 +116,10 @@ func (h *Handler) GetProject(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) ListProjects(w http.ResponseWriter, r *http.Request) {
 	role := middleware.RoleFromContext(r.Context())
+	// This list has no {projectId} URL param for middleware.RequireProjectAccess
+	// to check, so a pinned token would otherwise see every project's
+	// name/slug it could enumerate before the pin — narrow the result here.
+	pinned := middleware.TokenProjectFromContext(r.Context())
 
 	if role == "admin" {
 		projects, err := h.queries.ListAllProjects(r.Context())
@@ -112,7 +127,7 @@ func (h *Handler) ListProjects(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusInternalServerError, "failed to list projects")
 			return
 		}
-		writeJSON(w, http.StatusOK, projects)
+		writeJSON(w, http.StatusOK, filterProjectsByPin(projects, pinned, func(p generated.ListAllProjectsRow) pgtype.UUID { return p.ID }))
 		return
 	}
 
@@ -125,7 +140,27 @@ func (h *Handler) ListProjects(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, projects)
+	writeJSON(w, http.StatusOK, filterProjectsByPin(projects, pinned, func(p generated.ListProjectsByUserRow) pgtype.UUID { return p.ID }))
+}
+
+// filterProjectsByPin narrows rows to the pinned project id when pinned is
+// non-empty, and returns rows unchanged (never nil) otherwise. Generic over
+// the two list rows' near-identical but distinct sqlc-generated types.
+func filterProjectsByPin[T any](rows []T, pinned string, id func(T) pgtype.UUID) []T {
+	if pinned == "" {
+		return rows
+	}
+	var pinnedUUID pgtype.UUID
+	if err := pinnedUUID.Scan(pinned); err != nil {
+		return []T{}
+	}
+	out := make([]T, 0, len(rows))
+	for _, row := range rows {
+		if id(row) == pinnedUUID {
+			out = append(out, row)
+		}
+	}
+	return out
 }
 
 type updateProjectRequest struct {

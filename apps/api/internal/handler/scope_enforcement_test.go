@@ -131,9 +131,12 @@ func TestScope_DeployTokenCannotDoGeneralWrite(t *testing.T) {
 	updateResp.Body.Close()
 }
 
-// TestScope_DeployTokenCannotRead pins that deploy does not imply read
-// either — the two are independent narrow grants, not a ladder.
-func TestScope_DeployTokenCannotRead(t *testing.T) {
+// TestScope_DeployTokenCanAlsoRead pins that "deploy" grants "read" too — a
+// CI token that can trigger a deploy must also be able to poll its result,
+// or triggering one is a self-inflicted footgun. This is the one place the
+// lattice is NOT symmetric with "metrics": deploy grants read, but read (and
+// write) still do not grant deploy back, and metrics grants neither.
+func TestScope_DeployTokenCanAlsoRead(t *testing.T) {
 	resetDB(t)
 	adminToken := env.SetupAdmin(t, "admin@test.com", "password123")
 	project := env.CreateProject(t, adminToken, "Scope Project", "scope-project")
@@ -142,6 +145,23 @@ func TestScope_DeployTokenCannotRead(t *testing.T) {
 	deployPlain := mintScoped(t, adminToken, []string{"deploy"})
 
 	resp := env.DoRequest(t, "GET", "/api/projects/"+projectID, nil, testutil.AuthHeader(deployPlain))
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	resp.Body.Close()
+}
+
+// TestScope_DeployTokenCannotReadMetrics pins that the read grant deploy
+// picked up is ordinary read, not a transitive hop into "metrics" too —
+// scopeSatisfies is a flat per-requirement lookup, not a chain through an
+// intermediate scope.
+func TestScope_DeployTokenCannotReadMetrics(t *testing.T) {
+	resetDB(t)
+	adminToken := env.SetupAdmin(t, "admin@test.com", "password123")
+	project := env.CreateProject(t, adminToken, "Scope Project", "scope-project")
+	projectID := extractID(project["id"])
+
+	deployPlain := mintScoped(t, adminToken, []string{"deploy"})
+
+	resp := env.DoRequest(t, "GET", "/api/projects/"+projectID+"/metrics", nil, testutil.AuthHeader(deployPlain))
 	assert.Equal(t, http.StatusForbidden, resp.StatusCode)
 	resp.Body.Close()
 }
@@ -301,14 +321,193 @@ func TestTerminal_RequiresSession(t *testing.T) {
 }
 
 // TestWebSocketHub_RequiresReadScope pins that the general WS hub (live
-// updates) is scope-gated like any other read endpoint — a deploy-only token
-// must not subscribe to it.
+// updates) is scope-gated like any other read endpoint — a metrics-only
+// token (the narrowest scope that still does NOT satisfy "read" — deploy now
+// does, see TestScope_DeployTokenCanAlsoRead) must not subscribe to it.
 func TestWebSocketHub_RequiresReadScope(t *testing.T) {
 	resetDB(t)
 	adminToken := env.SetupAdmin(t, "admin@test.com", "password123")
 
-	deployPlain := mintScoped(t, adminToken, []string{"deploy"})
-	resp := env.DoRequest(t, "GET", "/api/ws", nil, testutil.AuthHeader(deployPlain))
+	metricsPlain := mintScoped(t, adminToken, []string{"metrics"})
+	resp := env.DoRequest(t, "GET", "/api/ws", nil, testutil.AuthHeader(metricsPlain))
 	assert.Equal(t, http.StatusForbidden, resp.StatusCode)
 	resp.Body.Close()
+}
+
+// TestUserManagement_RequiresSession pins the fix for a review finding: an
+// admin-role, write-scoped PAT could POST /api/users with role:"admin" and a
+// chosen password, then log in with those credentials for a real session —
+// which sails through every RequireSession gate in the app, including the
+// ones guarding token self-mint and the destroy boundary. ResetUserPassword
+// and AdminResetUserTOTP are worse: they take over an EXISTING admin account
+// with no re-verification at all. All six user-management mutations now
+// require a session; only the read (ListUsers) stays PAT-accessible.
+func TestUserManagement_RequiresSession(t *testing.T) {
+	resetDB(t)
+	adminToken := env.SetupAdmin(t, "admin@test.com", "password123")
+	memberID, _ := createMember(t, adminToken, "member@test.com")
+
+	fullPlain := mintScoped(t, adminToken, service.AllScopes)
+
+	cases := []struct {
+		name, method, path string
+		body               map[string]any
+	}{
+		{"create user", "POST", "/api/users", map[string]any{
+			"email": "escalate@test.com", "password": "password123", "role": "admin",
+		}},
+		{"invite user", "POST", "/api/users/invite", map[string]any{
+			"email": "escalate2@test.com", "role": "admin",
+		}},
+		{"update role", "PUT", "/api/users/" + memberID + "/role", map[string]any{"role": "admin"}},
+		{"reset password", "PUT", "/api/users/" + memberID + "/password", map[string]any{"password": "newpassword123"}},
+		{"reset totp", "POST", "/api/users/" + memberID + "/totp/reset", nil},
+		{"delete user", "DELETE", "/api/users/" + memberID, nil},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			resp := env.DoRequest(t, tc.method, tc.path, tc.body, testutil.AuthHeader(fullPlain))
+			defer resp.Body.Close()
+			assert.Equal(t, http.StatusForbidden, resp.StatusCode, "%s must require a session", tc.name)
+		})
+	}
+
+	// The read stays PAT-accessible — only the mutations are gated.
+	listResp := env.DoRequest(t, "GET", "/api/users", nil, testutil.AuthHeader(fullPlain))
+	assert.Equal(t, http.StatusOK, listResp.StatusCode)
+	listResp.Body.Close()
+}
+
+// TestProjectPin_CannotCreateProject pins a review finding: RequireProjectAccess
+// only ever compares against a {projectId} URL param, so project creation
+// (which has no existing id to compare against) needed its own explicit
+// check — a pinned token creating a new, unrelated project would otherwise
+// make the pin meaningless as a boundary.
+func TestProjectPin_CannotCreateProject(t *testing.T) {
+	resetDB(t)
+	adminToken := env.SetupAdmin(t, "admin@test.com", "password123")
+	adminID := extractID(testutil.ReadJSON(t, env.DoRequest(t, "GET", "/api/auth/me", nil, testutil.AuthHeader(adminToken)))["id"])
+
+	project := env.CreateProject(t, adminToken, "Pinned Project", "pinned-project")
+	pinnedPlain := createPinnedAPIToken(t, adminID, extractID(project["id"]), service.AllScopes)
+
+	resp := env.DoRequest(t, "POST", "/api/projects", map[string]any{
+		"name": "Escape Project", "slug": "escape-project",
+	}, testutil.AuthHeader(pinnedPlain))
+	assert.Equal(t, http.StatusForbidden, resp.StatusCode)
+	resp.Body.Close()
+}
+
+// TestProjectPin_TemplateInstantiate_CannotTargetDifferentProject pins the
+// same review finding for template instantiation: the target project arrives
+// in the request BODY, not a {projectId} URL param, so RequireProjectAccess
+// never sees it — resolveTemplateProject has to check the pin itself.
+func TestProjectPin_TemplateInstantiate_CannotTargetDifferentProject(t *testing.T) {
+	resetDB(t)
+	adminToken := env.SetupAdmin(t, "admin@test.com", "password123")
+	adminID := extractID(testutil.ReadJSON(t, env.DoRequest(t, "GET", "/api/auth/me", nil, testutil.AuthHeader(adminToken)))["id"])
+
+	pinnedProject := env.CreateProject(t, adminToken, "Pinned Project", "pinned-project")
+	otherProject := env.CreateProject(t, adminToken, "Other Project", "other-project")
+	pinnedPlain := createPinnedAPIToken(t, adminID, extractID(pinnedProject["id"]), service.AllScopes)
+
+	resp := env.DoRequest(t, "POST", "/api/templates/excalidraw/instantiate", map[string]any{
+		"project_id": extractID(otherProject["id"]),
+	}, testutil.AuthHeader(pinnedPlain))
+	assert.Equal(t, http.StatusForbidden, resp.StatusCode)
+	resp.Body.Close()
+}
+
+// TestProjectPin_TemplateInstantiate_CannotCreateNewProject pins the other
+// half: omitting project_id targets a brand new project, which by
+// definition is not the one a pinned token was narrowed to.
+func TestProjectPin_TemplateInstantiate_CannotCreateNewProject(t *testing.T) {
+	resetDB(t)
+	adminToken := env.SetupAdmin(t, "admin@test.com", "password123")
+	adminID := extractID(testutil.ReadJSON(t, env.DoRequest(t, "GET", "/api/auth/me", nil, testutil.AuthHeader(adminToken)))["id"])
+
+	pinnedProject := env.CreateProject(t, adminToken, "Pinned Project", "pinned-project")
+	pinnedPlain := createPinnedAPIToken(t, adminID, extractID(pinnedProject["id"]), service.AllScopes)
+
+	resp := env.DoRequest(t, "POST", "/api/templates/excalidraw/instantiate", map[string]any{
+		"new_project_name": "Escape Project",
+	}, testutil.AuthHeader(pinnedPlain))
+	assert.Equal(t, http.StatusForbidden, resp.StatusCode)
+	resp.Body.Close()
+}
+
+// TestProjectPin_GlobalDeployments_RejectsMismatchedFilter pins that the
+// project_id query filter on GET /api/deployments is checked against the pin
+// too — it is a query param, not a {projectId} URL param.
+func TestProjectPin_GlobalDeployments_RejectsMismatchedFilter(t *testing.T) {
+	resetDB(t)
+	adminToken := env.SetupAdmin(t, "admin@test.com", "password123")
+	adminID := extractID(testutil.ReadJSON(t, env.DoRequest(t, "GET", "/api/auth/me", nil, testutil.AuthHeader(adminToken)))["id"])
+
+	pinnedProject := env.CreateProject(t, adminToken, "Pinned Project", "pinned-project")
+	otherProject := env.CreateProject(t, adminToken, "Other Project", "other-project")
+	pinnedPlain := createPinnedAPIToken(t, adminID, extractID(pinnedProject["id"]), service.AllScopes)
+
+	resp := env.DoRequest(t, "GET", "/api/deployments?project_id="+extractID(otherProject["id"]), nil, testutil.AuthHeader(pinnedPlain))
+	assert.Equal(t, http.StatusForbidden, resp.StatusCode)
+	resp.Body.Close()
+}
+
+// TestProjectPin_GlobalDeployments_FiltersToOwnProjectWhenUnfiltered pins the
+// other half: an absent filter must not fall through to every project the
+// token's owner can reach — it is silently narrowed to the pin instead.
+func TestProjectPin_GlobalDeployments_FiltersToOwnProjectWhenUnfiltered(t *testing.T) {
+	resetDB(t)
+	adminToken := env.SetupAdmin(t, "admin@test.com", "password123")
+	adminID := extractID(testutil.ReadJSON(t, env.DoRequest(t, "GET", "/api/auth/me", nil, testutil.AuthHeader(adminToken)))["id"])
+
+	pinnedProject := env.CreateProject(t, adminToken, "Pinned Project", "pinned-project")
+	pinnedProjectID := extractID(pinnedProject["id"])
+	pinnedApp := minimalApp(t, adminToken, pinnedProjectID)
+
+	otherProject := env.CreateProject(t, adminToken, "Other Project", "other-project")
+	otherApp := minimalApp(t, adminToken, extractID(otherProject["id"]))
+
+	var pinnedAppUUID, otherAppUUID pgtype.UUID
+	require.NoError(t, pinnedAppUUID.Scan(extractID(pinnedApp["id"])))
+	require.NoError(t, otherAppUUID.Scan(extractID(otherApp["id"])))
+	_, err := env.Queries.CreateDeployment(context.Background(), generated.CreateDeploymentParams{
+		ApplicationID: pinnedAppUUID, Status: "success", TriggeredBy: "manual",
+	})
+	require.NoError(t, err)
+	_, err = env.Queries.CreateDeployment(context.Background(), generated.CreateDeploymentParams{
+		ApplicationID: otherAppUUID, Status: "success", TriggeredBy: "manual",
+	})
+	require.NoError(t, err)
+
+	pinnedPlain := createPinnedAPIToken(t, adminID, pinnedProjectID, service.AllScopes)
+
+	resp := env.DoRequest(t, "GET", "/api/deployments", nil, testutil.AuthHeader(pinnedPlain))
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	rows := testutil.ReadJSONArray(t, resp)
+	require.Len(t, rows, 1, "an unfiltered query must be narrowed to the pin, not span every project the owner can reach")
+	row := rows[0].(map[string]any)
+	assert.Equal(t, extractID(pinnedApp["id"]), row["application_id"])
+}
+
+// TestProjectPin_ListProjects_FiltersToOwnProject pins that GET /api/projects
+// — another endpoint with no {projectId} URL param — does not let a pinned
+// token enumerate every other project's name and slug.
+func TestProjectPin_ListProjects_FiltersToOwnProject(t *testing.T) {
+	resetDB(t)
+	adminToken := env.SetupAdmin(t, "admin@test.com", "password123")
+	adminID := extractID(testutil.ReadJSON(t, env.DoRequest(t, "GET", "/api/auth/me", nil, testutil.AuthHeader(adminToken)))["id"])
+
+	pinnedProject := env.CreateProject(t, adminToken, "Pinned Project", "pinned-project")
+	pinnedProjectID := extractID(pinnedProject["id"])
+	env.CreateProject(t, adminToken, "Other Project", "other-project")
+
+	pinnedPlain := createPinnedAPIToken(t, adminID, pinnedProjectID, service.AllScopes)
+
+	resp := env.DoRequest(t, "GET", "/api/projects", nil, testutil.AuthHeader(pinnedPlain))
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	rows := testutil.ReadJSONArray(t, resp)
+	require.Len(t, rows, 1)
+	row := rows[0].(map[string]any)
+	assert.Equal(t, pinnedProjectID, row["id"])
 }

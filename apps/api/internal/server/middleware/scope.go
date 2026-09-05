@@ -11,14 +11,18 @@ import (
 // since a general-purpose token (today, every token — no picker existed
 // before this) can already do everything a narrower one can. "read" in turn
 // satisfies "metrics", since metrics are just a narrower slice of what a
-// general read already covers. The reverse never holds: deploy does NOT
-// imply write (a CI deploy token must not also be able to rewrite env vars
-// or delete a backup), and metrics does not imply read (a Prometheus scrape
-// token must not be able to read arbitrary project data). This lattice has
-// exactly one asymmetry on purpose — capability only ever shrinks along it,
-// never round-trips.
+// general read already covers. "deploy" ALSO satisfies "read" — the design's
+// own CI use case ("let CI deploy app X") almost always polls the deployment
+// afterward, so a deploy-only token that could trigger a deploy but never
+// observe it would be a self-inflicted footgun, not a meaningful narrowing.
+// The remaining direction never holds: deploy does NOT imply write (a CI
+// deploy token must not also be able to rewrite env vars or delete a
+// backup), and metrics does not imply read or deploy (a Prometheus scrape
+// token must not be able to read arbitrary project data or trigger a
+// deploy) — capability only ever shrinks along those edges, never
+// round-trips.
 var scopeGrants = map[string][]string{
-	"read":    {"read", "write"},
+	"read":    {"read", "write", "deploy"},
 	"write":   {"write"},
 	"deploy":  {"deploy", "write"},
 	"metrics": {"metrics", "read", "write"},
