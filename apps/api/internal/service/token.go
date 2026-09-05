@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"errors"
+	"fmt"
 	"log/slog"
 	"strings"
 	"time"
@@ -34,6 +35,13 @@ const lastUsedCoarsen = 5 * time.Minute
 func HasTokenPrefix(s string) bool {
 	return strings.HasPrefix(s, TokenPrefix)
 }
+
+// AllScopes is the full scope set every token gets today. PR3 ships no scope
+// picker — the create-token form takes only a name and an expiry — so this is
+// the only value it ever passes; PR4 adds the picker and real enforcement
+// together, deliberately, so no UI ever promises a restriction that isn't
+// backed yet.
+var AllScopes = []string{"read", "write", "deploy", "metrics"}
 
 // TokenService owns personal access tokens: generation, hashing, and the
 // authentication lookup the auth middleware calls on every Bearer request
@@ -123,4 +131,45 @@ func (s *TokenService) Authenticate(ctx context.Context, plain string) (*Authent
 		Scopes:        row.Scopes,
 		ProjectID:     row.ProjectID,
 	}, nil
+}
+
+// CreateTokenParams collects what Create persists. Validation (name
+// non-empty, expiry one of the offered choices) is the handler's job — this
+// is the point past which a token unconditionally gets minted.
+type CreateTokenParams struct {
+	UserID      pgtype.UUID
+	Name        string
+	RoleAtIssue string
+	ExpiresAt   pgtype.Timestamptz
+}
+
+// CreatedToken carries the plaintext alongside the stored row. Plain exists
+// only for this one return trip — Create never logs or persists it, and
+// nothing downstream can recover it once the caller's response is sent.
+type CreatedToken struct {
+	generated.ApiToken
+	Plain string
+}
+
+// Create mints a new personal access token. It is always unpinned
+// (ProjectID left zero/NULL — every project the owner can reach, evaluated at
+// use time) and always carries AllScopes: no narrower option exists until
+// PR4.
+func (s *TokenService) Create(ctx context.Context, p CreateTokenParams) (*CreatedToken, error) {
+	plain, hash, err := GenerateToken()
+	if err != nil {
+		return nil, fmt.Errorf("generating token: %w", err)
+	}
+	row, err := s.queries.CreateAPIToken(ctx, generated.CreateAPITokenParams{
+		UserID:      p.UserID,
+		Name:        p.Name,
+		TokenHash:   hash,
+		Scopes:      AllScopes,
+		RoleAtIssue: p.RoleAtIssue,
+		ExpiresAt:   p.ExpiresAt,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("creating token: %w", err)
+	}
+	return &CreatedToken{ApiToken: row, Plain: plain}, nil
 }

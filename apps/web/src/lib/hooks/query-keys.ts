@@ -253,6 +253,7 @@ export const queryKeys = {
     status: ["backups", "status"] as const,
   },
   alertPreferences: ["alert-preferences"] as const,
+  tokens: ["tokens"] as const,
   invitations: ["invitations"] as const,
   proxyReconciler: ["proxy", "reconciler"] as const,
   maintenanceQueue: ["maintenance", "queue"] as const,

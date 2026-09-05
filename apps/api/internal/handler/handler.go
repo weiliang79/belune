@@ -94,6 +94,10 @@ type Handler struct {
 	// its verifier, so the login challenge and these endpoints agree on what
 	// counts as a valid factor.
 	totpSvc *service.TOTPService
+	// tokenSvc mints personal access tokens for the CRUD endpoints below. The
+	// same instance is also wired into middleware.Auth (in server.go) for the
+	// Bearer PAT branch — one TokenService, two callers.
+	tokenSvc *service.TokenService
 }
 
 func New(
@@ -119,6 +123,7 @@ func New(
 	termMgr *terminal.Manager,
 	quotaSvc *quota.Service,
 	emailSvc *email.Service,
+	tokenSvc *service.TokenService,
 ) *Handler {
 	return &Handler{
 		cfg:               cfg,
@@ -148,6 +153,7 @@ func New(
 		smtpSettingsSvc:   service.NewSMTPSettingsService(queries, cfg.Keyring, cfg),
 		serverSvc:         service.NewServerService(queries),
 		totpSvc:           service.NewTOTPService(db, queries, cfg.Keyring),
+		tokenSvc:          tokenSvc,
 	}
 }
 
