@@ -32,10 +32,12 @@ type Server struct {
 	router  chi.Router
 	handler *handler.Handler
 	auth    *service.AuthService
+	tokens  *service.TokenService
 }
 
 func New(cfg *config.Config, db *pgxpool.Pool, queries *generated.Queries, asynqClient handler.TaskEnqueuer, inspector handler.QueueInspector, rts runtime.Runtimes, pm proxy.ProxyManager, reconciler handler.ReconcilerStatusProvider, rdb *redis.Client, hub *ws.Hub, auditSvc *service.AuditService, notifySvc *service.NotificationService, termMgr *terminal.Manager, emailSvc *email.Service) *Server {
 	auth := service.NewAuthService(queries, cfg.JWTSecret, cfg.JWTExpiryHours, cfg.JWTRefreshHours, rdb)
+	tokens := service.NewTokenService(queries)
 	backupDestSvc := service.NewBackupDestinationService(queries, cfg.Keyring)
 	// appSvc needs backupDestSvc to erase volume-backup objects on delete, so it
 	// is built after it.
@@ -56,6 +58,7 @@ func New(cfg *config.Config, db *pgxpool.Pool, queries *generated.Queries, asynq
 		cfg:     cfg,
 		db:      db,
 		auth:    auth,
+		tokens:  tokens,
 		handler: handler.New(cfg, db, queries, asynqClient, inspector, rts, pm, reconciler, auth, rdb, appSvc, projSvc, dbSvc, gitProviderSvc, gitIntegrationSvc, backupDestSvc, hub, auditSvc, notifySvc, termMgr, quotaSvc, emailSvc),
 	}
 
@@ -117,7 +120,7 @@ func (s *Server) setupRouter() chi.Router {
 	}))
 
 	// Register API + health routes
-	registerRoutes(r, s.handler, s.auth, s.cfg.DisableRateLimiting)
+	registerRoutes(r, s.handler, s.auth, s.tokens, s.cfg.DisableRateLimiting)
 
 	// Catch-all: serve the embedded SPA for any unmatched path
 	if spaHandler := web.Handler(); spaHandler != nil {

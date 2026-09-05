@@ -122,7 +122,7 @@ func (h *Handler) ForgotPassword(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if h.auditSvc != nil {
-		h.auditSvc.Log(uuidToString(user.ID), clientIP, "password_reset_requested", "user", uuidToString(user.ID), nil)
+		h.auditSvc.Log(uuidToString(user.ID), "", clientIP, "password_reset_requested", "user", uuidToString(user.ID), nil)
 	}
 
 	writeJSON(w, http.StatusOK, map[string]string{"status": "if the email exists you will receive a reset link"})
@@ -202,7 +202,7 @@ func (h *Handler) ResetPassword(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if h.auditSvc != nil {
-		h.auditSvc.Log(uuidToString(record.UserID), clientIP, "password_reset_completed", "user", uuidToString(record.UserID), nil)
+		h.auditSvc.Log(uuidToString(record.UserID), "", clientIP, "password_reset_completed", "user", uuidToString(record.UserID), nil)
 	}
 
 	writeJSON(w, http.StatusOK, map[string]string{"status": "password reset successful"})
