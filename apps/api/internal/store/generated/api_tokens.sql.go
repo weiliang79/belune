@@ -53,8 +53,8 @@ func (q *Queries) CreateAPIToken(ctx context.Context, arg CreateAPITokenParams) 
 	return i, err
 }
 
-const deleteAPIToken = `-- name: DeleteAPIToken :execrows
-DELETE FROM api_tokens WHERE id = $1 AND user_id = $2
+const deleteAPIToken = `-- name: DeleteAPIToken :one
+DELETE FROM api_tokens WHERE id = $1 AND user_id = $2 RETURNING name
 `
 
 type DeleteAPITokenParams struct {
@@ -62,15 +62,16 @@ type DeleteAPITokenParams struct {
 	UserID pgtype.UUID `json:"user_id"`
 }
 
-// Scoped by user_id, not just id: the affected-row count is how the handler
-// tells "not found" apart from "not yours" — both must read the same to the
-// caller, so there is no separate ownership lookup to get out of sync with it.
-func (q *Queries) DeleteAPIToken(ctx context.Context, arg DeleteAPITokenParams) (int64, error) {
-	result, err := q.db.Exec(ctx, deleteAPIToken, arg.ID, arg.UserID)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
+// Scoped by user_id, not just id: pgx.ErrNoRows is how the handler tells
+// "not found" apart from "not yours" — both must read the same to the
+// caller, so there is no separate ownership lookup to get out of sync with
+// it. RETURNING name so the audit entry for the delete can carry it, the same
+// way create's does — one statement, not a second lookup.
+func (q *Queries) DeleteAPIToken(ctx context.Context, arg DeleteAPITokenParams) (string, error) {
+	row := q.db.QueryRow(ctx, deleteAPIToken, arg.ID, arg.UserID)
+	var name string
+	err := row.Scan(&name)
+	return name, err
 }
 
 const getAPITokenByHash = `-- name: GetAPITokenByHash :one

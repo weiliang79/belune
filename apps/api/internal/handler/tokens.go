@@ -2,11 +2,13 @@ package handler
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/weiliang79/belune/internal/server/middleware"
@@ -144,26 +146,27 @@ func (h *Handler) DeleteAPIToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tokenIDParam := chi.URLParam(r, "tokenId")
 	var tokenUUID pgtype.UUID
-	if err := tokenUUID.Scan(tokenIDParam); err != nil {
+	if err := tokenUUID.Scan(chi.URLParam(r, "tokenId")); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid token id")
 		return
 	}
 
-	rows, err := h.queries.DeleteAPIToken(r.Context(), generated.DeleteAPITokenParams{
+	name, err := h.queries.DeleteAPIToken(r.Context(), generated.DeleteAPITokenParams{
 		ID:     tokenUUID,
 		UserID: userUUID,
 	})
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			writeError(w, http.StatusNotFound, "token not found")
+			return
+		}
 		writeError(w, http.StatusInternalServerError, "failed to delete token")
 		return
 	}
-	if rows == 0 {
-		writeError(w, http.StatusNotFound, "token not found")
-		return
-	}
 
-	h.audit(r, "token_deleted", "api_token", tokenIDParam, nil)
+	h.audit(r, "token_deleted", "api_token", uuidToString(tokenUUID), map[string]any{
+		"name": name,
+	})
 	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
 }

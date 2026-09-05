@@ -263,10 +263,13 @@ func TestDeleteAPIToken_UnknownIDNotFound(t *testing.T) {
 // TestDeleteAPIToken_SelfRevocationSucceeds is a regression test for a window
 // project_v016_plan flagged explicitly: a token deleting itself (the same
 // credential authenticating the DELETE request that removes its own row).
-// Auth already resolved and populated the request context before the handler
-// runs, so this must succeed exactly like deleting any other token — nothing
-// about "am I currently authenticating with this" should matter.
-func TestDeleteAPIToken_SelfRevocationSucceeds(t *testing.T) {
+// This is now rejected: minting and revoking tokens requires a live session
+// (middleware.RequireSession), specifically because a PAT could otherwise
+// mint itself a longer-lived replacement and then revoke the original to
+// cover its tracks — a self-propagation path scope enforcement alone cannot
+// close, since token creation is a legitimate "write" action. The token used
+// to authenticate this request must survive, unaffected by the rejection.
+func TestDeleteAPIToken_PATCannotRevokeItself(t *testing.T) {
 	resetDB(t)
 	adminToken := env.SetupAdmin(t, "admin@test.com", "password123")
 
@@ -280,10 +283,74 @@ func TestDeleteAPIToken_SelfRevocationSucceeds(t *testing.T) {
 
 	// Authenticate the DELETE with the very token being deleted.
 	delResp := env.DoRequest(t, "DELETE", "/api/tokens/"+id, nil, testutil.AuthHeader(plain))
-	assert.Equal(t, http.StatusOK, delResp.StatusCode)
+	assert.Equal(t, http.StatusForbidden, delResp.StatusCode)
 	delResp.Body.Close()
 
+	// Still alive — the rejection must not have deleted it anyway.
 	resp := env.DoRequest(t, "GET", "/api/projects", nil, testutil.AuthHeader(plain))
-	assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	resp.Body.Close()
+}
+
+// TestDeleteAPIToken_PATCannotRevokeAnyToken pins that the session
+// requirement is not limited to a token deleting itself — a PAT is rejected
+// on this route regardless of whose token id it names, including one of its
+// own owner's OTHER tokens.
+func TestDeleteAPIToken_PATCannotRevokeAnyToken(t *testing.T) {
+	resetDB(t)
+	adminToken := env.SetupAdmin(t, "admin@test.com", "password123")
+
+	authTokenResp := env.DoRequest(t, "POST", "/api/tokens", map[string]any{
+		"name": "authenticator",
+	}, testutil.AuthHeader(adminToken))
+	require.Equal(t, http.StatusCreated, authTokenResp.StatusCode)
+	authPlain := testutil.ReadJSON(t, authTokenResp)["token"].(string)
+
+	targetResp := env.DoRequest(t, "POST", "/api/tokens", map[string]any{
+		"name": "target",
+	}, testutil.AuthHeader(adminToken))
+	require.Equal(t, http.StatusCreated, targetResp.StatusCode)
+	targetID := testutil.ReadJSON(t, targetResp)["id"].(string)
+
+	delResp := env.DoRequest(t, "DELETE", "/api/tokens/"+targetID, nil, testutil.AuthHeader(authPlain))
+	assert.Equal(t, http.StatusForbidden, delResp.StatusCode)
+	delResp.Body.Close()
+}
+
+// TestCreateAPIToken_RequiresSession pins the other half of the same fix: a
+// PAT cannot mint a replacement token for itself either.
+func TestCreateAPIToken_RequiresSession(t *testing.T) {
+	resetDB(t)
+	adminToken := env.SetupAdmin(t, "admin@test.com", "password123")
+
+	createResp := env.DoRequest(t, "POST", "/api/tokens", map[string]any{
+		"name": "authenticator",
+	}, testutil.AuthHeader(adminToken))
+	require.Equal(t, http.StatusCreated, createResp.StatusCode)
+	plain := testutil.ReadJSON(t, createResp)["token"].(string)
+
+	resp := env.DoRequest(t, "POST", "/api/tokens", map[string]any{
+		"name": "smuggled-replacement",
+	}, testutil.AuthHeader(plain))
+	assert.Equal(t, http.StatusForbidden, resp.StatusCode)
+	resp.Body.Close()
+}
+
+// TestListAPITokens_AllowsPATAuth pins that the session requirement is
+// deliberately narrow: listing is read-only, so a PAT may still call it —
+// only minting and revoking are gated.
+func TestListAPITokens_AllowsPATAuth(t *testing.T) {
+	resetDB(t)
+	adminToken := env.SetupAdmin(t, "admin@test.com", "password123")
+
+	createResp := env.DoRequest(t, "POST", "/api/tokens", map[string]any{
+		"name": "list-via-pat",
+	}, testutil.AuthHeader(adminToken))
+	require.Equal(t, http.StatusCreated, createResp.StatusCode)
+	plain := testutil.ReadJSON(t, createResp)["token"].(string)
+
+	resp := env.DoRequest(t, "GET", "/api/tokens", nil, testutil.AuthHeader(plain))
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	assert.Len(t, testutil.ReadJSONArray(t, resp), 1)
 	resp.Body.Close()
 }
