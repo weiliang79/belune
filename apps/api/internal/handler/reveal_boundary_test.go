@@ -57,9 +57,12 @@ func TestRevealRoutes_RequireSession(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// Sanity floor: the five known reveal routes (webhook secret, deploy
-	// hook, file mount, project env var, application env var). If this
-	// drops, a route's path changed shape or one was removed — worth
-	// knowing either way, not silently passing on zero routes checked.
-	assert.GreaterOrEqual(t, tested, 5, "the walk should discover at least the five known reveal routes")
+	// Sanity floor: the six known reveal routes (webhook secret, deploy
+	// hook, file mount, project env var, application env var, database
+	// credentials). If this drops, a route's path changed shape or one was
+	// removed — worth knowing either way, not silently passing on zero
+	// routes checked. Bump this (and the count above) any time a new
+	// reveal-shaped route is added, the same way destroy_boundary_test.go's
+	// twelve are enumerated explicitly rather than left to drift.
+	assert.GreaterOrEqual(t, tested, 6, "the walk should discover at least the six known reveal routes")
 }
