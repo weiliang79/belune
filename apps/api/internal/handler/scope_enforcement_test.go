@@ -225,6 +225,32 @@ func TestScope_ReadTokenCanAlsoReadMetrics(t *testing.T) {
 	resp.Body.Close()
 }
 
+// TestScope_MetricsTokenCanReachPrometheusEndpoint pins the fix for a real
+// gap: GET /metrics (the Prometheus scrape endpoint, admin-role gated) used
+// to sit under RequireScopeByMethod's plain "read" — which "metrics" does
+// NOT satisfy — so the metrics-only token the create-token dialog explicitly
+// sells as a scraper token would 403 on the one route that description
+// promises. Moved into the RequireScope("metrics") group; this pins that an
+// admin's metrics-only token can now reach it, and that a non-admin still
+// cannot regardless of scope.
+func TestScope_MetricsTokenCanReachPrometheusEndpoint(t *testing.T) {
+	resetDB(t)
+	adminToken := env.SetupAdmin(t, "admin@test.com", "password123")
+
+	metricsPlain := mintScoped(t, adminToken, []string{"metrics"})
+	resp := env.DoRequest(t, "GET", "/metrics", nil, testutil.AuthHeader(metricsPlain))
+	assert.Equal(t, http.StatusOK, resp.StatusCode, "an admin's metrics-only token must reach the scrape endpoint")
+	resp.Body.Close()
+
+	env.DoRequest(t, "POST", "/api/users", map[string]string{
+		"email": "member@test.com", "password": "password123", "role": "member",
+	}, testutil.AuthHeader(adminToken)).Body.Close()
+	memberToken := env.LoginAs(t, "member@test.com", "password123")
+	memberResp := env.DoRequest(t, "GET", "/metrics", nil, testutil.AuthHeader(memberToken))
+	assert.Equal(t, http.StatusForbidden, memberResp.StatusCode, "a non-admin session must still be rejected")
+	memberResp.Body.Close()
+}
+
 // TestScope_SessionBypassesScopeEntirely is the control: a session
 // authenticates with no scope restriction at all, regardless of what a token
 // would need for the same route.
