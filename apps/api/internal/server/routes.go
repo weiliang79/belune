@@ -416,6 +416,14 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService,
 					r.Use(middleware.RequireScope("metrics"))
 					r.Get("/api/metrics", h.GetMetrics)
 					r.Get("/api/metrics/host", h.GetHostHistoricalMetrics)
+					// Prometheus scrape endpoint. When METRICS_BIND is configured
+					// the metrics are also exposed anonymously on that listener;
+					// this admin-gated copy is for operators browsing via the UI.
+					// Scoped to "metrics", not RequireScopeByMethod's "read" — a
+					// metrics-only token is explicitly sold as a scraper token
+					// (see api-tokens-card.tsx) and must be able to reach the one
+					// route that description promises.
+					r.Method("GET", "/metrics", metrics.Handler())
 				})
 
 				r.Group(func(r chi.Router) {
@@ -479,10 +487,6 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService,
 					r.Put("/api/git/providers", h.SaveGitProviderConfig)
 					r.Delete("/api/git/providers/{configId}", h.DeleteGitProviderConfig)
 					r.Get("/api/git/providers/github/manifest", h.GetGitHubAppManifest)
-					// Prometheus scrape endpoint. When METRICS_BIND is configured
-					// the metrics are also exposed anonymously on that listener;
-					// this admin-gated copy is for operators browsing via the UI.
-					r.Method("GET", "/metrics", metrics.Handler())
 				})
 			})
 		})
