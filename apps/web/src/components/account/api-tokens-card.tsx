@@ -37,7 +37,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Checkbox } from "@/components/ui/checkbox";
+import {
+  SegmentedControl,
+  SegmentedControlItem,
+} from "@/components/ui/segmented-control";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -66,38 +69,62 @@ const EXPIRY_OPTIONS = [
   { value: "never", label: "No expiry" },
 ];
 
-// Mirrors middleware.scopeGrants: write also covers read and deploy, and
-// read also covers metrics — deploy and metrics are narrower carve-outs, not
-// rungs on a ladder. Order here is display order, all checked by default so
-// an unchanged submission keeps today's full-access behavior.
+// Mirrors middleware.scopeGrants, which is a true total order:
+// metrics ⊂ read ⊂ deploy ⊂ write. Every rung includes everything narrower
+// than it — there is no combination where e.g. "Read + Deploy" is anything
+// other than plain Deploy — so the token only ever needs ONE rung, not a
+// set. Order here is narrowest first, matching the picker.
 const SCOPE_OPTIONS: {
   value: TokenScope;
   label: string;
   description: string;
 }[] = [
   {
-    value: "read",
-    label: "Read",
-    description: "View projects, applications, and their data.",
+    value: "metrics",
+    label: "Metrics",
+    description:
+      "Read metrics only. The narrowest option — for a monitoring scraper.",
   },
   {
-    value: "write",
-    label: "Write",
-    description: "Everything Read can do, plus create, update, and configure.",
+    value: "read",
+    label: "Read",
+    description:
+      "View projects, applications, and their data. Includes metrics.",
   },
   {
     value: "deploy",
     label: "Deploy",
     description:
-      "Trigger deploys, restarts, and other runtime actions — without general write access.",
+      "Trigger deploys, restarts, and other runtime actions. Includes everything Read can do — but not general write access.",
   },
   {
-    value: "metrics",
-    label: "Metrics",
+    value: "write",
+    label: "Write",
     description:
-      "Read metrics only — narrower than Read, for a monitoring scraper.",
+      "Create, update, and configure — full access. Includes everything Deploy can do.",
   },
 ];
+
+// Mirrors middleware.scopeGrants inverted: what a token holding scope X can
+// also do, not just what it was literally minted with. Used for the list
+// badges so e.g. a Write token doesn't read as narrower than it is — under-
+// reporting capability is exactly what made the old checkbox picker
+// misleading in the first place.
+const SCOPE_GRANTS: Record<TokenScope, TokenScope[]> = {
+  write: ["write", "deploy", "read", "metrics"],
+  deploy: ["deploy", "read", "metrics"],
+  read: ["read", "metrics"],
+  metrics: ["metrics"],
+};
+const SCOPE_DISPLAY_ORDER = SCOPE_OPTIONS.map((o) => o.value);
+
+function effectiveScopes(scopes: TokenScope[]): TokenScope[] {
+  const set = new Set<TokenScope>();
+  for (const scope of scopes) {
+    for (const granted of SCOPE_GRANTS[scope] ?? [scope]) set.add(granted);
+  }
+  return SCOPE_DISPLAY_ORDER.filter((s) => set.has(s));
+}
 
 export function ApiTokensCard() {
   const { data: tokens, isLoading } = useTokens();
@@ -184,7 +211,7 @@ function TokenRow({ token }: { token: ApiToken }) {
       <div className="min-w-0 space-y-1">
         <div className="flex flex-wrap items-center gap-2">
           <span className="truncate text-sm font-medium">{token.name}</span>
-          {token.scopes.map((scope) => (
+          {effectiveScopes(token.scopes).map((scope) => (
             <Badge
               key={scope}
               variant="secondary"
@@ -256,8 +283,6 @@ function TokenRow({ token }: { token: ApiToken }) {
   );
 }
 
-const ALL_SCOPES = SCOPE_OPTIONS.map((o) => o.value);
-
 function CreateTokenDialog({
   onIssued,
 }: {
@@ -266,27 +291,17 @@ function CreateTokenDialog({
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const [expiry, setExpiry] = useState("30");
-  // Every scope checked by default — an unchanged submission keeps the
-  // full-access behavior tokens have always had; unchecking narrows it.
-  const [scopes, setScopes] = useState<Set<TokenScope>>(
-    () => new Set(ALL_SCOPES),
-  );
+  // Write by default — the full-access behavior tokens have always had.
+  // Every rung already includes everything narrower than it (see
+  // SCOPE_GRANTS), so there is exactly one value here, not a set.
+  const [scope, setScope] = useState<TokenScope>("write");
   const createToken = useCreateToken();
 
   const close = () => {
     setOpen(false);
     setName("");
     setExpiry("30");
-    setScopes(new Set(ALL_SCOPES));
-  };
-
-  const toggleScope = (scope: TokenScope, checked: boolean) => {
-    setScopes((prev) => {
-      const next = new Set(prev);
-      if (checked) next.add(scope);
-      else next.delete(scope);
-      return next;
-    });
+    setScope("write");
   };
 
   const submit = async (e: React.FormEvent) => {
@@ -294,7 +309,7 @@ function CreateTokenDialog({
     try {
       const result = await createToken.mutateAsync({
         name,
-        scopes: Array.from(scopes),
+        scopes: [scope],
         expiresInDays: expiry === "never" ? undefined : Number(expiry),
       });
       onIssued(result.token);
@@ -351,33 +366,20 @@ function CreateTokenDialog({
               </div>
               <div className="space-y-2">
                 <Label>Scope</Label>
-                <div className="space-y-2.5">
+                <SegmentedControl
+                  value={scope}
+                  onValueChange={(v) => setScope(v as TokenScope)}
+                  fullWidth
+                >
                   {SCOPE_OPTIONS.map((o) => (
-                    <label
-                      key={o.value}
-                      className="flex items-start gap-2.5 text-sm"
-                    >
-                      <Checkbox
-                        className="mt-0.5"
-                        checked={scopes.has(o.value)}
-                        onCheckedChange={(checked) =>
-                          toggleScope(o.value, checked === true)
-                        }
-                      />
-                      <span>
-                        <span className="font-medium">{o.label}</span>
-                        <span className="text-muted-foreground block text-xs">
-                          {o.description}
-                        </span>
-                      </span>
-                    </label>
+                    <SegmentedControlItem key={o.value} value={o.value}>
+                      {o.label}
+                    </SegmentedControlItem>
                   ))}
-                </div>
-                {scopes.size === 0 && (
-                  <p className="text-destructive text-xs">
-                    Select at least one scope.
-                  </p>
-                )}
+                </SegmentedControl>
+                <p className="text-muted-foreground text-xs">
+                  {SCOPE_OPTIONS.find((o) => o.value === scope)?.description}
+                </p>
               </div>
             </div>
             <DialogFooter>
@@ -386,9 +388,7 @@ function CreateTokenDialog({
               </Button>
               <Button
                 type="submit"
-                disabled={
-                  createToken.isPending || !name.trim() || scopes.size === 0
-                }
+                disabled={createToken.isPending || !name.trim()}
               >
                 {createToken.isPending ? "Creating..." : "Create"}
               </Button>
