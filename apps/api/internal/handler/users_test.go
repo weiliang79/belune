@@ -171,9 +171,11 @@ func TestResetUserPassword(t *testing.T) {
 	member := testutil.ReadJSON(t, resp)
 	memberID := extractID(member["id"])
 
-	// Admin resets member's password
+	// Admin resets member's password, stepping up with the admin's OWN
+	// current password.
 	resp = env.DoRequest(t, "PUT", fmt.Sprintf("/api/users/%s/password", memberID), map[string]string{
-		"password": "newpassword123",
+		"password":         "newpassword123",
+		"current_password": "password123",
 	}, testutil.AuthHeader(adminToken))
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 	resp.Body.Close()
@@ -181,6 +183,35 @@ func TestResetUserPassword(t *testing.T) {
 	// Member can login with new password
 	newToken := env.LoginAs(t, "member@test.com", "newpassword123")
 	assert.NotEmpty(t, newToken)
+}
+
+// TestResetUserPassword_RequiresCallersOwnPassword pins the step-up fix: a
+// hijacked or borrowed admin session must not be able to take over ANY
+// account, including another admin's, with nothing re-verified. Wrong or
+// absent current_password is rejected before the target's password ever
+// changes.
+func TestResetUserPassword_RequiresCallersOwnPassword(t *testing.T) {
+	resetDB(t)
+	adminToken := env.SetupAdmin(t, "admin@test.com", "password123")
+
+	resp := env.DoRequest(t, "POST", "/api/users", map[string]string{
+		"email":    "member@test.com",
+		"password": "password123",
+		"role":     "member",
+	}, testutil.AuthHeader(adminToken))
+	member := testutil.ReadJSON(t, resp)
+	memberID := extractID(member["id"])
+
+	resp = env.DoRequest(t, "PUT", fmt.Sprintf("/api/users/%s/password", memberID), map[string]string{
+		"password":         "newpassword123",
+		"current_password": "wrong-password",
+	}, testutil.AuthHeader(adminToken))
+	assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
+	resp.Body.Close()
+
+	// The target's password must be untouched.
+	stillOld := env.LoginAs(t, "member@test.com", "password123")
+	assert.NotEmpty(t, stillOld)
 }
 
 // extractID converts a pgtype.UUID JSON representation to a string UUID.

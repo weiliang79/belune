@@ -452,7 +452,11 @@ func TestAdminResetTOTP_ClearsTheFactorAndIsAudited(t *testing.T) {
 	memberToken := env.LoginAs(t, "locked-out@test.com", "password123")
 	enableTOTP(t, memberToken)
 
-	resp = env.DoRequest(t, "POST", "/api/users/"+memberID+"/totp/reset", nil, testutil.AuthHeader(adminToken))
+	// Steps up with the admin's OWN current password before clearing someone
+	// else's factor.
+	resp = env.DoRequest(t, "POST", "/api/users/"+memberID+"/totp/reset", map[string]string{
+		"current_password": "password123",
+	}, testutil.AuthHeader(adminToken))
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 
 	// The password alone gets them back in.
@@ -466,6 +470,34 @@ func TestAdminResetTOTP_ClearsTheFactorAndIsAudited(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, user.TotpEnabledAt.Valid)
 	assert.Empty(t, user.TotpSecretEncrypted, "the reset must clear the secret, not just the flag")
+}
+
+// TestAdminResetTOTP_RequiresCallersOwnPassword pins the same step-up fix as
+// TestResetUserPassword_RequiresCallersOwnPassword: a hijacked or borrowed
+// admin session must not be able to strip another admin's second factor with
+// nothing re-checked.
+func TestAdminResetTOTP_RequiresCallersOwnPassword(t *testing.T) {
+	resetDB(t)
+	adminToken := env.SetupAdmin(t, "admin@test.com", "password123")
+
+	resp := env.DoRequest(t, "POST", "/api/users", map[string]string{
+		"email": "locked-out@test.com", "password": "password123", "role": "member",
+	}, testutil.AuthHeader(adminToken))
+	require.Equal(t, http.StatusCreated, resp.StatusCode)
+	memberID := extractID(testutil.ReadJSON(t, resp)["id"])
+
+	memberToken := env.LoginAs(t, "locked-out@test.com", "password123")
+	enableTOTP(t, memberToken)
+
+	resp = env.DoRequest(t, "POST", "/api/users/"+memberID+"/totp/reset", map[string]string{
+		"current_password": "wrong-password",
+	}, testutil.AuthHeader(adminToken))
+	assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
+	resp.Body.Close()
+
+	user, err := env.Queries.GetUserByEmail(context.Background(), "locked-out@test.com")
+	require.NoError(t, err)
+	assert.True(t, user.TotpEnabledAt.Valid, "the target's factor must be untouched")
 }
 
 // TestHostShell_RequiresTheSecondFactorWhenEnrolled: the host shell is the

@@ -337,15 +337,40 @@ func (h *Handler) VerifyLogin(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, result)
 }
 
+type adminResetUserTOTPRequest struct {
+	CurrentPassword string `json:"current_password"`
+}
+
 // AdminResetUserTOTP clears another user's second factor, for the lost-device
 // case that recovery codes did not cover. An admin can already do nearly
 // anything, so the control is not permission but visibility: it is audited
-// loudly and it ends that user's sessions.
+// loudly and it ends that user's sessions. It also removes a factor from
+// someone else's account, so — like ResetUserPassword — it steps up on the
+// CALLER's own password first: a hijacked or borrowed admin session must not
+// be able to strip another admin's second factor with nothing re-checked.
 // POST /api/users/{userId}/totp/reset (admin only)
 func (h *Handler) AdminResetUserTOTP(w http.ResponseWriter, r *http.Request) {
 	var uid pgtype.UUID
 	if err := uid.Scan(chi.URLParam(r, "userId")); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid user id")
+		return
+	}
+
+	var req adminResetUserTOTPRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	var callerID pgtype.UUID
+	callerID.Scan(middleware.UserIDFromContext(r.Context()))
+	caller, err := h.queries.GetUserByID(r.Context(), callerID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to get caller")
+		return
+	}
+	if bcrypt.CompareHashAndPassword([]byte(caller.PasswordHash), []byte(req.CurrentPassword)) != nil {
+		writeError(w, http.StatusUnauthorized, "incorrect password")
 		return
 	}
 

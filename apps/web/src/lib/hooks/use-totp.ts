@@ -64,7 +64,13 @@ export function useRegenerateRecoveryCodes() {
 export function useResetUserTotp() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (userId: string) => resetUserTotp(userId),
+    mutationFn: ({
+      userId,
+      currentPassword,
+    }: {
+      userId: string;
+      currentPassword: string;
+    }) => resetUserTotp(userId, currentPassword),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.users.all });
     },
