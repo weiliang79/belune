@@ -15,17 +15,22 @@ import (
 // own CI use case ("let CI deploy app X") almost always polls the deployment
 // afterward, so a deploy-only token that could trigger a deploy but never
 // observe it would be a self-inflicted footgun, not a meaningful narrowing.
-// The remaining direction never holds: deploy does NOT imply write (a CI
-// deploy token must not also be able to rewrite env vars or delete a
-// backup), and metrics does not imply read or deploy (a Prometheus scrape
-// token must not be able to read arbitrary project data or trigger a
-// deploy) — capability only ever shrinks along those edges, never
-// round-trips.
+// Following from that same edge, "deploy" also satisfies "metrics" — it
+// already satisfies "read", which satisfies "metrics", so metrics not
+// following transitively made "read" and "deploy" incomparable for no
+// reason (a deploy token could poll full deployment history but 403 on a
+// narrower metrics snapshot). This makes the four scopes a true total order:
+// metrics ⊂ read ⊂ deploy ⊂ write. The remaining direction never holds:
+// deploy does NOT imply write (a CI deploy token must not also be able to
+// rewrite env vars or delete a backup), and metrics does not imply read,
+// deploy, or write (a Prometheus scrape token must not be able to read
+// arbitrary project data or trigger a deploy) — capability only ever
+// shrinks along those edges, never round-trips.
 var scopeGrants = map[string][]string{
 	"read":    {"read", "write", "deploy"},
 	"write":   {"write"},
 	"deploy":  {"deploy", "write"},
-	"metrics": {"metrics", "read", "write"},
+	"metrics": {"metrics", "read", "write", "deploy"},
 }
 
 func scopeSatisfies(tokenScopes []string, required string) bool {
