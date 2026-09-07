@@ -123,7 +123,13 @@ function effectiveScopes(scopes: TokenScope[]): TokenScope[] {
   for (const scope of scopes) {
     for (const granted of SCOPE_GRANTS[scope] ?? [scope]) set.add(granted);
   }
-  return SCOPE_DISPLAY_ORDER.filter((s) => set.has(s));
+  // TokenScope is a compile-time union, not a runtime guarantee — a token
+  // carrying a scope this build doesn't know about must still show SOMETHING
+  // rather than silently rendering as "no access": append it after the known
+  // rungs instead of letting the filter below drop it.
+  const known = SCOPE_DISPLAY_ORDER.filter((s) => set.has(s));
+  const unknown = [...set].filter((s) => !SCOPE_DISPLAY_ORDER.includes(s));
+  return [...known, ...unknown];
 }
 
 export function ApiTokensCard() {
