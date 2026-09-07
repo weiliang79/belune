@@ -221,8 +221,12 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService,
 				r.Put("/api/auth/password", h.ChangeOwnPassword)
 				r.Put("/api/auth/profile", h.UpdateProfile)
 
-				// Two-factor: managing your own factor always needs a live session,
-				// and the mutations re-check the password on top.
+				// Two-factor: the mutations re-check your password before taking
+				// effect (see totp.go). That is NOT a session gate — a PAT that
+				// also somehow holds the account password could still call these.
+				// Deliberately left that way for this PR (project_v016_plan's PR4
+				// notes record it as an explicit deferral, not an oversight); worth
+				// another look if PATs are trusted with more in a future release.
 				r.Get("/api/auth/totp", h.GetTOTPStatus)
 				r.Post("/api/auth/totp/enroll", h.EnrollTOTP)
 				r.Post("/api/auth/totp/enroll/verify", h.VerifyTOTPEnrollment)
