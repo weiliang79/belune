@@ -280,9 +280,17 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService,
 				r.Put("/api/projects/{projectId}/applications/{applicationId}/runtime", h.UpdateApplicationRuntime)
 				r.With(middleware.RequireSession()).Delete("/api/projects/{projectId}/applications/{applicationId}", h.DeleteApplication)
 				r.Put("/api/projects/{projectId}/applications/{applicationId}/webhook", h.UpdateApplicationWebhook)
-				r.Get("/api/projects/{projectId}/applications/{applicationId}/webhook/reveal", h.RevealWebhookSecret)
+				// Reveal endpoints decrypt a real secret and return it in plaintext
+				// (webhook secret, deploy-hook token, file-mount contents, env var
+				// value) — "read" scope alone would hand a read-only PAT every
+				// secret in the install, since read is derived purely from the
+				// HTTP method (RequireScopeByMethod), not from what the GET
+				// actually returns. Session-gated instead, same reasoning as the
+				// destroy boundary; see reveal_boundary_test.go for the structural
+				// enforcement.
+				r.With(middleware.RequireSession()).Get("/api/projects/{projectId}/applications/{applicationId}/webhook/reveal", h.RevealWebhookSecret)
 				r.Get("/api/projects/{projectId}/applications/{applicationId}/deploy-hook", h.GetDeployHook)
-				r.Get("/api/projects/{projectId}/applications/{applicationId}/deploy-hook/reveal", h.RevealDeployHook)
+				r.With(middleware.RequireSession()).Get("/api/projects/{projectId}/applications/{applicationId}/deploy-hook/reveal", h.RevealDeployHook)
 				r.Post("/api/projects/{projectId}/applications/{applicationId}/deploy-hook", h.GenerateDeployHook)
 				r.Delete("/api/projects/{projectId}/applications/{applicationId}/deploy-hook", h.DeleteDeployHook)
 				r.Post("/api/projects/{projectId}/applications/{applicationId}/change-source", h.ChangeApplicationSource)
@@ -345,7 +353,7 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService,
 
 				// Application file/config mounts
 				r.Get("/api/projects/{projectId}/applications/{applicationId}/file-mounts", h.ListFileMounts)
-				r.Get("/api/projects/{projectId}/applications/{applicationId}/file-mounts/{fileMountId}/reveal", h.RevealFileMount)
+				r.With(middleware.RequireSession()).Get("/api/projects/{projectId}/applications/{applicationId}/file-mounts/{fileMountId}/reveal", h.RevealFileMount)
 				r.Post("/api/projects/{projectId}/applications/{applicationId}/file-mounts", h.CreateFileMount)
 				r.Put("/api/projects/{projectId}/applications/{applicationId}/file-mounts/{fileMountId}", h.UpdateFileMount)
 				r.Delete("/api/projects/{projectId}/applications/{applicationId}/file-mounts/{fileMountId}", h.DeleteFileMount)
@@ -487,10 +495,11 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService,
 			r.Use(middleware.RequireProjectAccess())
 			r.Get("/api/projects/{projectId}/env", h.ListProjectEnvVars)
 			r.Put("/api/projects/{projectId}/env", h.UpdateProjectEnvVars)
-			r.Get("/api/projects/{projectId}/env/{envVarId}/reveal", h.RevealProjectEnvVar)
+			// See the reveal-endpoint comment above webhook/reveal: same reasoning.
+			r.With(middleware.RequireSession()).Get("/api/projects/{projectId}/env/{envVarId}/reveal", h.RevealProjectEnvVar)
 			r.Get("/api/projects/{projectId}/applications/{applicationId}/env", h.ListEnvVars)
 			r.Put("/api/projects/{projectId}/applications/{applicationId}/env", h.UpdateEnvVars)
-			r.Get("/api/projects/{projectId}/applications/{applicationId}/env/{envVarId}/reveal", h.RevealEnvVar)
+			r.With(middleware.RequireSession()).Get("/api/projects/{projectId}/applications/{applicationId}/env/{envVarId}/reveal", h.RevealEnvVar)
 		})
 
 		// Databases: standard limit + timeout
