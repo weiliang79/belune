@@ -322,9 +322,26 @@ function ResetTotpDialog({
   onOpenChange: (open: boolean) => void;
 }) {
   const resetTotp = useResetUserTotp();
+  const [currentPassword, setCurrentPassword] = useState("");
+
+  const confirm = () => {
+    if (!currentPassword) return;
+    toast.promise(resetTotp.mutateAsync({ userId, currentPassword }), {
+      loading: "Resetting...",
+      success: `Two-factor reset for ${email}`,
+      error: (err) => err.message,
+    });
+    onOpenChange(false);
+  };
 
   return (
-    <AlertDialog open={open} onOpenChange={onOpenChange}>
+    <AlertDialog
+      open={open}
+      onOpenChange={(next) => {
+        if (!next) setCurrentPassword("");
+        onOpenChange(next);
+      }}
+    >
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>Reset two-factor for {email}?</AlertDialogTitle>
@@ -334,18 +351,26 @@ function ResetTotpDialog({
             session they have open ends. This is recorded in the audit log.
           </AlertDialogDescription>
         </AlertDialogHeader>
+        <div className="space-y-2">
+          <Label htmlFor="reset-totp-confirm">Confirm It's You</Label>
+          <Input
+            id="reset-totp-confirm"
+            type="password"
+            autoFocus
+            value={currentPassword}
+            onChange={(e) => setCurrentPassword(e.target.value)}
+            placeholder="Your current password"
+            onKeyDown={(e) => {
+              if (e.key === "Enter") confirm();
+            }}
+          />
+          <p className="text-muted-foreground text-xs">
+            Re-enter your own password to reset {email}'s two-factor.
+          </p>
+        </div>
         <AlertDialogFooter>
           <AlertDialogCancel>Cancel</AlertDialogCancel>
-          <AlertDialogAction
-            onClick={() => {
-              toast.promise(resetTotp.mutateAsync(userId), {
-                loading: "Resetting...",
-                success: `Two-factor reset for ${email}`,
-                error: (err) => err.message,
-              });
-              onOpenChange(false);
-            }}
-          >
+          <AlertDialogAction onClick={confirm} disabled={!currentPassword}>
             Reset two-factor
           </AlertDialogAction>
         </AlertDialogFooter>
@@ -566,11 +591,15 @@ function ResetPasswordDialog({
   const resetPassword = useResetUserPassword();
 
   const form = useForm({
-    defaultValues: { password: "" },
+    defaultValues: { password: "", currentPassword: "" },
     onSubmit: async ({ value }) => {
       toast.promise(
         resetPassword
-          .mutateAsync({ userId, password: value.password })
+          .mutateAsync({
+            userId,
+            password: value.password,
+            currentPassword: value.currentPassword,
+          })
           .then(() => {
             form.reset();
             onOpenChange(false);
@@ -617,6 +646,35 @@ function ResetPasswordDialog({
                   onChange={(e) => field.handleChange(e.target.value)}
                   placeholder="At least 8 characters"
                 />
+                {field.state.meta.errors.length > 0 && (
+                  <p className="text-destructive text-sm">
+                    {typeof field.state.meta.errors[0] === "string"
+                      ? field.state.meta.errors[0]
+                      : field.state.meta.errors[0]?.message}
+                  </p>
+                )}
+              </div>
+            )}
+          />
+          <form.Field
+            name="currentPassword"
+            validators={{
+              onChange: z.string().min(1, "Your password is required"),
+            }}
+            children={(field) => (
+              <div className="space-y-2">
+                <Label htmlFor="reset-password-confirm">Confirm It's You</Label>
+                <Input
+                  id="reset-password-confirm"
+                  type="password"
+                  value={field.state.value}
+                  onBlur={field.handleBlur}
+                  onChange={(e) => field.handleChange(e.target.value)}
+                  placeholder="Your current password"
+                />
+                <p className="text-muted-foreground text-xs">
+                  Re-enter your own password to set a new one for {email}.
+                </p>
                 {field.state.meta.errors.length > 0 && (
                   <p className="text-destructive text-sm">
                     {typeof field.state.meta.errors[0] === "string"
