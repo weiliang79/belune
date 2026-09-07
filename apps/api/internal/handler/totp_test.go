@@ -500,6 +500,48 @@ func TestAdminResetTOTP_RequiresCallersOwnPassword(t *testing.T) {
 	assert.True(t, user.TotpEnabledAt.Valid, "the target's factor must be untouched")
 }
 
+// TestAdminResetTOTP_RequiresCallerMFAWhenEnrolled pins a fix for a gap an
+// Opus review found: the caller's password alone was not enough when the
+// CALLER themself has a second factor enrolled — DisableTOTP,
+// RegenerateRecoveryCodes, and CreateHostShellSession already require a
+// fresh code too in that case, and stripping someone ELSE's factor should
+// not need less proof than disabling your own.
+func TestAdminResetTOTP_RequiresCallerMFAWhenEnrolled(t *testing.T) {
+	resetDB(t)
+	adminToken := env.SetupAdmin(t, "admin@test.com", "password123")
+	adminSecret, _, adminToken := enableTOTP(t, adminToken)
+
+	resp := env.DoRequest(t, "POST", "/api/users", map[string]string{
+		"email": "locked-out@test.com", "password": "password123", "role": "member",
+	}, testutil.AuthHeader(adminToken))
+	require.Equal(t, http.StatusCreated, resp.StatusCode)
+	memberID := extractID(testutil.ReadJSON(t, resp)["id"])
+
+	memberToken := env.LoginAs(t, "locked-out@test.com", "password123")
+	enableTOTP(t, memberToken)
+
+	// Correct password, no code from the (MFA-enrolled) caller: rejected.
+	resp = env.DoRequest(t, "POST", "/api/users/"+memberID+"/totp/reset", map[string]string{
+		"current_password": "password123",
+	}, testutil.AuthHeader(adminToken))
+	assert.Equal(t, http.StatusUnauthorized, resp.StatusCode, "an MFA-enrolled caller must also supply a code")
+	resp.Body.Close()
+
+	target, err := env.Queries.GetUserByEmail(context.Background(), "locked-out@test.com")
+	require.NoError(t, err)
+	assert.True(t, target.TotpEnabledAt.Valid, "the target's factor must be untouched")
+
+	// Correct password AND a valid code from the caller: succeeds. loginCode,
+	// not codeAt(time.Now()) — enrolling just above already spent this
+	// window's code, so the identical value here would 401 as a replay.
+	resp = env.DoRequest(t, "POST", "/api/users/"+memberID+"/totp/reset", map[string]string{
+		"current_password": "password123",
+		"code":             loginCode(t, adminSecret),
+	}, testutil.AuthHeader(adminToken))
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	resp.Body.Close()
+}
+
 // TestHostShell_RequiresTheSecondFactorWhenEnrolled: the host shell is the
 // highest-privilege action in the product, and its step-up re-auth defends
 // against a hijacked session but not a stolen password.

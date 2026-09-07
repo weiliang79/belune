@@ -339,6 +339,8 @@ func (h *Handler) VerifyLogin(w http.ResponseWriter, r *http.Request) {
 
 type adminResetUserTOTPRequest struct {
 	CurrentPassword string `json:"current_password"`
+	Method          string `json:"method"`
+	Code            string `json:"code"`
 }
 
 // AdminResetUserTOTP clears another user's second factor, for the lost-device
@@ -348,6 +350,11 @@ type adminResetUserTOTPRequest struct {
 // someone else's account, so — like ResetUserPassword — it steps up on the
 // CALLER's own password first: a hijacked or borrowed admin session must not
 // be able to strip another admin's second factor with nothing re-checked.
+// If the CALLER has MFA enrolled, a fresh code is required too — the same
+// "password alone doesn't defend against a stolen session" reasoning
+// DisableTOTP, RegenerateRecoveryCodes, and CreateHostShellSession already
+// apply to actions of comparable or lesser sensitivity; stripping someone
+// ELSE's factor should not need less proof than disabling your own.
 // POST /api/users/{userId}/totp/reset (admin only)
 func (h *Handler) AdminResetUserTOTP(w http.ResponseWriter, r *http.Request) {
 	var uid pgtype.UUID
@@ -372,6 +379,20 @@ func (h *Handler) AdminResetUserTOTP(w http.ResponseWriter, r *http.Request) {
 	if bcrypt.CompareHashAndPassword([]byte(caller.PasswordHash), []byte(req.CurrentPassword)) != nil {
 		writeError(w, http.StatusUnauthorized, "incorrect password")
 		return
+	}
+	if service.HasMFA(caller) {
+		if strings.TrimSpace(req.Code) == "" {
+			writeError(w, http.StatusUnauthorized, "verification code required")
+			return
+		}
+		method := req.Method
+		if method == "" {
+			method = service.MethodTOTP
+		}
+		if err := h.totpSvc.Verify(r.Context(), caller, method, req.Code); err != nil {
+			writeSecondFactorError(w, err)
+			return
+		}
 	}
 
 	target, err := h.queries.GetUserByID(r.Context(), uid)
