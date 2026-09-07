@@ -51,7 +51,7 @@ func TestCreateDatabase_MySQLDefaultUserIsNotRoot(t *testing.T) {
 	db := testutil.ReadJSON(t, resp)
 	dbID := extractID(db["id"])
 
-	resp = env.DoRequest(t, "GET", fmt.Sprintf("/api/projects/%s/databases/%s", projectID, dbID), nil, testutil.AuthHeader(token))
+	resp = env.DoRequest(t, "GET", fmt.Sprintf("/api/projects/%s/databases/%s/credentials/reveal", projectID, dbID), nil, testutil.AuthHeader(token))
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 	result := testutil.ReadJSON(t, resp)
 	creds, ok := result["credentials"].(map[string]any)
@@ -95,17 +95,24 @@ func TestGetDatabase(t *testing.T) {
 	db := testutil.ReadJSON(t, resp)
 	dbID := extractID(db["id"])
 
-	// Get database — should have decrypted credentials
+	// GetDatabase must NOT carry credentials — that's a live, directly usable
+	// secret and sits behind plain read scope; see RevealDatabaseCredentials.
 	resp = env.DoRequest(t, "GET", fmt.Sprintf("/api/projects/%s/databases/%s", projectID, dbID), nil, testutil.AuthHeader(token))
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 	result := testutil.ReadJSON(t, resp)
 	assert.Equal(t, "mydb", result["name"])
+	assert.Nil(t, result["credentials"], "GetDatabase must not return credentials")
+	assert.Nil(t, result["connection_string"], "GetDatabase must not return a connection string")
 
-	// Credentials should be present and decrypted
-	creds, ok := result["credentials"].(map[string]any)
+	// The dedicated reveal endpoint decrypts them, and requires a session.
+	resp = env.DoRequest(t, "GET", fmt.Sprintf("/api/projects/%s/databases/%s/credentials/reveal", projectID, dbID), nil, testutil.AuthHeader(token))
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	revealed := testutil.ReadJSON(t, resp)
+	creds, ok := revealed["credentials"].(map[string]any)
 	require.True(t, ok, "credentials should be a map")
 	assert.NotEmpty(t, creds["user"])
 	assert.NotEmpty(t, creds["password"])
+	assert.NotEmpty(t, revealed["connection_string"])
 }
 
 func TestUpdateDatabaseResources(t *testing.T) {

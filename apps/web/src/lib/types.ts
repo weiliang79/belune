@@ -363,8 +363,6 @@ export interface Database {
   source_kind: string | null;
   source_ref: string | null;
   created_at: string;
-  credentials?: Record<string, string>;
-  connection_string?: string;
   volume?: { name: string; size_bytes: number };
   external_access?: {
     enabled: boolean;
@@ -376,6 +374,14 @@ export interface Database {
   // record still exists — the case Restart/Start can't recover from. Only set in
   // the steady non-running states; the UI surfaces Reload to recreate it.
   container_missing?: boolean;
+}
+
+// Live connection credentials, fetched separately from Database — the
+// backend requires a session for this one (a decrypted password, not just
+// view-only project data), so it's never part of the main database fetch.
+export interface DatabaseCredentials {
+  credentials?: Record<string, string>;
+  connection_string?: string;
 }
 
 export interface DatabaseBackup {

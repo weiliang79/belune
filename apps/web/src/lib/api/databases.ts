@@ -1,4 +1,9 @@
-import type { Database, DatabaseBackup, DatabaseRestore } from "@/lib/types";
+import type {
+  Database,
+  DatabaseBackup,
+  DatabaseCredentials,
+  DatabaseRestore,
+} from "@/lib/types";
 import { api } from "./client";
 
 export function listDatabases(projectId: string) {
@@ -12,6 +17,15 @@ export function getDatabase(projectId: string, databaseId: string) {
 export function getDatabaseVolume(projectId: string, databaseId: string) {
   return api.get<{ name: string; size_bytes: number | null }>(
     `/projects/${projectId}/databases/${databaseId}/volume`,
+  );
+}
+
+/** Live connection credentials — split out of getDatabase() so a decrypted
+ *  secret only ever goes over the wire on its own request, session-gated
+ *  server-side rather than riding along on the main database fetch. */
+export function getDatabaseCredentials(projectId: string, databaseId: string) {
+  return api.get<DatabaseCredentials>(
+    `/projects/${projectId}/databases/${databaseId}/credentials/reveal`,
   );
 }
 
@@ -201,5 +215,7 @@ export function restoreOrphanedBackup(projectId: string, backupId: string) {
 }
 
 export function deleteOrphanedBackup(projectId: string, backupId: string) {
-  return api.delete<void>(`/projects/${projectId}/orphaned-backups/${backupId}`);
+  return api.delete<void>(
+    `/projects/${projectId}/orphaned-backups/${backupId}`,
+  );
 }

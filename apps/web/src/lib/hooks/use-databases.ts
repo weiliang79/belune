@@ -48,6 +48,24 @@ export function useDatabaseVolume(projectId: string, databaseId: string) {
   });
 }
 
+// useDatabaseCredentials lazily fetches the decrypted connection credentials.
+// Split from useDatabase because the backend now requires a live session for
+// this one — the API sits behind the reveal boundary since a connection
+// password is a directly usable secret, not just view-only project data.
+export function useDatabaseCredentials(
+  projectId: string,
+  databaseId: string,
+  options?: { enabled?: boolean },
+) {
+  return useQuery({
+    queryKey: queryKeys.databases.credentials(projectId, databaseId),
+    queryFn: () => databasesApi.getDatabaseCredentials(projectId, databaseId),
+    staleTime: 30_000,
+    refetchOnWindowFocus: false,
+    enabled: options?.enabled ?? true,
+  });
+}
+
 // useDatabaseDeletionImpact reports what a delete would destroy. Enabled only
 // while the confirmation dialog is open — the answer is only needed at the
 // moment of consent, and it is two extra queries.

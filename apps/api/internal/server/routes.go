@@ -515,6 +515,10 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService,
 			r.Get("/api/projects/{projectId}/databases", h.ListDatabases)
 			r.Post("/api/projects/{projectId}/databases", h.CreateDatabase)
 			r.Get("/api/projects/{projectId}/databases/{databaseId}", h.GetDatabase)
+			// Live connection credentials — same reasoning as the /reveal
+			// endpoints above: a decrypted secret returned in plaintext needs a
+			// session, not just read scope.
+			r.With(middleware.RequireSession()).Get("/api/projects/{projectId}/databases/{databaseId}/credentials/reveal", h.RevealDatabaseCredentials)
 			r.Get("/api/projects/{projectId}/databases/{databaseId}/volume", h.GetDatabaseVolume)
 			r.Put("/api/projects/{projectId}/databases/{databaseId}", h.UpdateDatabase)
 			r.Post("/api/projects/{projectId}/databases/{databaseId}/external-access", h.SetDatabaseExternalAccess)
