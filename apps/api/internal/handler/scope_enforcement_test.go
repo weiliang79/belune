@@ -133,9 +133,10 @@ func TestScope_DeployTokenCannotDoGeneralWrite(t *testing.T) {
 
 // TestScope_DeployTokenCanAlsoRead pins that "deploy" grants "read" too — a
 // CI token that can trigger a deploy must also be able to poll its result,
-// or triggering one is a self-inflicted footgun. This is the one place the
-// lattice is NOT symmetric with "metrics": deploy grants read, but read (and
-// write) still do not grant deploy back, and metrics grants neither.
+// or triggering one is a self-inflicted footgun. The four scopes form a
+// total order (metrics ⊂ read ⊂ deploy ⊂ write; see TestScope_
+// DeployTokenCanAlsoReadMetrics for the metrics edge), so this direction
+// never round-trips: read and write still do not grant deploy back.
 func TestScope_DeployTokenCanAlsoRead(t *testing.T) {
 	resetDB(t)
 	adminToken := env.SetupAdmin(t, "admin@test.com", "password123")
@@ -149,11 +150,15 @@ func TestScope_DeployTokenCanAlsoRead(t *testing.T) {
 	resp.Body.Close()
 }
 
-// TestScope_DeployTokenCannotReadMetrics pins that the read grant deploy
-// picked up is ordinary read, not a transitive hop into "metrics" too —
-// scopeSatisfies is a flat per-requirement lookup, not a chain through an
-// intermediate scope.
-func TestScope_DeployTokenCannotReadMetrics(t *testing.T) {
+// TestScope_DeployTokenCanAlsoReadMetrics pins that the four scopes form a
+// true total order (metrics ⊂ read ⊂ deploy ⊂ write): deploy already
+// satisfies read, and read already satisfies metrics, so metrics not
+// following transitively left read and deploy incomparable for no reason —
+// a deploy token could already poll full deployment history but would 403
+// on a narrower metrics snapshot. scopeGrants["metrics"] now lists "deploy"
+// explicitly rather than relying on a chain (scopeSatisfies is a flat
+// per-requirement lookup, not a transitive walk).
+func TestScope_DeployTokenCanAlsoReadMetrics(t *testing.T) {
 	resetDB(t)
 	adminToken := env.SetupAdmin(t, "admin@test.com", "password123")
 	project := env.CreateProject(t, adminToken, "Scope Project", "scope-project")
@@ -162,7 +167,7 @@ func TestScope_DeployTokenCannotReadMetrics(t *testing.T) {
 	deployPlain := mintScoped(t, adminToken, []string{"deploy"})
 
 	resp := env.DoRequest(t, "GET", "/api/projects/"+projectID+"/metrics", nil, testutil.AuthHeader(deployPlain))
-	assert.Equal(t, http.StatusForbidden, resp.StatusCode)
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
 	resp.Body.Close()
 }
 
