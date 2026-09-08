@@ -115,3 +115,7 @@ curl -H "Authorization: Bearer $BELUNE_TOKEN" \
 ```
 
 Covers every database in the project. `read` scope reaches this; starting a new backup needs `write`. Restoring one needs a live session — no scope lets a token do it, per [above](#what-a-token-can-never-do).
+
+## Looking Up a Specific Endpoint
+
+This page covers common tasks, not every route. For the full list — every endpoint, its scope, and its gates, generated from the running API rather than hand-written — see the [API Reference](/docs/api-reference).

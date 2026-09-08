@@ -1,0 +1,31 @@
+{
+  "title": "API Reference",
+  "root": true,
+  "pages": [
+    "index",
+    "live-updates",
+    "terminal",
+    "tokens",
+    "account",
+    "git-integrations",
+    "git-providers",
+    "templates",
+    "deploy-actions",
+    "metrics",
+    "admin-metrics",
+    "previews",
+    "deployments",
+    "logs",
+    "domains",
+    "volumes",
+    "file-mounts",
+    "env",
+    "databases",
+    "applications",
+    "stats-notifications",
+    "projects",
+    "admin-users",
+    "admin-backups",
+    "admin-platform"
+  ]
+}
