@@ -13,6 +13,7 @@
     "server",
     "project",
     "application",
-    "database"
+    "database",
+    "api-access"
   ]
 }
