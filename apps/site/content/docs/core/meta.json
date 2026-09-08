@@ -1,5 +1,6 @@
 {
   "title": "Core",
+  "description": "Install, deploy, and operate Belune from the dashboard.",
   "root": true,
   "pages": [
     "---Overview---",
