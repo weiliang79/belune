@@ -121,6 +121,29 @@ func RequireRole(roles ...string) func(http.Handler) http.Handler {
 	}
 }
 
+// RequireSession returns a middleware that rejects a PAT-authenticated
+// request, accepting only a session JWT. Must be used after Auth.
+//
+// A PAT minting or revoking another PAT is a self-propagation path a scope
+// alone cannot close: token creation is a legitimate "write" action, so even
+// after scope enforcement lands a write-scoped token could still use it to
+// mint itself a longer-lived (or never-expiring) replacement and delete the
+// original — surviving a password reset entirely, since RevokeUserSessions
+// only touches JWT refresh tokens. Same reasoning TOTP enroll/disable already
+// applies to itself. This is also the seam PR4's "tokens cannot destroy"
+// boundary is expected to reuse for its own destructive routes.
+func RequireSession() func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if TokenIDFromContext(r.Context()) != "" {
+				http.Error(w, `{"error":"this action requires a session, not a personal access token"}`, http.StatusForbidden)
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
 // UserIDFromContext returns the authenticated user's ID from the request context.
 func UserIDFromContext(ctx context.Context) string {
 	v, _ := ctx.Value(ctxUserID).(string)

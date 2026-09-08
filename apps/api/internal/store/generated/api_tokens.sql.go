@@ -53,6 +53,27 @@ func (q *Queries) CreateAPIToken(ctx context.Context, arg CreateAPITokenParams) 
 	return i, err
 }
 
+const deleteAPIToken = `-- name: DeleteAPIToken :one
+DELETE FROM api_tokens WHERE id = $1 AND user_id = $2 RETURNING name
+`
+
+type DeleteAPITokenParams struct {
+	ID     pgtype.UUID `json:"id"`
+	UserID pgtype.UUID `json:"user_id"`
+}
+
+// Scoped by user_id, not just id: pgx.ErrNoRows is how the handler tells
+// "not found" apart from "not yours" — both must read the same to the
+// caller, so there is no separate ownership lookup to get out of sync with
+// it. RETURNING name so the audit entry for the delete can carry it, the same
+// way create's does — one statement, not a second lookup.
+func (q *Queries) DeleteAPIToken(ctx context.Context, arg DeleteAPITokenParams) (string, error) {
+	row := q.db.QueryRow(ctx, deleteAPIToken, arg.ID, arg.UserID)
+	var name string
+	err := row.Scan(&name)
+	return name, err
+}
+
 const getAPITokenByHash = `-- name: GetAPITokenByHash :one
 SELECT t.id, t.user_id, t.name, t.token_hash, t.scopes, t.project_id, t.role_at_issue, t.expires_at, t.last_used_at, t.created_at, u.role AS user_role
 FROM api_tokens t
@@ -95,6 +116,55 @@ func (q *Queries) GetAPITokenByHash(ctx context.Context, tokenHash []byte) (GetA
 		&i.UserRole,
 	)
 	return i, err
+}
+
+const listAPITokensByUser = `-- name: ListAPITokensByUser :many
+SELECT id, name, scopes, project_id, role_at_issue, expires_at, last_used_at, created_at
+FROM api_tokens
+WHERE user_id = $1
+ORDER BY created_at DESC
+`
+
+type ListAPITokensByUserRow struct {
+	ID          pgtype.UUID        `json:"id"`
+	Name        string             `json:"name"`
+	Scopes      []string           `json:"scopes"`
+	ProjectID   pgtype.UUID        `json:"project_id"`
+	RoleAtIssue string             `json:"role_at_issue"`
+	ExpiresAt   pgtype.Timestamptz `json:"expires_at"`
+	LastUsedAt  pgtype.Timestamptz `json:"last_used_at"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+}
+
+// The settings-page list: newest first, token_hash never selected — nothing
+// past the create response ever needs anything derived from it.
+func (q *Queries) ListAPITokensByUser(ctx context.Context, userID pgtype.UUID) ([]ListAPITokensByUserRow, error) {
+	rows, err := q.db.Query(ctx, listAPITokensByUser, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListAPITokensByUserRow{}
+	for rows.Next() {
+		var i ListAPITokensByUserRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Scopes,
+			&i.ProjectID,
+			&i.RoleAtIssue,
+			&i.ExpiresAt,
+			&i.LastUsedAt,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const updateAPITokenLastUsed = `-- name: UpdateAPITokenLastUsed :exec
