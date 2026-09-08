@@ -544,13 +544,15 @@ func writeAPIReferenceMDX(t *testing.T, routes []apidocRoute) {
 	}
 
 	meta := struct {
-		Title string   `json:"title"`
-		Root  bool     `json:"root"`
-		Pages []string `json:"pages"`
+		Title       string   `json:"title"`
+		Description string   `json:"description"`
+		Root        bool     `json:"root"`
+		Pages       []string `json:"pages"`
 	}{
-		Title: "API",
-		Root:  true,
-		Pages: pages,
+		Title:       "API",
+		Description: "Authenticate and script against Belune's HTTP API.",
+		Root:        true,
+		Pages:       pages,
 	}
 	b, err := json.MarshalIndent(meta, "", "  ")
 	require.NoError(t, err)
