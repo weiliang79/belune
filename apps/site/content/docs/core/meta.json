@@ -1,0 +1,18 @@
+{
+  "title": "Core",
+  "root": true,
+  "pages": [
+    "---Overview---",
+    "features",
+    "architecture",
+    "install",
+    "updating",
+    "uninstall",
+    "troubleshoot",
+    "terminology",
+    "server",
+    "project",
+    "application",
+    "database"
+  ]
+}

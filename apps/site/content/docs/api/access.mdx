@@ -1,0 +1,117 @@
+---
+title: API Access
+description: Authenticate and script against the API with a personal access token.
+---
+
+Belune has an API behind every screen in the dashboard. A **personal access token** authenticates as you, scoped to whatever you chose when you created it — for CI, monitoring, and anything else that isn't a person clicking around.
+
+<Callout type="info">
+Create one from **Account → Personal Access Tokens**. The value is shown exactly once, at creation — copy it before closing the dialog. There's no "regenerate"; create a new token and delete the old one once the new one is confirmed working.
+</Callout>
+
+This page is a task guide, not a full endpoint reference — it covers enough to script real work and know where the edges are.
+
+## Authenticating
+
+Send the token as a bearer credential, in the header only:
+
+```bash
+curl -H "Authorization: Bearer belune_pat_..." \
+  https://belune.example.com/api/projects
+```
+
+A personal access token is **never** accepted via the session cookie the dashboard itself uses — only `Authorization: Bearer`. The two are separate authentication paths, not alternatives; a browser session doesn't need a token, and a token can't use the cookie.
+
+A `Bearer` header also exempts the request from CSRF protection, so a script never fetches or sends an `X-CSRF-Token` — that dance exists for the cookie-based session only.
+
+## Scopes
+
+Every token gets one scope, chosen at creation. The four form a ladder — each one includes everything narrower than it, so a token only ever needs the rung that matches what it's for, not a combination:
+
+| Scope | Also grants | What it's for |
+|---|---|---|
+| `metrics` | — | Metrics only. The narrowest option, for a monitoring scraper. |
+| `read` | `metrics` | Viewing projects, applications, and their data. |
+| `deploy` | `read`, `metrics` | Triggering deploys, restarts, and other runtime actions — without general write access. |
+| `write` | `deploy`, `read`, `metrics` | Full access: create, update, and configure, plus everything above. |
+
+A token's reach also follows its owner: it can see and do whatever the owner's role and project access already allow, narrowed further by scope. A Member's `read` token only reaches the projects that Member can reach — [shared](/docs/core/project/overview#sharing) or owned.
+
+## What a Token Can Never Do
+
+Four things stay behind a live dashboard session no matter what scope a token carries. This is deliberate — a leaked token should be a bad day, not a catastrophe.
+
+- **Delete or restore anything.** Every project, application, database, domain, volume, and backup delete or restore — plus certificate deletion and orphaned-backup cleanup — rejects a token outright.
+- **Read a stored secret.** Database connection credentials, deploy-hook tokens, webhook secrets, environment variable values, and file mount contents are all decrypted on demand and returned as plaintext — never to a token, even at `write` scope.
+- **Manage tokens or users.** Minting or revoking a personal access token, and creating, inviting, deleting, changing the role of, or resetting the password or two-factor authentication of any user, all require a session.
+- **Open a terminal.** Both starting a container exec session and the WebSocket tunnel it uses reject a token.
+
+Each of these returns `403` with `{"error": "this action requires a session, not a personal access token"}` — a different message from a plain scope mismatch, so a script can tell "wrong scope, mint a wider token" apart from "no token reaches this, ever."
+
+None of this is a regression: personal access tokens are new in this release, so there's no prior token behavior to compare against. These are the limits of the new credential, not a capability taken away from an old one.
+
+## Limits and Errors
+
+- **100 requests a minute per token, not per user.** A token minted for one integration has its own budget, separate from your login session and from any other token on the account. Going over returns `429` as plain text (not the JSON shape below), with `X-RateLimit-Limit`, `X-RateLimit-Remaining`, and `X-RateLimit-Reset` headers so a client can back off before hitting it rather than after.
+- Every other error is `{"error": "<message>"}`, with a status code that means what it says: `401` for a missing, invalid, or expired token, `403` for a scope or session boundary (see above), `404` for something that doesn't exist or isn't yours to see.
+
+## Common Tasks
+
+Every example below assumes `BELUNE_TOKEN` is a token with at least `read` scope (`deploy` for the one that triggers a deploy), and real ids in place of `$PROJECT_ID`/`$APP_ID`.
+
+### List Projects and Applications
+
+```bash
+curl -H "Authorization: Bearer $BELUNE_TOKEN" \
+  https://belune.example.com/api/projects | jq '.[] | {id, name, slug}'
+
+curl -H "Authorization: Bearer $BELUNE_TOKEN" \
+  https://belune.example.com/api/projects/$PROJECT_ID/applications \
+  | jq '.[] | {id, name, status}'
+```
+
+### Check Application and Deployment Status
+
+```bash
+curl -H "Authorization: Bearer $BELUNE_TOKEN" \
+  https://belune.example.com/api/projects/$PROJECT_ID/applications/$APP_ID \
+  | jq '{status}'
+
+curl -H "Authorization: Bearer $BELUNE_TOKEN" \
+  https://belune.example.com/api/projects/$PROJECT_ID/applications/$APP_ID/deployments \
+  | jq '.[0] | {id, status, started_at, finished_at}'
+```
+
+A deployment moves through `pending → building → deploying → success` (or `failed` at any step) — see [Deployments](/docs/core/application/deployments#the-deployment-lifecycle) for what each stage means.
+
+### Trigger a Deploy
+
+```bash
+curl -X POST -H "Authorization: Bearer $BELUNE_TOKEN" \
+  https://belune.example.com/api/projects/$PROJECT_ID/applications/$APP_ID/deploy
+```
+
+Needs `deploy` scope or wider. Returns `202` with the new deployment record immediately — the build and rollout happen after the response, so poll the deployments endpoint above, or tail logs below, to see it through.
+
+<Callout type="info">
+If the only caller is a CI pipeline firing after it publishes an image, a **[deploy hook](/docs/core/application/deployments#deploy-triggers)** is the better fit — one tokenized URL, no personal access token or scope to manage. Reach for a PAT when the script needs to do more than trigger a single deploy.
+</Callout>
+
+### Tail Logs
+
+```bash
+curl -N -H "Authorization: Bearer $BELUNE_TOKEN" \
+  https://belune.example.com/api/projects/$PROJECT_ID/applications/$APP_ID/logs
+```
+
+Streams as Server-Sent Events; `-N` turns off curl's output buffering so lines print as they arrive. For a bounded page of history instead of a live tail, use `.../logs/history`.
+
+### List Backups
+
+```bash
+curl -H "Authorization: Bearer $BELUNE_TOKEN" \
+  https://belune.example.com/api/projects/$PROJECT_ID/backups \
+  | jq '.[] | {id, status, started_at, size_bytes}'
+```
+
+Covers every database in the project. `read` scope reaches this; starting a new backup needs `write`. Restoring one needs a live session — no scope lets a token do it, per [above](#what-a-token-can-never-do).

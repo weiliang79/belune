@@ -35,7 +35,7 @@ now share a project with every Member on the install instead.
 ### Personal access tokens
 
 Belune now has API credentials that aren't your login. Create one from
-**Account → Personal Access Tokens**, [documented here](https://belune.dev/docs/api-access):
+**Account → Personal Access Tokens**, [documented here](https://belune.dev/docs/api/access):
 
 - **Four scopes on a ladder** — `metrics` ⊂ `read` ⊂ `deploy` ⊂ `write` —
   each including everything narrower than it, so a token only ever needs one

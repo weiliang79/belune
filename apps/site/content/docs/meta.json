@@ -1,19 +1,4 @@
 {
   "title": "Documentation",
-  "pages": [
-    "---Overview---",
-    "index",
-    "features",
-    "architecture",
-    "install",
-    "updating",
-    "uninstall",
-    "troubleshoot",
-    "terminology",
-    "server",
-    "project",
-    "application",
-    "database",
-    "api-access"
-  ]
+  "pages": ["index", "core", "api"]
 }
