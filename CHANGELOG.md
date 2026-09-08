@@ -14,8 +14,72 @@ Release notes for each version are also published on the
 
 ## [Unreleased]
 
-<!-- Entries land here between releases; the release workflow generates the
-     published notes from the conventional-commit log. -->
+### Projects can now be shared with your team
+
+**Two Members could not collaborate on a project before this.** A project had
+one owner and nothing else, so a team reached for the only lever available:
+promote everyone to Admin just to let them work together. A project owner can
+now share a project with every Member on the install instead.
+
+- A single switch on the project's Settings tab, off by default — nothing
+  changes for an existing project until its owner turns it on.
+- A shared Member gets full working access: deploy, create databases, edit
+  environment variables, all of it.
+- **Destructive rights stay owner-only.** Deleting an application, database,
+  or domain, transferring the project, and unsharing it all still require
+  being the owner or an admin — sharing widens who can use a project, not who
+  can destroy it.
+- A Member who owns a project can share it themselves; it doesn't need an
+  admin.
+
+### Personal access tokens
+
+Belune now has API credentials that aren't your login. Create one from
+**Account → Personal Access Tokens**, [documented here](https://belune.dev/docs/api/access):
+
+- **Four scopes on a ladder** — `metrics` ⊂ `read` ⊂ `deploy` ⊂ `write` —
+  each including everything narrower than it, so a token only ever needs one
+  rung. A monitoring scraper wants `metrics`; a CI job that only deploys
+  wants `deploy`.
+- **Expiry: 1, 7, 14, 30, 60, or 90 days, or never** — 30 days by default.
+- Shown exactly once at creation. There's no "regenerate" — create a new
+  token, confirm it works, then delete the old one, so there's never a gap
+  where nothing has access.
+- The token list shows when each one was last used, so one nobody's touched
+  in months is easy to spot and retire.
+- Every audit-log entry now records which token performed an action, or that
+  it was you directly.
+
+By design, **no token can ever delete or restore anything, read a stored
+secret** (database credentials, deploy-hook tokens, webhook secrets,
+environment variables, file mount contents), **mint or revoke a token,
+manage users, or open a terminal** — those always require a live dashboard
+session, whatever scope the token carries. This isn't a capability being
+taken away — personal access tokens are new in this release, so there's
+nothing that previously worked with one. It's the ceiling the new credential
+ships with: a leaked token is a bad day, not a catastrophe.
+
+### Changed
+
+- **Resetting another user's password now asks for the acting admin's own
+  password first.** Resetting another user's two-factor authentication asks
+  for the admin's password, and a fresh code too if the admin has 2FA
+  enrolled themselves. Both show up as a new prompt on the Team page —
+  expect it, it isn't a bug.
+- **`GET /api/projects/{id}/databases/{id}` no longer returns connection
+  credentials.** They live at a new endpoint,
+  `.../databases/{id}/credentials/reveal`, which — like every endpoint that
+  hands back a decrypted secret — requires a live session. The dashboard
+  already calls the new endpoint; anyone who was reading the `credentials` or
+  `connection_string` field off the old response, with a session cookie,
+  needs to switch to it.
+
+### Upgrading
+
+This release adds two migrations (project sharing, personal access tokens).
+`update.sh` takes a backup first, as always. Both are purely additive —
+sharing defaults to off for every existing project, and there is nothing to
+migrate for a credential type that didn't exist before.
 
 ## [0.1.5]
 

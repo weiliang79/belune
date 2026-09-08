@@ -1,0 +1,6 @@
+{
+  "title": "API",
+  "description": "Authenticate and script against Belune's HTTP API.",
+  "root": true,
+  "pages": ["access"]
+}

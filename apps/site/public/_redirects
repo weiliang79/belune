@@ -7,3 +7,41 @@
 # version. Pinning this to a tag would just freeze the installer and force an
 # edit every release. Target is set once and left alone.
 /install.sh  https://raw.githubusercontent.com/weiliang79/belune/main/scripts/install.sh  302
+
+# Docs restructured into two root sections (Core, API) 2026-09-08 — every old
+# `/docs/<page>` path now lives under `/docs/core/<page>` or `/docs/api/<page>`.
+# 301s so any link already shared (search results, bookmarks, the CHANGELOG's
+# own pre-move entries) keeps resolving instead of 404ing.
+/docs/application/builders  /docs/core/application/builders  301
+/docs/application/deployments  /docs/core/application/deployments  301
+/docs/application/domains  /docs/core/application/domains  301
+/docs/application/environment-variables  /docs/core/application/environment-variables  301
+/docs/application/frameworks/laravel  /docs/core/application/frameworks/laravel  301
+/docs/application/frameworks/next  /docs/core/application/frameworks/next  301
+/docs/application/frameworks/vite  /docs/core/application/frameworks/vite  301
+/docs/application/logs-metrics  /docs/core/application/logs-metrics  301
+/docs/application/mounts  /docs/core/application/mounts  301
+/docs/application/settings  /docs/core/application/settings  301
+/docs/application/terminal  /docs/core/application/terminal  301
+/docs/application/walkthrough  /docs/core/application/walkthrough  301
+/docs/architecture  /docs/core/architecture  301
+/docs/database/backup-restore  /docs/core/database/backup-restore  301
+/docs/database/overview  /docs/core/database/overview  301
+/docs/features  /docs/core/features  301
+/docs/install  /docs/core/install  301
+/docs/project/backup-destinations  /docs/core/project/backup-destinations  301
+/docs/project/overview  /docs/core/project/overview  301
+/docs/project/templates  /docs/core/project/templates  301
+/docs/server/audit-log  /docs/core/server/audit-log  301
+/docs/server/certificates  /docs/core/server/certificates  301
+/docs/server/configurations  /docs/core/server/configurations  301
+/docs/server/docker  /docs/core/server/docker  301
+/docs/server/git  /docs/core/server/git  301
+/docs/server/notifications  /docs/core/server/notifications  301
+/docs/server/quotas  /docs/core/server/quotas  301
+/docs/server/users  /docs/core/server/users  301
+/docs/terminology  /docs/core/terminology  301
+/docs/troubleshoot  /docs/core/troubleshoot  301
+/docs/uninstall  /docs/core/uninstall  301
+/docs/updating  /docs/core/updating  301
+/docs/api-access  /docs/api/access  301
