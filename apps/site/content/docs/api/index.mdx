@@ -3,7 +3,7 @@ title: API Reference
 description: Every endpoint, generated from the running API rather than hand-written.
 ---
 
-This is the full endpoint reference — every route the API registers, one table per domain in the sidebar. If you're looking for how to authenticate, the scope ladder, or a walkthrough of common tasks, start at [API Access](/docs/api-access) instead; this page is for looking up one specific endpoint by name or path.
+This is the full endpoint reference — every route the API registers, one table per domain in the sidebar. If you're looking for how to authenticate, the scope ladder, or a walkthrough of common tasks, start at [API Access](/docs/api/access) instead; this page is for looking up one specific endpoint by name or path.
 
 <Callout type="warn">
 **Generated, not written.** Each table is produced by probing the real, running router with a personal access token and recording what actually happens — not by reading the source and describing what it's supposed to do. A hand-written version of this reference — published days before this page existed — had its scope-lattice legend go wrong within the week, found only because an unrelated review happened to check it against the code. A generated one can't drift the same way, because it IS the observed behavior.
@@ -11,11 +11,11 @@ This is the full endpoint reference — every route the API registers, one table
 
 ## What Each Table Shows
 
-- **Scope** — the narrowest [scope](/docs/api-access#scopes) a token needs to reach this endpoint.
+- **Scope** — the narrowest [scope](/docs/api/access#scopes) a token needs to reach this endpoint.
 - **Notes** — flags that don't fit the other columns:
   - `project-pinned` — a token pinned to one project is rejected outside it.
   - `admin role required` — the token's owner must be an Admin, regardless of scope.
-  - `session required` — no token, at any scope, can reach this endpoint; only a live dashboard session can. See [what a token can never do](/docs/api-access#what-a-token-can-never-do).
+  - `session required` — no token, at any scope, can reach this endpoint; only a live dashboard session can. See [what a token can never do](/docs/api/access#what-a-token-can-never-do).
   - `session gate not probed` — a small number of routes (destructive admin actions with no id in the path, like triggering a cleanup) aren't safe to actually execute during generation, so this one signal is read from the zero-scope probe alone rather than confirmed by executing the route. The scope column is still fully accurate; only whether the route is *additionally* session-gated is unconfirmed for these rows.
 
 ## What This Page Doesn't Cover

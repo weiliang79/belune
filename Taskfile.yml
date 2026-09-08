@@ -75,7 +75,7 @@ tasks:
     cmd: sqlc generate
 
   generate:api-docs:
-    desc: Regenerate apps/site/content/docs/api-reference by probing the real router (Docker must be running)
+    desc: Regenerate apps/site/content/docs/api by probing the real router (Docker must be running)
     dir: '{{.API_DIR}}'
     cmd: go test -count=1 -timeout=120s -run TestGenerateAPIReference ./internal/handler/...
     env:

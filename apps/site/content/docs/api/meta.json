@@ -2,5 +2,32 @@
   "title": "API",
   "description": "Authenticate and script against Belune's HTTP API.",
   "root": true,
-  "pages": ["access"]
+  "pages": [
+    "index",
+    "access",
+    "live-updates",
+    "terminal",
+    "tokens",
+    "account",
+    "git-integrations",
+    "git-providers",
+    "templates",
+    "deploy-actions",
+    "metrics",
+    "admin-metrics",
+    "previews",
+    "deployments",
+    "logs",
+    "domains",
+    "volumes",
+    "file-mounts",
+    "env",
+    "databases",
+    "applications",
+    "stats-notifications",
+    "projects",
+    "admin-users",
+    "admin-backups",
+    "admin-platform"
+  ]
 }
