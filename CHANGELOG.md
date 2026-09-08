@@ -41,7 +41,7 @@ Belune now has API credentials that aren't your login. Create one from
   each including everything narrower than it, so a token only ever needs one
   rung. A monitoring scraper wants `metrics`; a CI job that only deploys
   wants `deploy`.
-- **Expiry from 1 to 90 days, or never** — 30 days by default.
+- **Expiry: 1, 7, 14, 30, 60, or 90 days, or never** — 30 days by default.
 - Shown exactly once at creation. There's no "regenerate" — create a new
   token, confirm it works, then delete the old one, so there's never a gap
   where nothing has access.
