@@ -1,6 +1,9 @@
 -- name: CreateAuditLog :exec
-INSERT INTO audit_logs (user_id, action, resource_type, resource_id, details, ip_address)
-VALUES ($1, $2, $3, $4, $5, $6);
+-- token_id is nullable: NULL means the action came from a human session, not
+-- a PAT. It cannot be backfilled onto rows written before this column
+-- existed — see migration 000066.
+INSERT INTO audit_logs (user_id, action, resource_type, resource_id, details, ip_address, token_id)
+VALUES ($1, $2, $3, $4, $5, $6, $7);
 
 -- name: ListAuditLogs :many
 SELECT al.*, u.email AS user_email, u.username AS user_username
@@ -16,16 +19,20 @@ SELECT count(*) FROM audit_logs;
 -- resource_name resolves resource_id to the app/project/db name. Comparing
 -- <table>.id::text = resource_id avoids casting the (possibly non-uuid)
 -- resource_id to uuid, which would error for ids like 'settings'.
+--
+-- token_name rides along so the admin view can show "Alice's CI token" rather
+-- than a bare token_id — empty string (not NULL) for the common case where the
+-- action came from a human session, matching resource_name's convention.
 SELECT al.id, al.user_id, al.action, al.resource_type, al.resource_id, al.details, al.ip_address, al.created_at,
        u.email AS user_email, u.username AS user_username,
-       -- Empty-string fallback so sqlc's non-null string scan never hits a NULL
-       -- (rows whose resource isn't an app/project/db resolve to no name).
-       COALESCE(app.name, proj.name, db.name, '')::text AS resource_name
+       COALESCE(app.name, proj.name, db.name, '')::text AS resource_name,
+       al.token_id, COALESCE(t.name, '')::text AS token_name
 FROM audit_logs al
 LEFT JOIN users u ON u.id = al.user_id
 LEFT JOIN applications app ON al.resource_type = 'application' AND app.id::text = al.resource_id
 LEFT JOIN projects proj ON al.resource_type = 'project' AND proj.id::text = al.resource_id
 LEFT JOIN databases db ON al.resource_type = 'database' AND db.id::text = al.resource_id
+LEFT JOIN api_tokens t ON t.id = al.token_id
 WHERE (sqlc.narg('user_id')::uuid IS NULL OR al.user_id = sqlc.narg('user_id'))
   AND (sqlc.narg('action')::text IS NULL OR al.action = sqlc.narg('action'))
   AND (sqlc.narg('resource_type')::text IS NULL OR al.resource_type = sqlc.narg('resource_type'))
