@@ -74,6 +74,13 @@ tasks:
     dir: '{{.API_DIR}}'
     cmd: sqlc generate
 
+  generate:api-docs:
+    desc: Regenerate apps/site/content/docs/api by probing the real router (Docker must be running)
+    dir: '{{.API_DIR}}'
+    cmd: go test -count=1 -timeout=120s -run TestGenerateAPIReference ./internal/handler/...
+    env:
+      GENERATE_API_REFERENCE: '1'
+
   generate:types:
     desc: Regenerate types from OpenAPI spec
     cmds:
