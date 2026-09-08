@@ -1,9 +1,9 @@
-import { getSidebarTree } from '@/lib/source';
-import { DocsLayout } from 'fumadocs-ui/layouts/notebook';
-import { baseOptions } from '@/lib/layout.shared';
-import { Braces, LayoutDashboard } from 'lucide-react';
-import type { LayoutTab } from 'fumadocs-ui/layouts/shared';
-import type { ReactNode } from 'react';
+import { getSidebarTree } from "@/lib/source";
+import { DocsLayout } from "fumadocs-ui/layouts/notebook";
+import { baseOptions } from "@/lib/layout.shared";
+import { Braces, LayoutDashboard } from "lucide-react";
+import type { LayoutTab } from "fumadocs-ui/layouts/shared";
+import type { ReactNode } from "react";
 
 // Icons keyed by meta.json's own `title` (getLayoutTabs sets LayoutTab.title
 // to the root folder's `name`, i.e. its meta.json title) rather than by path
@@ -14,13 +14,33 @@ import type { ReactNode } from 'react';
 // apidoc_generate_test.go has to own and re-emit every regeneration,
 // alongside Title and Description. Icons are presentation, kept here;
 // content (title, description) stays in each root's meta.json.
+// Boxed like Fumadocs' own tab switcher: the dropdown gives the icon a bare
+// size-5 slot on desktop, and an unframed glyph there reads as floating next
+// to the two lines of text. The border + muted fill give it the same weight
+// as the title it sits beside.
+function TabIcon({ children }: { children: ReactNode }) {
+  return (
+    <div className="bg-fd-muted text-fd-primary border-fd-border flex size-full items-center justify-center rounded-md border [&_svg]:size-3.5">
+      {children}
+    </div>
+  );
+}
+
 const tabIcons: Record<string, ReactNode> = {
-  Core: <LayoutDashboard />,
-  API: <Braces />,
+  Core: (
+    <TabIcon>
+      <LayoutDashboard />
+    </TabIcon>
+  ),
+  API: (
+    <TabIcon>
+      <Braces />
+    </TabIcon>
+  ),
 };
 
 function withIcon(tab: LayoutTab): LayoutTab {
-  const icon = typeof tab.title === 'string' ? tabIcons[tab.title] : undefined;
+  const icon = typeof tab.title === "string" ? tabIcons[tab.title] : undefined;
   return icon ? { ...tab, icon } : tab;
 }
 
@@ -44,7 +64,7 @@ function withIcon(tab: LayoutTab): LayoutTab {
 // different enum, not a renamed version of the same one) — named explicitly
 // rather than left implicit. The intro page at `/docs` itself sits outside
 // both roots, so neither tab shows active there — that's expected, not a bug.
-export default function Layout({ children }: LayoutProps<'/docs'>) {
+export default function Layout({ children }: LayoutProps<"/docs">) {
   return (
     <DocsLayout
       tree={getSidebarTree()}
