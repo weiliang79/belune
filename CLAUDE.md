@@ -54,7 +54,9 @@ Frontend mirrors it: `src/lib/api/<resource>.ts` (fetch) → `src/lib/hooks/use-
 
 **Type-checking the web app** → `npx tsc --noEmit` checks **nothing** here (root tsconfig is solution-style with `files: []`) and exits 0 in 0.6s. Use `tsc -b --noEmit` or `task build:web`.
 
-**Adding a UI component** → reuse `src/components/ui/` (41 shadcn/base-ui primitives, `style: base-nova`, lucide icons). Add via the shadcn skill/CLI rather than pasting; use `Switch` for toggles and `PageTabs` for tabbed pages.
+**Adding a UI component** → reuse `src/components/ui/` (41 shadcn/base-ui primitives, `style: base-nova`, lucide icons). Add via the shadcn skill/CLI rather than pasting; use `Switch` for toggles and `PageTabs` for tabbed pages. **Never hand-roll a `<label>`** — use the `Label` primitive; a raw one silently loses the disabled-state and `select-none` handling `Label` already carries.
+
+**Building a form** → `@tanstack/react-form` with field validators, never one `useState` per field. The hand-rolled pattern still present in some dialogs is legacy being migrated out — do not copy it into new code, and note those forms have no client-side validation at all, which is the actual cost.
 
 **Committing** → Conventional Commits with a scope (`feat(api,web):`, `fix(deploy):`) and **DCO sign-off**: `git commit -s`. One logical change per commit.
 
