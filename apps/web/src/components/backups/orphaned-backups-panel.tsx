@@ -65,7 +65,13 @@ function siblingCount(
  * database. Without this panel they would be storage an install keeps paying
  * for with no screen acknowledging it exists.
  */
-export function OrphanedBackupsPanel({ projectId }: { projectId: string }) {
+export function OrphanedBackupsPanel({
+  projectId,
+  canDelete,
+}: {
+  projectId: string;
+  canDelete: boolean;
+}) {
   const { data: backups, isLoading } = useOrphanedBackups(projectId);
   const restore = useRestoreOrphanedBackup(projectId);
   const remove = useDeleteOrphanedBackup(projectId);
@@ -219,58 +225,60 @@ export function OrphanedBackupsPanel({ projectId }: { projectId: string }) {
                       </AlertDialog>
                     </Tooltip>
 
-                    <Tooltip>
-                      <AlertDialog>
-                        <TooltipTrigger
-                          render={
-                            <AlertDialogTrigger
-                              render={
-                                <Button
-                                  variant="ghost"
-                                  size="icon-sm"
-                                  aria-label={`Delete backup of ${b.database_name}`}
-                                  className="text-destructive hover:bg-destructive/10 hover:text-destructive"
-                                  disabled={pendingId === b.id}
-                                />
-                              }
-                            >
-                              <Trash2 aria-hidden="true" />
-                            </AlertDialogTrigger>
-                          }
-                        />
-                        <TooltipPositioner>
-                          <TooltipContent>Delete Backup</TooltipContent>
-                        </TooltipPositioner>
+                    {canDelete && (
+                      <Tooltip>
+                        <AlertDialog>
+                          <TooltipTrigger
+                            render={
+                              <AlertDialogTrigger
+                                render={
+                                  <Button
+                                    variant="ghost"
+                                    size="icon-sm"
+                                    aria-label={`Delete backup of ${b.database_name}`}
+                                    className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                                    disabled={pendingId === b.id}
+                                  />
+                                }
+                              >
+                                <Trash2 aria-hidden="true" />
+                              </AlertDialogTrigger>
+                            }
+                          />
+                          <TooltipPositioner>
+                            <TooltipContent>Delete Backup</TooltipContent>
+                          </TooltipPositioner>
 
-                        <AlertDialogContent>
-                          <AlertDialogHeader>
-                            <AlertDialogTitle>
-                              Delete this backup?
-                            </AlertDialogTitle>
-                            <AlertDialogDescription>
-                              This permanently erases the archive of{" "}
-                              {b.database_name}
-                              {b.has_remote
-                                ? ", including the copy at its remote destination"
-                                : ""}
-                              . The database it came from is already gone, so
-                              this is the last copy — it cannot be undone.
-                            </AlertDialogDescription>
-                          </AlertDialogHeader>
-                          <AlertDialogFooter>
-                            <AlertDialogCancel>Cancel</AlertDialogCancel>
-                            <AlertDialogAction
-                              onClick={() =>
-                                handleDelete(b.id, b.database_name)
-                              }
-                              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                            >
-                              Delete
-                            </AlertDialogAction>
-                          </AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
-                    </Tooltip>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>
+                                Delete this backup?
+                              </AlertDialogTitle>
+                              <AlertDialogDescription>
+                                This permanently erases the archive of{" "}
+                                {b.database_name}
+                                {b.has_remote
+                                  ? ", including the copy at its remote destination"
+                                  : ""}
+                                . The database it came from is already gone, so
+                                this is the last copy — it cannot be undone.
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Cancel</AlertDialogCancel>
+                              <AlertDialogAction
+                                onClick={() =>
+                                  handleDelete(b.id, b.database_name)
+                                }
+                                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                              >
+                                Delete
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                      </Tooltip>
+                    )}
                   </div>
                 </li>
               );

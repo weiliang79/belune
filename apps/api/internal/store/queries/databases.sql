@@ -46,7 +46,9 @@ UPDATE databases SET slug = $2 WHERE id = $1;
 SELECT count(*) FROM databases;
 
 -- name: GetDatabaseOwnerUserID :one
-SELECT p.user_id FROM databases d
+-- shared rides along so canAccessDatabase can grant every Member access to a
+-- shared project's databases, not only its owner.
+SELECT p.user_id, p.shared FROM databases d
 JOIN projects p ON p.id = d.project_id
 WHERE d.id = $1;
 

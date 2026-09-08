@@ -27,6 +27,9 @@ SET read = TRUE
 WHERE user_id = $1 AND read = FALSE;
 
 -- name: GetDeploymentNotifyInfo :one
+-- Owner-only even for a shared project: fanning notifications out to every
+-- member is a new feature (alert_preferences is per-user), not something
+-- sharing implies. Revisit with real project membership.
 SELECT u.id AS user_id, a.project_id, a.id AS application_id,
        a.name AS app_name, p.name AS project_name
 FROM deployments d

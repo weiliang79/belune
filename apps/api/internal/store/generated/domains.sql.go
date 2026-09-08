@@ -217,17 +217,24 @@ func (q *Queries) GetDomainForRequest(ctx context.Context, arg GetDomainForReque
 }
 
 const getDomainOwnerUserID = `-- name: GetDomainOwnerUserID :one
-SELECT p.user_id FROM domains d
+SELECT p.user_id, p.shared FROM domains d
 JOIN applications a ON a.id = d.application_id
 JOIN projects p ON p.id = a.project_id
 WHERE d.id = $1
 `
 
-func (q *Queries) GetDomainOwnerUserID(ctx context.Context, id pgtype.UUID) (pgtype.UUID, error) {
+type GetDomainOwnerUserIDRow struct {
+	UserID pgtype.UUID `json:"user_id"`
+	Shared bool        `json:"shared"`
+}
+
+// shared rides along so canAccessDomain can grant every Member access to a
+// shared project's domains, not only its owner.
+func (q *Queries) GetDomainOwnerUserID(ctx context.Context, id pgtype.UUID) (GetDomainOwnerUserIDRow, error) {
 	row := q.db.QueryRow(ctx, getDomainOwnerUserID, id)
-	var user_id pgtype.UUID
-	err := row.Scan(&user_id)
-	return user_id, err
+	var i GetDomainOwnerUserIDRow
+	err := row.Scan(&i.UserID, &i.Shared)
+	return i, err
 }
 
 const listDomainsByApplication = `-- name: ListDomainsByApplication :many

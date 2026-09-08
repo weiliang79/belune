@@ -113,7 +113,7 @@ WHERE (sqlc.narg('project_id')::uuid IS NULL OR p.id = sqlc.narg('project_id'))
   AND (sqlc.narg('status')::text IS NULL OR d.status = sqlc.narg('status'))
   AND (sqlc.narg('from')::timestamptz IS NULL OR d.started_at >= sqlc.narg('from'))
   AND (sqlc.narg('to')::timestamptz IS NULL OR d.started_at <= sqlc.narg('to'))
-  AND (sqlc.narg('user_id')::uuid IS NULL OR p.user_id = sqlc.narg('user_id'))
+  AND (sqlc.narg('user_id')::uuid IS NULL OR p.user_id = sqlc.narg('user_id') OR p.shared)
   AND (sqlc.narg('search')::text IS NULL
        OR d.commit_sha ILIKE '%' || sqlc.narg('search') || '%'
        OR d.commit_message ILIKE '%' || sqlc.narg('search') || '%'
@@ -128,7 +128,7 @@ SELECT d.id, d.application_id, d.status, d.triggered_by, d.commit_sha, d.commit_
 FROM deployments d
 JOIN applications a ON a.id = d.application_id
 JOIN projects p ON p.id = a.project_id
-WHERE p.user_id = $1
+WHERE p.user_id = $1 OR p.shared
 ORDER BY d.started_at DESC
 LIMIT $2 OFFSET $3;
 

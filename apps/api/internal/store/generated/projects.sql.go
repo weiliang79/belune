@@ -25,7 +25,7 @@ func (q *Queries) CountProjects(ctx context.Context) (int64, error) {
 const createProject = `-- name: CreateProject :one
 INSERT INTO projects (name, slug, user_id, server_id)
 VALUES ($1, $2, $3, $4)
-RETURNING id, name, slug, user_id, created_at, updated_at, server_id
+RETURNING id, name, slug, user_id, created_at, updated_at, server_id, shared
 `
 
 type CreateProjectParams struct {
@@ -51,6 +51,7 @@ func (q *Queries) CreateProject(ctx context.Context, arg CreateProjectParams) (P
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.ServerID,
+		&i.Shared,
 	)
 	return i, err
 }
@@ -65,7 +66,7 @@ func (q *Queries) DeleteProject(ctx context.Context, id pgtype.UUID) error {
 }
 
 const getProject = `-- name: GetProject :one
-SELECT id, name, slug, user_id, created_at, updated_at, server_id FROM projects WHERE id = $1
+SELECT id, name, slug, user_id, created_at, updated_at, server_id, shared FROM projects WHERE id = $1
 `
 
 func (q *Queries) GetProject(ctx context.Context, id pgtype.UUID) (Project, error) {
@@ -79,12 +80,13 @@ func (q *Queries) GetProject(ctx context.Context, id pgtype.UUID) (Project, erro
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.ServerID,
+		&i.Shared,
 	)
 	return i, err
 }
 
 const listAllProjects = `-- name: ListAllProjects :many
-SELECT p.id, p.name, p.slug, p.user_id, p.created_at, p.updated_at, p.server_id, (
+SELECT p.id, p.name, p.slug, p.user_id, p.created_at, p.updated_at, p.server_id, p.shared, (
     SELECT max(d.started_at)
     FROM deployments d
     JOIN applications a ON a.id = d.application_id
@@ -102,6 +104,7 @@ type ListAllProjectsRow struct {
 	CreatedAt      pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
 	ServerID       pgtype.UUID        `json:"server_id"`
+	Shared         bool               `json:"shared"`
 	LastDeployedAt interface{}        `json:"last_deployed_at"`
 }
 
@@ -122,6 +125,7 @@ func (q *Queries) ListAllProjects(ctx context.Context) ([]ListAllProjectsRow, er
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.ServerID,
+			&i.Shared,
 			&i.LastDeployedAt,
 		); err != nil {
 			return nil, err
@@ -135,14 +139,14 @@ func (q *Queries) ListAllProjects(ctx context.Context) ([]ListAllProjectsRow, er
 }
 
 const listProjectsByUser = `-- name: ListProjectsByUser :many
-SELECT p.id, p.name, p.slug, p.user_id, p.created_at, p.updated_at, p.server_id, (
+SELECT p.id, p.name, p.slug, p.user_id, p.created_at, p.updated_at, p.server_id, p.shared, (
     SELECT max(d.started_at)
     FROM deployments d
     JOIN applications a ON a.id = d.application_id
     WHERE a.project_id = p.id
 ) AS last_deployed_at
 FROM projects p
-WHERE p.user_id = $1
+WHERE p.user_id = $1 OR p.shared
 ORDER BY p.created_at DESC
 `
 
@@ -154,9 +158,11 @@ type ListProjectsByUserRow struct {
 	CreatedAt      pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
 	ServerID       pgtype.UUID        `json:"server_id"`
+	Shared         bool               `json:"shared"`
 	LastDeployedAt interface{}        `json:"last_deployed_at"`
 }
 
+// Owned or shared: a shared project is visible to every Member, not only its owner.
 func (q *Queries) ListProjectsByUser(ctx context.Context, userID pgtype.UUID) ([]ListProjectsByUserRow, error) {
 	rows, err := q.db.Query(ctx, listProjectsByUser, userID)
 	if err != nil {
@@ -174,6 +180,7 @@ func (q *Queries) ListProjectsByUser(ctx context.Context, userID pgtype.UUID) ([
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.ServerID,
+			&i.Shared,
 			&i.LastDeployedAt,
 		); err != nil {
 			return nil, err
@@ -189,7 +196,7 @@ func (q *Queries) ListProjectsByUser(ctx context.Context, userID pgtype.UUID) ([
 const updateProject = `-- name: UpdateProject :one
 UPDATE projects SET name = $2, updated_at = NOW()
 WHERE id = $1
-RETURNING id, name, slug, user_id, created_at, updated_at, server_id
+RETURNING id, name, slug, user_id, created_at, updated_at, server_id, shared
 `
 
 type UpdateProjectParams struct {
@@ -208,6 +215,7 @@ func (q *Queries) UpdateProject(ctx context.Context, arg UpdateProjectParams) (P
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.ServerID,
+		&i.Shared,
 	)
 	return i, err
 }
@@ -215,7 +223,7 @@ func (q *Queries) UpdateProject(ctx context.Context, arg UpdateProjectParams) (P
 const updateProjectOwner = `-- name: UpdateProjectOwner :one
 UPDATE projects SET user_id = $2, updated_at = NOW()
 WHERE id = $1
-RETURNING id, name, slug, user_id, created_at, updated_at, server_id
+RETURNING id, name, slug, user_id, created_at, updated_at, server_id, shared
 `
 
 type UpdateProjectOwnerParams struct {
@@ -234,6 +242,36 @@ func (q *Queries) UpdateProjectOwner(ctx context.Context, arg UpdateProjectOwner
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.ServerID,
+		&i.Shared,
+	)
+	return i, err
+}
+
+const updateProjectSharing = `-- name: UpdateProjectSharing :one
+UPDATE projects SET shared = $2, updated_at = NOW()
+WHERE id = $1
+RETURNING id, name, slug, user_id, created_at, updated_at, server_id, shared
+`
+
+type UpdateProjectSharingParams struct {
+	ID     pgtype.UUID `json:"id"`
+	Shared bool        `json:"shared"`
+}
+
+// Owner/admin only — sharing is a destructive-adjacent right, not something a
+// shared member gains just by having access.
+func (q *Queries) UpdateProjectSharing(ctx context.Context, arg UpdateProjectSharingParams) (Project, error) {
+	row := q.db.QueryRow(ctx, updateProjectSharing, arg.ID, arg.Shared)
+	var i Project
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Slug,
+		&i.UserID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.ServerID,
+		&i.Shared,
 	)
 	return i, err
 }

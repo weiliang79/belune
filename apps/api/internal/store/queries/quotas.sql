@@ -21,6 +21,10 @@ SELECT * FROM quotas ORDER BY scope, created_at DESC;
 SELECT COUNT(*) FROM applications WHERE project_id = $1;
 
 -- name: CountApplicationsByUser :one
+-- Deliberately owner-scoped, not shared-inclusive: quotas follow ownership,
+-- not access. If a shared project counted against every member, one project
+-- would consume N members' quotas simultaneously and sharing would silently
+-- shrink everyone's capacity. Do not add "OR p.shared" here.
 SELECT COUNT(*)
 FROM applications a
 JOIN projects p ON p.id = a.project_id
@@ -34,6 +38,8 @@ FROM applications
 WHERE project_id = $1;
 
 -- name: SumApplicationResourcesByUser :one
+-- Owner-scoped for the same reason as CountApplicationsByUser above — quotas
+-- follow ownership, not access. Do not add "OR p.shared" here.
 SELECT
     COALESCE(SUM(a.cpu_limit), 0)::DOUBLE PRECISION AS cpu_total,
     COALESCE(SUM(a.memory_limit), 0)::BIGINT        AS memory_total_bytes

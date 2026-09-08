@@ -9,7 +9,9 @@ import {
 } from "lucide-react";
 import { useApplications } from "@/lib/hooks/use-applications";
 import { useDatabases } from "@/lib/hooks/use-databases";
+import { useProject } from "@/lib/hooks/use-projects";
 import { useProjectMetrics } from "@/lib/hooks/use-project-metrics";
+import { useAuthStore } from "@/lib/stores/auth";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -43,6 +45,10 @@ function ProjectOverview() {
   const { data: databases, isLoading: databasesLoading } =
     useDatabases(projectId);
   const { data: serviceMetrics } = useProjectMetrics(projectId);
+  const { data: project } = useProject(projectId);
+  const currentUser = useAuthStore((s) => s.user);
+  const canDelete =
+    currentUser?.role === "admin" || currentUser?.id === project?.user_id;
 
   const [appDialogOpen, setAppDialogOpen] = useState(false);
   const [dbDialogOpen, setDbDialogOpen] = useState(false);
@@ -165,6 +171,7 @@ function ProjectOverview() {
           ) : (
             <ServicesTable
               projectId={projectId}
+              canDelete={canDelete}
               items={items}
               metrics={serviceMetrics}
               isLoading={loading}

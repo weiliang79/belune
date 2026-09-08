@@ -72,6 +72,13 @@ func (h *Handler) ChangeApplicationSource(w http.ResponseWriter, r *http.Request
 		return
 	}
 
+	if req.Type == "git" {
+		if !h.canAttachGitIntegration(r, parseOptionalUUID(req.GitIntegrationID)) {
+			writeError(w, http.StatusForbidden, "access denied to git integration")
+			return
+		}
+	}
+
 	// A preview child is git-only by construction — it exists because a branch
 	// matched a pattern — so switching the parent to an image would orphan it.
 	previews, err := h.queries.ListPreviewsByParent(r.Context(), applicationUUID)

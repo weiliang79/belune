@@ -587,16 +587,23 @@ func (q *Queries) GetApplicationByDeployHookToken(ctx context.Context, deployHoo
 }
 
 const getApplicationOwnerUserID = `-- name: GetApplicationOwnerUserID :one
-SELECT p.user_id FROM applications a
+SELECT p.user_id, p.shared FROM applications a
 JOIN projects p ON p.id = a.project_id
 WHERE a.id = $1
 `
 
-func (q *Queries) GetApplicationOwnerUserID(ctx context.Context, id pgtype.UUID) (pgtype.UUID, error) {
+type GetApplicationOwnerUserIDRow struct {
+	UserID pgtype.UUID `json:"user_id"`
+	Shared bool        `json:"shared"`
+}
+
+// shared rides along so canAccessApplication can grant every Member access to
+// a shared project's applications, not only its owner.
+func (q *Queries) GetApplicationOwnerUserID(ctx context.Context, id pgtype.UUID) (GetApplicationOwnerUserIDRow, error) {
 	row := q.db.QueryRow(ctx, getApplicationOwnerUserID, id)
-	var user_id pgtype.UUID
-	err := row.Scan(&user_id)
-	return user_id, err
+	var i GetApplicationOwnerUserIDRow
+	err := row.Scan(&i.UserID, &i.Shared)
+	return i, err
 }
 
 const getApplicationWithProjectSlug = `-- name: GetApplicationWithProjectSlug :one
@@ -732,6 +739,9 @@ type GetDeploymentOwnerInfoRow struct {
 	ProjectName string      `json:"project_name"`
 }
 
+// Owner-only even for a shared project: fanning notifications out to every
+// member is a new feature (alert_preferences is per-user), not something
+// sharing implies. Revisit with real project membership.
 func (q *Queries) GetDeploymentOwnerInfo(ctx context.Context, id pgtype.UUID) (GetDeploymentOwnerInfoRow, error) {
 	row := q.db.QueryRow(ctx, getDeploymentOwnerInfo, id)
 	var i GetDeploymentOwnerInfoRow
@@ -823,6 +833,7 @@ type GetProjectOwnerInfoRow struct {
 	ProjectName string      `json:"project_name"`
 }
 
+// Owner-only for the same reason as GetDeploymentOwnerInfo above.
 func (q *Queries) GetProjectOwnerInfo(ctx context.Context, id pgtype.UUID) (GetProjectOwnerInfoRow, error) {
 	row := q.db.QueryRow(ctx, getProjectOwnerInfo, id)
 	var i GetProjectOwnerInfoRow

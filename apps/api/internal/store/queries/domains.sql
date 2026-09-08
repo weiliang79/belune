@@ -38,7 +38,9 @@ LIMIT 1;
 DELETE FROM domains WHERE id = $1;
 
 -- name: GetDomainOwnerUserID :one
-SELECT p.user_id FROM domains d
+-- shared rides along so canAccessDomain can grant every Member access to a
+-- shared project's domains, not only its owner.
+SELECT p.user_id, p.shared FROM domains d
 JOIN applications a ON a.id = d.application_id
 JOIN projects p ON p.id = a.project_id
 WHERE d.id = $1;

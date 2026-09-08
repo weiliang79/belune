@@ -7,12 +7,14 @@ import {
   PlusIcon,
   RocketIcon,
   SearchIcon,
+  Users2Icon,
 } from "lucide-react";
 import type { ColumnDef, SortingState } from "@tanstack/react-table";
 import { useProjects } from "@/lib/hooks/use-projects";
 import { useApplications } from "@/lib/hooks/use-applications";
 import { useDatabases } from "@/lib/hooks/use-databases";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page-header";
 import { Input } from "@/components/ui/input";
@@ -115,9 +117,17 @@ function ProjectCard({ project }: { project: Project }) {
                 <FolderIcon aria-hidden="true" className="size-4.5" />
               </div>
               <div className="flex min-w-0 flex-col">
-                <CardTitle className="group-hover:text-primary truncate text-sm font-semibold transition-colors">
-                  {project.name}
-                </CardTitle>
+                <div className="flex min-w-0 items-center gap-1.5">
+                  <CardTitle className="group-hover:text-primary truncate text-sm font-semibold transition-colors">
+                    {project.name}
+                  </CardTitle>
+                  {project.shared && (
+                    <Badge variant="outline" className="shrink-0">
+                      <Users2Icon aria-hidden="true" />
+                      Shared
+                    </Badge>
+                  )}
+                </div>
                 <span className="text-text-faint truncate font-mono text-xs">
                   {project.slug}
                 </span>

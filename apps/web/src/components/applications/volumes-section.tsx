@@ -37,9 +37,10 @@ import {
 interface Props {
   projectId: string;
   applicationId: string;
+  canDelete: boolean;
 }
 
-export function VolumesSection({ projectId, applicationId }: Props) {
+export function VolumesSection({ projectId, applicationId, canDelete }: Props) {
   const { data: volumes, isLoading } = useVolumes(projectId, applicationId);
   const createVolume = useCreateVolume(projectId, applicationId);
   const deleteVolume = useDeleteVolume(projectId, applicationId);
@@ -161,16 +162,18 @@ export function VolumesSection({ projectId, applicationId }: Props) {
                   <span className="text-text-faint mr-1 text-sm tabular-nums">
                     {formatBytes(vol.size_bytes)}
                   </span>
-                  <IconAction
-                    label="Remove volume"
-                    destructive
-                    onClick={() => {
-                      setDeleteData(false);
-                      setRemoveTarget(vol);
-                    }}
-                  >
-                    <Trash2Icon aria-hidden="true" className="size-4" />
-                  </IconAction>
+                  {canDelete && (
+                    <IconAction
+                      label="Remove volume"
+                      destructive
+                      onClick={() => {
+                        setDeleteData(false);
+                        setRemoveTarget(vol);
+                      }}
+                    >
+                      <Trash2Icon aria-hidden="true" className="size-4" />
+                    </IconAction>
+                  )}
                 </div>
               </div>
             ))}
@@ -279,7 +282,6 @@ export function VolumesSection({ projectId, applicationId }: Props) {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-
     </Card>
   );
 }

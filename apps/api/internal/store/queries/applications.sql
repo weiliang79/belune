@@ -93,7 +93,9 @@ UPDATE applications SET slug = $2 WHERE id = $1;
 SELECT count(*) FROM applications;
 
 -- name: GetApplicationOwnerUserID :one
-SELECT p.user_id FROM applications a
+-- shared rides along so canAccessApplication can grant every Member access to
+-- a shared project's applications, not only its owner.
+SELECT p.user_id, p.shared FROM applications a
 JOIN projects p ON p.id = a.project_id
 WHERE a.id = $1;
 
@@ -146,6 +148,9 @@ UPDATE applications SET last_activity_at = NOW()
 WHERE id = $1;
 
 -- name: GetDeploymentOwnerInfo :one
+-- Owner-only even for a shared project: fanning notifications out to every
+-- member is a new feature (alert_preferences is per-user), not something
+-- sharing implies. Revisit with real project membership.
 SELECT u.id AS user_id, u.email, u.first_name, a.name AS app_name, p.name AS project_name
 FROM deployments d
 JOIN applications a ON a.id = d.application_id
@@ -154,6 +159,7 @@ JOIN users u ON u.id = p.user_id
 WHERE d.id = $1;
 
 -- name: GetProjectOwnerInfo :one
+-- Owner-only for the same reason as GetDeploymentOwnerInfo above.
 SELECT u.id AS user_id, u.email, u.first_name, p.name AS project_name
 FROM projects p
 JOIN users u ON u.id = p.user_id

@@ -22,7 +22,7 @@ SELECT count(*)                                       AS total,
 FROM applications a
 JOIN projects p ON p.id = a.project_id
 WHERE a.parent_application_id IS NULL
-  AND ($1::uuid IS NULL OR p.user_id = $1)
+  AND ($1::uuid IS NULL OR p.user_id = $1 OR p.shared)
 `
 
 type CountApplicationHealthRow struct {
@@ -35,7 +35,9 @@ type CountApplicationHealthRow struct {
 }
 
 // Operator-health aggregates for the dashboard stat strips. Each is optionally
-// scoped to one owner via sqlc.narg('user_id') (NULL = all, for admins).
+// scoped to one owner via sqlc.narg('user_id') (NULL = all, for admins), and
+// additionally includes shared projects so a Member's stats reflect what they
+// can actually reach.
 // Parent applications only — preview children are ephemeral and would inflate
 // the health ratio.
 func (q *Queries) CountApplicationHealth(ctx context.Context, userID pgtype.UUID) (CountApplicationHealthRow, error) {
@@ -59,7 +61,7 @@ SELECT count(*)                                       AS total,
        count(*) FILTER (WHERE db.status = 'stopped')  AS stopped
 FROM databases db
 JOIN projects p ON p.id = db.project_id
-WHERE ($1::uuid IS NULL OR p.user_id = $1)
+WHERE ($1::uuid IS NULL OR p.user_id = $1 OR p.shared)
 `
 
 type CountDatabaseHealthRow struct {
@@ -95,7 +97,7 @@ FROM deployments d
 JOIN applications a ON a.id = d.application_id
 JOIN projects p ON p.id = a.project_id
 WHERE d.started_at >= now() - interval '7 days'
-  AND ($1::uuid IS NULL OR p.user_id = $1)
+  AND ($1::uuid IS NULL OR p.user_id = $1 OR p.shared)
 `
 
 type CountDeployments7dRow struct {
@@ -152,7 +154,7 @@ FROM (
     WHERE a.parent_application_id IS NULL
       AND a.status NOT IN ('error', 'unhealthy')
       AND d.status IN ('success', 'failed')
-      AND ($1::uuid IS NULL OR p.user_id = $1)
+      AND ($1::uuid IS NULL OR p.user_id = $1 OR p.shared)
     ORDER BY d.application_id, d.started_at DESC
 ) latest
 WHERE latest.status = 'failed'
@@ -192,7 +194,7 @@ WITH latest_db AS (
     JOIN projects p ON p.id = db.project_id
     WHERE c.enabled
       AND b.status IN ('succeeded', 'failed')
-      AND ($1::uuid IS NULL OR p.user_id = $1)
+      AND ($1::uuid IS NULL OR p.user_id = $1 OR p.shared)
     ORDER BY b.backup_config_id, b.started_at DESC
 ), latest_volume AS (
     SELECT DISTINCT ON (v.backup_config_id) v.status
@@ -203,7 +205,7 @@ WITH latest_db AS (
     JOIN projects p ON p.id = a.project_id
     WHERE vc.enabled
       AND v.status IN ('succeeded', 'failed')
-      AND ($1::uuid IS NULL OR p.user_id = $1)
+      AND ($1::uuid IS NULL OR p.user_id = $1 OR p.shared)
     ORDER BY v.backup_config_id, v.started_at DESC
 )
 SELECT (
