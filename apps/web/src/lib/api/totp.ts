@@ -55,6 +55,10 @@ export function regenerateRecoveryCodes(password: string, code: string) {
   });
 }
 
-export function resetUserTotp(userId: string) {
-  return api.post<{ status: string }>(`/users/${userId}/totp/reset`);
+/** Clearing someone else's factor is a step up the same way disabling your
+ *  own is — the caller's OWN current password, not the target's. */
+export function resetUserTotp(userId: string, currentPassword: string) {
+  return api.post<{ status: string }>(`/users/${userId}/totp/reset`, {
+    current_password: currentPassword,
+  });
 }

@@ -83,15 +83,24 @@ type externalAccessInfo struct {
 
 type databaseResponse struct {
 	generated.Database
-	Credentials      map[string]string   `json:"credentials,omitempty"`
-	ConnectionString string              `json:"connection_string,omitempty"`
-	Volume           *volumeInfo         `json:"volume,omitempty"`
-	ExternalAccess   *externalAccessInfo `json:"external_access,omitempty"`
+	Volume         *volumeInfo         `json:"volume,omitempty"`
+	ExternalAccess *externalAccessInfo `json:"external_access,omitempty"`
 	// ContainerMissing is true when the managed container has been removed out
 	// from under us (deleted on the host) while the record still exists — the
 	// case Restart/Start can't recover from. The UI surfaces Reload to recreate
 	// it. Only computed in the steady non-running states; see GetDatabase.
 	ContainerMissing bool `json:"container_missing"`
+}
+
+// databaseCredentialsResponse is intentionally its own type, not a field on
+// databaseResponse: connection credentials are a live, directly usable
+// secret — the plaintext password IS the exploit, not a pointer to one — so
+// they get the same RequireSession gate and audit trail as the other
+// decrypt-and-return endpoints, split into their own route instead of riding
+// along on GetDatabase's plain "read" scope. See RevealDatabaseCredentials.
+type databaseCredentialsResponse struct {
+	Credentials      map[string]string `json:"credentials,omitempty"`
+	ConnectionString string            `json:"connection_string,omitempty"`
 }
 
 func (h *Handler) CreateDatabase(w http.ResponseWriter, r *http.Request) {
@@ -422,17 +431,10 @@ func (h *Handler) GetDatabase(w http.ResponseWriter, r *http.Request) {
 
 	resp := databaseResponse{Database: db}
 
-	// Decrypt credentials
-	if len(db.CredentialsEncrypted) > 0 {
-		credsJSON, err := h.cfg.Keyring.Decrypt(db.CredentialsEncrypted)
-		if err == nil {
-			var creds map[string]string
-			if json.Unmarshal(credsJSON, &creds) == nil {
-				resp.Credentials = creds
-				resp.ConnectionString = buildConnectionString(db, creds)
-			}
-		}
-	}
+	// Credentials are deliberately NOT decrypted here — this endpoint sits
+	// behind plain "read" scope, and a connection password is a live,
+	// directly usable secret. See RevealDatabaseCredentials for the
+	// session-gated endpoint that returns it.
 
 	// Volume size is deliberately NOT fetched here. VolumeSize funnels into
 	// Docker's `system df -v`, which stats every volume on the host — instant on a
@@ -470,6 +472,53 @@ func (h *Handler) GetDatabase(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
+
+	writeJSON(w, http.StatusOK, resp)
+}
+
+// RevealDatabaseCredentials decrypts and returns the database's live
+// connection credentials — split out of GetDatabase (which sits behind
+// plain "read" scope) because this is the same class of endpoint the
+// RequireSession reveal boundary protects: a decrypted secret returned in
+// plaintext, not a masked/derived value. Ends in "/reveal" on purpose so
+// reveal_boundary_test.go's structural sweep discovers it automatically.
+// GET /api/projects/{projectId}/databases/{databaseId}/credentials/reveal
+func (h *Handler) RevealDatabaseCredentials(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "databaseId")
+	var uuid pgtype.UUID
+	if err := uuid.Scan(id); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid database id")
+		return
+	}
+
+	if !h.canAccessDatabase(r, uuid) {
+		writeError(w, http.StatusForbidden, "access denied")
+		return
+	}
+
+	db, err := h.queries.GetDatabase(r.Context(), uuid)
+	if err != nil {
+		writeError(w, http.StatusNotFound, "database not found")
+		return
+	}
+
+	var resp databaseCredentialsResponse
+	if len(db.CredentialsEncrypted) > 0 {
+		credsJSON, err := h.cfg.Keyring.Decrypt(db.CredentialsEncrypted)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "failed to decrypt credentials")
+			return
+		}
+		var creds map[string]string
+		if err := json.Unmarshal(credsJSON, &creds); err != nil {
+			writeError(w, http.StatusInternalServerError, "failed to decrypt credentials")
+			return
+		}
+		resp.Credentials = creds
+		resp.ConnectionString = buildConnectionString(db, creds)
+	}
+
+	h.audit(r, "reveal_database_credentials", "database", id, nil)
 
 	writeJSON(w, http.StatusOK, resp)
 }

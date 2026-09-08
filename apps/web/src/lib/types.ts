@@ -363,8 +363,6 @@ export interface Database {
   source_kind: string | null;
   source_ref: string | null;
   created_at: string;
-  credentials?: Record<string, string>;
-  connection_string?: string;
   volume?: { name: string; size_bytes: number };
   external_access?: {
     enabled: boolean;
@@ -376,6 +374,14 @@ export interface Database {
   // record still exists — the case Restart/Start can't recover from. Only set in
   // the steady non-running states; the UI surfaces Reload to recreate it.
   container_missing?: boolean;
+}
+
+// Live connection credentials, fetched separately from Database — the
+// backend requires a session for this one (a decrypted password, not just
+// view-only project data), so it's never part of the main database fetch.
+export interface DatabaseCredentials {
+  credentials?: Record<string, string>;
+  connection_string?: string;
 }
 
 export interface DatabaseBackup {
@@ -578,12 +584,15 @@ export interface Notification {
   created_at: string;
 }
 
+// "write" grants "read" and "deploy" too, and "read" grants "metrics" —
+// deploy and metrics are narrower, independent carve-outs, not steps on a
+// ladder. See middleware.scopeGrants (apps/api) for the authoritative table.
+export type TokenScope = "read" | "write" | "deploy" | "metrics";
+
 export interface ApiToken {
   id: string;
   name: string;
-  // Always {read, write, deploy, metrics} until PR4 adds a scope picker —
-  // there is no way yet to mint anything narrower.
-  scopes: string[];
+  scopes: TokenScope[];
   role_at_issue: "admin" | "member";
   expires_at: string | null;
   last_used_at: string | null;

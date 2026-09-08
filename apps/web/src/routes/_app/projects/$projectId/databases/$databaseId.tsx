@@ -37,6 +37,7 @@ import { toast } from "sonner";
 import {
   useDatabase,
   useDatabaseVolume,
+  useDatabaseCredentials,
   useDatabaseDeletionImpact,
   useDeleteDatabase,
   useUpdateDatabase,
@@ -80,7 +81,11 @@ import { ProvenanceNote } from "@/lib/components/provenance-note";
 import { CopyButton } from "@/lib/components/copy-button";
 import { formatBytes, formatList } from "@/lib/utils/format";
 import { cn } from "@/lib/utils";
-import type { Database, DatabaseBackupConfig } from "@/lib/types";
+import type {
+  Database,
+  DatabaseBackupConfig,
+  DatabaseCredentials,
+} from "@/lib/types";
 import {
   Field,
   FieldContent,
@@ -134,6 +139,11 @@ function DatabaseDetailPage() {
   const { tab } = Route.useSearch();
   const navigate = useNavigate();
   const { data: db, isLoading } = useDatabase(projectId, databaseId);
+  // Only fetched once the database is actually running — matches when the
+  // Connection Details card that needs it becomes visible.
+  const { data: creds } = useDatabaseCredentials(projectId, databaseId, {
+    enabled: db?.status === "running",
+  });
   const { data: project } = useProject(projectId);
   const currentUser = useAuthStore((s) => s.user);
   const canDelete =
@@ -423,7 +433,7 @@ function DatabaseDetailPage() {
 
       {activeTab === "overview" && (
         <div className="space-y-6">
-          {db.status === "running" && db.credentials ? (
+          {db.status === "running" && creds?.credentials ? (
             <Card>
               <CardHeader>
                 <CardTitle>Connection Details</CardTitle>
@@ -449,7 +459,7 @@ function DatabaseDetailPage() {
                     </div>
                   </div>
                   <Separator />
-                  {Object.entries(db.credentials).map(([key, value]) => (
+                  {Object.entries(creds.credentials).map(([key, value]) => (
                     <div
                       key={key}
                       className="flex items-center justify-between text-sm"
@@ -463,7 +473,7 @@ function DatabaseDetailPage() {
                   ))}
                 </div>
 
-                {db.connection_string && (
+                {creds.connection_string && (
                   <>
                     <Separator />
                     <div className="space-y-2">
@@ -472,9 +482,9 @@ function DatabaseDetailPage() {
                       </p>
                       <div className="bg-muted flex items-center justify-between rounded-md px-3 py-2">
                         <code className="text-xs break-all">
-                          {db.connection_string}
+                          {creds.connection_string}
                         </code>
-                        <CopyButton value={db.connection_string} />
+                        <CopyButton value={creds.connection_string} />
                       </div>
                     </div>
                   </>
@@ -491,7 +501,9 @@ function DatabaseDetailPage() {
             )
           )}
 
-          {db.status === "running" && <ExternalAccessCard db={db} />}
+          {db.status === "running" && (
+            <ExternalAccessCard db={db} creds={creds} />
+          )}
         </div>
       )}
 
@@ -675,8 +687,12 @@ function DatabaseDetailPage() {
 }
 
 /** Per-engine localhost connection string reached through the SSH tunnel. */
-function localConnectionString(db: Database, localPort: number): string {
-  const c = db.credentials ?? {};
+function localConnectionString(
+  db: Database,
+  localPort: number,
+  credentials: Record<string, string> | undefined,
+): string {
+  const c = credentials ?? {};
   switch (db.type) {
     case "postgres":
       return `postgresql://${c.user}:${c.password}@localhost:${localPort}/${c.database}`;
@@ -696,7 +712,13 @@ function localConnectionString(db: Database, localPort: number): string {
  * which recreates the container — surfaced via the warning so the brief
  * downtime isn't a surprise. The database is never exposed publicly.
  */
-function ExternalAccessCard({ db }: { db: Database }) {
+function ExternalAccessCard({
+  db,
+  creds,
+}: {
+  db: Database;
+  creds: DatabaseCredentials | undefined;
+}) {
   const setAccess = useSetDatabaseExternalAccess(db.project_id, db.id);
   const ext = db.external_access;
   const enabled = ext?.enabled ?? false;
@@ -722,7 +744,7 @@ function ExternalAccessCard({ db }: { db: Database }) {
   // leaves people unsure how to end the tunnel. With it, the session is the
   // tunnel: Ctrl-C closes it, and that is obvious.
   const sshCmd = `ssh -N -L ${localPort}:127.0.0.1:${ext?.host_port ?? ""} ${sshUser}@${sshHost}`;
-  const connStr = localConnectionString(db, localPort);
+  const connStr = localConnectionString(db, localPort, creds?.credentials);
 
   return (
     <Card>

@@ -194,9 +194,11 @@ func TestAdminPasswordResetRevokesSessions(t *testing.T) {
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 	resp.Body.Close()
 
-	// Admin resets the member's password.
+	// Admin resets the member's password, stepping up with the admin's OWN
+	// current password.
 	resp = env.DoRequest(t, "PUT", fmt.Sprintf("/api/users/%s/password", memberID), map[string]string{
-		"password": "newpassword123",
+		"password":         "newpassword123",
+		"current_password": "password123",
 	}, AuthHeaderWithCSRF(adminToken))
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 	resp.Body.Close()

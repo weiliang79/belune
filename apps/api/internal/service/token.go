@@ -36,11 +36,11 @@ func HasTokenPrefix(s string) bool {
 	return strings.HasPrefix(s, TokenPrefix)
 }
 
-// AllScopes is the full scope set every token gets today. PR3 ships no scope
-// picker — the create-token form takes only a name and an expiry — so this is
-// the only value it ever passes; PR4 adds the picker and real enforcement
-// together, deliberately, so no UI ever promises a restriction that isn't
-// backed yet.
+// AllScopes is the full, valid scope set — both the canonical list a create
+// request's chosen scopes are validated against, and what PR3 minted every
+// token with before this picker existed (PR3 shipped no scope picker
+// deliberately, so no UI ever promised a restriction enforcement didn't back
+// yet; this PR adds the picker and enforcement together).
 var AllScopes = []string{"read", "write", "deploy", "metrics"}
 
 // TokenService owns personal access tokens: generation, hashing, and the
@@ -134,13 +134,15 @@ func (s *TokenService) Authenticate(ctx context.Context, plain string) (*Authent
 }
 
 // CreateTokenParams collects what Create persists. Validation (name
-// non-empty, expiry one of the offered choices) is the handler's job — this
-// is the point past which a token unconditionally gets minted.
+// non-empty, expiry one of the offered choices, scopes non-empty and each one
+// a member of AllScopes) is the handler's job — this is the point past which
+// a token unconditionally gets minted with exactly the scopes given.
 type CreateTokenParams struct {
 	UserID      pgtype.UUID
 	Name        string
 	RoleAtIssue string
 	ExpiresAt   pgtype.Timestamptz
+	Scopes      []string
 }
 
 // CreatedToken carries the plaintext alongside the stored row. Plain exists
@@ -151,10 +153,9 @@ type CreatedToken struct {
 	Plain string
 }
 
-// Create mints a new personal access token. It is always unpinned
-// (ProjectID left zero/NULL — every project the owner can reach, evaluated at
-// use time) and always carries AllScopes: no narrower option exists until
-// PR4.
+// Create mints a new personal access token with exactly p.Scopes. It is
+// always unpinned (ProjectID left zero/NULL — every project the owner can
+// reach, evaluated at use time); narrowing by project has no UI yet.
 func (s *TokenService) Create(ctx context.Context, p CreateTokenParams) (*CreatedToken, error) {
 	plain, hash, err := GenerateToken()
 	if err != nil {
@@ -164,7 +165,7 @@ func (s *TokenService) Create(ctx context.Context, p CreateTokenParams) (*Create
 		UserID:      p.UserID,
 		Name:        p.Name,
 		TokenHash:   hash,
-		Scopes:      AllScopes,
+		Scopes:      p.Scopes,
 		RoleAtIssue: p.RoleAtIssue,
 		ExpiresAt:   p.ExpiresAt,
 	})

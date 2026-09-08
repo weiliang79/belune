@@ -15,11 +15,12 @@ import (
 type contextKey string
 
 const (
-	ctxUserID  contextKey = "user_id"
-	ctxEmail   contextKey = "email"
-	ctxRole    contextKey = "role"
-	ctxTokenID contextKey = "token_id"
-	ctxScopes  contextKey = "scopes"
+	ctxUserID    contextKey = "user_id"
+	ctxEmail     contextKey = "email"
+	ctxRole      contextKey = "role"
+	ctxTokenID   contextKey = "token_id"
+	ctxScopes    contextKey = "scopes"
+	ctxProjectID contextKey = "token_project_id"
 )
 
 // Auth returns a middleware that authenticates a session JWT or a personal
@@ -54,6 +55,9 @@ func Auth(authService *service.AuthService, tokenService *service.TokenService) 
 				ctx = context.WithValue(ctx, ctxRole, tok.EffectiveRole)
 				ctx = context.WithValue(ctx, ctxTokenID, uuid.UUID(tok.TokenID.Bytes).String())
 				ctx = context.WithValue(ctx, ctxScopes, tok.Scopes)
+				if tok.ProjectID.Valid {
+					ctx = context.WithValue(ctx, ctxProjectID, uuid.UUID(tok.ProjectID.Bytes).String())
+				}
 				next.ServeHTTP(w, r.WithContext(ctx))
 				return
 			}
@@ -179,5 +183,15 @@ func TokenIDFromContext(ctx context.Context) string {
 // slice from a JWT request as "unrestricted", not "no scopes").
 func ScopesFromContext(ctx context.Context) []string {
 	v, _ := ctx.Value(ctxScopes).([]string)
+	return v
+}
+
+// TokenProjectFromContext returns the id of the project the authenticating
+// PAT is pinned to, or "" when the token is unpinned (reaches every project
+// its owner can access) or the request is session-authenticated. Project
+// reach follows current access, evaluated at use time — this is read fresh
+// from the token row on every request, never cached past it.
+func TokenProjectFromContext(ctx context.Context) string {
+	v, _ := ctx.Value(ctxProjectID).(string)
 	return v
 }

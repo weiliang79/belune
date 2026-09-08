@@ -37,6 +37,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
+import {
+  SegmentedControl,
+  SegmentedControlItem,
+} from "@/components/ui/segmented-control";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -51,7 +55,7 @@ import {
   useTokens,
 } from "@/lib/hooks/use-tokens";
 import { formatDateTimeShort, formatRelativeTime } from "@/lib/utils/format";
-import type { ApiToken } from "@/lib/types";
+import type { TokenScope, ApiToken } from "@/lib/types";
 
 // Mirrors the backend's validTokenExpiryDays exactly — the API rejects
 // anything else, so offering it here would just be a confusing round trip.
@@ -64,6 +68,69 @@ const EXPIRY_OPTIONS = [
   { value: "90", label: "90 days" },
   { value: "never", label: "No expiry" },
 ];
+
+// Mirrors middleware.scopeGrants, which is a true total order:
+// metrics ⊂ read ⊂ deploy ⊂ write. Every rung includes everything narrower
+// than it — there is no combination where e.g. "Read + Deploy" is anything
+// other than plain Deploy — so the token only ever needs ONE rung, not a
+// set. Order here is narrowest first, matching the picker.
+const SCOPE_OPTIONS: {
+  value: TokenScope;
+  label: string;
+  description: string;
+}[] = [
+  {
+    value: "metrics",
+    label: "Metrics",
+    description:
+      "Read metrics only. The narrowest option — for a monitoring scraper.",
+  },
+  {
+    value: "read",
+    label: "Read",
+    description:
+      "View projects, applications, and their data. Includes metrics.",
+  },
+  {
+    value: "deploy",
+    label: "Deploy",
+    description:
+      "Trigger deploys, restarts, and other runtime actions. Includes everything Read can do — but not general write access.",
+  },
+  {
+    value: "write",
+    label: "Write",
+    description:
+      "Create, update, and configure — full access. Includes everything Deploy can do.",
+  },
+];
+
+// Mirrors middleware.scopeGrants inverted: what a token holding scope X can
+// also do, not just what it was literally minted with. Used for the list
+// badges so e.g. a Write token doesn't read as narrower than it is — under-
+// reporting capability is exactly what made the old checkbox picker
+// misleading in the first place.
+const SCOPE_GRANTS: Record<TokenScope, TokenScope[]> = {
+  write: ["write", "deploy", "read", "metrics"],
+  deploy: ["deploy", "read", "metrics"],
+  read: ["read", "metrics"],
+  metrics: ["metrics"],
+};
+const SCOPE_DISPLAY_ORDER = SCOPE_OPTIONS.map((o) => o.value);
+
+function effectiveScopes(scopes: TokenScope[]): TokenScope[] {
+  const set = new Set<TokenScope>();
+  for (const scope of scopes) {
+    for (const granted of SCOPE_GRANTS[scope] ?? [scope]) set.add(granted);
+  }
+  // TokenScope is a compile-time union, not a runtime guarantee — a token
+  // carrying a scope this build doesn't know about must still show SOMETHING
+  // rather than silently rendering as "no access": append it after the known
+  // rungs instead of letting the filter below drop it.
+  const known = SCOPE_DISPLAY_ORDER.filter((s) => set.has(s));
+  const unknown = [...set].filter((s) => !SCOPE_DISPLAY_ORDER.includes(s));
+  return [...known, ...unknown];
+}
 
 export function ApiTokensCard() {
   const { data: tokens, isLoading } = useTokens();
@@ -79,8 +146,8 @@ export function ApiTokensCard() {
           Personal Access Tokens
         </CardTitle>
         <CardDescription>
-          Tokens authenticate as you, for everything you have access to. There
-          is no way yet to narrow one to less than that.
+          Tokens authenticate as you, scoped to whatever you choose when
+          creating one — for all projects you have access to.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -148,8 +215,17 @@ function TokenRow({ token }: { token: ApiToken }) {
   return (
     <div className="flex items-center justify-between gap-4 py-3 first:pt-0 last:pb-0">
       <div className="min-w-0 space-y-1">
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <span className="truncate text-sm font-medium">{token.name}</span>
+          {effectiveScopes(token.scopes).map((scope) => (
+            <Badge
+              key={scope}
+              variant="secondary"
+              className="text-xs capitalize"
+            >
+              {scope}
+            </Badge>
+          ))}
           {!token.expires_at && (
             <Badge variant="outline" className="text-xs">
               Never expires
@@ -221,12 +297,17 @@ function CreateTokenDialog({
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const [expiry, setExpiry] = useState("30");
+  // Write by default — the full-access behavior tokens have always had.
+  // Every rung already includes everything narrower than it (see
+  // SCOPE_GRANTS), so there is exactly one value here, not a set.
+  const [scope, setScope] = useState<TokenScope>("write");
   const createToken = useCreateToken();
 
   const close = () => {
     setOpen(false);
     setName("");
     setExpiry("30");
+    setScope("write");
   };
 
   const submit = async (e: React.FormEvent) => {
@@ -234,6 +315,7 @@ function CreateTokenDialog({
     try {
       const result = await createToken.mutateAsync({
         name,
+        scopes: [scope],
         expiresInDays: expiry === "never" ? undefined : Number(expiry),
       });
       onIssued(result.token);
@@ -287,6 +369,23 @@ function CreateTokenDialog({
                     ))}
                   </SelectContent>
                 </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Scope</Label>
+                <SegmentedControl
+                  value={scope}
+                  onValueChange={(v) => setScope(v as TokenScope)}
+                  fullWidth
+                >
+                  {SCOPE_OPTIONS.map((o) => (
+                    <SegmentedControlItem key={o.value} value={o.value}>
+                      {o.label}
+                    </SegmentedControlItem>
+                  ))}
+                </SegmentedControl>
+                <p className="text-muted-foreground text-xs">
+                  {SCOPE_OPTIONS.find((o) => o.value === scope)?.description}
+                </p>
               </div>
             </div>
             <DialogFooter>

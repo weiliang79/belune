@@ -154,6 +154,8 @@ export const queryKeys = {
       ["projects", projectId, "databases", databaseId] as const,
     volume: (projectId: string, databaseId: string) =>
       ["projects", projectId, "databases", databaseId, "volume"] as const,
+    credentials: (projectId: string, databaseId: string) =>
+      ["projects", projectId, "databases", databaseId, "credentials"] as const,
     backups: (projectId: string, databaseId: string) =>
       ["projects", projectId, "databases", databaseId, "backups"] as const,
     restores: (projectId: string, databaseId: string) =>

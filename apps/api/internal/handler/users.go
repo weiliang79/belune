@@ -191,9 +191,15 @@ func (h *Handler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 }
 
 type resetUserPasswordRequest struct {
-	Password string `json:"password"`
+	Password        string `json:"password"`
+	CurrentPassword string `json:"current_password"`
 }
 
+// ResetUserPassword sets a NEW password for another user with no re-auth of
+// its own beyond the RequireSession gate — a hijacked or borrowed admin
+// session could otherwise take over any account, including another admin's,
+// with nothing re-checked. Step up the same way ChangeOwnPassword does: the
+// CALLER's own current password, not the target's.
 func (h *Handler) ResetUserPassword(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "userId")
 	var uuid pgtype.UUID
@@ -210,6 +216,18 @@ func (h *Handler) ResetUserPassword(w http.ResponseWriter, r *http.Request) {
 
 	if len(req.Password) < 8 {
 		writeError(w, http.StatusBadRequest, "password must be at least 8 characters")
+		return
+	}
+
+	var callerID pgtype.UUID
+	callerID.Scan(middleware.UserIDFromContext(r.Context()))
+	caller, err := h.queries.GetUserByID(r.Context(), callerID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to get caller")
+		return
+	}
+	if bcrypt.CompareHashAndPassword([]byte(caller.PasswordHash), []byte(req.CurrentPassword)) != nil {
+		writeError(w, http.StatusUnauthorized, "incorrect password")
 		return
 	}
 

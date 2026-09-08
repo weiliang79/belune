@@ -337,16 +337,62 @@ func (h *Handler) VerifyLogin(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, result)
 }
 
+type adminResetUserTOTPRequest struct {
+	CurrentPassword string `json:"current_password"`
+	Method          string `json:"method"`
+	Code            string `json:"code"`
+}
+
 // AdminResetUserTOTP clears another user's second factor, for the lost-device
 // case that recovery codes did not cover. An admin can already do nearly
 // anything, so the control is not permission but visibility: it is audited
-// loudly and it ends that user's sessions.
+// loudly and it ends that user's sessions. It also removes a factor from
+// someone else's account, so — like ResetUserPassword — it steps up on the
+// CALLER's own password first: a hijacked or borrowed admin session must not
+// be able to strip another admin's second factor with nothing re-checked.
+// If the CALLER has MFA enrolled, a fresh code is required too — the same
+// "password alone doesn't defend against a stolen session" reasoning
+// DisableTOTP, RegenerateRecoveryCodes, and CreateHostShellSession already
+// apply to actions of comparable or lesser sensitivity; stripping someone
+// ELSE's factor should not need less proof than disabling your own.
 // POST /api/users/{userId}/totp/reset (admin only)
 func (h *Handler) AdminResetUserTOTP(w http.ResponseWriter, r *http.Request) {
 	var uid pgtype.UUID
 	if err := uid.Scan(chi.URLParam(r, "userId")); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid user id")
 		return
+	}
+
+	var req adminResetUserTOTPRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	var callerID pgtype.UUID
+	callerID.Scan(middleware.UserIDFromContext(r.Context()))
+	caller, err := h.queries.GetUserByID(r.Context(), callerID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to get caller")
+		return
+	}
+	if bcrypt.CompareHashAndPassword([]byte(caller.PasswordHash), []byte(req.CurrentPassword)) != nil {
+		writeError(w, http.StatusUnauthorized, "incorrect password")
+		return
+	}
+	if service.HasMFA(caller) {
+		if strings.TrimSpace(req.Code) == "" {
+			writeError(w, http.StatusUnauthorized, "verification code required")
+			return
+		}
+		method := req.Method
+		if method == "" {
+			method = service.MethodTOTP
+		}
+		if err := h.totpSvc.Verify(r.Context(), caller, method, req.Code); err != nil {
+			writeSecondFactorError(w, err)
+			return
+		}
 	}
 
 	target, err := h.queries.GetUserByID(r.Context(), uid)
