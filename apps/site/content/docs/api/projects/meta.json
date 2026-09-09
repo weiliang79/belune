@@ -4,7 +4,6 @@
     "list-projects",
     "create-project",
     "get-project",
-    "delete-project",
     "update-project",
     "list-project-backups",
     "update-project-sharing",

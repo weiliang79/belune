@@ -1,7 +1,0 @@
-{
-  "title": "Terminal Access",
-  "pages": [
-    "create-terminal-session",
-    "handle-terminal-web-socket"
-  ]
-}

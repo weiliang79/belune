@@ -6,7 +6,6 @@
     "export-audit-logs",
     "list-certificates",
     "upload-certificate",
-    "delete-certificate",
     "trigger-cleanup",
     "list-docker-containers",
     "list-docker-images",

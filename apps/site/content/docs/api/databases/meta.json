@@ -10,7 +10,6 @@
     "list-databases",
     "create-database",
     "get-database",
-    "delete-database",
     "update-database",
     "list-database-backup-configs",
     "create-database-backup-config",
@@ -19,16 +18,11 @@
     "run-database-backup-config",
     "list-database-backups",
     "backup-database",
-    "delete-database-backup",
-    "reveal-database-credentials",
     "get-database-deletion-impact",
     "set-database-external-access",
-    "restore-database",
     "list-database-restores",
     "upgrade-database",
     "get-database-volume",
-    "list-project-orphaned-backups",
-    "delete-orphaned-backup",
-    "restore-database-from-tombstone"
+    "list-project-orphaned-backups"
   ]
 }

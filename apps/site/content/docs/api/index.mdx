@@ -1,9 +1,9 @@
 ---
 title: API Reference
-description: Every endpoint, generated from the running API rather than hand-written.
+description: Every token-callable endpoint, generated from the running API rather than hand-written.
 ---
 
-This is the full endpoint reference — every route the API registers, browsable by domain in the sidebar. If you're looking for how to authenticate, the scope ladder, or a walkthrough of common tasks, start at [API Access](/docs/api/access) instead; this page is for looking up one specific endpoint by name or path.
+This is the endpoint reference for scripting with a personal access token — every route a token can call, browsable by domain in the sidebar. Routes that always require a live dashboard session, no token or scope reaches them, aren't listed here; see [What a Token Can Never Do](/docs/api/access#what-a-token-can-never-do) for that boundary. If you're looking for how to authenticate, the scope ladder, or a walkthrough of common tasks, start at [API Access](/docs/api/access) instead; this page is for looking up one specific endpoint by name or path.
 
 <Callout type="warn">
 **Generated, not written.** This reference is an [OpenAPI 3.1 spec](/openapi.json), produced by probing the real, running router with a personal access token and statically resolving every request/response Go type — not by reading the source and describing what it's supposed to do. A hand-written version of this reference — published days before this page existed — had its scope-lattice legend go wrong within the week, found only because an unrelated review happened to check it against the code. A generated one can't drift the same way, because it IS the observed behavior.
@@ -11,7 +11,7 @@ This is the full endpoint reference — every route the API registers, browsable
 
 ## Get the Spec Directly
 
-The spec itself is served at [`/openapi.json`](/openapi.json) — a stable, public URL, not behind auth. Point an OpenAPI client, a codegen tool, or a linter at it directly instead of scraping this page.
+The spec itself is served at [`/openapi.json`](/openapi.json) — a stable, public URL, not behind auth. Point an OpenAPI client, a codegen tool, or a linter at it directly instead of scraping this page. Unlike the per-operation pages below, the spec is complete: it includes every registered route, session-only ones included, each with an accurate `security` block.
 
 ## What This Reference Shows, and What It Doesn't
 

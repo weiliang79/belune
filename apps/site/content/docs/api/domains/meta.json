@@ -4,7 +4,6 @@
     "list-domain-tls-status",
     "list-domains",
     "add-domain",
-    "remove-domain",
     "update-domain",
     "list-route-features",
     "upsert-route-feature",

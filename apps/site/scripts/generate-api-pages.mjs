@@ -10,12 +10,30 @@
 // Consumes apps/site/public/openapi.json, which
 // apps/api/internal/handler/apidoc_generate_test.go writes; run this AFTER
 // that generator, never standalone (see task generate:api-docs).
+//
+// PAGES ARE A FILTERED VIEW OF THE SPEC, NOT A MIRROR OF IT. This reference's
+// audience is people scripting with a personal access token — an operation
+// no token can ever call, at any scope (RequireSession; see
+// middleware.RequireSession and the "What a Token Can Never Do" section of
+// access.mdx, which already documents the boundary in prose), is a dead end
+// in that reference, not useful content. public/openapi.json itself is NOT
+// filtered: it's the complete, published-at-a-stable-URL machine artifact
+// third-party tooling depends on, its security block already states
+// session-only correctly, and TestGenerateAPIReference's own invariant
+// (every RequireSession route emits no pat* scheme) has nothing to check if
+// those operations were removed from it. Only the human-facing page set
+// (and the meta.json files describing it) is filtered, by cloning the
+// already-generated spec in memory and feeding fumadocs-openapi that clone
+// instead of the file on disk — decided by the user 2026-09-09, after
+// rejecting a redundant "dashboard-only endpoints" table (access.mdx's
+// prose already covers exactly this set).
 import { createOpenAPI } from 'fumadocs-openapi/server';
 import { generateFiles } from 'fumadocs-openapi';
-import { writeFileSync, readdirSync } from 'node:fs';
+import { writeFileSync, readFileSync, readdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 
 const OUT_DIR = './content/docs/api';
+const SPEC_PATH = './public/openapi.json';
 
 // Mirrors apidocDomainOrder in apps/api/internal/handler/apidoc_generate_test.go
 // (tag title -> slug) — both this script's folder names and the top-level
@@ -23,6 +41,10 @@ const OUT_DIR = './content/docs/api';
 // slugification (lowercasing the title verbatim) produces folder names like
 // "admin-—-git-provider-configs" that don't match, so this is used as the
 // slugify hook instead of trying to reconcile two independent slugifiers.
+// A domain can legitimately end up with zero surviving pages once
+// isPatCallable below filters it (e.g. "Terminal Access" — both of its
+// operations are session-only) — handled structurally, not listed here: see
+// the presentDirs filter at the bottom.
 const SLUG_BY_TITLE = {
   'Live Updates (WebSocket Hub)': 'live-updates',
   'Terminal Access': 'terminal',
@@ -79,8 +101,63 @@ function kebabCase(name) {
   return s.toLowerCase();
 }
 
+// isPatCallable is THE single predicate for "does this operation belong in
+// the human-facing reference" — derived from the same structural fact
+// TestAPIDocAllMarshalerTypesHandled's sibling guard checks on the Go side
+// (every RequireSession route's security carries no pat* scheme), not a
+// hand-maintained path list that would rot the way destroy_boundary_test.go's
+// own comments warn a resource list would. Kept in exactly one place on
+// purpose: the user is still reviewing which operations should actually be
+// excluded, and any future exception (an operation worth keeping despite
+// being session-gated) should be one documented line added here, not a
+// change threaded through the generator or the tag/domain machinery.
+function isPatCallable(operation) {
+  return (operation.security ?? []).some((requirement) => Object.keys(requirement).some((scheme) => scheme.startsWith('pat')));
+}
+
+const fullSpec = JSON.parse(readFileSync(SPEC_PATH, 'utf8'));
+const pagesSpec = structuredClone(fullSpec);
+for (const [path, methods] of Object.entries(pagesSpec.paths)) {
+  for (const method of Object.keys(methods)) {
+    if (!isPatCallable(methods[method])) delete methods[method];
+  }
+  if (Object.keys(methods).length === 0) delete pagesSpec.paths[path];
+}
+
+// generateFiles only ever mkdir+writeFiles — it never deletes, so a
+// operation that WAS generated on a previous run and is filtered out on this
+// one (every operation in a shrinking or now-empty domain, e.g. "Terminal
+// Access") would otherwise survive on disk as an orphan: still on the
+// filesystem, still routable, just no longer linked from anywhere — the same
+// class of bug the top-level meta.json write once had to guard against.
+// Every directory directly under OUT_DIR is generator output (index.mdx,
+// access.mdx and meta.json are the only hand-written/generated FILES there),
+// so clearing all of them before regenerating is safe and total.
+for (const e of readdirSync(OUT_DIR, { withFileTypes: true })) {
+  if (e.isDirectory()) rmSync(join(OUT_DIR, e.name), { recursive: true, force: true });
+}
+
+// createOpenAPI's `input` accepts an in-memory document (SchemaRecord) as an
+// alternative to a file path — verified by reading fumadocs-openapi's own
+// loader (server/index.js's getSchema, and @fumadocs/api-docs's bundle(),
+// which explicitly branches on `typeof input !== 'string'`) rather than
+// assumed from the .d.ts alone. Feeding it the filtered clone here, instead
+// of writing a second file to disk, keeps SPEC_PATH itself untouched by this
+// script — it only ever reads that file.
+//
+// The SchemaRecord key MUST be SPEC_PATH itself, not an arbitrary id: each
+// generated .mdx embeds it verbatim as <Comp document="...">, and that value
+// is looked up again at request/build time against src/lib/source.ts's own,
+// entirely separate `createOpenAPI({ input: ['./public/openapi.json'] })` —
+// found by an actual `npm run build` failure ("Failed to resolve input:
+// openapi") when this was first written with an arbitrary key, not
+// predicted. The two loaders never share state — this one's filtered
+// in-memory clone only ever decides which pages get generated and what
+// `operations` list lands in each one's frontmatter; every operation that
+// survives filtering is resolved again at runtime from the real, complete
+// file, which still contains it unchanged.
 const server = createOpenAPI({
-  input: ['./public/openapi.json'],
+  input: { [SPEC_PATH]: pagesSpec },
 });
 
 await generateFiles({
@@ -112,7 +189,13 @@ await generateFiles({
 // trying to suppress the library's own top-level write. Order comes from
 // SLUG_BY_TITLE itself (written in the same order as apidocDomainOrder), not
 // an alphabetical directory listing — losing that curated reading order
-// would be a real regression, not just cosmetic.
+// would be a real regression, not just cosmetic. presentDirs.has(slug) also
+// does double duty as the empty-domain guard: a domain every one of whose
+// operations isPatCallable filtered out (e.g. "Terminal Access") never gets
+// a folder from generateFiles in the first place — group() in
+// fumadocs-openapi's preset only creates a tag's group when an operation
+// still references that tag — so it's excluded here the same way a domain
+// with zero routes always was, no special-casing needed.
 const presentDirs = new Set(
   readdirSync(OUT_DIR, { withFileTypes: true })
     .filter((e) => e.isDirectory())
