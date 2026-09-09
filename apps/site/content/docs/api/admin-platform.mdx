@@ -1,0 +1,299 @@
+---
+title: Admin — Platform
+full: true
+_openapi:
+  preload:
+    - ./public/openapi.json
+  toc:
+    - depth: 2
+      title: List Audit Logs
+      url: '#list-audit-logs'
+    - depth: 2
+      title: List Audit Actions
+      url: '#list-audit-actions'
+    - depth: 2
+      title: Export Audit Logs
+      url: '#export-audit-logs'
+    - depth: 2
+      title: List Certificates
+      url: '#list-certificates'
+    - depth: 2
+      title: Upload Certificate
+      url: '#upload-certificate'
+    - depth: 2
+      title: Delete Certificate
+      url: '#delete-certificate'
+    - depth: 2
+      title: Trigger Cleanup
+      url: '#trigger-cleanup'
+    - depth: 2
+      title: List Docker Containers
+      url: '#list-docker-containers'
+    - depth: 2
+      title: List Docker Images
+      url: '#list-docker-images'
+    - depth: 2
+      title: List Docker Networks
+      url: '#list-docker-networks'
+    - depth: 2
+      title: Get Docker Overview
+      url: '#get-docker-overview'
+    - depth: 2
+      title: Create Host Shell Session
+      url: '#create-host-shell-session'
+    - depth: 2
+      title: Get Queue Status
+      url: '#get-queue-status'
+    - depth: 2
+      title: Clear Queue
+      url: '#clear-queue'
+    - depth: 2
+      title: Clear Pending Queue
+      url: '#clear-pending-queue'
+    - depth: 2
+      title: Restart Service
+      url: '#restart-service'
+    - depth: 2
+      title: Get Server I P
+      url: '#get-server-i-p'
+    - depth: 2
+      title: List Notification Channels
+      url: '#list-notification-channels'
+    - depth: 2
+      title: Create Notification Channel
+      url: '#create-notification-channel'
+    - depth: 2
+      title: Test Notification Channel Params
+      url: '#test-notification-channel-params'
+    - depth: 2
+      title: Set Notification Channel Enabled
+      url: '#set-notification-channel-enabled'
+    - depth: 2
+      title: Delete Notification Channel
+      url: '#delete-notification-channel'
+    - depth: 2
+      title: Update Notification Channel
+      url: '#update-notification-channel'
+    - depth: 2
+      title: Test Notification Channel
+      url: '#test-notification-channel'
+    - depth: 2
+      title: List Notification Events
+      url: '#list-notification-events'
+    - depth: 2
+      title: Reconcile Proxy
+      url: '#reconcile-proxy'
+    - depth: 2
+      title: Get Proxy Reconciler Status
+      url: '#get-proxy-reconciler-status'
+    - depth: 2
+      title: List Quotas
+      url: '#list-quotas'
+    - depth: 2
+      title: Get Quota
+      url: '#get-quota'
+    - depth: 2
+      title: Delete Quota
+      url: '#delete-quota'
+    - depth: 2
+      title: Upsert Quota
+      url: '#upsert-quota'
+    - depth: 2
+      title: Get Dashboard T L S
+      url: '#get-dashboard-t-l-s'
+    - depth: 2
+      title: Get Server Services
+      url: '#get-server-services'
+    - depth: 2
+      title: List Settings
+      url: '#list-settings'
+    - depth: 2
+      title: Update Settings
+      url: '#update-settings'
+    - depth: 2
+      title: Get S M T P Settings
+      url: '#get-s-m-t-p-settings'
+    - depth: 2
+      title: Update S M T P Settings
+      url: '#update-s-m-t-p-settings'
+    - depth: 2
+      title: Test S M T P Settings
+      url: '#test-s-m-t-p-settings'
+  structuredData:
+    headings:
+      - content: List Audit Logs
+        id: list-audit-logs
+      - content: List Audit Actions
+        id: list-audit-actions
+      - content: Export Audit Logs
+        id: export-audit-logs
+      - content: List Certificates
+        id: list-certificates
+      - content: Upload Certificate
+        id: upload-certificate
+      - content: Delete Certificate
+        id: delete-certificate
+      - content: Trigger Cleanup
+        id: trigger-cleanup
+      - content: List Docker Containers
+        id: list-docker-containers
+      - content: List Docker Images
+        id: list-docker-images
+      - content: List Docker Networks
+        id: list-docker-networks
+      - content: Get Docker Overview
+        id: get-docker-overview
+      - content: Create Host Shell Session
+        id: create-host-shell-session
+      - content: Get Queue Status
+        id: get-queue-status
+      - content: Clear Queue
+        id: clear-queue
+      - content: Clear Pending Queue
+        id: clear-pending-queue
+      - content: Restart Service
+        id: restart-service
+      - content: Get Server I P
+        id: get-server-i-p
+      - content: List Notification Channels
+        id: list-notification-channels
+      - content: Create Notification Channel
+        id: create-notification-channel
+      - content: Test Notification Channel Params
+        id: test-notification-channel-params
+      - content: Set Notification Channel Enabled
+        id: set-notification-channel-enabled
+      - content: Delete Notification Channel
+        id: delete-notification-channel
+      - content: Update Notification Channel
+        id: update-notification-channel
+      - content: Test Notification Channel
+        id: test-notification-channel
+      - content: List Notification Events
+        id: list-notification-events
+      - content: Reconcile Proxy
+        id: reconcile-proxy
+      - content: Get Proxy Reconciler Status
+        id: get-proxy-reconciler-status
+      - content: List Quotas
+        id: list-quotas
+      - content: Get Quota
+        id: get-quota
+      - content: Delete Quota
+        id: delete-quota
+      - content: Upsert Quota
+        id: upsert-quota
+      - content: Get Dashboard T L S
+        id: get-dashboard-t-l-s
+      - content: Get Server Services
+        id: get-server-services
+      - content: List Settings
+        id: list-settings
+      - content: Update Settings
+        id: update-settings
+      - content: Get S M T P Settings
+        id: get-s-m-t-p-settings
+      - content: Update S M T P Settings
+        id: update-s-m-t-p-settings
+      - content: Test S M T P Settings
+        id: test-s-m-t-p-settings
+    contents:
+      - content: Session-gate UNVERIFIED (id-less mutating route, skipped for safety —
+          see apidocSkipFullScopeReason). Scope is confirmed — every route is
+          probed at zero scope — but whether a personal access token is
+          additionally rejected here by a session-only gate is not; both
+          security alternatives below are listed, only one is guaranteed
+          correct.
+        heading: upload-certificate
+      - content: Session-gate UNVERIFIED (id-less mutating route, skipped for safety —
+          see apidocSkipFullScopeReason). Scope is confirmed — every route is
+          probed at zero scope — but whether a personal access token is
+          additionally rejected here by a session-only gate is not; both
+          security alternatives below are listed, only one is guaranteed
+          correct.
+        heading: trigger-cleanup
+      - content: Session-gate UNVERIFIED (id-less mutating route, skipped for safety —
+          see apidocSkipFullScopeReason). Scope is confirmed — every route is
+          probed at zero scope — but whether a personal access token is
+          additionally rejected here by a session-only gate is not; both
+          security alternatives below are listed, only one is guaranteed
+          correct.
+        heading: create-host-shell-session
+      - content: Session-gate UNVERIFIED (id-less mutating route, skipped for safety —
+          see apidocSkipFullScopeReason). Scope is confirmed — every route is
+          probed at zero scope — but whether a personal access token is
+          additionally rejected here by a session-only gate is not; both
+          security alternatives below are listed, only one is guaranteed
+          correct.
+        heading: clear-queue
+      - content: Session-gate UNVERIFIED (id-less mutating route, skipped for safety —
+          see apidocSkipFullScopeReason). Scope is confirmed — every route is
+          probed at zero scope — but whether a personal access token is
+          additionally rejected here by a session-only gate is not; both
+          security alternatives below are listed, only one is guaranteed
+          correct.
+        heading: clear-pending-queue
+      - content: Session-gate UNVERIFIED (id-less mutating route, skipped for safety —
+          see apidocSkipFullScopeReason). Scope is confirmed — every route is
+          probed at zero scope — but whether a personal access token is
+          additionally rejected here by a session-only gate is not; both
+          security alternatives below are listed, only one is guaranteed
+          correct.
+        heading: restart-service
+      - content: Session-gate UNVERIFIED (id-less mutating route, skipped for safety —
+          see apidocSkipFullScopeReason). Scope is confirmed — every route is
+          probed at zero scope — but whether a personal access token is
+          additionally rejected here by a session-only gate is not; both
+          security alternatives below are listed, only one is guaranteed
+          correct.
+        heading: create-notification-channel
+      - content: Session-gate UNVERIFIED (id-less mutating route, skipped for safety —
+          see apidocSkipFullScopeReason). Scope is confirmed — every route is
+          probed at zero scope — but whether a personal access token is
+          additionally rejected here by a session-only gate is not; both
+          security alternatives below are listed, only one is guaranteed
+          correct.
+        heading: test-notification-channel-params
+      - content: Session-gate UNVERIFIED (id-less mutating route, skipped for safety —
+          see apidocSkipFullScopeReason). Scope is confirmed — every route is
+          probed at zero scope — but whether a personal access token is
+          additionally rejected here by a session-only gate is not; both
+          security alternatives below are listed, only one is guaranteed
+          correct.
+        heading: reconcile-proxy
+      - content: Session-gate UNVERIFIED (id-less mutating route, skipped for safety —
+          see apidocSkipFullScopeReason). Scope is confirmed — every route is
+          probed at zero scope — but whether a personal access token is
+          additionally rejected here by a session-only gate is not; both
+          security alternatives below are listed, only one is guaranteed
+          correct.
+        heading: update-settings
+      - content: Session-gate UNVERIFIED (id-less mutating route, skipped for safety —
+          see apidocSkipFullScopeReason). Scope is confirmed — every route is
+          probed at zero scope — but whether a personal access token is
+          additionally rejected here by a session-only gate is not; both
+          security alternatives below are listed, only one is guaranteed
+          correct.
+        heading: update-s-m-t-p-settings
+      - content: Session-gate UNVERIFIED (id-less mutating route, skipped for safety —
+          see apidocSkipFullScopeReason). Scope is confirmed — every route is
+          probed at zero scope — but whether a personal access token is
+          additionally rejected here by a session-only gate is not; both
+          security alternatives below are listed, only one is guaranteed
+          correct.
+        heading: test-s-m-t-p-settings
+---
+
+{/* This file was generated by Fumadocs. Do not edit this file directly. Any changes should be made by running the generation command again. */}
+
+export default function Layout(props) {
+  const { APIPage, OpenAPIPage } = props.components ?? {};
+  // "APIPage" is the old name from v10, this allows both for backward compatibility
+  const Comp = OpenAPIPage ?? APIPage;
+  return (
+    <>
+      {props.children}
+      <Comp document="./public/openapi.json" webhooks={[]} operations={[{"path":"/api/audit-logs","method":"get"},{"path":"/api/audit-logs/actions","method":"get"},{"path":"/api/audit-logs/export","method":"get"},{"path":"/api/certificates","method":"get"},{"path":"/api/certificates","method":"post"},{"path":"/api/certificates/{certificateId}","method":"delete"},{"path":"/api/cleanup","method":"post"},{"path":"/api/docker/containers","method":"get"},{"path":"/api/docker/images","method":"get"},{"path":"/api/docker/networks","method":"get"},{"path":"/api/docker/overview","method":"get"},{"path":"/api/maintenance/host-shell","method":"post"},{"path":"/api/maintenance/queue","method":"get"},{"path":"/api/maintenance/queue/clear","method":"post"},{"path":"/api/maintenance/queue/clear-pending","method":"post"},{"path":"/api/maintenance/restart","method":"post"},{"path":"/api/maintenance/server-ip","method":"get"},{"path":"/api/notification-channels","method":"get"},{"path":"/api/notification-channels","method":"post"},{"path":"/api/notification-channels/test","method":"post"},{"path":"/api/notification-channels/{channelId}","method":"patch"},{"path":"/api/notification-channels/{channelId}","method":"delete"},{"path":"/api/notification-channels/{channelId}","method":"put"},{"path":"/api/notification-channels/{channelId}/test","method":"post"},{"path":"/api/notification-events","method":"get"},{"path":"/api/proxy/reconcile","method":"post"},{"path":"/api/proxy/reconciler","method":"get"},{"path":"/api/quotas","method":"get"},{"path":"/api/quotas/{scope}/{scopeId}","method":"get"},{"path":"/api/quotas/{scope}/{scopeId}","method":"delete"},{"path":"/api/quotas/{scope}/{scopeId}","method":"put"},{"path":"/api/server/dashboard-tls","method":"get"},{"path":"/api/server/services","method":"get"},{"path":"/api/settings","method":"get"},{"path":"/api/settings","method":"put"},{"path":"/api/settings/smtp","method":"get"},{"path":"/api/settings/smtp","method":"put"},{"path":"/api/settings/smtp/test","method":"post"}]} showTitle />
+    </>
+  );
+}

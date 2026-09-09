@@ -5,6 +5,7 @@ dotenv: ['.env']
 vars:
   API_DIR: apps/api
   WEB_DIR: apps/web
+  SITE_DIR: apps/site
   INFRA_DIR: infra
 
 tasks:
@@ -78,6 +79,24 @@ tasks:
     desc: Regenerate types from OpenAPI spec
     cmds:
       - 'echo "TODO: Add OpenAPI type generation commands"'
+
+  generate:api-docs:
+    desc: Regenerate apps/site/public/openapi.json and its site pages by probing the real router (Docker must be running)
+    cmds:
+      - task: generate:api-docs:spec
+      - task: generate:api-docs:pages
+
+  generate:api-docs:spec:
+    internal: true
+    dir: '{{.API_DIR}}'
+    cmd: go test -count=1 -timeout=120s -run TestGenerateAPIReference ./internal/handler/...
+    env:
+      GENERATE_API_REFERENCE: '1'
+
+  generate:api-docs:pages:
+    internal: true
+    dir: '{{.SITE_DIR}}'
+    cmd: node scripts/generate-api-pages.mjs
 
   # ─── Database ──────────────────────────────────────────────────
 

@@ -36,6 +36,37 @@ jobs:
       - name: Test
         run: go test -short -count=1 ./...
 
+      # Regenerates the OpenAPI spec and its site pages, then fails if that
+      # changes anything already committed — the freshness check this generator
+      # was deferred pending a spike on whether testcontainers actually works in
+      # CI. It does: `go test -short` above already runs the full internal/handler
+      # testcontainers suite (there is no -short gate on it — see the comment
+      # there), so this reuses proven infrastructure rather than adding new. A
+      # spec that silently drifts from the real API is worse than the MDX
+      # tables it replaced: MDX was read by people, a spec is meant to be
+      # consumed by codegen and client tooling directly.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: apps/site/package-lock.json
+
+      - name: Install site dependencies
+        working-directory: apps/site
+        run: npm ci
+
+      - name: Regenerate the API reference
+        run: go test -count=1 -timeout=120s -run TestGenerateAPIReference ./internal/handler/...
+        env:
+          GENERATE_API_REFERENCE: "1"
+
+      - name: Regenerate the API reference's site pages
+        working-directory: apps/site
+        run: node scripts/generate-api-pages.mjs
+
+      - name: Fail if the API reference is stale
+        run: git diff --exit-code -- apps/site/public/openapi.json apps/site/content/docs/api
+
   migrations:
     name: Migrations (fresh DB)
     runs-on: ubuntu-latest

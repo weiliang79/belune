@@ -1,4 +1,4 @@
-import { getPageImage, getPageMarkdownUrl, source } from '@/lib/source';
+import { getPageImage, getPageMarkdownUrl, openapi, source } from '@/lib/source';
 import {
   DocsBody,
   DocsDescription,
@@ -9,9 +9,11 @@ import {
 } from 'fumadocs-ui/layouts/notebook/page';
 import { notFound } from 'next/navigation';
 import { getMDXComponents } from '@/components/mdx';
+import { OpenAPIPage } from '@/components/openapi-page';
 import type { Metadata } from 'next';
 import { createRelativeLink } from 'fumadocs-ui/mdx';
 import { gitConfig } from '@/lib/shared';
+import type { GeneratedPageProps } from 'fumadocs-openapi';
 
 export default async function Page(props: PageProps<'/docs/[[...slug]]'>) {
   const params = await props.params;
@@ -20,6 +22,22 @@ export default async function Page(props: PageProps<'/docs/[[...slug]]'>) {
 
   const MDX = page.data.body;
   const markdownUrl = getPageMarkdownUrl(page).url;
+
+  // Generated api/*.mdx pages (apps/site/scripts/generate-api-pages.mjs)
+  // carry `_openapi` frontmatter naming which document(s) to preload —
+  // <OpenAPIPage> reads doc content from the `preloaded` prop keyed by that
+  // same path, not by fetching `document` itself (verified live: the plain
+  // registered component throws "Cannot read properties of undefined
+  // (reading 'bundled')" without it). Bound per-request here, not as a
+  // module-level singleton, since preloaded content is page-specific.
+  const openApiComponents = page.data._openapi
+    ? {
+        OpenAPIPage: async (p: GeneratedPageProps) => {
+          const { preloaded } = await openapi.preloadOpenAPIPage(page);
+          return <OpenAPIPage {...p} preloaded={preloaded} />;
+        },
+      }
+    : undefined;
 
   return (
     <DocsPage toc={page.data.toc} full={page.data.full}>
@@ -37,6 +55,7 @@ export default async function Page(props: PageProps<'/docs/[[...slug]]'>) {
           components={getMDXComponents({
             // this allows you to link to other pages with relative file paths
             a: createRelativeLink(source, page),
+            ...openApiComponents,
           })}
         />
       </DocsBody>
