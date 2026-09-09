@@ -65,7 +65,19 @@ jobs:
         run: node scripts/generate-api-pages.mjs
 
       - name: Fail if the API reference is stale
-        run: git diff --exit-code -- apps/site/public/openapi.json apps/site/content/docs/api
+        # git diff only inspects TRACKED files, so it misses new files —
+        # exactly what one-page-per-operation generates far more of, and a
+        # renamed operationId (a dependency bump, an edit to the page
+        # script) is a delete-plus-add where only the delete half shows.
+        # git status --porcelain reports untracked files too; any output at
+        # all means the working tree no longer matches what's committed.
+        run: |
+          status=$(git status --porcelain -- apps/site/public/openapi.json apps/site/content/docs/api)
+          if [ -n "$status" ]; then
+            echo "$status"
+            echo "::error::apps/site/public/openapi.json or apps/site/content/docs/api is stale — run 'task generate:api-docs' and commit the result."
+            exit 1
+          fi
 
   migrations:
     name: Migrations (fresh DB)
