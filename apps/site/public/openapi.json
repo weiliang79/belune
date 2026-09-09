@@ -3,7 +3,7 @@
   "info": {
     "title": "Belune API",
     "version": "1.0.0",
-    "description": "Generated from the running API by probing every registered route with a personal access token and statically resolving every request/response Go type — not hand-written, and not a reading of routes.go. See the API Access guide for how to authenticate and the scope model.\n\n**\"required\" is intentionally omitted from every request schema.** Field optionality in this codebase is enforced imperatively (e.g. `if req.Name == \"\" { ... }`), not type-encoded — most optional fields aren't even pointers. Inferring \"required\" from arbitrary validation code is a fundamentally fuzzier problem than the static type resolution the rest of this spec relies on, so it is left honestly unspecified rather than risked wrong.\n\n**Session-gate unverified on some routes** (marked `x-belune-session-gate: \"unverified\"` on the operation): a small number of destructive admin actions and streaming (SSE) routes aren't safe to actually execute during generation, so whether a personal access token is additionally rejected by a session-only gate is unconfirmed for those. Both the scope-based and session-only security alternatives are listed on those operations; only one is guaranteed correct.\n\n**Project-pinning has no OpenAPI representation** — a token pinned to one project rejected outside it is noted in the affected operations' descriptions, not encoded structurally."
+    "description": "Generated from the running API by probing every registered route with a personal access token and statically resolving every request/response Go type — not hand-written, and not a reading of routes.go. See the API Access guide for how to authenticate and the scope model.\n\n**\"required\" is intentionally omitted from every request schema.** Field optionality in this codebase is enforced imperatively (e.g. `if req.Name == \"\" { ... }`), not type-encoded — most optional fields aren't even pointers. Inferring \"required\" from arbitrary validation code is a fundamentally fuzzier problem than the static type resolution the rest of this spec relies on, so it is left honestly unspecified rather than risked wrong.\n\n**Project-pinning has no OpenAPI representation** — a token pinned to one project rejected outside it is noted in the affected operations' descriptions, not encoded structurally."
   },
   "servers": [
     {
@@ -127,7 +127,6 @@
       "put": {
         "operationId": "UpdateAlertPreferences",
         "summary": "Update Alert Preferences",
-        "description": "Session-gate UNVERIFIED (id-less mutating route, skipped for safety — see apidocSkipFullScopeReason). Scope is confirmed — every route is probed at zero scope — but whether a personal access token is additionally rejected here by a session-only gate is not; both security alternatives below are listed, only one is guaranteed correct.",
         "tags": [
           "Session \u0026 Account"
         ],
@@ -170,8 +169,7 @@
           {
             "session": []
           }
-        ],
-        "x-belune-session-gate": "unverified"
+        ]
       }
     },
     "/api/audit-logs": {
@@ -308,7 +306,6 @@
       "post": {
         "operationId": "Logout",
         "summary": "Logout",
-        "description": "Session-gate UNVERIFIED (id-less mutating route, skipped for safety — see apidocSkipFullScopeReason). Scope is confirmed — every route is probed at zero scope — but whether a personal access token is additionally rejected here by a session-only gate is not; both security alternatives below are listed, only one is guaranteed correct.",
         "tags": [
           "Session \u0026 Account"
         ],
@@ -346,8 +343,7 @@
           {
             "session": []
           }
-        ],
-        "x-belune-session-gate": "unverified"
+        ]
       }
     },
     "/api/auth/me": {
@@ -420,7 +416,6 @@
       "put": {
         "operationId": "ChangeOwnPassword",
         "summary": "Change Own Password",
-        "description": "Session-gate UNVERIFIED (id-less mutating route, skipped for safety — see apidocSkipFullScopeReason). Scope is confirmed — every route is probed at zero scope — but whether a personal access token is additionally rejected here by a session-only gate is not; both security alternatives below are listed, only one is guaranteed correct.",
         "tags": [
           "Session \u0026 Account"
         ],
@@ -468,15 +463,13 @@
           {
             "session": []
           }
-        ],
-        "x-belune-session-gate": "unverified"
+        ]
       }
     },
     "/api/auth/profile": {
       "put": {
         "operationId": "UpdateProfile",
         "summary": "Update Profile",
-        "description": "Session-gate UNVERIFIED (id-less mutating route, skipped for safety — see apidocSkipFullScopeReason). Scope is confirmed — every route is probed at zero scope — but whether a personal access token is additionally rejected here by a session-only gate is not; both security alternatives below are listed, only one is guaranteed correct.",
         "tags": [
           "Session \u0026 Account"
         ],
@@ -519,8 +512,7 @@
           {
             "session": []
           }
-        ],
-        "x-belune-session-gate": "unverified"
+        ]
       }
     },
     "/api/auth/totp": {
@@ -581,7 +573,6 @@
       "post": {
         "operationId": "DisableTOTP",
         "summary": "Disable TOTP",
-        "description": "Session-gate UNVERIFIED (id-less mutating route, skipped for safety — see apidocSkipFullScopeReason). Scope is confirmed — every route is probed at zero scope — but whether a personal access token is additionally rejected here by a session-only gate is not; both security alternatives below are listed, only one is guaranteed correct.",
         "tags": [
           "Session \u0026 Account"
         ],
@@ -639,15 +630,13 @@
           {
             "session": []
           }
-        ],
-        "x-belune-session-gate": "unverified"
+        ]
       }
     },
     "/api/auth/totp/enroll": {
       "post": {
         "operationId": "EnrollTOTP",
         "summary": "Enroll TOTP",
-        "description": "Session-gate UNVERIFIED (id-less mutating route, skipped for safety — see apidocSkipFullScopeReason). Scope is confirmed — every route is probed at zero scope — but whether a personal access token is additionally rejected here by a session-only gate is not; both security alternatives below are listed, only one is guaranteed correct.",
         "tags": [
           "Session \u0026 Account"
         ],
@@ -697,15 +686,13 @@
           {
             "session": []
           }
-        ],
-        "x-belune-session-gate": "unverified"
+        ]
       }
     },
     "/api/auth/totp/enroll/verify": {
       "post": {
         "operationId": "VerifyTOTPEnrollment",
         "summary": "Verify TOTP Enrollment",
-        "description": "Session-gate UNVERIFIED (id-less mutating route, skipped for safety — see apidocSkipFullScopeReason). Scope is confirmed — every route is probed at zero scope — but whether a personal access token is additionally rejected here by a session-only gate is not; both security alternatives below are listed, only one is guaranteed correct.",
         "tags": [
           "Session \u0026 Account"
         ],
@@ -766,15 +753,13 @@
           {
             "session": []
           }
-        ],
-        "x-belune-session-gate": "unverified"
+        ]
       }
     },
     "/api/auth/totp/recovery-codes": {
       "post": {
         "operationId": "RegenerateRecoveryCodes",
         "summary": "Regenerate Recovery Codes",
-        "description": "Session-gate UNVERIFIED (id-less mutating route, skipped for safety — see apidocSkipFullScopeReason). Scope is confirmed — every route is probed at zero scope — but whether a personal access token is additionally rejected here by a session-only gate is not; both security alternatives below are listed, only one is guaranteed correct.",
         "tags": [
           "Session \u0026 Account"
         ],
@@ -825,8 +810,7 @@
           {
             "session": []
           }
-        ],
-        "x-belune-session-gate": "unverified"
+        ]
       }
     },
     "/api/backups": {
@@ -877,7 +861,6 @@
       "put": {
         "operationId": "UpdateBackupRemote",
         "summary": "Update Backup Remote",
-        "description": "Session-gate UNVERIFIED (id-less mutating route, skipped for safety — see apidocSkipFullScopeReason). Scope is confirmed — every route is probed at zero scope — but whether a personal access token is additionally rejected here by a session-only gate is not; both security alternatives below are listed, only one is guaranteed correct.",
         "tags": [
           "Admin — Platform Backups"
         ],
@@ -930,15 +913,13 @@
             "adminRole": [],
             "session": []
           }
-        ],
-        "x-belune-session-gate": "unverified"
+        ]
       }
     },
     "/api/backups/run": {
       "post": {
         "operationId": "TriggerBackupRun",
         "summary": "Trigger Backup Run",
-        "description": "Session-gate UNVERIFIED (id-less mutating route, skipped for safety — see apidocSkipFullScopeReason). Scope is confirmed — every route is probed at zero scope — but whether a personal access token is additionally rejected here by a session-only gate is not; both security alternatives below are listed, only one is guaranteed correct.",
         "tags": [
           "Admin — Platform Backups"
         ],
@@ -978,8 +959,7 @@
             "adminRole": [],
             "session": []
           }
-        ],
-        "x-belune-session-gate": "unverified"
+        ]
       }
     },
     "/api/backups/status": {
@@ -1027,7 +1007,6 @@
       "post": {
         "operationId": "TestBackupRemote",
         "summary": "Test Backup Remote",
-        "description": "Session-gate UNVERIFIED (id-less mutating route, skipped for safety — see apidocSkipFullScopeReason). Scope is confirmed — every route is probed at zero scope — but whether a personal access token is additionally rejected here by a session-only gate is not; both security alternatives below are listed, only one is guaranteed correct.",
         "tags": [
           "Admin — Platform Backups"
         ],
@@ -1067,8 +1046,7 @@
             "adminRole": [],
             "session": []
           }
-        ],
-        "x-belune-session-gate": "unverified"
+        ]
       }
     },
     "/api/certificates": {
@@ -1117,7 +1095,6 @@
       "post": {
         "operationId": "UploadCertificate",
         "summary": "Upload Certificate",
-        "description": "Session-gate UNVERIFIED (id-less mutating route, skipped for safety — see apidocSkipFullScopeReason). Scope is confirmed — every route is probed at zero scope — but whether a personal access token is additionally rejected here by a session-only gate is not; both security alternatives below are listed, only one is guaranteed correct.",
         "tags": [
           "Admin — Platform"
         ],
@@ -1162,8 +1139,7 @@
             "adminRole": [],
             "session": []
           }
-        ],
-        "x-belune-session-gate": "unverified"
+        ]
       }
     },
     "/api/certificates/{certificateId}": {
@@ -1211,7 +1187,6 @@
       "post": {
         "operationId": "TriggerCleanup",
         "summary": "Trigger Cleanup",
-        "description": "Session-gate UNVERIFIED (id-less mutating route, skipped for safety — see apidocSkipFullScopeReason). Scope is confirmed — every route is probed at zero scope — but whether a personal access token is additionally rejected here by a session-only gate is not; both security alternatives below are listed, only one is guaranteed correct.",
         "tags": [
           "Admin — Platform"
         ],
@@ -1261,8 +1236,7 @@
             "adminRole": [],
             "session": []
           }
-        ],
-        "x-belune-session-gate": "unverified"
+        ]
       }
     },
     "/api/deployments": {
@@ -1903,7 +1877,6 @@
       "put": {
         "operationId": "SaveGitProviderConfig",
         "summary": "Save Git Provider Config",
-        "description": "Session-gate UNVERIFIED (id-less mutating route, skipped for safety — see apidocSkipFullScopeReason). Scope is confirmed — every route is probed at zero scope — but whether a personal access token is additionally rejected here by a session-only gate is not; both security alternatives below are listed, only one is guaranteed correct.",
         "tags": [
           "Admin — Git Provider Configs"
         ],
@@ -1948,8 +1921,7 @@
             "adminRole": [],
             "session": []
           }
-        ],
-        "x-belune-session-gate": "unverified"
+        ]
       }
     },
     "/api/git/providers/github/manifest": {
@@ -2069,7 +2041,6 @@
       "post": {
         "operationId": "CreateHostShellSession",
         "summary": "Create Host Shell Session",
-        "description": "Session-gate UNVERIFIED (id-less mutating route, skipped for safety — see apidocSkipFullScopeReason). Scope is confirmed — every route is probed at zero scope — but whether a personal access token is additionally rejected here by a session-only gate is not; both security alternatives below are listed, only one is guaranteed correct.",
         "tags": [
           "Admin — Platform"
         ],
@@ -2130,8 +2101,7 @@
             "adminRole": [],
             "session": []
           }
-        ],
-        "x-belune-session-gate": "unverified"
+        ]
       }
     },
     "/api/maintenance/logs": {
@@ -2220,7 +2190,6 @@
       "post": {
         "operationId": "ClearQueue",
         "summary": "Clear Queue",
-        "description": "Session-gate UNVERIFIED (id-less mutating route, skipped for safety — see apidocSkipFullScopeReason). Scope is confirmed — every route is probed at zero scope — but whether a personal access token is additionally rejected here by a session-only gate is not; both security alternatives below are listed, only one is guaranteed correct.",
         "tags": [
           "Admin — Platform"
         ],
@@ -2260,15 +2229,13 @@
             "adminRole": [],
             "session": []
           }
-        ],
-        "x-belune-session-gate": "unverified"
+        ]
       }
     },
     "/api/maintenance/queue/clear-pending": {
       "post": {
         "operationId": "ClearPendingQueue",
         "summary": "Clear Pending Queue",
-        "description": "Session-gate UNVERIFIED (id-less mutating route, skipped for safety — see apidocSkipFullScopeReason). Scope is confirmed — every route is probed at zero scope — but whether a personal access token is additionally rejected here by a session-only gate is not; both security alternatives below are listed, only one is guaranteed correct.",
         "tags": [
           "Admin — Platform"
         ],
@@ -2308,15 +2275,13 @@
             "adminRole": [],
             "session": []
           }
-        ],
-        "x-belune-session-gate": "unverified"
+        ]
       }
     },
     "/api/maintenance/restart": {
       "post": {
         "operationId": "RestartService",
         "summary": "Restart Service",
-        "description": "Session-gate UNVERIFIED (id-less mutating route, skipped for safety — see apidocSkipFullScopeReason). Scope is confirmed — every route is probed at zero scope — but whether a personal access token is additionally rejected here by a session-only gate is not; both security alternatives below are listed, only one is guaranteed correct.",
         "tags": [
           "Admin — Platform"
         ],
@@ -2359,8 +2324,7 @@
             "adminRole": [],
             "session": []
           }
-        ],
-        "x-belune-session-gate": "unverified"
+        ]
       }
     },
     "/api/maintenance/server-ip": {
@@ -2493,7 +2457,6 @@
       "get": {
         "operationId": "StreamHostMetrics",
         "summary": "Stream Host Metrics",
-        "description": "Session-gate UNVERIFIED (streaming (SSE) route — the connection never closes, so a bounded probe can't observe it). Scope is confirmed — every route is probed at zero scope — but whether a personal access token is additionally rejected here by a session-only gate is not; both security alternatives below are listed, only one is guaranteed correct.",
         "tags": [
           "Admin — Metrics \u0026 Live Streams"
         ],
@@ -2521,8 +2484,7 @@
             "adminRole": [],
             "session": []
           }
-        ],
-        "x-belune-session-gate": "unverified"
+        ]
       }
     },
     "/api/notification-channels": {
@@ -2571,7 +2533,6 @@
       "post": {
         "operationId": "CreateNotificationChannel",
         "summary": "Create Notification Channel",
-        "description": "Session-gate UNVERIFIED (id-less mutating route, skipped for safety — see apidocSkipFullScopeReason). Scope is confirmed — every route is probed at zero scope — but whether a personal access token is additionally rejected here by a session-only gate is not; both security alternatives below are listed, only one is guaranteed correct.",
         "tags": [
           "Admin — Platform"
         ],
@@ -2616,15 +2577,13 @@
             "adminRole": [],
             "session": []
           }
-        ],
-        "x-belune-session-gate": "unverified"
+        ]
       }
     },
     "/api/notification-channels/test": {
       "post": {
         "operationId": "TestNotificationChannelParams",
         "summary": "Test Notification Channel Params",
-        "description": "Session-gate UNVERIFIED (id-less mutating route, skipped for safety — see apidocSkipFullScopeReason). Scope is confirmed — every route is probed at zero scope — but whether a personal access token is additionally rejected here by a session-only gate is not; both security alternatives below are listed, only one is guaranteed correct.",
         "tags": [
           "Admin — Platform"
         ],
@@ -2674,8 +2633,7 @@
             "adminRole": [],
             "session": []
           }
-        ],
-        "x-belune-session-gate": "unverified"
+        ]
       }
     },
     "/api/notification-channels/{channelId}": {
@@ -3010,7 +2968,6 @@
       "post": {
         "operationId": "MarkAllNotificationsRead",
         "summary": "Mark All Notifications Read",
-        "description": "Session-gate UNVERIFIED (id-less mutating route, skipped for safety — see apidocSkipFullScopeReason). Scope is confirmed — every route is probed at zero scope — but whether a personal access token is additionally rejected here by a session-only gate is not; both security alternatives below are listed, only one is guaranteed correct.",
         "tags": [
           "Stats \u0026 Notifications"
         ],
@@ -3036,15 +2993,13 @@
           {
             "session": []
           }
-        ],
-        "x-belune-session-gate": "unverified"
+        ]
       }
     },
     "/api/notifications/stream": {
       "get": {
         "operationId": "StreamNotifications",
         "summary": "Stream Notifications",
-        "description": "Session-gate UNVERIFIED (streaming (SSE) route — the connection never closes, so a bounded probe can't observe it). Scope is confirmed — every route is probed at zero scope — but whether a personal access token is additionally rejected here by a session-only gate is not; both security alternatives below are listed, only one is guaranteed correct.",
         "tags": [
           "Stats \u0026 Notifications"
         ],
@@ -3070,8 +3025,7 @@
           {
             "session": []
           }
-        ],
-        "x-belune-session-gate": "unverified"
+        ]
       }
     },
     "/api/notifications/unread-count": {
@@ -3212,7 +3166,6 @@
       "post": {
         "operationId": "CreateProject",
         "summary": "Create Project",
-        "description": "Session-gate UNVERIFIED (id-less mutating route, skipped for safety — see apidocSkipFullScopeReason). Scope is confirmed — every route is probed at zero scope — but whether a personal access token is additionally rejected here by a session-only gate is not; both security alternatives below are listed, only one is guaranteed correct.",
         "tags": [
           "Projects"
         ],
@@ -3255,8 +3208,7 @@
           {
             "session": []
           }
-        ],
-        "x-belune-session-gate": "unverified"
+        ]
       }
     },
     "/api/projects/{projectId}": {
@@ -4414,7 +4366,7 @@
       "get": {
         "operationId": "StreamBuildLogs",
         "summary": "Stream Build Logs",
-        "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope. Session-gate UNVERIFIED (streaming (SSE) route — the connection never closes, so a bounded probe can't observe it). Scope is confirmed — every route is probed at zero scope — but whether a personal access token is additionally rejected here by a session-only gate is not; both security alternatives below are listed, only one is guaranteed correct.",
+        "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
         "tags": [
           "Deployments"
         ],
@@ -4469,8 +4421,7 @@
           {
             "session": []
           }
-        ],
-        "x-belune-session-gate": "unverified"
+        ]
       }
     },
     "/api/projects/{projectId}/applications/{applicationId}/domains": {
@@ -5741,7 +5692,7 @@
       "get": {
         "operationId": "StreamLogs",
         "summary": "Stream Logs",
-        "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope. Session-gate UNVERIFIED (streaming (SSE) route — the connection never closes, so a bounded probe can't observe it). Scope is confirmed — every route is probed at zero scope — but whether a personal access token is additionally rejected here by a session-only gate is not; both security alternatives below are listed, only one is guaranteed correct.",
+        "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
         "tags": [
           "Logs \u0026 Request Traces"
         ],
@@ -5787,8 +5738,7 @@
           {
             "session": []
           }
-        ],
-        "x-belune-session-gate": "unverified"
+        ]
       }
     },
     "/api/projects/{projectId}/applications/{applicationId}/logs/history": {
@@ -5921,7 +5871,7 @@
       "get": {
         "operationId": "StreamApplicationMetrics",
         "summary": "Stream Application Metrics",
-        "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope. Session-gate UNVERIFIED (streaming (SSE) route — the connection never closes, so a bounded probe can't observe it). Scope is confirmed — every route is probed at zero scope — but whether a personal access token is additionally rejected here by a session-only gate is not; both security alternatives below are listed, only one is guaranteed correct.",
+        "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
         "tags": [
           "Metrics"
         ],
@@ -5967,8 +5917,7 @@
           {
             "session": []
           }
-        ],
-        "x-belune-session-gate": "unverified"
+        ]
       }
     },
     "/api/projects/{projectId}/applications/{applicationId}/previews": {
@@ -6370,7 +6319,7 @@
       "get": {
         "operationId": "StreamRequestLogs",
         "summary": "Stream Request Logs",
-        "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope. Session-gate UNVERIFIED (streaming (SSE) route — the connection never closes, so a bounded probe can't observe it). Scope is confirmed — every route is probed at zero scope — but whether a personal access token is additionally rejected here by a session-only gate is not; both security alternatives below are listed, only one is guaranteed correct.",
+        "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
         "tags": [
           "Logs \u0026 Request Traces"
         ],
@@ -6416,8 +6365,7 @@
           {
             "session": []
           }
-        ],
-        "x-belune-session-gate": "unverified"
+        ]
       }
     },
     "/api/projects/{projectId}/applications/{applicationId}/resources": {
@@ -10592,7 +10540,6 @@
       "post": {
         "operationId": "ReconcileProxy",
         "summary": "Reconcile Proxy",
-        "description": "Session-gate UNVERIFIED (id-less mutating route, skipped for safety — see apidocSkipFullScopeReason). Scope is confirmed — every route is probed at zero scope — but whether a personal access token is additionally rejected here by a session-only gate is not; both security alternatives below are listed, only one is guaranteed correct.",
         "tags": [
           "Admin — Platform"
         ],
@@ -10627,8 +10574,7 @@
             "adminRole": [],
             "session": []
           }
-        ],
-        "x-belune-session-gate": "unverified"
+        ]
       }
     },
     "/api/proxy/reconciler": {
@@ -10958,7 +10904,6 @@
       "get": {
         "operationId": "StreamAllRequestLogs",
         "summary": "Stream All Request Logs",
-        "description": "Session-gate UNVERIFIED (streaming (SSE) route — the connection never closes, so a bounded probe can't observe it). Scope is confirmed — every route is probed at zero scope — but whether a personal access token is additionally rejected here by a session-only gate is not; both security alternatives below are listed, only one is guaranteed correct.",
         "tags": [
           "Logs \u0026 Request Traces"
         ],
@@ -10986,8 +10931,7 @@
             "adminRole": [],
             "session": []
           }
-        ],
-        "x-belune-session-gate": "unverified"
+        ]
       }
     },
     "/api/requests/summary": {
@@ -11159,7 +11103,6 @@
       "put": {
         "operationId": "UpdateSettings",
         "summary": "Update Settings",
-        "description": "Session-gate UNVERIFIED (id-less mutating route, skipped for safety — see apidocSkipFullScopeReason). Scope is confirmed — every route is probed at zero scope — but whether a personal access token is additionally rejected here by a session-only gate is not; both security alternatives below are listed, only one is guaranteed correct.",
         "tags": [
           "Admin — Platform"
         ],
@@ -11212,8 +11155,7 @@
             "adminRole": [],
             "session": []
           }
-        ],
-        "x-belune-session-gate": "unverified"
+        ]
       }
     },
     "/api/settings/smtp": {
@@ -11259,7 +11201,6 @@
       "put": {
         "operationId": "UpdateSMTPSettings",
         "summary": "Update SMTP Settings",
-        "description": "Session-gate UNVERIFIED (id-less mutating route, skipped for safety — see apidocSkipFullScopeReason). Scope is confirmed — every route is probed at zero scope — but whether a personal access token is additionally rejected here by a session-only gate is not; both security alternatives below are listed, only one is guaranteed correct.",
         "tags": [
           "Admin — Platform"
         ],
@@ -11309,15 +11250,13 @@
             "adminRole": [],
             "session": []
           }
-        ],
-        "x-belune-session-gate": "unverified"
+        ]
       }
     },
     "/api/settings/smtp/test": {
       "post": {
         "operationId": "TestSMTPSettings",
         "summary": "Test SMTP Settings",
-        "description": "Session-gate UNVERIFIED (id-less mutating route, skipped for safety — see apidocSkipFullScopeReason). Scope is confirmed — every route is probed at zero scope — but whether a personal access token is additionally rejected here by a session-only gate is not; both security alternatives below are listed, only one is guaranteed correct.",
         "tags": [
           "Admin — Platform"
         ],
@@ -11367,8 +11306,7 @@
             "adminRole": [],
             "session": []
           }
-        ],
-        "x-belune-session-gate": "unverified"
+        ]
       }
     },
     "/api/stats": {
@@ -11606,7 +11544,6 @@
       "post": {
         "operationId": "CreateAPIToken",
         "summary": "Create API Token",
-        "description": "Session-gate UNVERIFIED (id-less mutating route, skipped for safety — see apidocSkipFullScopeReason). Scope is confirmed — every route is probed at zero scope — but whether a personal access token is additionally rejected here by a session-only gate is not; both security alternatives below are listed, only one is guaranteed correct.",
         "tags": [
           "Personal Access Tokens"
         ],
@@ -11678,13 +11615,9 @@
         },
         "security": [
           {
-            "patWrite": []
-          },
-          {
             "session": []
           }
-        ],
-        "x-belune-session-gate": "unverified"
+        ]
       }
     },
     "/api/tokens/{tokenId}": {
@@ -11785,7 +11718,6 @@
       "post": {
         "operationId": "CreateUser",
         "summary": "Create User",
-        "description": "Session-gate UNVERIFIED (id-less mutating route, skipped for safety — see apidocSkipFullScopeReason). Scope is confirmed — every route is probed at zero scope — but whether a personal access token is additionally rejected here by a session-only gate is not; both security alternatives below are listed, only one is guaranteed correct.",
         "tags": [
           "Admin — Users \u0026 Invitations"
         ],
@@ -11824,14 +11756,9 @@
         "security": [
           {
             "adminRole": [],
-            "patWrite": []
-          },
-          {
-            "adminRole": [],
             "session": []
           }
-        ],
-        "x-belune-session-gate": "unverified"
+        ]
       }
     },
     "/api/users/invitations": {
@@ -11927,7 +11854,6 @@
       "post": {
         "operationId": "InviteUser",
         "summary": "Invite User",
-        "description": "Session-gate UNVERIFIED (id-less mutating route, skipped for safety — see apidocSkipFullScopeReason). Scope is confirmed — every route is probed at zero scope — but whether a personal access token is additionally rejected here by a session-only gate is not; both security alternatives below are listed, only one is guaranteed correct.",
         "tags": [
           "Admin — Users \u0026 Invitations"
         ],
@@ -11966,14 +11892,9 @@
         "security": [
           {
             "adminRole": [],
-            "patWrite": []
-          },
-          {
-            "adminRole": [],
             "session": []
           }
-        ],
-        "x-belune-session-gate": "unverified"
+        ]
       }
     },
     "/api/users/{userId}": {

@@ -10,55 +10,55 @@
 //     its static type, then walks that type into a JSON Schema.
 //  2. DYNAMIC probing (the same chi.Walk + PAT mechanism destroy_boundary_test.go
 //     and reveal_boundary_test.go already use) tells us what static types
-//     alone cannot: which scope a route needs, and whether it's session-only.
-//     A scope requirement is a runtime CLOSURE VALUE (RequireScope("write")) —
-//     no amount of reading routes.go recovers "write" from that without
-//     actually calling the route and reading the rejection message.
+//     alone cannot: which scope a route needs. A scope requirement is a
+//     runtime CLOSURE VALUE (RequireScope("write")) — no amount of reading
+//     routes.go recovers "write" from that without actually calling the
+//     route and reading the rejection message.
 //
 // Not a correctness test — a generation tool that happens to reuse the test
 // harness (a real Postgres via testcontainers; Docker, Redis, and asynq are
-// mocked, see testutil.SetupTestServer, so even a route this generator's
-// full-scope probe actually executes never touches anything outside this
-// ephemeral run). Skipped unless GENERATE_API_REFERENCE=1 is set, so it never
-// runs as part of the ordinary suite. Invoke via `task generate:api-docs`.
+// mocked, see testutil.SetupTestServer). Skipped unless GENERATE_API_REFERENCE=1
+// is set, so it never runs as part of the ordinary suite. Invoke via
+// `task generate:api-docs`.
 //
-// Two probes per route, in the same spirit as the RequireScope/RequireSession
-// split those boundary tests already rely on:
+// One probe per route: a ZERO-SCOPE token (scopes = []string{}, non-nil-but-
+// empty — minted by inserting directly via queries.CreateAPIToken, since
+// POST /api/tokens itself now rejects an empty scopes array).
+// RequireScope/RequireScopeByMethod reject it with "token lacks required
+// scope: X", naming the requirement directly — and the handler NEVER RUNS,
+// because scopeSatisfies's loop over an empty slice can't match anything.
+// This probe is SAFE ON EVERY ROUTE, no exceptions, and needs none of the
+// id-less-mutating-route caution a probe that could execute a handler would.
+// A route gated by RequireSession with no RequireScope* in front of it at
+// all (e.g. the WS terminal tunnel) rejects the zero-scope token with a
+// different message ("this action requires a session, not a personal access
+// token") before scope ever comes into it — Scope reads as "none" for those.
 //
-//  1. A ZERO-SCOPE token (scopes = []string{}, non-nil-but-empty — minted by
-//     inserting directly via queries.CreateAPIToken, since POST /api/tokens
-//     itself now rejects an empty scopes array). RequireScope/RequireScopeByMethod
-//     reject it with "token lacks required scope: X", naming the requirement
-//     directly — and the handler NEVER RUNS, because scopeSatisfies's loop
-//     over an empty slice can't match anything. This probe is SAFE ON EVERY
-//     ROUTE, no exceptions, and is the only one skip-listed routes still get.
-//
-//  2. A FULL-SCOPE token (service.AllScopes — satisfies every RequireScope*
-//     check by construction). This probe reveals RequireSession (the route
-//     executes past the scope gate and hits the ", not a personal access
-//     token" message), but on any route that isn't otherwise gated, it
-//     EXECUTES THE HANDLER. With a dummy UUID substituted for path params, an
-//     id-having route 404s harmlessly first. The routes that don't get that
-//     protection are id-less mutating ones — withheld from this probe
-//     entirely; see apidocSkipFullScopeReason. Skipping costs nothing but
-//     Session accuracy for that one row: the zero-scope probe already gave
-//     the scope, and the row is still emitted — marked with
-//     x-belune-session-gate: unverified in the spec, never silently dropped
-//     or silently claimed session-only.
-//
-// Admin-role gating is NOT probed — it's read structurally off the same
-// chi.Walk call, for a reason specific to what reflection can and can't
-// recover: RequireRole("admin") and RequireSession are parameterless/fixed
-// (their presence in the middleware chain is the whole story, and every
-// RequireRole call in this codebase names "admin", never anything else — see
-// internal/server/routes_test.go's TestRequireRoleOnlyEverNamesAdmin, which
-// enforces that invariant at the source), so a function-name check via
-// runtime.FuncForPC is exact and free — no second HTTP round trip earns
-// anything. RequireScope(required) is different: it's parameterized by a
-// scope STRING captured in the closure, which a function name can't recover
-// without reaching into unexported runtime internals — that's the one thing
-// only a live probe can actually tell you, which is exactly why probing is
-// this generator's primary technique for scope, not a stylistic choice.
+// Admin-role AND session-only gating are NOT probed at all — both are read
+// structurally off the same chi.Walk call, for a reason specific to what
+// reflection can and can't recover: RequireRole("admin") and RequireSession
+// are both parameterless/fixed (their presence in the middleware chain is
+// the whole story, and every RequireRole call in this codebase names
+// "admin", never anything else — see internal/server/routes_test.go's
+// TestRequireRoleOnlyEverNamesAdmin, which enforces that invariant at the
+// source), so a function-name check via runtime.FuncForPC is exact and free
+// — no HTTP round trip earns anything, and there's no handler-execution risk
+// to weigh for routes a scope probe can't safely reach either. An earlier
+// version of this file probed RequireSession with a second, full-scope
+// token instead (withholding the probe, and thus the answer, on id-less
+// mutating routes) — before a peer review pointed out RequireSession is
+// exactly as structurally readable as RequireRole already was, and that the
+// permissive fallback for an unanswered probe (list a PAT scheme alongside
+// session, since the restriction "may not exist") was actively dangerous in
+// this direction: it had POST /api/tokens, POST /api/users and POST
+// /api/users/invite — session-only in reality — documented as callable with
+// a write-scoped PAT, on POST /api/tokens the exact self-mint escalation
+// path #16 exists to close. RequireScope(required) is different from both:
+// it's parameterized by a scope STRING captured in the closure, which a
+// function name can't recover without reaching into unexported runtime
+// internals — that's the one thing only a live probe can actually tell you,
+// which is exactly why probing is still this generator's technique for
+// scope, not a stylistic choice.
 //
 // SECURITY ENCODING: OpenAPI's `scopes` array on a security requirement is
 // legal ONLY for oauth2/openIdConnect schemes — for http/bearer it MUST be
@@ -135,17 +135,15 @@ func apidocErrorMessage(t *testing.T, resp *http.Response) string {
 }
 
 // apidocRoute is one route's fully observed (or structurally read, for the
-// admin flag) shape.
+// admin and session flags) shape.
 type apidocRoute struct {
-	Method       string
-	Path         string
-	Handler      string
-	Scope        string // "read"/"write"/"deploy"/"metrics"; see the UNRECOGNIZED fallback below if nothing matched
-	Session      bool   // RequireSession observed via the full-scope probe
-	Admin        bool   // RequireRole("admin") read from the middleware chain
-	Pinned       bool   // path contains {projectId} — RequireProjectAccess applies
-	NotProbed    bool   // full-scope probe withheld; Session is unknown, not false
-	NotProbedWhy string // human-readable reason, only meaningful when NotProbed
+	Method  string
+	Path    string
+	Handler string
+	Scope   string // "read"/"write"/"deploy"/"metrics"/"none"; see the UNRECOGNIZED fallback below if nothing matched
+	Session bool   // RequireSession read structurally from the middleware chain — see the top-of-file note on why this isn't probed
+	Admin   bool   // RequireRole("admin") read from the middleware chain
+	Pinned  bool   // path contains {projectId} — RequireProjectAccess applies
 }
 
 // apidocSkipPublicPrefixes are the routes with no Auth() middleware at all —
@@ -181,38 +179,6 @@ func apidocIsPublic(path string) bool {
 		}
 	}
 	return false
-}
-
-// apidocSkipFullScopeReason decides whether it's safe to let the full-scope
-// probe actually execute a route's handler, returning "" when it is and a
-// human-readable reason when it isn't. Two independent hazards, both derived
-// structurally rather than off a hand-typed list of specific paths — the
-// "hand-maintained list rots" lesson this project already applies to
-// destroy_boundary_test.go's own resource set:
-//
-//   - An id-less MUTATING route: with no existing resource for a dummy UUID
-//     to 404 against, the handler runs to completion. GET/HEAD/OPTIONS are
-//     always safe regardless of path shape (RequireScopeByMethod treats them
-//     as read, and nothing in this codebase mutates on a safe method); an
-//     id-having route is always safe too — a dummy UUID 404s first.
-//   - A STREAMING route (SSE): the connection never closes on its own, so a
-//     plain bounded GET blocks forever reading a body that has no EOF — found
-//     empirically, this generator's first run hung on StreamHostMetrics.
-//     Every streaming handler in this codebase is named Stream*, checked on
-//     the handler name reflection already extracts rather than a second
-//     hand-typed path list.
-func apidocSkipFullScopeReason(method, path, handlerName string) string {
-	if strings.HasPrefix(handlerName, "Stream") {
-		return "streaming (SSE) route — the connection never closes, so a bounded probe can't observe it"
-	}
-	switch method {
-	case http.MethodGet, http.MethodHead, http.MethodOptions:
-		return ""
-	}
-	if strings.Contains(path, "{") {
-		return ""
-	}
-	return "id-less mutating route, skipped for safety — see apidocSkipFullScopeReason"
 }
 
 // apidocFuncName returns the short name of the function a value wraps —
@@ -305,7 +271,6 @@ func TestGenerateAPIReference(t *testing.T) {
 	adminUserID := extractID(mustAuthMe(t, adminToken)["id"])
 
 	zeroScope := apidocZeroScopeToken(t, adminUserID)
-	fullScope := mintScoped(t, adminToken, service.AllScopes)
 
 	router, ok := env.Server.Config.Handler.(chi.Routes)
 	require.True(t, ok, "test server handler must be walkable as chi.Routes")
@@ -325,11 +290,12 @@ func TestGenerateAPIReference(t *testing.T) {
 			Handler: apidocFuncName(handler),
 			Pinned:  strings.Contains(route, "{projectId}"),
 			Admin:   apidocMiddlewareContains(mws, "RequireRole"),
+			Session: apidocMiddlewareContains(mws, "RequireSession"),
 		}
 
 		path := substituteDummyIDs(route)
 
-		// Probe 1: zero-scope. Safe on every route — the handler never runs,
+		// Zero-scope probe. Safe on every route — the handler never runs,
 		// since an empty scopes slice can't satisfy any RequireScope check.
 		resp := env.DoRequest(t, method, path, nil, testutil.AuthHeader(zeroScope))
 		status1 := resp.StatusCode
@@ -343,9 +309,13 @@ func TestGenerateAPIReference(t *testing.T) {
 			// ever comes into it, at ANY scope including zero. Reading
 			// routes.go would have called this "read" or "write" by the
 			// blanket default; probing catches that there is no blanket
-			// default here at all.
+			// default here at all. row.Session is already true by this point
+			// (set structurally above) — this is corroboration, not the
+			// source of truth, and the require below turns a mismatch
+			// between the two into a loud failure instead of a silently
+			// wrong row.
 			row.Scope = "none"
-			row.Session = true
+			require.True(t, row.Session, "%s %s: zero-scope probe hit the session-only rejection message, but RequireSession wasn't found structurally in its middleware chain", method, route)
 		}
 		if row.Scope == "" {
 			// Every authenticated, non-public route in this codebase sits
@@ -354,17 +324,6 @@ func TestGenerateAPIReference(t *testing.T) {
 			// wasn't rejected at all), which is itself worth surfacing
 			// loudly rather than silently emitting an incomplete row.
 			row.Scope = fmt.Sprintf("UNRECOGNIZED (%d %q)", status1, msg)
-		}
-
-		// Probe 2: full-scope, only where it's safe to let it actually run.
-		if why := apidocSkipFullScopeReason(method, route, row.Handler); why != "" {
-			row.NotProbed = true
-			row.NotProbedWhy = why
-		} else {
-			resp2 := env.DoRequest(t, method, path, nil, testutil.AuthHeader(fullScope))
-			if apidocErrorMessage(t, resp2) == "this action requires a session, not a personal access token" {
-				row.Session = true
-			}
 		}
 
 		routes = append(routes, row)
@@ -383,6 +342,23 @@ func TestGenerateAPIReference(t *testing.T) {
 	for _, r := range routes {
 		if strings.HasPrefix(r.Scope, "UNRECOGNIZED") {
 			t.Errorf("apidoc: %s %s — %s", r.Method, r.Path, r.Scope)
+		}
+		// RequireSession rejects every PAT unconditionally (see
+		// middleware.RequireSession) — a session-gated route's emitted
+		// security must never list a pat* scheme as an alternative, or the
+		// spec documents an escalation that doesn't exist. This is the
+		// invariant a peer review found broken for exactly the three
+		// highest-stakes routes it could be broken for (POST /api/tokens,
+		// POST /api/users, POST /api/users/invite) — checked directly
+		// against the real router's middleware chain, not re-derived.
+		if r.Session {
+			for _, req := range apidocSecurity(r) {
+				for scheme := range req {
+					if strings.HasPrefix(scheme, "pat") {
+						t.Errorf("apidoc: %s %s is RequireSession-gated but its emitted security still lists %q — a personal access token would be wrongly documented as able to call it", r.Method, r.Path, scheme)
+					}
+				}
+			}
 		}
 	}
 
@@ -410,8 +386,8 @@ type apidocDomain struct {
 
 // apidocDomainOrder is the generated reference's table of contents — a
 // curated presentation order, not a safety mechanism. Unlike
-// apidocSkipPublicPrefixes or apidocSkipFullScopeReason, getting this list
-// wrong costs nothing but tidiness: apidocClassify's default case ("uncategorized")
+// apidocSkipPublicPrefixes, getting this list wrong costs nothing but
+// tidiness: apidocClassify's default case ("uncategorized")
 // guarantees a route can never be silently dropped for lack of a matching
 // domain, only poorly filed until someone adds a rule for it.
 var apidocDomainOrder = []struct{ slug, title string }{
@@ -1054,15 +1030,14 @@ type oasParameter struct {
 	Schema   apidocSchema `json:"schema"`
 }
 type oasOperation struct {
-	OperationID        string                 `json:"operationId"`
-	Summary            string                 `json:"summary,omitempty"`
-	Description        string                 `json:"description,omitempty"`
-	Tags               []string               `json:"tags,omitempty"`
-	Parameters         []oasParameter         `json:"parameters,omitempty"`
-	RequestBody        *oasRequestBody        `json:"requestBody,omitempty"`
-	Responses          map[string]oasResponse `json:"responses"`
-	Security           []map[string][]string  `json:"security"`
-	XBeluneSessionGate string                 `json:"x-belune-session-gate,omitempty"`
+	OperationID string                 `json:"operationId"`
+	Summary     string                 `json:"summary,omitempty"`
+	Description string                 `json:"description,omitempty"`
+	Tags        []string               `json:"tags,omitempty"`
+	Parameters  []oasParameter         `json:"parameters,omitempty"`
+	RequestBody *oasRequestBody        `json:"requestBody,omitempty"`
+	Responses   map[string]oasResponse `json:"responses"`
+	Security    []map[string][]string  `json:"security"`
 }
 type oasRequestBody struct {
 	Required bool                    `json:"required"`
@@ -1184,18 +1159,11 @@ func apidocPathParameters(path string) []oasParameter {
 }
 
 // apidocOperationDescription surfaces the caveats a schema alone can't carry
-// — project-pinning has no OpenAPI concept at all, and an unverified session
-// gate needs prose alongside its x-belune-session-gate marker so a reader
-// (not just a machine) sees the caveat.
+// — project-pinning has no OpenAPI concept at all.
 func apidocOperationDescription(r apidocRoute) string {
 	var notes []string
 	if r.Pinned {
 		notes = append(notes, "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.")
-	}
-	if r.NotProbed {
-		notes = append(notes, fmt.Sprintf(
-			"Session-gate UNVERIFIED (%s). Scope is confirmed — every route is probed at zero scope — but whether a personal access token is additionally rejected here by a session-only gate is not; both security alternatives below are listed, only one is guaranteed correct.",
-			r.NotProbedWhy))
 	}
 	return strings.Join(notes, " ")
 }
@@ -1203,8 +1171,6 @@ func apidocOperationDescription(r apidocRoute) string {
 const apidocSpecDescription = `Generated from the running API by probing every registered route with a personal access token and statically resolving every request/response Go type — not hand-written, and not a reading of routes.go. See the API Access guide for how to authenticate and the scope model.
 
 **"required" is intentionally omitted from every request schema.** Field optionality in this codebase is enforced imperatively (e.g. ` + "`if req.Name == \"\" { ... }`" + `), not type-encoded — most optional fields aren't even pointers. Inferring "required" from arbitrary validation code is a fundamentally fuzzier problem than the static type resolution the rest of this spec relies on, so it is left honestly unspecified rather than risked wrong.
-
-**Session-gate unverified on some routes** (marked ` + "`x-belune-session-gate: \"unverified\"`" + ` on the operation): a small number of destructive admin actions and streaming (SSE) routes aren't safe to actually execute during generation, so whether a personal access token is additionally rejected by a session-only gate is unconfirmed for those. Both the scope-based and session-only security alternatives are listed on those operations; only one is guaranteed correct.
 
 **Project-pinning has no OpenAPI representation** — a token pinned to one project rejected outside it is noted in the affected operations' descriptions, not encoded structurally.`
 
@@ -1263,9 +1229,6 @@ func apidocBuildDocument(t *testing.T, routes []apidocRoute, sig map[string]apid
 			Parameters:  apidocPathParameters(r.Path),
 			Security:    apidocSecurity(r),
 			Responses:   map[string]oasResponse{},
-		}
-		if r.NotProbed {
-			op.XBeluneSessionGate = "unverified"
 		}
 
 		ops := sig[r.Handler]

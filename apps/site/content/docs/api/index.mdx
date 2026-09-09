@@ -15,10 +15,7 @@ The spec itself is served at [`/openapi.json`](/openapi.json) — a stable, publ
 
 ## What This Reference Shows, and What It Doesn't
 
-Each endpoint's page below covers its parameters, request body, and response shapes for every status code the generator observed. Two things are deliberately left out rather than guessed at:
-
-- **`required` is omitted from every request schema.** Field optionality in this codebase is enforced imperatively, not type-encoded — inferring it from validation code would be a fundamentally fuzzier problem than the static type resolution the rest of this spec relies on.
-- **A handful of routes carry `x-belune-session-gate: unverified`** — destructive admin actions with no id in the path, and streaming (SSE) routes, aren't safe to actually execute during generation. Their required *scope* is fully accurate (every route is probed at zero scope); only whether a personal access token is *additionally* rejected by a session-only gate is unconfirmed for those. Both security alternatives are listed on the affected operations.
+Each endpoint's page below covers its parameters, request body, and response shapes for every status code the generator observed. One thing is deliberately left out rather than guessed at: **`required`**, omitted from every request schema. Field optionality in this codebase is enforced imperatively, not type-encoded — inferring it from validation code would be a fundamentally fuzzier problem than the static type resolution the rest of this spec relies on.
 
 Project-pinning (a token pinned to one project rejected outside it) has no OpenAPI representation either — it's called out in the affected operations' own descriptions instead.
 
