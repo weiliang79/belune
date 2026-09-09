@@ -56,7 +56,13 @@ jobs:
         run: npm ci
 
       - name: Regenerate the API reference
-        run: go test -count=1 -timeout=120s -run TestGenerateAPIReference ./internal/handler/...
+        # -run must keep including TestAPIDocAllMarshalerTypesHandled — it's
+        # gated behind the same GENERATE_API_REFERENCE env var as the
+        # generator itself (it re-walks the generator's own output), so
+        # narrowing -run to just TestGenerateAPIReference silently stops it
+        # from ever running, anywhere, defeating the guard it exists to be.
+        # Found by peer review.
+        run: go test -count=1 -timeout=120s -run 'TestGenerateAPIReference|TestAPIDocAllMarshalerTypesHandled' ./internal/handler/...
         env:
           GENERATE_API_REFERENCE: "1"
 
