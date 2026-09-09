@@ -24,7 +24,7 @@ export default function NotFound() {
           Home
         </Link>
         <Link
-          href="/docs"
+          href="/docs/core"
           className="inline-flex h-11 items-center rounded-lg border border-fd-border px-5 font-medium transition-colors hover:bg-fd-accent"
         >
           Read the docs

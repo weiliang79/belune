@@ -80,7 +80,7 @@ function Hero() {
           </div>
           <div className="mt-8 flex flex-wrap gap-3">
             <Link
-              href="/docs"
+              href="/docs/core"
               className="inline-flex h-11 items-center rounded-lg bg-fd-primary px-5 font-medium text-fd-primary-foreground transition-opacity hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fd-primary"
             >
               Read the docs
@@ -482,7 +482,7 @@ function Footer() {
           </span>
         </div>
         <nav className="flex flex-wrap gap-x-6 gap-y-2 text-sm text-fd-muted-foreground">
-          <Link href="/docs" className="hover:text-fd-foreground">
+          <Link href="/docs/core" className="hover:text-fd-foreground">
             Docs
           </Link>
           <a

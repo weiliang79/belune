@@ -4,7 +4,7 @@
   "root": true,
   "pages": [
     "---Overview---",
-    "features",
+    "index",
     "architecture",
     "install",
     "updating",

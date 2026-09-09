@@ -27,7 +27,7 @@
 /docs/architecture  /docs/core/architecture  301
 /docs/database/backup-restore  /docs/core/database/backup-restore  301
 /docs/database/overview  /docs/core/database/overview  301
-/docs/features  /docs/core/features  301
+/docs/features  /docs/core  301
 /docs/install  /docs/core/install  301
 /docs/project/backup-destinations  /docs/core/project/backup-destinations  301
 /docs/project/overview  /docs/core/project/overview  301
@@ -45,3 +45,13 @@
 /docs/uninstall  /docs/core/uninstall  301
 /docs/updating  /docs/core/updating  301
 /docs/api-access  /docs/api/access  301
+
+# Features became the Core section's own landing page 2026-09-09 — its
+# content moved from /docs/core/features to /docs/core itself (Fumadocs
+# resolves a folder's own index.mdx at the folder's own path, no extra
+# segment). Same 301-everything-old policy as above.
+/docs/core/features  /docs/core  301
+
+# Bare /docs now sends a visitor straight into the Core guides rather than
+# stopping at the intro page first.
+/docs  /docs/core  301
