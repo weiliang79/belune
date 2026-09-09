@@ -1,16 +1,6 @@
 {
   "title": "Session & Account",
   "pages": [
-    "get-alert-preferences",
-    "update-alert-preferences",
-    "logout",
-    "me",
-    "change-own-password",
-    "update-profile",
-    "get-totp-status",
-    "disable-totp",
-    "enroll-totp",
-    "verify-totp-enrollment",
-    "regenerate-recovery-codes"
+    "me"
   ]
 }

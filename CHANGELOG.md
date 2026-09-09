@@ -12,6 +12,29 @@ Belune is pre-1.0. The versioning contract while it stays there:
 Release notes for each version are also published on the
 [Releases page](https://github.com/weiliang79/belune/releases).
 
+## [Unreleased]
+
+### Personal access tokens can no longer manage the account itself
+
+A PAT manages infrastructure — deploying, editing environment variables,
+running backups — not the account it belongs to. The following now require
+a live dashboard session, joining [deleting or restoring data, reading a
+stored secret, and minting or revoking tokens, which already
+did](https://belune.dev/docs/api/access#what-a-token-can-never-do):
+
+- Changing your password or profile, and logging out.
+- Enrolling, disabling, or checking the status of two-factor authentication,
+  and regenerating recovery codes.
+- Reading or changing notification preferences.
+- **Listing your own personal access tokens.** The list includes every
+  token's scopes and last-used time — read-only, but still a credential
+  inventory a leaked token could use to find the one that holds `write`.
+
+None of this closes an account-takeover path: password changes, disabling
+TOTP, and regenerating recovery codes already required your current
+password (and a current second factor, where one is enrolled) before this.
+It's a narrower surface for a leaked token to see, not a vulnerability fix.
+
 ## [0.1.6]
 
 ### Projects can now be shared with your team

@@ -39,11 +39,12 @@ A token's reach also follows its owner: it can see and do whatever the owner's r
 
 ## What a Token Can Never Do
 
-Four things stay behind a live dashboard session no matter what scope a token carries. This is deliberate — a leaked token should be a bad day, not a catastrophe.
+Five things stay behind a live dashboard session no matter what scope a token carries. This is deliberate — a leaked token should be a bad day, not a catastrophe.
 
 - **Delete or restore anything.** Every project, application, database, domain, volume, and backup delete or restore — plus certificate deletion and orphaned-backup cleanup — rejects a token outright.
 - **Read a stored secret.** Database connection credentials, deploy-hook tokens, webhook secrets, environment variable values, and file mount contents are all decrypted on demand and returned as plaintext — never to a token, even at `write` scope.
 - **Manage tokens or users.** Minting or revoking a personal access token, and creating, inviting, deleting, changing the role of, or resetting the password or two-factor authentication of any user, all require a session.
+- **Manage your own account, or enumerate your tokens.** Changing your password or profile, logging out, enrolling, disabling, or checking the status of two-factor authentication, regenerating recovery codes, and reading or changing notification preferences all require a session — a token manages infrastructure, not the account it belongs to. Listing your own tokens joins them: read-only, but the list includes every token's scopes and last-used time, which is a credential inventory a leaked token could use to find the one that holds `write`. ([`GET /auth/me`](/docs/api/account/me), reporting the calling token's own identity, is not affected — it's how a script confirms what it authenticated as.)
 - **Open a terminal.** Both starting a container exec session and the WebSocket tunnel it uses reject a token.
 
 Each of these returns `403` with `{"error": "this action requires a session, not a personal access token"}` — a different message from a plain scope mismatch, so a script can tell "wrong scope, mint a wider token" apart from "no token reaches this, ever."

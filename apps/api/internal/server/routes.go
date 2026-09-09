@@ -216,33 +216,51 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService,
 				r.Use(middleware.RequireScopeByMethod())
 				r.Use(middleware.RequireProjectAccess())
 
-				r.Post("/api/auth/logout", h.Logout)
+				// A PAT manages infrastructure, not the account itself: every
+				// route below (through the tokens block) now requires a live
+				// session, except Me — reporting the token's OWN identity and
+				// role is how a script confirms what it authenticated as, not
+				// account management. None of this closes an account-takeover
+				// path that existed — ChangeOwnPassword bcrypt-verifies
+				// current_password, DisableTOTP/RegenerateRecoveryCodes each
+				// already required the password AND a current second factor,
+				// EnrollTOTP already required the password, and UpdateProfile
+				// only ever wrote username/first/last name, never email. This
+				// is defense in depth plus removing a recon surface, not a
+				// vulnerability fix.
+				r.With(middleware.RequireSession()).Post("/api/auth/logout", h.Logout)
 				r.Get("/api/auth/me", h.Me)
-				r.Put("/api/auth/password", h.ChangeOwnPassword)
-				r.Put("/api/auth/profile", h.UpdateProfile)
+				r.With(middleware.RequireSession()).Put("/api/auth/password", h.ChangeOwnPassword)
+				r.With(middleware.RequireSession()).Put("/api/auth/profile", h.UpdateProfile)
 
-				// Two-factor: the mutations re-check your password before taking
-				// effect (see totp.go). That is NOT a session gate — a PAT that
-				// also somehow holds the account password could still call these.
-				// Deliberately left that way for this PR (project_v016_plan's PR4
-				// notes record it as an explicit deferral, not an oversight); worth
-				// another look if PATs are trusted with more in a future release.
-				r.Get("/api/auth/totp", h.GetTOTPStatus)
-				r.Post("/api/auth/totp/enroll", h.EnrollTOTP)
-				r.Post("/api/auth/totp/enroll/verify", h.VerifyTOTPEnrollment)
-				r.Post("/api/auth/totp/disable", h.DisableTOTP)
-				r.Post("/api/auth/totp/recovery-codes", h.RegenerateRecoveryCodes)
+				// GetTOTPStatus is read-only but reports whether MFA is enabled
+				// — security posture is recon value on its own, so it's gated
+				// with the mutations rather than carved out as PAT-safe.
+				r.With(middleware.RequireSession()).Get("/api/auth/totp", h.GetTOTPStatus)
+				r.With(middleware.RequireSession()).Post("/api/auth/totp/enroll", h.EnrollTOTP)
+				r.With(middleware.RequireSession()).Post("/api/auth/totp/enroll/verify", h.VerifyTOTPEnrollment)
+				r.With(middleware.RequireSession()).Post("/api/auth/totp/disable", h.DisableTOTP)
+				r.With(middleware.RequireSession()).Post("/api/auth/totp/recovery-codes", h.RegenerateRecoveryCodes)
 
-				r.Get("/api/account/alert-preferences", h.GetAlertPreferences)
-				r.Put("/api/account/alert-preferences", h.UpdateAlertPreferences)
+				// Notification config, not infrastructure — the more arguable
+				// half of this gate (someone might reasonably script it), gated
+				// for consistency with the principle above rather than a sharp
+				// security line.
+				r.With(middleware.RequireSession()).Get("/api/account/alert-preferences", h.GetAlertPreferences)
+				r.With(middleware.RequireSession()).Put("/api/account/alert-preferences", h.UpdateAlertPreferences)
 
 				// Personal access tokens: self-service, scoped to the caller. No
 				// admin oversight view exists in v1 — see project_v016_plan.
-				// Minting and revoking require a live session — a PAT calling
-				// these would be a self-propagation path (mint a longer-lived
-				// replacement, revoke the original) that scope enforcement alone
-				// cannot close. Listing stays PAT-accessible: it is read-only.
-				r.Get("/api/tokens", h.ListAPITokens)
+				// Minting and revoking already required a live session — a PAT
+				// calling them would be a self-propagation path (mint a longer-
+				// lived replacement, revoke the original) scope enforcement
+				// alone can't close. Listing now joins them: it returns every
+				// token's id, name, scopes, role_at_issue, and last-used/expiry
+				// timestamps — masked correctly, but still a credential
+				// inventory a leaked low-scope token could use to map out which
+				// other tokens exist, which holds write, which hasn't been used
+				// in months, and the id DeleteAPIToken takes.
+				r.With(middleware.RequireSession()).Get("/api/tokens", h.ListAPITokens)
 				r.With(middleware.RequireSession()).Post("/api/tokens", h.CreateAPIToken)
 				r.With(middleware.RequireSession()).Delete("/api/tokens/{tokenId}", h.DeleteAPIToken)
 

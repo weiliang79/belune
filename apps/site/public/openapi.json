@@ -117,9 +117,6 @@
         },
         "security": [
           {
-            "patRead": []
-          },
-          {
             "session": []
           }
         ]
@@ -163,9 +160,6 @@
           }
         },
         "security": [
-          {
-            "patWrite": []
-          },
           {
             "session": []
           }
@@ -338,9 +332,6 @@
         },
         "security": [
           {
-            "patWrite": []
-          },
-          {
             "session": []
           }
         ]
@@ -458,9 +449,6 @@
         },
         "security": [
           {
-            "patWrite": []
-          },
-          {
             "session": []
           }
         ]
@@ -506,9 +494,6 @@
           }
         },
         "security": [
-          {
-            "patWrite": []
-          },
           {
             "session": []
           }
@@ -560,9 +545,6 @@
           }
         },
         "security": [
-          {
-            "patRead": []
-          },
           {
             "session": []
           }
@@ -625,9 +607,6 @@
         },
         "security": [
           {
-            "patWrite": []
-          },
-          {
             "session": []
           }
         ]
@@ -680,9 +659,6 @@
           }
         },
         "security": [
-          {
-            "patWrite": []
-          },
           {
             "session": []
           }
@@ -748,9 +724,6 @@
         },
         "security": [
           {
-            "patWrite": []
-          },
-          {
             "session": []
           }
         ]
@@ -804,9 +777,6 @@
           }
         },
         "security": [
-          {
-            "patWrite": []
-          },
           {
             "session": []
           }
@@ -11533,9 +11503,6 @@
           }
         },
         "security": [
-          {
-            "patRead": []
-          },
           {
             "session": []
           }

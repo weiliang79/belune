@@ -339,6 +339,7 @@ func TestGenerateAPIReference(t *testing.T) {
 	})
 
 	t.Logf("apidoc: probed %d routes", len(routes))
+	sessionRoutes := 0
 	for _, r := range routes {
 		if strings.HasPrefix(r.Scope, "UNRECOGNIZED") {
 			t.Errorf("apidoc: %s %s — %s", r.Method, r.Path, r.Scope)
@@ -352,6 +353,7 @@ func TestGenerateAPIReference(t *testing.T) {
 		// POST /api/users, POST /api/users/invite) — checked directly
 		// against the real router's middleware chain, not re-derived.
 		if r.Session {
+			sessionRoutes++
 			for _, req := range apidocSecurity(r) {
 				for scheme := range req {
 					if strings.HasPrefix(scheme, "pat") {
@@ -361,6 +363,14 @@ func TestGenerateAPIReference(t *testing.T) {
 			}
 		}
 	}
+	// Pinned, not a floor: 27 (destroy/restore + reveal + terminal +
+	// mint/revoke-token routes, all pre-existing) + 11 (GET /api/tokens plus
+	// the account/auth/TOTP routes gated afterward — a PAT manages
+	// infrastructure, not the account itself; see routes.go). If this moves,
+	// a route was added, removed, or re-gated — worth an explicit look
+	// either way, the same reasoning destroy_boundary_test.go and
+	// reveal_boundary_test.go's own sanity floors give for their sets.
+	require.Equal(t, 38, sessionRoutes, "expected exactly 38 RequireSession routes")
 
 	sig, reg := apidocExtractTypes(t)
 	doc := apidocBuildDocument(t, routes, sig, reg)
