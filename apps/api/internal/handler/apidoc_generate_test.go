@@ -364,13 +364,20 @@ func TestGenerateAPIReference(t *testing.T) {
 		}
 	}
 	// Pinned, not a floor: 27 (destroy/restore + reveal + terminal +
-	// mint/revoke-token routes, all pre-existing) + 11 (GET /api/tokens plus
+	// mint/revoke-token routes, all pre-existing) + 9 (GET /api/tokens plus
 	// the account/auth/TOTP routes gated afterward — a PAT manages
-	// infrastructure, not the account itself; see routes.go). If this moves,
-	// a route was added, removed, or re-gated — worth an explicit look
-	// either way, the same reasoning destroy_boundary_test.go and
-	// reveal_boundary_test.go's own sanity floors give for their sets.
-	require.Equal(t, 38, sessionRoutes, "expected exactly 38 RequireSession routes")
+	// infrastructure, not the account itself; see routes.go). Was 38 with
+	// GET/PUT /api/account/alert-preferences also gated — reverted (see
+	// routes.go): alert preferences are infrastructure config, not account
+	// security, and gating them bought no credential exposure or takeover
+	// protection. This constant is deliberately edited only after watching
+	// the test fail at the old value first (confirmed: 38 -> 36 when the
+	// routes changed, before this constant did), the same way a floor
+	// assertion is meant to be moved. If this moves again, a route was
+	// added, removed, or re-gated — worth an explicit look either way, the
+	// same reasoning destroy_boundary_test.go and reveal_boundary_test.go's
+	// own sanity floors give for their sets.
+	require.Equal(t, 36, sessionRoutes, "expected exactly 36 RequireSession routes")
 
 	sig, reg := apidocExtractTypes(t)
 	doc := apidocBuildDocument(t, routes, sig, reg)

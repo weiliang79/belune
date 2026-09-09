@@ -217,7 +217,7 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService,
 				r.Use(middleware.RequireProjectAccess())
 
 				// A PAT manages infrastructure, not the account itself: every
-				// route below (through the tokens block) now requires a live
+				// route below through the TOTP block now requires a live
 				// session, except Me — reporting the token's OWN identity and
 				// role is how a script confirms what it authenticated as, not
 				// account management. None of this closes an account-takeover
@@ -242,12 +242,18 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService,
 				r.With(middleware.RequireSession()).Post("/api/auth/totp/disable", h.DisableTOTP)
 				r.With(middleware.RequireSession()).Post("/api/auth/totp/recovery-codes", h.RegenerateRecoveryCodes)
 
-				// Notification config, not infrastructure — the more arguable
-				// half of this gate (someone might reasonably script it), gated
-				// for consistency with the principle above rather than a sharp
-				// security line.
-				r.With(middleware.RequireSession()).Get("/api/account/alert-preferences", h.GetAlertPreferences)
-				r.With(middleware.RequireSession()).Put("/api/account/alert-preferences", h.UpdateAlertPreferences)
+				// Alert preferences are infrastructure config (deployment
+				// failures, resource thresholds — the things a token already
+				// manages), not account security, so they were briefly gated
+				// above alongside the account-security block and then moved
+				// back here: a provisioning script configuring its own alert
+				// thresholds is legitimate, gating bought no credential
+				// exposure or takeover-path protection, and the only "recon"
+				// given up is "this account receives email." Deliberately on
+				// the other side of the "PAT manages infrastructure, not the
+				// account" line from everything above it.
+				r.Get("/api/account/alert-preferences", h.GetAlertPreferences)
+				r.Put("/api/account/alert-preferences", h.UpdateAlertPreferences)
 
 				// Personal access tokens: self-service, scoped to the caller. No
 				// admin oversight view exists in v1 — see project_v016_plan.

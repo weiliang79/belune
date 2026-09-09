@@ -25,21 +25,25 @@ did](https://belune.dev/docs/api/access#what-a-token-can-never-do):
 - Changing your password or profile, and logging out.
 - Enrolling, disabling, or checking the status of two-factor authentication,
   and regenerating recovery codes.
-- Reading or changing notification preferences.
 - **Listing your own personal access tokens.** The list includes every
   token's scopes and last-used time — read-only, but still a credential
   inventory a leaked token could use to find the one that holds `write`.
+
+Notification preferences were considered and left alone: they're
+infrastructure config (deployment failures, resource thresholds — the same
+things a token already manages), not account security, so a token can still
+read and change them.
 
 None of this closes an account-takeover path: password changes, disabling
 TOTP, and regenerating recovery codes already required your current
 password (and a current second factor, where one is enrolled) before this.
 It's a narrower surface for a leaked token to see, not a vulnerability fix.
 
-**Upgrading from 0.1.6:** all four bullets above were PAT-callable there. If
-you have a script that changes its own password, manages TOTP, edits
-notification preferences, or lists its own tokens using a personal access
-token, it will start getting `403` instead of `200` — point it at a session
-credential instead, or drop the call if it isn't essential.
+**Upgrading from 0.1.6:** all three bullets above were PAT-callable there. If
+you have a script that changes its own password, manages TOTP, or lists its
+own tokens using a personal access token, it will start getting `403`
+instead of `200` — point it at a session credential instead, or drop the
+call if it isn't essential. Notification-preference calls are unaffected.
 
 ## [0.1.6]
 

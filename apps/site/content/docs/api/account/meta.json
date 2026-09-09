@@ -1,6 +1,8 @@
 {
   "title": "Session & Account",
   "pages": [
+    "get-alert-preferences",
+    "update-alert-preferences",
     "me"
   ]
 }

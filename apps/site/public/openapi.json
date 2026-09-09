@@ -117,6 +117,9 @@
         },
         "security": [
           {
+            "patRead": []
+          },
+          {
             "session": []
           }
         ]
@@ -160,6 +163,9 @@
           }
         },
         "security": [
+          {
+            "patWrite": []
+          },
           {
             "session": []
           }
