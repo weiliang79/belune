@@ -42,14 +42,18 @@ export default async function Page(props: PageProps<'/docs/[[...slug]]'>) {
 
   return (
     <DocsPage toc={page.data.toc} full={page.data.full}>
-      {/* Generated api/*.mdx pages skip the title/description/toolbar row —
-          <OpenAPIPage> renders its own operation title (showTitle, set by
-          generate-api-pages.mjs), so DocsTitle here would be a duplicate,
-          and its two-column layout (code samples pinned to the right) reads
-          better without competing chrome above it. */}
+      {/* The title stays for generated api/*.mdx pages too, matching
+          Fumadocs' own OpenAPI reference pages (e.g.
+          fumadocs.dev/docs/openapi/planets/getAllData) — <OpenAPIPage>'s
+          `showTitle` prop does NOT render a page-level heading itself
+          (verified live: hiding DocsTitle left no title at all), so this is
+          the only thing that does. Description and the Copy-Markdown/Open
+          toolbar stay hidden on those pages by request — the two-column
+          layout (code samples pinned to the right) reads better without
+          the extra rows competing for space above it. */}
+      <DocsTitle>{page.data.title}</DocsTitle>
       {!isOpenAPIPage && (
         <>
-          <DocsTitle>{page.data.title}</DocsTitle>
           <DocsDescription className="mb-0">{page.data.description}</DocsDescription>
           <div className="flex flex-row gap-2 items-center border-b pb-6">
             <MarkdownCopyButton markdownUrl={markdownUrl} />
