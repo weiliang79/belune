@@ -29,8 +29,12 @@
 // prose already covers exactly this set).
 //
 // PREVIEW: the two Git domains nest under a shared "Git" separator — see
-// the block near the bottom, past the top-level meta.json write. Not yet
-// the final shape; do not merge on its own (that block says why).
+// the block near the bottom, past the top-level meta.json write. The one
+// thing that made this unsafe to merge on its own — "Admin — Git Provider
+// Configs" losing its admin-audience signal in the rename to "Provider
+// Configs" — is fixed by the sidebar's "Admin only" badge (see
+// markAdminOperations below and src/lib/source.tsx); the nesting shape
+// itself is still the user's call to finalize.
 import { createOpenAPI } from 'fumadocs-openapi/server';
 import { generateFiles } from 'fumadocs-openapi';
 import { writeFileSync, readFileSync, readdirSync, rmSync } from 'node:fs';
@@ -131,6 +135,16 @@ function isPatCallable(operation) {
   return (operation.security ?? []).some((requirement) => Object.keys(requirement).some((scheme) => scheme.startsWith('pat')));
 }
 
+// isAdminGated is THE single predicate the sidebar's "Admin only" badges
+// derive from (src/lib/source.tsx reads it back off each page's own
+// frontmatter, not the spec directly — see markAdminOperations below for
+// why) — same "derive it, don't hand-list it" reasoning as isPatCallable.
+// apidocSecurity ANDs adminRole into every alternative uniformly when
+// RequireRole gates a route, so checking any one alternative is enough.
+function isAdminGated(operation) {
+  return (operation.security ?? []).some((requirement) => 'adminRole' in requirement);
+}
+
 const fullSpec = JSON.parse(readFileSync(SPEC_PATH, 'utf8'));
 const pagesSpec = structuredClone(fullSpec);
 for (const [path, methods] of Object.entries(pagesSpec.paths)) {
@@ -176,6 +190,44 @@ for (const e of readdirSync(OUT_DIR, { withFileTypes: true })) {
   if (e.isDirectory() && OWNED.has(e.name)) rmSync(join(OUT_DIR, e.name), { recursive: true, force: true });
 }
 
+// markAdminOperations is generateFiles's beforeWrite hook (documented as
+// "can add/change/remove output files before writing to file system") — the
+// seam used to inject an `admin: true` frontmatter flag onto every
+// admin-gated operation's page, WITHOUT threading a second lookup through
+// fumadocs-openapi's own template generation (which has no option for
+// extra frontmatter fields). Each generated .mdx already embeds the
+// operation it covers as `operations={[{"path":...,"method":...}]}` in its
+// body (regex-extracted here rather than mapped through
+// generateFilesOnly's internal per-schema `generated`/`generatedEntries`
+// context, which is keyed by schema id and entry structure this script
+// doesn't otherwise need to know) — resolving that back against pagesSpec
+// (the same filtered clone generateFiles itself ran against, so every
+// operation a file exists for is guaranteed present in it) gives the
+// answer. `admin` is a plain top-level frontmatter key, inserted right
+// after the `title:` line — always the first line, always a single line
+// (never folds, unlike `description`), so anchoring there is unambiguous.
+//
+// Why frontmatter and not a wired-through prop: src/lib/source.tsx builds
+// the SIDEBAR TREE from page data (source.getPages()), which has no
+// `security` field at all — the spec never reaches that far. Emitting the
+// flag onto each generated page keeps openapi.json the single source of
+// truth while still making it visible where the sidebar-tree code needs
+// it. source.config.ts's pageSchema has to declare `admin` too, or Zod
+// silently strips it (checked by reading the schema, not assumed) — see
+// the `admin: z.boolean().optional()` extension there.
+function markAdminOperations(files) {
+  for (const file of files) {
+    if (!file.path.endsWith('.mdx')) continue;
+    const match = file.content.match(/operations=\{\[\{"path":"([^"]+)","method":"([^"]+)"\}\]\}/);
+    if (!match) continue;
+    const [, path, method] = match;
+    const operation = pagesSpec.paths[path]?.[method];
+    if (operation && isAdminGated(operation)) {
+      file.content = file.content.replace(/^(---\ntitle: .*\n)/, '$1admin: true\n');
+    }
+  }
+}
+
 // createOpenAPI's `input` accepts an in-memory document (SchemaRecord) as an
 // alternative to a file path — verified by reading fumadocs-openapi's own
 // loader (server/index.js's getSchema, and @fumadocs/api-docs's bundle(),
@@ -186,7 +238,7 @@ for (const e of readdirSync(OUT_DIR, { withFileTypes: true })) {
 //
 // The SchemaRecord key MUST be SPEC_PATH itself, not an arbitrary id: each
 // generated .mdx embeds it verbatim as <Comp document="...">, and that value
-// is looked up again at request/build time against src/lib/source.ts's own,
+// is looked up again at request/build time against src/lib/source.tsx's own,
 // entirely separate `createOpenAPI({ input: ['./public/openapi.json'] })` —
 // found by an actual `npm run build` failure ("Failed to resolve input:
 // openapi") when this was first written with an arbitrary key, not
@@ -218,6 +270,7 @@ await generateFiles({
     return kebabCase(operation.operationId);
   },
   meta: { folderStyle: 'folder' },
+  beforeWrite: markAdminOperations,
 });
 
 // The above also regenerates the TOP-LEVEL content/docs/api/meta.json (one
@@ -283,12 +336,13 @@ writeFileSync(
 // general nesting mechanism, just this one preview), and synthesize the
 // parent's.
 //
-// ⚠️ NOT READY TO SHIP ALONE: "Admin — Git Provider Configs" carried its
-// admin-only audience in its title. Renaming it to "Provider Configs" here
-// loses that signal — acceptable for a preview, not for a merge. The
-// planned fix is an "Admin only" badge (Folder.name/Item.name are ReactNode
-// in fumadocs-core — same technique the tab icons already use), not yet
-// built. Do not merge this state on its own.
+// "Admin — Git Provider Configs" carried its admin-only audience in its
+// title; renaming it to "Provider Configs" here would have lost that signal
+// on its own. Restored by the "Admin only" sidebar badge in
+// src/lib/source.tsx (Folder.name/Separator.name/Item.name are all
+// ReactNode in fumadocs-core — same technique the tab icons already use),
+// computed there from each page's `admin` frontmatter (markAdminOperations
+// above), not hand-listed here.
 if (presentDirs.has('git')) {
   const CHILD_TITLES = { integrations: 'Integrations', providers: 'Provider Configs' };
   const gitChildren = readdirSync(join(OUT_DIR, 'git'), { withFileTypes: true })
