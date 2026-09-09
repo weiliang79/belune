@@ -12,7 +12,7 @@ Belune is pre-1.0. The versioning contract while it stays there:
 Release notes for each version are also published on the
 [Releases page](https://github.com/weiliang79/belune/releases).
 
-## [Unreleased]
+## [0.1.6]
 
 ### Projects can now be shared with your team
 
