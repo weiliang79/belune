@@ -548,20 +548,23 @@ type apidocOperationTypes struct {
 // defining each once and referencing it by $ref avoids duplicating shared
 // types (most visibly generated.Database and friends) at every call site.
 type apidocSchemaRegistry struct {
-	schemas  map[string]apidocSchema
-	inFlight map[string]bool // guards self-referential types against infinite recursion
+	schemas    map[string]apidocSchema
+	inFlight   map[string]bool         // guards self-referential types against infinite recursion
+	namedTypes map[string]*types.Named // every distinct named type walkType has resolved, special-cased or not — see recordNamed and TestAPIDocAllMarshalerTypesHandled
 }
 
 func newApidocSchemaRegistry() *apidocSchemaRegistry {
-	return &apidocSchemaRegistry{schemas: map[string]apidocSchema{}, inFlight: map[string]bool{}}
+	return &apidocSchemaRegistry{schemas: map[string]apidocSchema{}, inFlight: map[string]bool{}, namedTypes: map[string]*types.Named{}}
 }
 
-// walkType resolves a Go static type into a JSON Schema node. Five traps —
+// walkType resolves a Go static type into a JSON Schema node. Six traps —
 // four anticipated before this was written (see the top-of-file design note
 // and project_api_reference_generator_design.md), a fifth ([]byte/
 // json.RawMessage) found only by actually running the generator and reading
-// its output, exactly the argument this whole project makes for generation
-// over hand-writing:
+// its output, and a sixth (time.Time) found only by a peer review's
+// go/types sweep of every response-surface type implementing
+// json.Marshaler — exactly the argument this whole project makes for
+// generation over hand-writing:
 //
 //  1. pgtype values implement json.Marshaler and marshal to a bare nullable
 //     scalar — naive reflection would emit their internal struct shape
@@ -583,7 +586,18 @@ func newApidocSchemaRegistry() *apidocSchemaRegistry {
 //     spec had 15 fields wrong this way (credentials_encrypted,
 //     advanced_config, notification channel configs, audit log details, …) —
 //     caught by reading the actual output, not by design review.
+//  6. time.Time has only unexported fields (wall, ext, loc), so naive
+//     reflection sees an empty struct — but it implements json.Marshaler and
+//     marshals to an RFC3339 string, and the zero value marshals to a real
+//     string ("0001-01-01T00:00:00Z"), never null; only *time.Time is
+//     nullable, via the existing types.Pointer case below. Verified
+//     empirically by a peer review, the same standard this file holds
+//     itself to elsewhere — see TestAPIDocAllMarshalerTypesHandled, which
+//     turns that review into a standing guard against a seventh.
 func (reg *apidocSchemaRegistry) walkType(t types.Type) apidocSchema {
+	if named, ok := t.(*types.Named); ok {
+		reg.namedTypes[named.String()] = named // recorded before the special-case switch below, so pgtype/time.Time/json.RawMessage land here too, not just plain domain structs
+	}
 	switch t.String() {
 	case "github.com/jackc/pgx/v5/pgtype.UUID":
 		return apidocSchema{"type": []string{"string", "null"}, "format": "uuid"}
@@ -593,6 +607,8 @@ func (reg *apidocSchemaRegistry) walkType(t types.Type) apidocSchema {
 		return apidocSchema{"type": []string{"string", "null"}}
 	case "github.com/jackc/pgx/v5/pgtype.Int4":
 		return apidocSchema{"type": []string{"integer", "null"}}
+	case "time.Time":
+		return apidocSchema{"type": "string", "format": "date-time"}
 	case "encoding/json.RawMessage":
 		// Passed through verbatim by json.RawMessage's own MarshalJSON — it
 		// IS already-valid JSON on the wire, not a byte string. Genuinely
@@ -947,6 +963,65 @@ func apidocExtractTypes(t *testing.T) (map[string]apidocOperationTypes, *apidocS
 		}
 	}
 	return result, reg
+}
+
+// apidocKnownMarshalerTypes are the type strings walkType already
+// special-cases because they implement json.Marshaler with a wire shape
+// naive struct reflection would get wrong — the literal set from walkType's
+// "Six traps" doc comment, not re-derived, so TestAPIDocAllMarshalerTypesHandled
+// actually checks the switch statement's coverage rather than assuming it.
+var apidocKnownMarshalerTypes = map[string]bool{
+	"github.com/jackc/pgx/v5/pgtype.UUID":        true,
+	"github.com/jackc/pgx/v5/pgtype.Timestamptz": true,
+	"github.com/jackc/pgx/v5/pgtype.Text":        true,
+	"github.com/jackc/pgx/v5/pgtype.Int4":        true,
+	"time.Time":                                  true,
+	"encoding/json.RawMessage":                   true,
+}
+
+// TestAPIDocAllMarshalerTypesHandled guards against a silent seventh trap.
+// time.Time (trap #6, see walkType's doc comment) shipped unhandled past
+// this generator's own hand-review and was only caught by a peer's go/types
+// sweep of the whole reachable response surface for types implementing
+// json.Marshaler — the exact bug class this test now closes off structurally
+// instead of relying on the next review catching it too.
+//
+// It reuses apidocExtractTypes's own walk (recordNamed, a side effect of
+// every walkType call, whether or not that call takes the special-cased
+// path) to get the real reachable named-type set, then, for each one, checks
+// whether it or its pointer implements json.Marshaler — the pointer check
+// matters, since some of these (and future ones) may have pointer-receiver
+// MarshalJSON methods. Anything that does must already be in
+// apidocKnownMarshalerTypes; walkType's naive struct-field reflection is
+// wrong for anything else that reaches this state.
+func TestAPIDocAllMarshalerTypesHandled(t *testing.T) {
+	if os.Getenv("GENERATE_API_REFERENCE") != "1" {
+		t.Skip("set GENERATE_API_REFERENCE=1 to run — see task generate:api-docs")
+	}
+
+	_, reg := apidocExtractTypes(t)
+
+	cfg := &packages.Config{Mode: packages.NeedTypes | packages.NeedDeps | packages.NeedImports}
+	pkgs, err := packages.Load(cfg, "encoding/json")
+	require.NoError(t, err)
+	require.Len(t, pkgs, 1)
+	require.Empty(t, pkgs[0].Errors)
+	marshalerObj := pkgs[0].Types.Scope().Lookup("Marshaler")
+	require.NotNil(t, marshalerObj, "encoding/json.Marshaler not found")
+	marshalerIface, ok := marshalerObj.Type().Underlying().(*types.Interface)
+	require.True(t, ok)
+
+	var unhandled []string
+	for name, named := range reg.namedTypes {
+		if apidocKnownMarshalerTypes[name] {
+			continue
+		}
+		if types.Implements(named, marshalerIface) || types.Implements(types.NewPointer(named), marshalerIface) {
+			unhandled = append(unhandled, name)
+		}
+	}
+	sort.Strings(unhandled)
+	require.Empty(t, unhandled, "these types implement json.Marshaler but aren't special-cased in walkType — their default struct-reflection shape is very likely wrong; add each to the switch in walkType and to apidocKnownMarshalerTypes")
 }
 
 // === OpenAPI 3.1 document assembly ===

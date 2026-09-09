@@ -12360,7 +12360,8 @@
       "CertificateMetadata": {
         "properties": {
           "created_at": {
-            "$ref": "#/components/schemas/Time"
+            "format": "date-time",
+            "type": "string"
           },
           "domain_count": {
             "type": "integer"
@@ -12375,23 +12376,17 @@
             "type": "string"
           },
           "not_after": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/Time"
-              },
-              {
-                "type": "null"
-              }
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
             ]
           },
           "not_before": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/Time"
-              },
-              {
-                "type": "null"
-              }
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
             ]
           },
           "subjects": {
@@ -13694,7 +13689,8 @@
             "type": "integer"
           },
           "last_run_at": {
-            "$ref": "#/components/schemas/Time"
+            "format": "date-time",
+            "type": "string"
           },
           "last_updated": {
             "type": "integer"
@@ -13814,10 +13810,6 @@
             "type": "string"
           }
         },
-        "type": "object"
-      },
-      "Time": {
-        "properties": {},
         "type": "object"
       },
       "UpdateUserProfileRow": {
@@ -14457,7 +14449,8 @@
             "type": "string"
           },
           "created_at": {
-            "$ref": "#/components/schemas/Time"
+            "format": "date-time",
+            "type": "string"
           },
           "endpoint": {
             "type": "string"
@@ -14481,7 +14474,8 @@
             "type": "string"
           },
           "updated_at": {
-            "$ref": "#/components/schemas/Time"
+            "format": "date-time",
+            "type": "string"
           },
           "use_ssl": {
             "type": "boolean"
@@ -14896,13 +14890,10 @@
             "type": "string"
           },
           "tls_not_after": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/Time"
-              },
-              {
-                "type": "null"
-              }
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
             ]
           },
           "tls_status": {
@@ -14949,7 +14940,8 @@
             "type": "boolean"
           },
           "created_at": {
-            "$ref": "#/components/schemas/Time"
+            "format": "date-time",
+            "type": "string"
           },
           "database_id": {
             "type": "string"
@@ -14976,13 +14968,10 @@
             ]
           },
           "last_run_at": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/Time"
-              },
-              {
-                "type": "null"
-              }
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
             ]
           },
           "prefix": {
@@ -14992,7 +14981,8 @@
             "type": "string"
           },
           "updated_at": {
-            "$ref": "#/components/schemas/Time"
+            "format": "date-time",
+            "type": "string"
           }
         },
         "type": "object"
@@ -15009,13 +14999,10 @@
             "type": "string"
           },
           "finished_at": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/Time"
-              },
-              {
-                "type": "null"
-              }
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
             ]
           },
           "has_remote": {
@@ -15034,7 +15021,8 @@
             "type": "integer"
           },
           "started_at": {
-            "$ref": "#/components/schemas/Time"
+            "format": "date-time",
+            "type": "string"
           },
           "status": {
             "type": "string"
@@ -15211,13 +15199,10 @@
             "type": "string"
           },
           "finished_at": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/Time"
-              },
-              {
-                "type": "null"
-              }
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
             ]
           },
           "id": {
@@ -15227,7 +15212,8 @@
             "type": "string"
           },
           "started_at": {
-            "$ref": "#/components/schemas/Time"
+            "format": "date-time",
+            "type": "string"
           },
           "status": {
             "type": "string"
@@ -15572,23 +15558,17 @@
             "type": "string"
           },
           "tls_last_checked_at": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/Time"
-              },
-              {
-                "type": "null"
-              }
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
             ]
           },
           "tls_not_after": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/Time"
-              },
-              {
-                "type": "null"
-              }
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
             ]
           },
           "tls_status": {
@@ -16056,7 +16036,8 @@
       "orphanedBackupResponse": {
         "properties": {
           "database_deleted_at": {
-            "$ref": "#/components/schemas/Time"
+            "format": "date-time",
+            "type": "string"
           },
           "database_name": {
             "type": "string"
@@ -17016,7 +16997,8 @@
             "type": "string"
           },
           "created_at": {
-            "$ref": "#/components/schemas/Time"
+            "format": "date-time",
+            "type": "string"
           },
           "destination_id": {
             "type": "string"
@@ -17034,13 +17016,10 @@
             ]
           },
           "last_run_at": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/Time"
-              },
-              {
-                "type": "null"
-              }
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
             ]
           },
           "prefix": {
@@ -17064,13 +17043,10 @@
             "type": "string"
           },
           "finished_at": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/Time"
-              },
-              {
-                "type": "null"
-              }
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
             ]
           },
           "has_remote": {
@@ -17086,7 +17062,8 @@
             "type": "integer"
           },
           "started_at": {
-            "$ref": "#/components/schemas/Time"
+            "format": "date-time",
+            "type": "string"
           },
           "status": {
             "type": "string"
@@ -17114,13 +17091,10 @@
             "type": "string"
           },
           "finished_at": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/Time"
-              },
-              {
-                "type": "null"
-              }
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
             ]
           },
           "id": {
@@ -17130,7 +17104,8 @@
             "type": "string"
           },
           "started_at": {
-            "$ref": "#/components/schemas/Time"
+            "format": "date-time",
+            "type": "string"
           },
           "status": {
             "type": "string"
