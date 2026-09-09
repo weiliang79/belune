@@ -130,11 +130,26 @@ for (const [path, methods] of Object.entries(pagesSpec.paths)) {
 // Access") would otherwise survive on disk as an orphan: still on the
 // filesystem, still routable, just no longer linked from anywhere — the same
 // class of bug the top-level meta.json write once had to guard against.
-// Every directory directly under OUT_DIR is generator output (index.mdx,
-// access.mdx and meta.json are the only hand-written/generated FILES there),
-// so clearing all of them before regenerating is safe and total.
+//
+// Scoped to OWNED (every slug SLUG_BY_TITLE can produce) rather than every
+// directory under OUT_DIR — deliberately, not for convenience: "every
+// directory here is generator output" is the same allowlist-shaped
+// assumption that already bit the Go side once (a hardcoded written :=
+// {"index.mdx", "access.mdx", "meta.json"} would have silently deleted
+// access.mdx on the directory rename; the fix there was marker-based, not a
+// widened allowlist, specifically so the class wouldn't come back). A
+// hand-written subfolder under content/docs/api/ is plausible — access.mdx
+// already proves hand-written content lives in this tab — and nothing marks
+// one as safe to keep, so sweeping "everything" would silently delete it on
+// the next regeneration with no warning and no trace beyond the deletion.
+// Restricting to OWNED still empties a domain that shrinks to nothing
+// (terminal stays in SLUG_BY_TITLE even at zero operations, so its stale
+// folder is still swept — the actual case this cleanup exists for) while
+// leaving anything with another name alone. Don't widen this back to "all
+// directories."
+const OWNED = new Set(Object.values(SLUG_BY_TITLE));
 for (const e of readdirSync(OUT_DIR, { withFileTypes: true })) {
-  if (e.isDirectory()) rmSync(join(OUT_DIR, e.name), { recursive: true, force: true });
+  if (e.isDirectory() && OWNED.has(e.name)) rmSync(join(OUT_DIR, e.name), { recursive: true, force: true });
 }
 
 // createOpenAPI's `input` accepts an in-memory document (SchemaRecord) as an
