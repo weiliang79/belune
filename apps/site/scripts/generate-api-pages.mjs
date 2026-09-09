@@ -27,6 +27,10 @@
 // instead of the file on disk — decided by the user 2026-09-09, after
 // rejecting a redundant "dashboard-only endpoints" table (access.mdx's
 // prose already covers exactly this set).
+//
+// PREVIEW: the two Git domains nest under a shared "Git" separator — see
+// the block near the bottom, past the top-level meta.json write. Not yet
+// the final shape; do not merge on its own (that block says why).
 import { createOpenAPI } from 'fumadocs-openapi/server';
 import { generateFiles } from 'fumadocs-openapi';
 import { writeFileSync, readFileSync, readdirSync, rmSync } from 'node:fs';
@@ -50,8 +54,10 @@ const SLUG_BY_TITLE = {
   'Terminal Access': 'terminal',
   'Personal Access Tokens': 'tokens',
   'Session & Account': 'account',
-  'Git Integrations': 'git-integrations',
-  'Admin — Git Provider Configs': 'git-providers',
+  // Slashes here are deliberate — see the "Nest the two Git domains" block
+  // near the bottom, which is the only place that depends on it.
+  'Git Integrations': 'git/integrations',
+  'Admin — Git Provider Configs': 'git/providers',
   'App Templates': 'templates',
   'Deploy & Lifecycle Actions': 'deploy-actions',
   Metrics: 'metrics',
@@ -101,6 +107,16 @@ function kebabCase(name) {
   return s.toLowerCase();
 }
 
+// topSegment reduces a SLUG_BY_TITLE value to the TOP-LEVEL directory it
+// actually lands in on disk — identity for a plain slug ("tokens"), the
+// first path component for a nested one ("git/integrations" -> "git").
+// Both the OWNED sweep and the top-level meta.json's pages array need this:
+// they operate on/list top-level directory names, and a slug containing a
+// slash no longer equals the directory it produces.
+function topSegment(slug) {
+  return slug.split('/')[0];
+}
+
 // isPatCallable is THE single predicate for "does this operation belong in
 // the human-facing reference" — derived from the same structural fact
 // TestAPIDocAllMarshalerTypesHandled's sibling guard checks on the Go side
@@ -147,7 +163,15 @@ for (const [path, methods] of Object.entries(pagesSpec.paths)) {
 // folder is still swept — the actual case this cleanup exists for) while
 // leaving anything with another name alone. Don't widen this back to "all
 // directories."
-const OWNED = new Set(Object.values(SLUG_BY_TITLE));
+//
+// topSegment matters here specifically because of git/integrations and
+// git/providers: OWNED has to contain "git" (what actually appears as a
+// top-level directory under OUT_DIR), not the full slug — a set built from
+// the raw slug values would never match "git", the sweep would silently
+// stop cleaning that whole subtree, and a stale page from a deleted
+// operation would survive as exactly the orphan class this sweep exists to
+// prevent. Checked, not assumed: see the "Nest the two Git domains" block.
+const OWNED = new Set(Object.values(SLUG_BY_TITLE).map(topSegment));
 for (const e of readdirSync(OUT_DIR, { withFileTypes: true })) {
   if (e.isDirectory() && OWNED.has(e.name)) rmSync(join(OUT_DIR, e.name), { recursive: true, force: true });
 }
@@ -216,7 +240,11 @@ const presentDirs = new Set(
     .filter((e) => e.isDirectory())
     .map((e) => e.name),
 );
-const domainSlugs = [...new Set(Object.values(SLUG_BY_TITLE))].filter((slug) => presentDirs.has(slug));
+// topSegment collapses git/integrations and git/providers to one "git"
+// entry — the Set dedupes it to a single occurrence, at the position of
+// whichever one SLUG_BY_TITLE lists first, which is exactly "replace the
+// two entries with the single entry git, in the same position."
+const domainSlugs = [...new Set(Object.values(SLUG_BY_TITLE).map(topSegment))].filter((slug) => presentDirs.has(slug));
 
 writeFileSync(
   join(OUT_DIR, 'meta.json'),
@@ -231,3 +259,58 @@ writeFileSync(
     2,
   ) + '\n',
 );
+
+// PREVIEW, not the final shape (2026-09-10) — nests "Git Integrations" and
+// "Admin — Git Provider Configs" under a shared "Git" separator, so the
+// user can see it before deciding. flattenSections in src/lib/source.ts
+// flattens exactly ONE level inside a root tab — checked by reading it, not
+// assumed — so a git/ folder containing integrations/ and providers/
+// collapses to a "Git" separator with the two as collapsible dropdowns
+// underneath, for free; the sidebar needs no changes for this.
+//
+// The slash embedded in SLUG_BY_TITLE's two "git/..." values already made
+// slugifyTag place their operations at git/integrations/*.mdx and
+// git/providers/*.mdx (path.join tolerates a slash inside one argument —
+// verified against the actual output below, not assumed) and made
+// generateFiles's own meta:{folderStyle:'folder'} write correct
+// git/integrations/meta.json and git/providers/meta.json files, with
+// correct `pages` arrays — just with the ORIGINAL full tag names as their
+// titles, and no git/meta.json, since fumadocs-openapi has no concept of
+// these two groups sharing a "git" parent (that would need tag.parent in
+// the spec, a heavier change out of scope for a preview). Both gaps are
+// closed here: read each child meta.json back, replace only its title
+// (CHILD_TITLES is a two-entry, hand-written map on purpose — this isn't a
+// general nesting mechanism, just this one preview), and synthesize the
+// parent's.
+//
+// ⚠️ NOT READY TO SHIP ALONE: "Admin — Git Provider Configs" carried its
+// admin-only audience in its title. Renaming it to "Provider Configs" here
+// loses that signal — acceptable for a preview, not for a merge. The
+// planned fix is an "Admin only" badge (Folder.name/Item.name are ReactNode
+// in fumadocs-core — same technique the tab icons already use), not yet
+// built. Do not merge this state on its own.
+if (presentDirs.has('git')) {
+  const CHILD_TITLES = { integrations: 'Integrations', providers: 'Provider Configs' };
+  const gitChildren = readdirSync(join(OUT_DIR, 'git'), { withFileTypes: true })
+    .filter((e) => e.isDirectory())
+    .map((e) => e.name);
+
+  for (const child of gitChildren) {
+    const metaPath = join(OUT_DIR, 'git', child, 'meta.json');
+    const meta = JSON.parse(readFileSync(metaPath, 'utf8'));
+    meta.title = CHILD_TITLES[child] ?? meta.title;
+    writeFileSync(metaPath, JSON.stringify(meta, null, 2));
+  }
+
+  writeFileSync(
+    join(OUT_DIR, 'git', 'meta.json'),
+    JSON.stringify(
+      {
+        title: 'Git',
+        pages: ['integrations', 'providers'].filter((c) => gitChildren.includes(c)),
+      },
+      null,
+      2,
+    ),
+  );
+}
