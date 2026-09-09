@@ -1,0 +1,136 @@
+---
+title: Session & Account
+full: true
+_openapi:
+  preload:
+    - ./public/openapi.json
+  toc:
+    - depth: 2
+      title: Get Alert Preferences
+      url: '#get-alert-preferences'
+    - depth: 2
+      title: Update Alert Preferences
+      url: '#update-alert-preferences'
+    - depth: 2
+      title: Logout
+      url: '#logout'
+    - depth: 2
+      title: Me
+      url: '#me'
+    - depth: 2
+      title: Change Own Password
+      url: '#change-own-password'
+    - depth: 2
+      title: Update Profile
+      url: '#update-profile'
+    - depth: 2
+      title: Get T O T P Status
+      url: '#get-t-o-t-p-status'
+    - depth: 2
+      title: Disable T O T P
+      url: '#disable-t-o-t-p'
+    - depth: 2
+      title: Enroll T O T P
+      url: '#enroll-t-o-t-p'
+    - depth: 2
+      title: Verify T O T P Enrollment
+      url: '#verify-t-o-t-p-enrollment'
+    - depth: 2
+      title: Regenerate Recovery Codes
+      url: '#regenerate-recovery-codes'
+  structuredData:
+    headings:
+      - content: Get Alert Preferences
+        id: get-alert-preferences
+      - content: Update Alert Preferences
+        id: update-alert-preferences
+      - content: Logout
+        id: logout
+      - content: Me
+        id: me
+      - content: Change Own Password
+        id: change-own-password
+      - content: Update Profile
+        id: update-profile
+      - content: Get T O T P Status
+        id: get-t-o-t-p-status
+      - content: Disable T O T P
+        id: disable-t-o-t-p
+      - content: Enroll T O T P
+        id: enroll-t-o-t-p
+      - content: Verify T O T P Enrollment
+        id: verify-t-o-t-p-enrollment
+      - content: Regenerate Recovery Codes
+        id: regenerate-recovery-codes
+    contents:
+      - content: Session-gate UNVERIFIED (id-less mutating route, skipped for safety —
+          see apidocSkipFullScopeReason). Scope is confirmed — every route is
+          probed at zero scope — but whether a personal access token is
+          additionally rejected here by a session-only gate is not; both
+          security alternatives below are listed, only one is guaranteed
+          correct.
+        heading: update-alert-preferences
+      - content: Session-gate UNVERIFIED (id-less mutating route, skipped for safety —
+          see apidocSkipFullScopeReason). Scope is confirmed — every route is
+          probed at zero scope — but whether a personal access token is
+          additionally rejected here by a session-only gate is not; both
+          security alternatives below are listed, only one is guaranteed
+          correct.
+        heading: logout
+      - content: Session-gate UNVERIFIED (id-less mutating route, skipped for safety —
+          see apidocSkipFullScopeReason). Scope is confirmed — every route is
+          probed at zero scope — but whether a personal access token is
+          additionally rejected here by a session-only gate is not; both
+          security alternatives below are listed, only one is guaranteed
+          correct.
+        heading: change-own-password
+      - content: Session-gate UNVERIFIED (id-less mutating route, skipped for safety —
+          see apidocSkipFullScopeReason). Scope is confirmed — every route is
+          probed at zero scope — but whether a personal access token is
+          additionally rejected here by a session-only gate is not; both
+          security alternatives below are listed, only one is guaranteed
+          correct.
+        heading: update-profile
+      - content: Session-gate UNVERIFIED (id-less mutating route, skipped for safety —
+          see apidocSkipFullScopeReason). Scope is confirmed — every route is
+          probed at zero scope — but whether a personal access token is
+          additionally rejected here by a session-only gate is not; both
+          security alternatives below are listed, only one is guaranteed
+          correct.
+        heading: disable-t-o-t-p
+      - content: Session-gate UNVERIFIED (id-less mutating route, skipped for safety —
+          see apidocSkipFullScopeReason). Scope is confirmed — every route is
+          probed at zero scope — but whether a personal access token is
+          additionally rejected here by a session-only gate is not; both
+          security alternatives below are listed, only one is guaranteed
+          correct.
+        heading: enroll-t-o-t-p
+      - content: Session-gate UNVERIFIED (id-less mutating route, skipped for safety —
+          see apidocSkipFullScopeReason). Scope is confirmed — every route is
+          probed at zero scope — but whether a personal access token is
+          additionally rejected here by a session-only gate is not; both
+          security alternatives below are listed, only one is guaranteed
+          correct.
+        heading: verify-t-o-t-p-enrollment
+      - content: Session-gate UNVERIFIED (id-less mutating route, skipped for safety —
+          see apidocSkipFullScopeReason). Scope is confirmed — every route is
+          probed at zero scope — but whether a personal access token is
+          additionally rejected here by a session-only gate is not; both
+          security alternatives below are listed, only one is guaranteed
+          correct.
+        heading: regenerate-recovery-codes
+---
+
+{/* This file was generated by Fumadocs. Do not edit this file directly. Any changes should be made by running the generation command again. */}
+
+export default function Layout(props) {
+  const { APIPage, OpenAPIPage } = props.components ?? {};
+  // "APIPage" is the old name from v10, this allows both for backward compatibility
+  const Comp = OpenAPIPage ?? APIPage;
+  return (
+    <>
+      {props.children}
+      <Comp document="./public/openapi.json" webhooks={[]} operations={[{"path":"/api/account/alert-preferences","method":"get"},{"path":"/api/account/alert-preferences","method":"put"},{"path":"/api/auth/logout","method":"post"},{"path":"/api/auth/me","method":"get"},{"path":"/api/auth/password","method":"put"},{"path":"/api/auth/profile","method":"put"},{"path":"/api/auth/totp","method":"get"},{"path":"/api/auth/totp/disable","method":"post"},{"path":"/api/auth/totp/enroll","method":"post"},{"path":"/api/auth/totp/enroll/verify","method":"post"},{"path":"/api/auth/totp/recovery-codes","method":"post"}]} showTitle />
+    </>
+  );
+}

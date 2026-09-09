@@ -1,0 +1,177 @@
+---
+title: Applications
+full: true
+_openapi:
+  preload:
+    - ./public/openapi.json
+  toc:
+    - depth: 2
+      title: List Applications
+      url: '#list-applications'
+    - depth: 2
+      title: Create Application
+      url: '#create-application'
+    - depth: 2
+      title: Get Application
+      url: '#get-application'
+    - depth: 2
+      title: Delete Application
+      url: '#delete-application'
+    - depth: 2
+      title: Update Application
+      url: '#update-application'
+    - depth: 2
+      title: Get Build Cache
+      url: '#get-build-cache'
+    - depth: 2
+      title: Clear Build Cache
+      url: '#clear-build-cache'
+    - depth: 2
+      title: Change Application Source
+      url: '#change-application-source'
+    - depth: 2
+      title: Get Deploy Hook
+      url: '#get-deploy-hook'
+    - depth: 2
+      title: Generate Deploy Hook
+      url: '#generate-deploy-hook'
+    - depth: 2
+      title: Delete Deploy Hook
+      url: '#delete-deploy-hook'
+    - depth: 2
+      title: Reveal Deploy Hook
+      url: '#reveal-deploy-hook'
+    - depth: 2
+      title: Get Application Health
+      url: '#get-application-health'
+    - depth: 2
+      title: Set Health Check
+      url: '#set-health-check'
+    - depth: 2
+      title: Set Resources
+      url: '#set-resources'
+    - depth: 2
+      title: Update Application Runtime
+      url: '#update-application-runtime'
+    - depth: 2
+      title: List App Volume Backup Configs
+      url: '#list-app-volume-backup-configs'
+    - depth: 2
+      title: Update Application Webhook
+      url: '#update-application-webhook'
+    - depth: 2
+      title: Reveal Webhook Secret
+      url: '#reveal-webhook-secret'
+  structuredData:
+    headings:
+      - content: List Applications
+        id: list-applications
+      - content: Create Application
+        id: create-application
+      - content: Get Application
+        id: get-application
+      - content: Delete Application
+        id: delete-application
+      - content: Update Application
+        id: update-application
+      - content: Get Build Cache
+        id: get-build-cache
+      - content: Clear Build Cache
+        id: clear-build-cache
+      - content: Change Application Source
+        id: change-application-source
+      - content: Get Deploy Hook
+        id: get-deploy-hook
+      - content: Generate Deploy Hook
+        id: generate-deploy-hook
+      - content: Delete Deploy Hook
+        id: delete-deploy-hook
+      - content: Reveal Deploy Hook
+        id: reveal-deploy-hook
+      - content: Get Application Health
+        id: get-application-health
+      - content: Set Health Check
+        id: set-health-check
+      - content: Set Resources
+        id: set-resources
+      - content: Update Application Runtime
+        id: update-application-runtime
+      - content: List App Volume Backup Configs
+        id: list-app-volume-backup-configs
+      - content: Update Application Webhook
+        id: update-application-webhook
+      - content: Reveal Webhook Secret
+        id: reveal-webhook-secret
+    contents:
+      - content: Scoped to one project — a token pinned to a different project is
+          rejected outside it, regardless of scope.
+        heading: list-applications
+      - content: Scoped to one project — a token pinned to a different project is
+          rejected outside it, regardless of scope.
+        heading: create-application
+      - content: Scoped to one project — a token pinned to a different project is
+          rejected outside it, regardless of scope.
+        heading: get-application
+      - content: Scoped to one project — a token pinned to a different project is
+          rejected outside it, regardless of scope.
+        heading: delete-application
+      - content: Scoped to one project — a token pinned to a different project is
+          rejected outside it, regardless of scope.
+        heading: update-application
+      - content: Scoped to one project — a token pinned to a different project is
+          rejected outside it, regardless of scope.
+        heading: get-build-cache
+      - content: Scoped to one project — a token pinned to a different project is
+          rejected outside it, regardless of scope.
+        heading: clear-build-cache
+      - content: Scoped to one project — a token pinned to a different project is
+          rejected outside it, regardless of scope.
+        heading: change-application-source
+      - content: Scoped to one project — a token pinned to a different project is
+          rejected outside it, regardless of scope.
+        heading: get-deploy-hook
+      - content: Scoped to one project — a token pinned to a different project is
+          rejected outside it, regardless of scope.
+        heading: generate-deploy-hook
+      - content: Scoped to one project — a token pinned to a different project is
+          rejected outside it, regardless of scope.
+        heading: delete-deploy-hook
+      - content: Scoped to one project — a token pinned to a different project is
+          rejected outside it, regardless of scope.
+        heading: reveal-deploy-hook
+      - content: Scoped to one project — a token pinned to a different project is
+          rejected outside it, regardless of scope.
+        heading: get-application-health
+      - content: Scoped to one project — a token pinned to a different project is
+          rejected outside it, regardless of scope.
+        heading: set-health-check
+      - content: Scoped to one project — a token pinned to a different project is
+          rejected outside it, regardless of scope.
+        heading: set-resources
+      - content: Scoped to one project — a token pinned to a different project is
+          rejected outside it, regardless of scope.
+        heading: update-application-runtime
+      - content: Scoped to one project — a token pinned to a different project is
+          rejected outside it, regardless of scope.
+        heading: list-app-volume-backup-configs
+      - content: Scoped to one project — a token pinned to a different project is
+          rejected outside it, regardless of scope.
+        heading: update-application-webhook
+      - content: Scoped to one project — a token pinned to a different project is
+          rejected outside it, regardless of scope.
+        heading: reveal-webhook-secret
+---
+
+{/* This file was generated by Fumadocs. Do not edit this file directly. Any changes should be made by running the generation command again. */}
+
+export default function Layout(props) {
+  const { APIPage, OpenAPIPage } = props.components ?? {};
+  // "APIPage" is the old name from v10, this allows both for backward compatibility
+  const Comp = OpenAPIPage ?? APIPage;
+  return (
+    <>
+      {props.children}
+      <Comp document="./public/openapi.json" webhooks={[]} operations={[{"path":"/api/projects/{projectId}/applications","method":"get"},{"path":"/api/projects/{projectId}/applications","method":"post"},{"path":"/api/projects/{projectId}/applications/{applicationId}","method":"get"},{"path":"/api/projects/{projectId}/applications/{applicationId}","method":"delete"},{"path":"/api/projects/{projectId}/applications/{applicationId}","method":"put"},{"path":"/api/projects/{projectId}/applications/{applicationId}/cache","method":"get"},{"path":"/api/projects/{projectId}/applications/{applicationId}/cache","method":"delete"},{"path":"/api/projects/{projectId}/applications/{applicationId}/change-source","method":"post"},{"path":"/api/projects/{projectId}/applications/{applicationId}/deploy-hook","method":"get"},{"path":"/api/projects/{projectId}/applications/{applicationId}/deploy-hook","method":"post"},{"path":"/api/projects/{projectId}/applications/{applicationId}/deploy-hook","method":"delete"},{"path":"/api/projects/{projectId}/applications/{applicationId}/deploy-hook/reveal","method":"get"},{"path":"/api/projects/{projectId}/applications/{applicationId}/health","method":"get"},{"path":"/api/projects/{projectId}/applications/{applicationId}/health-check","method":"put"},{"path":"/api/projects/{projectId}/applications/{applicationId}/resources","method":"put"},{"path":"/api/projects/{projectId}/applications/{applicationId}/runtime","method":"put"},{"path":"/api/projects/{projectId}/applications/{applicationId}/volume-backup-configs","method":"get"},{"path":"/api/projects/{projectId}/applications/{applicationId}/webhook","method":"put"},{"path":"/api/projects/{projectId}/applications/{applicationId}/webhook/reveal","method":"get"}]} showTitle />
+    </>
+  );
+}

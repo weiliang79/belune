@@ -1,0 +1,31 @@
+---
+title: API Reference
+description: Every endpoint, generated from the running API rather than hand-written.
+---
+
+This is the full endpoint reference — every route the API registers, browsable by domain in the sidebar. If you're looking for how to authenticate, the scope ladder, or a walkthrough of common tasks, start at [API Access](/docs/api/access) instead; this page is for looking up one specific endpoint by name or path.
+
+<Callout type="warn">
+**Generated, not written.** This reference is an [OpenAPI 3.1 spec](/openapi.json), produced by probing the real, running router with a personal access token and statically resolving every request/response Go type — not by reading the source and describing what it's supposed to do. A hand-written version of this reference — published days before this page existed — had its scope-lattice legend go wrong within the week, found only because an unrelated review happened to check it against the code. A generated one can't drift the same way, because it IS the observed behavior.
+</Callout>
+
+## Get the Spec Directly
+
+The spec itself is served at [`/openapi.json`](/openapi.json) — a stable, public URL, not behind auth. Point an OpenAPI client, a codegen tool, or a linter at it directly instead of scraping this page.
+
+## What This Reference Shows, and What It Doesn't
+
+Each endpoint's page below covers its parameters, request body, and response shapes for every status code the generator observed. Two things are deliberately left out rather than guessed at:
+
+- **`required` is omitted from every request schema.** Field optionality in this codebase is enforced imperatively, not type-encoded — inferring it from validation code would be a fundamentally fuzzier problem than the static type resolution the rest of this spec relies on.
+- **A handful of routes carry `x-belune-session-gate: unverified`** — destructive admin actions with no id in the path, and streaming (SSE) routes, aren't safe to actually execute during generation. Their required *scope* is fully accurate (every route is probed at zero scope); only whether a personal access token is *additionally* rejected by a session-only gate is unconfirmed for those. Both security alternatives are listed on the affected operations.
+
+Project-pinning (a token pinned to one project rejected outside it) has no OpenAPI representation either — it's called out in the affected operations' own descriptions instead.
+
+## Regenerating
+
+```bash
+task generate:api-docs
+```
+
+Runs against a disposable database — nothing it does touches a real install. Commit the result; Cloudflare Pages builds this site from `main` with no Go toolchain and no running API, so the output has to already be there.
