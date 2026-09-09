@@ -1,5 +1,5 @@
 import { getSidebarTree } from "@/lib/source";
-import { DocsLayout } from "fumadocs-ui/layouts/notebook";
+import { DocsLayout } from "fumadocs-ui/layouts/docs";
 import { baseOptions } from "@/lib/layout.shared";
 import { Braces, LayoutDashboard } from "lucide-react";
 import type { LayoutTab } from "fumadocs-ui/layouts/shared";
@@ -44,13 +44,15 @@ function withIcon(tab: LayoutTab): LayoutTab {
   return icon ? { ...tab, icon } : tab;
 }
 
-// `layouts/notebook`, not `layouts/docs`: the two differ in where the tab
-// dropdown sits in the sidebar (notebook puts it directly under the logo,
-// above search; docs puts it below search) — baked into each layout's own
-// sidebar slot, not a prop, so this can't be fixed on `layouts/docs`. The
-// paired page component (`src/app/docs/[[...slug]]/page.tsx`) has to import
-// from `fumadocs-ui/layouts/notebook/page` too — DocsPage throws at runtime
-// if it's rendered under the wrong DocsLayout.
+// `layouts/docs`, not `layouts/notebook`: the two differ in where the tab
+// dropdown sits in the sidebar (docs puts it below search, in the sidebar;
+// notebook puts it directly under the logo, with search relocated to the
+// top bar instead) — baked into each layout's own sidebar slot, not a prop,
+// so neither ordering is reachable from the other layout. Moved back here
+// per request — search belongs in the sidebar, above the dropdown, not the
+// top bar. The paired page component (`src/app/docs/[[...slug]]/page.tsx`)
+// has to import from `fumadocs-ui/layouts/docs/page` too — DocsPage throws
+// at runtime if it's rendered under the wrong DocsLayout.
 //
 // `tabs={{ transform: withIcon }}` (not a precomputed LayoutTab[]) still lets
 // DocsLayout derive title/description/url from the `root: true` folders
@@ -59,17 +61,17 @@ function withIcon(tab: LayoutTab): LayoutTab {
 // hand-maintained LayoutTab[] here would be a second, hand-maintained place
 // the title/description/url could drift from meta.json's own fields.
 //
-// `tabMode="sidebar"` is notebook's default (unlike `layouts/docs`, whose
-// prop is `"auto" | "top"` — notebook's is `"sidebar" | "navbar"`, a
-// different enum, not a renamed version of the same one) — named explicitly
-// rather than left implicit. The intro page at `/docs` itself sits outside
-// both roots, so neither tab shows active there — that's expected, not a bug.
+// `tabMode="auto"` renders the switcher as a sidebar dropdown rather than a
+// top tab bar — `layouts/docs`'s prop is `"auto" | "top"`, a different enum
+// from `layouts/notebook`'s `"sidebar" | "navbar"`, not a renamed version of
+// the same one. The intro page at `/docs` itself sits outside both roots,
+// so neither tab shows active there — that's expected, not a bug.
 export default function Layout({ children }: LayoutProps<"/docs">) {
   return (
     <DocsLayout
       tree={getSidebarTree()}
       tabs={{ transform: withIcon }}
-      tabMode="sidebar"
+      tabMode="auto"
       {...baseOptions()}
     >
       {children}
