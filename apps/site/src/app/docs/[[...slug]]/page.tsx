@@ -30,7 +30,8 @@ export default async function Page(props: PageProps<'/docs/[[...slug]]'>) {
   // registered component throws "Cannot read properties of undefined
   // (reading 'bundled')" without it). Bound per-request here, not as a
   // module-level singleton, since preloaded content is page-specific.
-  const openApiComponents = page.data._openapi
+  const isOpenAPIPage = Boolean(page.data._openapi);
+  const openApiComponents = isOpenAPIPage
     ? {
         OpenAPIPage: async (p: GeneratedPageProps) => {
           const { preloaded } = await openapi.preloadOpenAPIPage(page);
@@ -41,15 +42,24 @@ export default async function Page(props: PageProps<'/docs/[[...slug]]'>) {
 
   return (
     <DocsPage toc={page.data.toc} full={page.data.full}>
-      <DocsTitle>{page.data.title}</DocsTitle>
-      <DocsDescription className="mb-0">{page.data.description}</DocsDescription>
-      <div className="flex flex-row gap-2 items-center border-b pb-6">
-        <MarkdownCopyButton markdownUrl={markdownUrl} />
-        <ViewOptionsPopover
-          markdownUrl={markdownUrl}
-          githubUrl={`https://github.com/${gitConfig.user}/${gitConfig.repo}/blob/${gitConfig.branch}/content/docs/${page.path}`}
-        />
-      </div>
+      {/* Generated api/*.mdx pages skip the title/description/toolbar row —
+          <OpenAPIPage> renders its own operation title (showTitle, set by
+          generate-api-pages.mjs), so DocsTitle here would be a duplicate,
+          and its two-column layout (code samples pinned to the right) reads
+          better without competing chrome above it. */}
+      {!isOpenAPIPage && (
+        <>
+          <DocsTitle>{page.data.title}</DocsTitle>
+          <DocsDescription className="mb-0">{page.data.description}</DocsDescription>
+          <div className="flex flex-row gap-2 items-center border-b pb-6">
+            <MarkdownCopyButton markdownUrl={markdownUrl} />
+            <ViewOptionsPopover
+              markdownUrl={markdownUrl}
+              githubUrl={`https://github.com/${gitConfig.user}/${gitConfig.repo}/blob/${gitConfig.branch}/content/docs/${page.path}`}
+            />
+          </div>
+        </>
+      )}
       <DocsBody>
         <MDX
           components={getMDXComponents({
