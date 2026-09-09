@@ -1,0 +1,17 @@
+{
+  "title": "Application Volumes & Backups",
+  "pages": [
+    "list-docker-volumes",
+    "list-application-volumes",
+    "create-application-volume",
+    "delete-application-volume",
+    "list-volume-backup-configs",
+    "create-volume-backup-config",
+    "delete-volume-backup-config",
+    "update-volume-backup-config",
+    "run-volume-backup-config",
+    "list-volume-backups",
+    "restore-volume-backup",
+    "list-volume-restores"
+  ]
+}

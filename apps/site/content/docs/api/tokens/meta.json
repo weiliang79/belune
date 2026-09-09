@@ -1,0 +1,8 @@
+{
+  "title": "Personal Access Tokens",
+  "pages": [
+    "list-api-tokens",
+    "create-api-token",
+    "delete-api-token"
+  ]
+}

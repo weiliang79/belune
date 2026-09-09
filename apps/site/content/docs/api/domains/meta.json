@@ -1,0 +1,14 @@
+{
+  "title": "Domains & T L S",
+  "pages": [
+    "list-domain-tls-status",
+    "list-domains",
+    "add-domain",
+    "remove-domain",
+    "update-domain",
+    "list-route-features",
+    "upsert-route-feature",
+    "delete-route-feature",
+    "recheck-domain-tls"
+  ]
+}

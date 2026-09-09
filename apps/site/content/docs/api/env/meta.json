@@ -1,0 +1,11 @@
+{
+  "title": "Environment Variables",
+  "pages": [
+    "list-env-vars",
+    "update-env-vars",
+    "reveal-env-var",
+    "list-project-env-vars",
+    "update-project-env-vars",
+    "reveal-project-env-var"
+  ]
+}

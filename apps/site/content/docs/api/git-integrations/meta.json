@@ -1,0 +1,11 @@
+{
+  "title": "Git Integrations",
+  "pages": [
+    "list-git-integrations",
+    "list-available-providers",
+    "start-git-integration-connect",
+    "delete-git-integration",
+    "list-integration-branches",
+    "list-integration-repos"
+  ]
+}

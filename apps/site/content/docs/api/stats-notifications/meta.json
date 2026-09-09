@@ -1,0 +1,11 @@
+{
+  "title": "Stats & Notifications",
+  "pages": [
+    "list-notifications",
+    "mark-all-notifications-read",
+    "stream-notifications",
+    "unread-notification-count",
+    "mark-notification-read",
+    "get-stats"
+  ]
+}

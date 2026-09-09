@@ -1,0 +1,10 @@
+{
+  "title": "Admin — Platform Backups",
+  "pages": [
+    "list-backup-runs",
+    "update-backup-remote",
+    "trigger-backup-run",
+    "get-backup-status",
+    "test-backup-remote"
+  ]
+}

@@ -89,6 +89,7 @@
     "/api/account/alert-preferences": {
       "get": {
         "operationId": "GetAlertPreferences",
+        "summary": "Get Alert Preferences",
         "tags": [
           "Session \u0026 Account"
         ],
@@ -125,6 +126,7 @@
       },
       "put": {
         "operationId": "UpdateAlertPreferences",
+        "summary": "Update Alert Preferences",
         "description": "Session-gate UNVERIFIED (id-less mutating route, skipped for safety — see apidocSkipFullScopeReason). Scope is confirmed — every route is probed at zero scope — but whether a personal access token is additionally rejected here by a session-only gate is not; both security alternatives below are listed, only one is guaranteed correct.",
         "tags": [
           "Session \u0026 Account"
@@ -175,6 +177,7 @@
     "/api/audit-logs": {
       "get": {
         "operationId": "ListAuditLogs",
+        "summary": "List Audit Logs",
         "tags": [
           "Admin — Platform"
         ],
@@ -226,6 +229,7 @@
     "/api/audit-logs/actions": {
       "get": {
         "operationId": "ListAuditActions",
+        "summary": "List Audit Actions",
         "tags": [
           "Admin — Platform"
         ],
@@ -269,6 +273,7 @@
     "/api/audit-logs/export": {
       "get": {
         "operationId": "ExportAuditLogs",
+        "summary": "Export Audit Logs",
         "tags": [
           "Admin — Platform"
         ],
@@ -302,6 +307,7 @@
     "/api/auth/logout": {
       "post": {
         "operationId": "Logout",
+        "summary": "Logout",
         "description": "Session-gate UNVERIFIED (id-less mutating route, skipped for safety — see apidocSkipFullScopeReason). Scope is confirmed — every route is probed at zero scope — but whether a personal access token is additionally rejected here by a session-only gate is not; both security alternatives below are listed, only one is guaranteed correct.",
         "tags": [
           "Session \u0026 Account"
@@ -347,6 +353,7 @@
     "/api/auth/me": {
       "get": {
         "operationId": "Me",
+        "summary": "Me",
         "tags": [
           "Session \u0026 Account"
         ],
@@ -412,6 +419,7 @@
     "/api/auth/password": {
       "put": {
         "operationId": "ChangeOwnPassword",
+        "summary": "Change Own Password",
         "description": "Session-gate UNVERIFIED (id-less mutating route, skipped for safety — see apidocSkipFullScopeReason). Scope is confirmed — every route is probed at zero scope — but whether a personal access token is additionally rejected here by a session-only gate is not; both security alternatives below are listed, only one is guaranteed correct.",
         "tags": [
           "Session \u0026 Account"
@@ -467,6 +475,7 @@
     "/api/auth/profile": {
       "put": {
         "operationId": "UpdateProfile",
+        "summary": "Update Profile",
         "description": "Session-gate UNVERIFIED (id-less mutating route, skipped for safety — see apidocSkipFullScopeReason). Scope is confirmed — every route is probed at zero scope — but whether a personal access token is additionally rejected here by a session-only gate is not; both security alternatives below are listed, only one is guaranteed correct.",
         "tags": [
           "Session \u0026 Account"
@@ -517,6 +526,7 @@
     "/api/auth/totp": {
       "get": {
         "operationId": "GetTOTPStatus",
+        "summary": "Get TOTP Status",
         "tags": [
           "Session \u0026 Account"
         ],
@@ -570,6 +580,7 @@
     "/api/auth/totp/disable": {
       "post": {
         "operationId": "DisableTOTP",
+        "summary": "Disable TOTP",
         "description": "Session-gate UNVERIFIED (id-less mutating route, skipped for safety — see apidocSkipFullScopeReason). Scope is confirmed — every route is probed at zero scope — but whether a personal access token is additionally rejected here by a session-only gate is not; both security alternatives below are listed, only one is guaranteed correct.",
         "tags": [
           "Session \u0026 Account"
@@ -635,6 +646,7 @@
     "/api/auth/totp/enroll": {
       "post": {
         "operationId": "EnrollTOTP",
+        "summary": "Enroll TOTP",
         "description": "Session-gate UNVERIFIED (id-less mutating route, skipped for safety — see apidocSkipFullScopeReason). Scope is confirmed — every route is probed at zero scope — but whether a personal access token is additionally rejected here by a session-only gate is not; both security alternatives below are listed, only one is guaranteed correct.",
         "tags": [
           "Session \u0026 Account"
@@ -692,6 +704,7 @@
     "/api/auth/totp/enroll/verify": {
       "post": {
         "operationId": "VerifyTOTPEnrollment",
+        "summary": "Verify TOTP Enrollment",
         "description": "Session-gate UNVERIFIED (id-less mutating route, skipped for safety — see apidocSkipFullScopeReason). Scope is confirmed — every route is probed at zero scope — but whether a personal access token is additionally rejected here by a session-only gate is not; both security alternatives below are listed, only one is guaranteed correct.",
         "tags": [
           "Session \u0026 Account"
@@ -760,6 +773,7 @@
     "/api/auth/totp/recovery-codes": {
       "post": {
         "operationId": "RegenerateRecoveryCodes",
+        "summary": "Regenerate Recovery Codes",
         "description": "Session-gate UNVERIFIED (id-less mutating route, skipped for safety — see apidocSkipFullScopeReason). Scope is confirmed — every route is probed at zero scope — but whether a personal access token is additionally rejected here by a session-only gate is not; both security alternatives below are listed, only one is guaranteed correct.",
         "tags": [
           "Session \u0026 Account"
@@ -818,6 +832,7 @@
     "/api/backups": {
       "get": {
         "operationId": "ListBackupRuns",
+        "summary": "List Backup Runs",
         "tags": [
           "Admin — Platform Backups"
         ],
@@ -861,6 +876,7 @@
     "/api/backups/remote": {
       "put": {
         "operationId": "UpdateBackupRemote",
+        "summary": "Update Backup Remote",
         "description": "Session-gate UNVERIFIED (id-less mutating route, skipped for safety — see apidocSkipFullScopeReason). Scope is confirmed — every route is probed at zero scope — but whether a personal access token is additionally rejected here by a session-only gate is not; both security alternatives below are listed, only one is guaranteed correct.",
         "tags": [
           "Admin — Platform Backups"
@@ -921,6 +937,7 @@
     "/api/backups/run": {
       "post": {
         "operationId": "TriggerBackupRun",
+        "summary": "Trigger Backup Run",
         "description": "Session-gate UNVERIFIED (id-less mutating route, skipped for safety — see apidocSkipFullScopeReason). Scope is confirmed — every route is probed at zero scope — but whether a personal access token is additionally rejected here by a session-only gate is not; both security alternatives below are listed, only one is guaranteed correct.",
         "tags": [
           "Admin — Platform Backups"
@@ -968,6 +985,7 @@
     "/api/backups/status": {
       "get": {
         "operationId": "GetBackupStatus",
+        "summary": "Get Backup Status",
         "tags": [
           "Admin — Platform Backups"
         ],
@@ -1008,6 +1026,7 @@
     "/api/backups/test": {
       "post": {
         "operationId": "TestBackupRemote",
+        "summary": "Test Backup Remote",
         "description": "Session-gate UNVERIFIED (id-less mutating route, skipped for safety — see apidocSkipFullScopeReason). Scope is confirmed — every route is probed at zero scope — but whether a personal access token is additionally rejected here by a session-only gate is not; both security alternatives below are listed, only one is guaranteed correct.",
         "tags": [
           "Admin — Platform Backups"
@@ -1055,6 +1074,7 @@
     "/api/certificates": {
       "get": {
         "operationId": "ListCertificates",
+        "summary": "List Certificates",
         "tags": [
           "Admin — Platform"
         ],
@@ -1096,6 +1116,7 @@
       },
       "post": {
         "operationId": "UploadCertificate",
+        "summary": "Upload Certificate",
         "description": "Session-gate UNVERIFIED (id-less mutating route, skipped for safety — see apidocSkipFullScopeReason). Scope is confirmed — every route is probed at zero scope — but whether a personal access token is additionally rejected here by a session-only gate is not; both security alternatives below are listed, only one is guaranteed correct.",
         "tags": [
           "Admin — Platform"
@@ -1148,6 +1169,7 @@
     "/api/certificates/{certificateId}": {
       "delete": {
         "operationId": "DeleteCertificate",
+        "summary": "Delete Certificate",
         "tags": [
           "Admin — Platform"
         ],
@@ -1188,6 +1210,7 @@
     "/api/cleanup": {
       "post": {
         "operationId": "TriggerCleanup",
+        "summary": "Trigger Cleanup",
         "description": "Session-gate UNVERIFIED (id-less mutating route, skipped for safety — see apidocSkipFullScopeReason). Scope is confirmed — every route is probed at zero scope — but whether a personal access token is additionally rejected here by a session-only gate is not; both security alternatives below are listed, only one is guaranteed correct.",
         "tags": [
           "Admin — Platform"
@@ -1245,6 +1268,7 @@
     "/api/deployments": {
       "get": {
         "operationId": "GetGlobalDeployments",
+        "summary": "Get Global Deployments",
         "tags": [
           "Deployments"
         ],
@@ -1286,6 +1310,7 @@
     "/api/docker/containers": {
       "get": {
         "operationId": "ListDockerContainers",
+        "summary": "List Docker Containers",
         "tags": [
           "Admin — Platform"
         ],
@@ -1329,6 +1354,7 @@
     "/api/docker/images": {
       "get": {
         "operationId": "ListDockerImages",
+        "summary": "List Docker Images",
         "tags": [
           "Admin — Platform"
         ],
@@ -1372,6 +1398,7 @@
     "/api/docker/networks": {
       "get": {
         "operationId": "ListDockerNetworks",
+        "summary": "List Docker Networks",
         "tags": [
           "Admin — Platform"
         ],
@@ -1415,6 +1442,7 @@
     "/api/docker/overview": {
       "get": {
         "operationId": "GetDockerOverview",
+        "summary": "Get Docker Overview",
         "tags": [
           "Admin — Platform"
         ],
@@ -1455,6 +1483,7 @@
     "/api/docker/volumes": {
       "get": {
         "operationId": "ListDockerVolumes",
+        "summary": "List Docker Volumes",
         "tags": [
           "Application Volumes \u0026 Backups"
         ],
@@ -1498,6 +1527,7 @@
     "/api/domains/tls": {
       "get": {
         "operationId": "ListDomainTLSStatus",
+        "summary": "List Domain TLS Status",
         "tags": [
           "Domains \u0026 TLS"
         ],
@@ -1541,6 +1571,7 @@
     "/api/git/integrations": {
       "get": {
         "operationId": "ListGitIntegrations",
+        "summary": "List Git Integrations",
         "tags": [
           "Git Integrations"
         ],
@@ -1582,6 +1613,7 @@
     "/api/git/integrations/available": {
       "get": {
         "operationId": "ListAvailableProviders",
+        "summary": "List Available Providers",
         "tags": [
           "Git Integrations"
         ],
@@ -1623,6 +1655,7 @@
     "/api/git/integrations/connect": {
       "get": {
         "operationId": "StartGitIntegrationConnect",
+        "summary": "Start Git Integration Connect",
         "tags": [
           "Git Integrations"
         ],
@@ -1666,6 +1699,7 @@
     "/api/git/integrations/{integrationId}": {
       "delete": {
         "operationId": "DeleteGitIntegration",
+        "summary": "Delete Git Integration",
         "tags": [
           "Git Integrations"
         ],
@@ -1720,6 +1754,7 @@
     "/api/git/integrations/{integrationId}/branches": {
       "get": {
         "operationId": "ListIntegrationBranches",
+        "summary": "List Integration Branches",
         "tags": [
           "Git Integrations"
         ],
@@ -1772,6 +1807,7 @@
     "/api/git/integrations/{integrationId}/repos": {
       "get": {
         "operationId": "ListIntegrationRepos",
+        "summary": "List Integration Repos",
         "tags": [
           "Git Integrations"
         ],
@@ -1824,6 +1860,7 @@
     "/api/git/providers": {
       "get": {
         "operationId": "ListGitProviderConfigs",
+        "summary": "List Git Provider Configs",
         "tags": [
           "Admin — Git Provider Configs"
         ],
@@ -1865,6 +1902,7 @@
       },
       "put": {
         "operationId": "SaveGitProviderConfig",
+        "summary": "Save Git Provider Config",
         "description": "Session-gate UNVERIFIED (id-less mutating route, skipped for safety — see apidocSkipFullScopeReason). Scope is confirmed — every route is probed at zero scope — but whether a personal access token is additionally rejected here by a session-only gate is not; both security alternatives below are listed, only one is guaranteed correct.",
         "tags": [
           "Admin — Git Provider Configs"
@@ -1917,6 +1955,7 @@
     "/api/git/providers/github/manifest": {
       "get": {
         "operationId": "GetGitHubAppManifest",
+        "summary": "Get Git Hub App Manifest",
         "tags": [
           "Admin — Git Provider Configs"
         ],
@@ -1972,6 +2011,7 @@
     "/api/git/providers/{configId}": {
       "delete": {
         "operationId": "DeleteGitProviderConfig",
+        "summary": "Delete Git Provider Config",
         "tags": [
           "Admin — Git Provider Configs"
         ],
@@ -2028,6 +2068,7 @@
     "/api/maintenance/host-shell": {
       "post": {
         "operationId": "CreateHostShellSession",
+        "summary": "Create Host Shell Session",
         "description": "Session-gate UNVERIFIED (id-less mutating route, skipped for safety — see apidocSkipFullScopeReason). Scope is confirmed — every route is probed at zero scope — but whether a personal access token is additionally rejected here by a session-only gate is not; both security alternatives below are listed, only one is guaranteed correct.",
         "tags": [
           "Admin — Platform"
@@ -2096,6 +2137,7 @@
     "/api/maintenance/logs": {
       "get": {
         "operationId": "GetPlatformLogs",
+        "summary": "Get Platform Logs",
         "tags": [
           "Logs \u0026 Request Traces"
         ],
@@ -2136,6 +2178,7 @@
     "/api/maintenance/queue": {
       "get": {
         "operationId": "GetQueueStatus",
+        "summary": "Get Queue Status",
         "tags": [
           "Admin — Platform"
         ],
@@ -2176,6 +2219,7 @@
     "/api/maintenance/queue/clear": {
       "post": {
         "operationId": "ClearQueue",
+        "summary": "Clear Queue",
         "description": "Session-gate UNVERIFIED (id-less mutating route, skipped for safety — see apidocSkipFullScopeReason). Scope is confirmed — every route is probed at zero scope — but whether a personal access token is additionally rejected here by a session-only gate is not; both security alternatives below are listed, only one is guaranteed correct.",
         "tags": [
           "Admin — Platform"
@@ -2223,6 +2267,7 @@
     "/api/maintenance/queue/clear-pending": {
       "post": {
         "operationId": "ClearPendingQueue",
+        "summary": "Clear Pending Queue",
         "description": "Session-gate UNVERIFIED (id-less mutating route, skipped for safety — see apidocSkipFullScopeReason). Scope is confirmed — every route is probed at zero scope — but whether a personal access token is additionally rejected here by a session-only gate is not; both security alternatives below are listed, only one is guaranteed correct.",
         "tags": [
           "Admin — Platform"
@@ -2270,6 +2315,7 @@
     "/api/maintenance/restart": {
       "post": {
         "operationId": "RestartService",
+        "summary": "Restart Service",
         "description": "Session-gate UNVERIFIED (id-less mutating route, skipped for safety — see apidocSkipFullScopeReason). Scope is confirmed — every route is probed at zero scope — but whether a personal access token is additionally rejected here by a session-only gate is not; both security alternatives below are listed, only one is guaranteed correct.",
         "tags": [
           "Admin — Platform"
@@ -2320,6 +2366,7 @@
     "/api/maintenance/server-ip": {
       "get": {
         "operationId": "GetServerIP",
+        "summary": "Get Server IP",
         "tags": [
           "Admin — Platform"
         ],
@@ -2360,6 +2407,7 @@
     "/api/metrics": {
       "get": {
         "operationId": "GetMetrics",
+        "summary": "Get Metrics",
         "tags": [
           "Admin — Metrics \u0026 Live Streams"
         ],
@@ -2400,6 +2448,7 @@
     "/api/metrics/host": {
       "get": {
         "operationId": "GetHostHistoricalMetrics",
+        "summary": "Get Host Historical Metrics",
         "tags": [
           "Admin — Metrics \u0026 Live Streams"
         ],
@@ -2443,6 +2492,7 @@
     "/api/metrics/host/stream": {
       "get": {
         "operationId": "StreamHostMetrics",
+        "summary": "Stream Host Metrics",
         "description": "Session-gate UNVERIFIED (streaming (SSE) route — the connection never closes, so a bounded probe can't observe it). Scope is confirmed — every route is probed at zero scope — but whether a personal access token is additionally rejected here by a session-only gate is not; both security alternatives below are listed, only one is guaranteed correct.",
         "tags": [
           "Admin — Metrics \u0026 Live Streams"
@@ -2478,6 +2528,7 @@
     "/api/notification-channels": {
       "get": {
         "operationId": "ListNotificationChannels",
+        "summary": "List Notification Channels",
         "tags": [
           "Admin — Platform"
         ],
@@ -2519,6 +2570,7 @@
       },
       "post": {
         "operationId": "CreateNotificationChannel",
+        "summary": "Create Notification Channel",
         "description": "Session-gate UNVERIFIED (id-less mutating route, skipped for safety — see apidocSkipFullScopeReason). Scope is confirmed — every route is probed at zero scope — but whether a personal access token is additionally rejected here by a session-only gate is not; both security alternatives below are listed, only one is guaranteed correct.",
         "tags": [
           "Admin — Platform"
@@ -2571,6 +2623,7 @@
     "/api/notification-channels/test": {
       "post": {
         "operationId": "TestNotificationChannelParams",
+        "summary": "Test Notification Channel Params",
         "description": "Session-gate UNVERIFIED (id-less mutating route, skipped for safety — see apidocSkipFullScopeReason). Scope is confirmed — every route is probed at zero scope — but whether a personal access token is additionally rejected here by a session-only gate is not; both security alternatives below are listed, only one is guaranteed correct.",
         "tags": [
           "Admin — Platform"
@@ -2628,6 +2681,7 @@
     "/api/notification-channels/{channelId}": {
       "delete": {
         "operationId": "DeleteNotificationChannel",
+        "summary": "Delete Notification Channel",
         "tags": [
           "Admin — Platform"
         ],
@@ -2682,6 +2736,7 @@
       },
       "patch": {
         "operationId": "SetNotificationChannelEnabled",
+        "summary": "Set Notification Channel Enabled",
         "tags": [
           "Admin — Platform"
         ],
@@ -2741,6 +2796,7 @@
       },
       "put": {
         "operationId": "UpdateNotificationChannel",
+        "summary": "Update Notification Channel",
         "tags": [
           "Admin — Platform"
         ],
@@ -2802,6 +2858,7 @@
     "/api/notification-channels/{channelId}/test": {
       "post": {
         "operationId": "TestNotificationChannel",
+        "summary": "Test Notification Channel",
         "tags": [
           "Admin — Platform"
         ],
@@ -2858,6 +2915,7 @@
     "/api/notification-events": {
       "get": {
         "operationId": "ListNotificationEvents",
+        "summary": "List Notification Events",
         "tags": [
           "Admin — Platform"
         ],
@@ -2901,6 +2959,7 @@
     "/api/notifications": {
       "get": {
         "operationId": "ListNotifications",
+        "summary": "List Notifications",
         "tags": [
           "Stats \u0026 Notifications"
         ],
@@ -2950,6 +3009,7 @@
     "/api/notifications/read-all": {
       "post": {
         "operationId": "MarkAllNotificationsRead",
+        "summary": "Mark All Notifications Read",
         "description": "Session-gate UNVERIFIED (id-less mutating route, skipped for safety — see apidocSkipFullScopeReason). Scope is confirmed — every route is probed at zero scope — but whether a personal access token is additionally rejected here by a session-only gate is not; both security alternatives below are listed, only one is guaranteed correct.",
         "tags": [
           "Stats \u0026 Notifications"
@@ -2983,6 +3043,7 @@
     "/api/notifications/stream": {
       "get": {
         "operationId": "StreamNotifications",
+        "summary": "Stream Notifications",
         "description": "Session-gate UNVERIFIED (streaming (SSE) route — the connection never closes, so a bounded probe can't observe it). Scope is confirmed — every route is probed at zero scope — but whether a personal access token is additionally rejected here by a session-only gate is not; both security alternatives below are listed, only one is guaranteed correct.",
         "tags": [
           "Stats \u0026 Notifications"
@@ -3016,6 +3077,7 @@
     "/api/notifications/unread-count": {
       "get": {
         "operationId": "UnreadNotificationCount",
+        "summary": "Unread Notification Count",
         "tags": [
           "Stats \u0026 Notifications"
         ],
@@ -3059,6 +3121,7 @@
     "/api/notifications/{notificationId}/read": {
       "post": {
         "operationId": "MarkNotificationRead",
+        "summary": "Mark Notification Read",
         "tags": [
           "Stats \u0026 Notifications"
         ],
@@ -3108,6 +3171,7 @@
     "/api/projects": {
       "get": {
         "operationId": "ListProjects",
+        "summary": "List Projects",
         "tags": [
           "Projects"
         ],
@@ -3147,6 +3211,7 @@
       },
       "post": {
         "operationId": "CreateProject",
+        "summary": "Create Project",
         "description": "Session-gate UNVERIFIED (id-less mutating route, skipped for safety — see apidocSkipFullScopeReason). Scope is confirmed — every route is probed at zero scope — but whether a personal access token is additionally rejected here by a session-only gate is not; both security alternatives below are listed, only one is guaranteed correct.",
         "tags": [
           "Projects"
@@ -3197,6 +3262,7 @@
     "/api/projects/{projectId}": {
       "delete": {
         "operationId": "DeleteProject",
+        "summary": "Delete Project",
         "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
         "tags": [
           "Projects"
@@ -3247,6 +3313,7 @@
       },
       "get": {
         "operationId": "GetProject",
+        "summary": "Get Project",
         "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
         "tags": [
           "Projects"
@@ -3295,6 +3362,7 @@
       },
       "put": {
         "operationId": "UpdateProject",
+        "summary": "Update Project",
         "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
         "tags": [
           "Projects"
@@ -3355,6 +3423,7 @@
     "/api/projects/{projectId}/applications": {
       "get": {
         "operationId": "ListApplications",
+        "summary": "List Applications",
         "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
         "tags": [
           "Applications"
@@ -3406,6 +3475,7 @@
       },
       "post": {
         "operationId": "CreateApplication",
+        "summary": "Create Application",
         "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
         "tags": [
           "Applications"
@@ -3466,6 +3536,7 @@
     "/api/projects/{projectId}/applications/{applicationId}": {
       "delete": {
         "operationId": "DeleteApplication",
+        "summary": "Delete Application",
         "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
         "tags": [
           "Applications"
@@ -3525,6 +3596,7 @@
       },
       "get": {
         "operationId": "GetApplication",
+        "summary": "Get Application",
         "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
         "tags": [
           "Applications"
@@ -3582,6 +3654,7 @@
       },
       "put": {
         "operationId": "UpdateApplication",
+        "summary": "Update Application",
         "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
         "tags": [
           "Applications"
@@ -3651,6 +3724,7 @@
     "/api/projects/{projectId}/applications/{applicationId}/build": {
       "post": {
         "operationId": "BuildApplication",
+        "summary": "Build Application",
         "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
         "tags": [
           "Deploy \u0026 Lifecycle Actions"
@@ -3710,6 +3784,7 @@
     "/api/projects/{projectId}/applications/{applicationId}/cache": {
       "delete": {
         "operationId": "ClearBuildCache",
+        "summary": "Clear Build Cache",
         "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
         "tags": [
           "Applications"
@@ -3772,6 +3847,7 @@
       },
       "get": {
         "operationId": "GetBuildCache",
+        "summary": "Get Build Cache",
         "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
         "tags": [
           "Applications"
@@ -3842,6 +3918,7 @@
     "/api/projects/{projectId}/applications/{applicationId}/change-source": {
       "post": {
         "operationId": "ChangeApplicationSource",
+        "summary": "Change Application Source",
         "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
         "tags": [
           "Applications"
@@ -3911,6 +3988,7 @@
     "/api/projects/{projectId}/applications/{applicationId}/deploy": {
       "post": {
         "operationId": "DeployApplication",
+        "summary": "Deploy Application",
         "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
         "tags": [
           "Deploy \u0026 Lifecycle Actions"
@@ -3970,6 +4048,7 @@
     "/api/projects/{projectId}/applications/{applicationId}/deploy-hook": {
       "delete": {
         "operationId": "DeleteDeployHook",
+        "summary": "Delete Deploy Hook",
         "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
         "tags": [
           "Applications"
@@ -4027,6 +4106,7 @@
       },
       "get": {
         "operationId": "GetDeployHook",
+        "summary": "Get Deploy Hook",
         "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
         "tags": [
           "Applications"
@@ -4084,6 +4164,7 @@
       },
       "post": {
         "operationId": "GenerateDeployHook",
+        "summary": "Generate Deploy Hook",
         "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
         "tags": [
           "Applications"
@@ -4143,6 +4224,7 @@
     "/api/projects/{projectId}/applications/{applicationId}/deploy-hook/reveal": {
       "get": {
         "operationId": "RevealDeployHook",
+        "summary": "Reveal Deploy Hook",
         "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
         "tags": [
           "Applications"
@@ -4199,6 +4281,7 @@
     "/api/projects/{projectId}/applications/{applicationId}/deployments": {
       "get": {
         "operationId": "ListDeployments",
+        "summary": "List Deployments",
         "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
         "tags": [
           "Deployments"
@@ -4261,6 +4344,7 @@
     "/api/projects/{projectId}/applications/{applicationId}/deployments/{deploymentId}": {
       "get": {
         "operationId": "GetDeployment",
+        "summary": "Get Deployment",
         "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
         "tags": [
           "Deployments"
@@ -4329,6 +4413,7 @@
     "/api/projects/{projectId}/applications/{applicationId}/deployments/{deploymentId}/build-logs": {
       "get": {
         "operationId": "StreamBuildLogs",
+        "summary": "Stream Build Logs",
         "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope. Session-gate UNVERIFIED (streaming (SSE) route — the connection never closes, so a bounded probe can't observe it). Scope is confirmed — every route is probed at zero scope — but whether a personal access token is additionally rejected here by a session-only gate is not; both security alternatives below are listed, only one is guaranteed correct.",
         "tags": [
           "Deployments"
@@ -4391,6 +4476,7 @@
     "/api/projects/{projectId}/applications/{applicationId}/domains": {
       "get": {
         "operationId": "ListDomains",
+        "summary": "List Domains",
         "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
         "tags": [
           "Domains \u0026 TLS"
@@ -4451,6 +4537,7 @@
       },
       "post": {
         "operationId": "AddDomain",
+        "summary": "Add Domain",
         "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
         "tags": [
           "Domains \u0026 TLS"
@@ -4520,6 +4607,7 @@
     "/api/projects/{projectId}/applications/{applicationId}/domains/{domainId}": {
       "delete": {
         "operationId": "RemoveDomain",
+        "summary": "Remove Domain",
         "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
         "tags": [
           "Domains \u0026 TLS"
@@ -4588,6 +4676,7 @@
       },
       "put": {
         "operationId": "UpdateDomain",
+        "summary": "Update Domain",
         "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
         "tags": [
           "Domains \u0026 TLS"
@@ -4666,6 +4755,7 @@
     "/api/projects/{projectId}/applications/{applicationId}/domains/{domainId}/features": {
       "get": {
         "operationId": "ListRouteFeatures",
+        "summary": "List Route Features",
         "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
         "tags": [
           "Domains \u0026 TLS"
@@ -4735,6 +4825,7 @@
       },
       "put": {
         "operationId": "UpsertRouteFeature",
+        "summary": "Upsert Route Feature",
         "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
         "tags": [
           "Domains \u0026 TLS"
@@ -4813,6 +4904,7 @@
     "/api/projects/{projectId}/applications/{applicationId}/domains/{domainId}/features/{featureId}": {
       "delete": {
         "operationId": "DeleteRouteFeature",
+        "summary": "Delete Route Feature",
         "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
         "tags": [
           "Domains \u0026 TLS"
@@ -4895,6 +4987,7 @@
     "/api/projects/{projectId}/applications/{applicationId}/domains/{domainId}/tls/recheck": {
       "post": {
         "operationId": "RecheckDomainTLS",
+        "summary": "Recheck Domain TLS",
         "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
         "tags": [
           "Domains \u0026 TLS"
@@ -4956,6 +5049,7 @@
     "/api/projects/{projectId}/applications/{applicationId}/env": {
       "get": {
         "operationId": "ListEnvVars",
+        "summary": "List Env Vars",
         "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
         "tags": [
           "Environment Variables"
@@ -5016,6 +5110,7 @@
       },
       "put": {
         "operationId": "UpdateEnvVars",
+        "summary": "Update Env Vars",
         "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
         "tags": [
           "Environment Variables"
@@ -5090,6 +5185,7 @@
     "/api/projects/{projectId}/applications/{applicationId}/env/{envVarId}/reveal": {
       "get": {
         "operationId": "RevealEnvVar",
+        "summary": "Reveal Env Var",
         "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
         "tags": [
           "Environment Variables"
@@ -5160,6 +5256,7 @@
     "/api/projects/{projectId}/applications/{applicationId}/file-mounts": {
       "get": {
         "operationId": "ListFileMounts",
+        "summary": "List File Mounts",
         "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
         "tags": [
           "File Mounts"
@@ -5220,6 +5317,7 @@
       },
       "post": {
         "operationId": "CreateFileMount",
+        "summary": "Create File Mount",
         "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
         "tags": [
           "File Mounts"
@@ -5289,6 +5387,7 @@
     "/api/projects/{projectId}/applications/{applicationId}/file-mounts/{fileMountId}": {
       "delete": {
         "operationId": "DeleteFileMount",
+        "summary": "Delete File Mount",
         "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
         "tags": [
           "File Mounts"
@@ -5360,6 +5459,7 @@
       },
       "put": {
         "operationId": "UpdateFileMount",
+        "summary": "Update File Mount",
         "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
         "tags": [
           "File Mounts"
@@ -5438,6 +5538,7 @@
     "/api/projects/{projectId}/applications/{applicationId}/file-mounts/{fileMountId}/reveal": {
       "get": {
         "operationId": "RevealFileMount",
+        "summary": "Reveal File Mount",
         "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
         "tags": [
           "File Mounts"
@@ -5508,6 +5609,7 @@
     "/api/projects/{projectId}/applications/{applicationId}/health": {
       "get": {
         "operationId": "GetApplicationHealth",
+        "summary": "Get Application Health",
         "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
         "tags": [
           "Applications"
@@ -5568,6 +5670,7 @@
     "/api/projects/{projectId}/applications/{applicationId}/health-check": {
       "put": {
         "operationId": "SetHealthCheck",
+        "summary": "Set Health Check",
         "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
         "tags": [
           "Applications"
@@ -5637,6 +5740,7 @@
     "/api/projects/{projectId}/applications/{applicationId}/logs": {
       "get": {
         "operationId": "StreamLogs",
+        "summary": "Stream Logs",
         "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope. Session-gate UNVERIFIED (streaming (SSE) route — the connection never closes, so a bounded probe can't observe it). Scope is confirmed — every route is probed at zero scope — but whether a personal access token is additionally rejected here by a session-only gate is not; both security alternatives below are listed, only one is guaranteed correct.",
         "tags": [
           "Logs \u0026 Request Traces"
@@ -5690,6 +5794,7 @@
     "/api/projects/{projectId}/applications/{applicationId}/logs/history": {
       "get": {
         "operationId": "ListApplicationLogs",
+        "summary": "List Application Logs",
         "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
         "tags": [
           "Logs \u0026 Request Traces"
@@ -5752,6 +5857,7 @@
     "/api/projects/{projectId}/applications/{applicationId}/logs/sessions": {
       "get": {
         "operationId": "ListApplicationLogSessions",
+        "summary": "List Application Log Sessions",
         "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
         "tags": [
           "Logs \u0026 Request Traces"
@@ -5814,6 +5920,7 @@
     "/api/projects/{projectId}/applications/{applicationId}/metrics/stream": {
       "get": {
         "operationId": "StreamApplicationMetrics",
+        "summary": "Stream Application Metrics",
         "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope. Session-gate UNVERIFIED (streaming (SSE) route — the connection never closes, so a bounded probe can't observe it). Scope is confirmed — every route is probed at zero scope — but whether a personal access token is additionally rejected here by a session-only gate is not; both security alternatives below are listed, only one is guaranteed correct.",
         "tags": [
           "Metrics"
@@ -5867,6 +5974,7 @@
     "/api/projects/{projectId}/applications/{applicationId}/previews": {
       "get": {
         "operationId": "ListPreviews",
+        "summary": "List Previews",
         "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
         "tags": [
           "Preview Environments"
@@ -5934,6 +6042,7 @@
     "/api/projects/{projectId}/applications/{applicationId}/previews/config": {
       "put": {
         "operationId": "UpdatePreviewConfig",
+        "summary": "Update Preview Config",
         "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
         "tags": [
           "Preview Environments"
@@ -6003,6 +6112,7 @@
     "/api/projects/{projectId}/applications/{applicationId}/previews/{previewId}": {
       "delete": {
         "operationId": "DeletePreview",
+        "summary": "Delete Preview",
         "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
         "tags": [
           "Preview Environments"
@@ -6076,6 +6186,7 @@
     "/api/projects/{projectId}/applications/{applicationId}/rebuild": {
       "post": {
         "operationId": "RebuildApplication",
+        "summary": "Rebuild Application",
         "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
         "tags": [
           "Deploy \u0026 Lifecycle Actions"
@@ -6135,6 +6246,7 @@
     "/api/projects/{projectId}/applications/{applicationId}/reload": {
       "post": {
         "operationId": "ReloadApplication",
+        "summary": "Reload Application",
         "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
         "tags": [
           "Deploy \u0026 Lifecycle Actions"
@@ -6194,6 +6306,7 @@
     "/api/projects/{projectId}/applications/{applicationId}/requests": {
       "get": {
         "operationId": "ListRequestLogs",
+        "summary": "List Request Logs",
         "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
         "tags": [
           "Logs \u0026 Request Traces"
@@ -6256,6 +6369,7 @@
     "/api/projects/{projectId}/applications/{applicationId}/requests/stream": {
       "get": {
         "operationId": "StreamRequestLogs",
+        "summary": "Stream Request Logs",
         "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope. Session-gate UNVERIFIED (streaming (SSE) route — the connection never closes, so a bounded probe can't observe it). Scope is confirmed — every route is probed at zero scope — but whether a personal access token is additionally rejected here by a session-only gate is not; both security alternatives below are listed, only one is guaranteed correct.",
         "tags": [
           "Logs \u0026 Request Traces"
@@ -6309,6 +6423,7 @@
     "/api/projects/{projectId}/applications/{applicationId}/resources": {
       "put": {
         "operationId": "SetResources",
+        "summary": "Set Resources",
         "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
         "tags": [
           "Applications"
@@ -6378,6 +6493,7 @@
     "/api/projects/{projectId}/applications/{applicationId}/restart": {
       "post": {
         "operationId": "RestartApplication",
+        "summary": "Restart Application",
         "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
         "tags": [
           "Deploy \u0026 Lifecycle Actions"
@@ -6437,6 +6553,7 @@
     "/api/projects/{projectId}/applications/{applicationId}/rollback": {
       "post": {
         "operationId": "RollbackDeployment",
+        "summary": "Rollback Deployment",
         "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
         "tags": [
           "Deploy \u0026 Lifecycle Actions"
@@ -6506,6 +6623,7 @@
     "/api/projects/{projectId}/applications/{applicationId}/runtime": {
       "put": {
         "operationId": "UpdateApplicationRuntime",
+        "summary": "Update Application Runtime",
         "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
         "tags": [
           "Applications"
@@ -6583,6 +6701,7 @@
     "/api/projects/{projectId}/applications/{applicationId}/start": {
       "post": {
         "operationId": "StartApplication",
+        "summary": "Start Application",
         "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
         "tags": [
           "Deploy \u0026 Lifecycle Actions"
@@ -6642,6 +6761,7 @@
     "/api/projects/{projectId}/applications/{applicationId}/stop": {
       "post": {
         "operationId": "StopApplication",
+        "summary": "Stop Application",
         "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
         "tags": [
           "Deploy \u0026 Lifecycle Actions"
@@ -6701,6 +6821,7 @@
     "/api/projects/{projectId}/applications/{applicationId}/terminal": {
       "post": {
         "operationId": "CreateTerminalSession",
+        "summary": "Create Terminal Session",
         "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
         "tags": [
           "Terminal Access"
@@ -6777,6 +6898,7 @@
     "/api/projects/{projectId}/applications/{applicationId}/volume-backup-configs": {
       "get": {
         "operationId": "ListAppVolumeBackupConfigs",
+        "summary": "List App Volume Backup Configs",
         "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
         "tags": [
           "Applications"
@@ -6839,6 +6961,7 @@
     "/api/projects/{projectId}/applications/{applicationId}/volumes": {
       "get": {
         "operationId": "ListApplicationVolumes",
+        "summary": "List Application Volumes",
         "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
         "tags": [
           "Application Volumes \u0026 Backups"
@@ -6899,6 +7022,7 @@
       },
       "post": {
         "operationId": "CreateApplicationVolume",
+        "summary": "Create Application Volume",
         "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
         "tags": [
           "Application Volumes \u0026 Backups"
@@ -6968,6 +7092,7 @@
     "/api/projects/{projectId}/applications/{applicationId}/volumes/{volumeId}": {
       "delete": {
         "operationId": "DeleteApplicationVolume",
+        "summary": "Delete Application Volume",
         "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
         "tags": [
           "Application Volumes \u0026 Backups"
@@ -7036,6 +7161,7 @@
     "/api/projects/{projectId}/applications/{applicationId}/volumes/{volumeId}/backup-configs": {
       "get": {
         "operationId": "ListVolumeBackupConfigs",
+        "summary": "List Volume Backup Configs",
         "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
         "tags": [
           "Application Volumes \u0026 Backups"
@@ -7105,6 +7231,7 @@
       },
       "post": {
         "operationId": "CreateVolumeBackupConfig",
+        "summary": "Create Volume Backup Config",
         "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
         "tags": [
           "Application Volumes \u0026 Backups"
@@ -7183,6 +7310,7 @@
     "/api/projects/{projectId}/applications/{applicationId}/volumes/{volumeId}/backup-configs/{configId}": {
       "delete": {
         "operationId": "DeleteVolumeBackupConfig",
+        "summary": "Delete Volume Backup Config",
         "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
         "tags": [
           "Application Volumes \u0026 Backups"
@@ -7263,6 +7391,7 @@
       },
       "put": {
         "operationId": "UpdateVolumeBackupConfig",
+        "summary": "Update Volume Backup Config",
         "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
         "tags": [
           "Application Volumes \u0026 Backups"
@@ -7350,6 +7479,7 @@
     "/api/projects/{projectId}/applications/{applicationId}/volumes/{volumeId}/backup-configs/{configId}/run": {
       "post": {
         "operationId": "RunVolumeBackupConfig",
+        "summary": "Run Volume Backup Config",
         "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
         "tags": [
           "Application Volumes \u0026 Backups"
@@ -7432,6 +7562,7 @@
     "/api/projects/{projectId}/applications/{applicationId}/volumes/{volumeId}/backups": {
       "get": {
         "operationId": "ListVolumeBackups",
+        "summary": "List Volume Backups",
         "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
         "tags": [
           "Application Volumes \u0026 Backups"
@@ -7503,6 +7634,7 @@
     "/api/projects/{projectId}/applications/{applicationId}/volumes/{volumeId}/backups/{backupId}/restore": {
       "post": {
         "operationId": "RestoreVolumeBackup",
+        "summary": "Restore Volume Backup",
         "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
         "tags": [
           "Application Volumes \u0026 Backups"
@@ -7582,6 +7714,7 @@
     "/api/projects/{projectId}/applications/{applicationId}/volumes/{volumeId}/restores": {
       "get": {
         "operationId": "ListVolumeRestores",
+        "summary": "List Volume Restores",
         "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
         "tags": [
           "Application Volumes \u0026 Backups"
@@ -7653,6 +7786,7 @@
     "/api/projects/{projectId}/applications/{applicationId}/webhook": {
       "put": {
         "operationId": "UpdateApplicationWebhook",
+        "summary": "Update Application Webhook",
         "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
         "tags": [
           "Applications"
@@ -7722,6 +7856,7 @@
     "/api/projects/{projectId}/applications/{applicationId}/webhook/reveal": {
       "get": {
         "operationId": "RevealWebhookSecret",
+        "summary": "Reveal Webhook Secret",
         "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
         "tags": [
           "Applications"
@@ -7783,6 +7918,7 @@
     "/api/projects/{projectId}/backup-destinations": {
       "get": {
         "operationId": "ListBackupDestinations",
+        "summary": "List Backup Destinations",
         "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
         "tags": [
           "Databases \u0026 Backups"
@@ -7834,6 +7970,7 @@
       },
       "post": {
         "operationId": "CreateBackupDestination",
+        "summary": "Create Backup Destination",
         "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
         "tags": [
           "Databases \u0026 Backups"
@@ -7894,6 +8031,7 @@
     "/api/projects/{projectId}/backup-destinations/test": {
       "post": {
         "operationId": "TestBackupDestinationParams",
+        "summary": "Test Backup Destination Params",
         "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
         "tags": [
           "Databases \u0026 Backups"
@@ -7959,6 +8097,7 @@
     "/api/projects/{projectId}/backup-destinations/{destId}": {
       "delete": {
         "operationId": "DeleteBackupDestination",
+        "summary": "Delete Backup Destination",
         "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
         "tags": [
           "Databases \u0026 Backups"
@@ -8021,6 +8160,7 @@
       },
       "put": {
         "operationId": "UpdateBackupDestination",
+        "summary": "Update Backup Destination",
         "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
         "tags": [
           "Databases \u0026 Backups"
@@ -8090,6 +8230,7 @@
     "/api/projects/{projectId}/backup-destinations/{destId}/test": {
       "post": {
         "operationId": "TestBackupDestination",
+        "summary": "Test Backup Destination",
         "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
         "tags": [
           "Databases \u0026 Backups"
@@ -8154,6 +8295,7 @@
     "/api/projects/{projectId}/backups": {
       "get": {
         "operationId": "ListProjectBackups",
+        "summary": "List Project Backups",
         "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
         "tags": [
           "Projects"
@@ -8207,6 +8349,7 @@
     "/api/projects/{projectId}/databases": {
       "get": {
         "operationId": "ListDatabases",
+        "summary": "List Databases",
         "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
         "tags": [
           "Databases \u0026 Backups"
@@ -8258,6 +8401,7 @@
       },
       "post": {
         "operationId": "CreateDatabase",
+        "summary": "Create Database",
         "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
         "tags": [
           "Databases \u0026 Backups"
@@ -8318,6 +8462,7 @@
     "/api/projects/{projectId}/databases/{databaseId}": {
       "delete": {
         "operationId": "DeleteDatabase",
+        "summary": "Delete Database",
         "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
         "tags": [
           "Databases \u0026 Backups"
@@ -8377,6 +8522,7 @@
       },
       "get": {
         "operationId": "GetDatabase",
+        "summary": "Get Database",
         "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
         "tags": [
           "Databases \u0026 Backups"
@@ -8434,6 +8580,7 @@
       },
       "put": {
         "operationId": "UpdateDatabase",
+        "summary": "Update Database",
         "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
         "tags": [
           "Databases \u0026 Backups"
@@ -8503,6 +8650,7 @@
     "/api/projects/{projectId}/databases/{databaseId}/backup-configs": {
       "get": {
         "operationId": "ListDatabaseBackupConfigs",
+        "summary": "List Database Backup Configs",
         "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
         "tags": [
           "Databases \u0026 Backups"
@@ -8563,6 +8711,7 @@
       },
       "post": {
         "operationId": "CreateDatabaseBackupConfig",
+        "summary": "Create Database Backup Config",
         "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
         "tags": [
           "Databases \u0026 Backups"
@@ -8632,6 +8781,7 @@
     "/api/projects/{projectId}/databases/{databaseId}/backup-configs/{configId}": {
       "delete": {
         "operationId": "DeleteDatabaseBackupConfig",
+        "summary": "Delete Database Backup Config",
         "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
         "tags": [
           "Databases \u0026 Backups"
@@ -8703,6 +8853,7 @@
       },
       "put": {
         "operationId": "UpdateDatabaseBackupConfig",
+        "summary": "Update Database Backup Config",
         "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
         "tags": [
           "Databases \u0026 Backups"
@@ -8781,6 +8932,7 @@
     "/api/projects/{projectId}/databases/{databaseId}/backup-configs/{configId}/run": {
       "post": {
         "operationId": "RunDatabaseBackupConfig",
+        "summary": "Run Database Backup Config",
         "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
         "tags": [
           "Databases \u0026 Backups"
@@ -8854,6 +9006,7 @@
     "/api/projects/{projectId}/databases/{databaseId}/backups": {
       "get": {
         "operationId": "ListDatabaseBackups",
+        "summary": "List Database Backups",
         "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
         "tags": [
           "Databases \u0026 Backups"
@@ -8914,6 +9067,7 @@
       },
       "post": {
         "operationId": "BackupDatabase",
+        "summary": "Backup Database",
         "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
         "tags": [
           "Databases \u0026 Backups"
@@ -8978,6 +9132,7 @@
     "/api/projects/{projectId}/databases/{databaseId}/backups/{backupId}": {
       "delete": {
         "operationId": "DeleteDatabaseBackup",
+        "summary": "Delete Database Backup",
         "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
         "tags": [
           "Databases \u0026 Backups"
@@ -9048,6 +9203,7 @@
     "/api/projects/{projectId}/databases/{databaseId}/credentials/reveal": {
       "get": {
         "operationId": "RevealDatabaseCredentials",
+        "summary": "Reveal Database Credentials",
         "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
         "tags": [
           "Databases \u0026 Backups"
@@ -9104,6 +9260,7 @@
     "/api/projects/{projectId}/databases/{databaseId}/deletion-impact": {
       "get": {
         "operationId": "GetDatabaseDeletionImpact",
+        "summary": "Get Database Deletion Impact",
         "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
         "tags": [
           "Databases \u0026 Backups"
@@ -9174,6 +9331,7 @@
     "/api/projects/{projectId}/databases/{databaseId}/external-access": {
       "post": {
         "operationId": "SetDatabaseExternalAccess",
+        "summary": "Set Database External Access",
         "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
         "tags": [
           "Databases \u0026 Backups"
@@ -9263,6 +9421,7 @@
     "/api/projects/{projectId}/databases/{databaseId}/logs/history": {
       "get": {
         "operationId": "ListDatabaseLogs",
+        "summary": "List Database Logs",
         "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
         "tags": [
           "Logs \u0026 Request Traces"
@@ -9325,6 +9484,7 @@
     "/api/projects/{projectId}/databases/{databaseId}/logs/sessions": {
       "get": {
         "operationId": "ListDatabaseLogSessions",
+        "summary": "List Database Log Sessions",
         "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
         "tags": [
           "Logs \u0026 Request Traces"
@@ -9387,6 +9547,7 @@
     "/api/projects/{projectId}/databases/{databaseId}/reload": {
       "post": {
         "operationId": "ReloadDatabase",
+        "summary": "Reload Database",
         "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
         "tags": [
           "Deploy \u0026 Lifecycle Actions"
@@ -9451,6 +9612,7 @@
     "/api/projects/{projectId}/databases/{databaseId}/restart": {
       "post": {
         "operationId": "RestartDatabase",
+        "summary": "Restart Database",
         "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
         "tags": [
           "Deploy \u0026 Lifecycle Actions"
@@ -9510,6 +9672,7 @@
     "/api/projects/{projectId}/databases/{databaseId}/restore": {
       "post": {
         "operationId": "RestoreDatabase",
+        "summary": "Restore Database",
         "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
         "tags": [
           "Databases \u0026 Backups"
@@ -9581,6 +9744,7 @@
     "/api/projects/{projectId}/databases/{databaseId}/restores": {
       "get": {
         "operationId": "ListDatabaseRestores",
+        "summary": "List Database Restores",
         "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
         "tags": [
           "Databases \u0026 Backups"
@@ -9643,6 +9807,7 @@
     "/api/projects/{projectId}/databases/{databaseId}/start": {
       "post": {
         "operationId": "StartDatabase",
+        "summary": "Start Database",
         "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
         "tags": [
           "Deploy \u0026 Lifecycle Actions"
@@ -9702,6 +9867,7 @@
     "/api/projects/{projectId}/databases/{databaseId}/stop": {
       "post": {
         "operationId": "StopDatabase",
+        "summary": "Stop Database",
         "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
         "tags": [
           "Deploy \u0026 Lifecycle Actions"
@@ -9761,6 +9927,7 @@
     "/api/projects/{projectId}/databases/{databaseId}/upgrade": {
       "post": {
         "operationId": "UpgradeDatabase",
+        "summary": "Upgrade Database",
         "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
         "tags": [
           "Databases \u0026 Backups"
@@ -9835,6 +10002,7 @@
     "/api/projects/{projectId}/databases/{databaseId}/volume": {
       "get": {
         "operationId": "GetDatabaseVolume",
+        "summary": "Get Database Volume",
         "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
         "tags": [
           "Databases \u0026 Backups"
@@ -9894,6 +10062,7 @@
     "/api/projects/{projectId}/env": {
       "get": {
         "operationId": "ListProjectEnvVars",
+        "summary": "List Project Env Vars",
         "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
         "tags": [
           "Environment Variables"
@@ -9945,6 +10114,7 @@
       },
       "put": {
         "operationId": "UpdateProjectEnvVars",
+        "summary": "Update Project Env Vars",
         "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
         "tags": [
           "Environment Variables"
@@ -10010,6 +10180,7 @@
     "/api/projects/{projectId}/env/{envVarId}/reveal": {
       "get": {
         "operationId": "RevealProjectEnvVar",
+        "summary": "Reveal Project Env Var",
         "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
         "tags": [
           "Environment Variables"
@@ -10071,6 +10242,7 @@
     "/api/projects/{projectId}/metrics": {
       "get": {
         "operationId": "GetProjectMetrics",
+        "summary": "Get Project Metrics",
         "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
         "tags": [
           "Metrics"
@@ -10124,6 +10296,7 @@
     "/api/projects/{projectId}/orphaned-backups": {
       "get": {
         "operationId": "ListProjectOrphanedBackups",
+        "summary": "List Project Orphaned Backups",
         "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
         "tags": [
           "Databases \u0026 Backups"
@@ -10177,6 +10350,7 @@
     "/api/projects/{projectId}/orphaned-backups/{backupId}": {
       "delete": {
         "operationId": "DeleteOrphanedBackup",
+        "summary": "Delete Orphaned Backup",
         "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
         "tags": [
           "Databases \u0026 Backups"
@@ -10238,6 +10412,7 @@
     "/api/projects/{projectId}/orphaned-backups/{backupId}/restore": {
       "post": {
         "operationId": "RestoreDatabaseFromTombstone",
+        "summary": "Restore Database From Tombstone",
         "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
         "tags": [
           "Databases \u0026 Backups"
@@ -10294,6 +10469,7 @@
     "/api/projects/{projectId}/sharing": {
       "put": {
         "operationId": "UpdateProjectSharing",
+        "summary": "Update Project Sharing",
         "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
         "tags": [
           "Projects"
@@ -10354,6 +10530,7 @@
     "/api/projects/{projectId}/transfer": {
       "put": {
         "operationId": "TransferProject",
+        "summary": "Transfer Project",
         "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
         "tags": [
           "Projects"
@@ -10414,6 +10591,7 @@
     "/api/proxy/reconcile": {
       "post": {
         "operationId": "ReconcileProxy",
+        "summary": "Reconcile Proxy",
         "description": "Session-gate UNVERIFIED (id-less mutating route, skipped for safety — see apidocSkipFullScopeReason). Scope is confirmed — every route is probed at zero scope — but whether a personal access token is additionally rejected here by a session-only gate is not; both security alternatives below are listed, only one is guaranteed correct.",
         "tags": [
           "Admin — Platform"
@@ -10456,6 +10634,7 @@
     "/api/proxy/reconciler": {
       "get": {
         "operationId": "GetProxyReconcilerStatus",
+        "summary": "Get Proxy Reconciler Status",
         "tags": [
           "Admin — Platform"
         ],
@@ -10496,6 +10675,7 @@
     "/api/quotas": {
       "get": {
         "operationId": "ListQuotas",
+        "summary": "List Quotas",
         "tags": [
           "Admin — Platform"
         ],
@@ -10539,6 +10719,7 @@
     "/api/quotas/{scope}/{scopeId}": {
       "delete": {
         "operationId": "DeleteQuota",
+        "summary": "Delete Quota",
         "tags": [
           "Admin — Platform"
         ],
@@ -10602,6 +10783,7 @@
       },
       "get": {
         "operationId": "GetQuota",
+        "summary": "Get Quota",
         "tags": [
           "Admin — Platform"
         ],
@@ -10660,6 +10842,7 @@
       },
       "put": {
         "operationId": "UpsertQuota",
+        "summary": "Upsert Quota",
         "tags": [
           "Admin — Platform"
         ],
@@ -10730,6 +10913,7 @@
     "/api/requests": {
       "get": {
         "operationId": "ListAllRequestLogs",
+        "summary": "List All Request Logs",
         "tags": [
           "Logs \u0026 Request Traces"
         ],
@@ -10773,6 +10957,7 @@
     "/api/requests/stream": {
       "get": {
         "operationId": "StreamAllRequestLogs",
+        "summary": "Stream All Request Logs",
         "description": "Session-gate UNVERIFIED (streaming (SSE) route — the connection never closes, so a bounded probe can't observe it). Scope is confirmed — every route is probed at zero scope — but whether a personal access token is additionally rejected here by a session-only gate is not; both security alternatives below are listed, only one is guaranteed correct.",
         "tags": [
           "Logs \u0026 Request Traces"
@@ -10808,6 +10993,7 @@
     "/api/requests/summary": {
       "get": {
         "operationId": "GetAllRequestsSummary",
+        "summary": "Get All Requests Summary",
         "tags": [
           "Logs \u0026 Request Traces"
         ],
@@ -10848,6 +11034,7 @@
     "/api/server/dashboard-tls": {
       "get": {
         "operationId": "GetDashboardTLS",
+        "summary": "Get Dashboard TLS",
         "tags": [
           "Admin — Platform"
         ],
@@ -10888,6 +11075,7 @@
     "/api/server/services": {
       "get": {
         "operationId": "GetServerServices",
+        "summary": "Get Server Services",
         "tags": [
           "Admin — Platform"
         ],
@@ -10928,6 +11116,7 @@
     "/api/settings": {
       "get": {
         "operationId": "ListSettings",
+        "summary": "List Settings",
         "tags": [
           "Admin — Platform"
         ],
@@ -10969,6 +11158,7 @@
       },
       "put": {
         "operationId": "UpdateSettings",
+        "summary": "Update Settings",
         "description": "Session-gate UNVERIFIED (id-less mutating route, skipped for safety — see apidocSkipFullScopeReason). Scope is confirmed — every route is probed at zero scope — but whether a personal access token is additionally rejected here by a session-only gate is not; both security alternatives below are listed, only one is guaranteed correct.",
         "tags": [
           "Admin — Platform"
@@ -11029,6 +11219,7 @@
     "/api/settings/smtp": {
       "get": {
         "operationId": "GetSMTPSettings",
+        "summary": "Get SMTP Settings",
         "tags": [
           "Admin — Platform"
         ],
@@ -11067,6 +11258,7 @@
       },
       "put": {
         "operationId": "UpdateSMTPSettings",
+        "summary": "Update SMTP Settings",
         "description": "Session-gate UNVERIFIED (id-less mutating route, skipped for safety — see apidocSkipFullScopeReason). Scope is confirmed — every route is probed at zero scope — but whether a personal access token is additionally rejected here by a session-only gate is not; both security alternatives below are listed, only one is guaranteed correct.",
         "tags": [
           "Admin — Platform"
@@ -11124,6 +11316,7 @@
     "/api/settings/smtp/test": {
       "post": {
         "operationId": "TestSMTPSettings",
+        "summary": "Test SMTP Settings",
         "description": "Session-gate UNVERIFIED (id-less mutating route, skipped for safety — see apidocSkipFullScopeReason). Scope is confirmed — every route is probed at zero scope — but whether a personal access token is additionally rejected here by a session-only gate is not; both security alternatives below are listed, only one is guaranteed correct.",
         "tags": [
           "Admin — Platform"
@@ -11181,6 +11374,7 @@
     "/api/stats": {
       "get": {
         "operationId": "GetStats",
+        "summary": "Get Stats",
         "tags": [
           "Stats \u0026 Notifications"
         ],
@@ -11219,6 +11413,7 @@
     "/api/templates": {
       "get": {
         "operationId": "ListTemplates",
+        "summary": "List Templates",
         "tags": [
           "App Templates"
         ],
@@ -11260,6 +11455,7 @@
     "/api/templates/{templateId}": {
       "get": {
         "operationId": "GetTemplate",
+        "summary": "Get Template",
         "tags": [
           "App Templates"
         ],
@@ -11309,6 +11505,7 @@
     "/api/templates/{templateId}/instantiate": {
       "post": {
         "operationId": "InstantiateTemplate",
+        "summary": "Instantiate Template",
         "tags": [
           "App Templates"
         ],
@@ -11368,6 +11565,7 @@
     "/api/tokens": {
       "get": {
         "operationId": "ListAPITokens",
+        "summary": "List API Tokens",
         "tags": [
           "Personal Access Tokens"
         ],
@@ -11407,6 +11605,7 @@
       },
       "post": {
         "operationId": "CreateAPIToken",
+        "summary": "Create API Token",
         "description": "Session-gate UNVERIFIED (id-less mutating route, skipped for safety — see apidocSkipFullScopeReason). Scope is confirmed — every route is probed at zero scope — but whether a personal access token is additionally rejected here by a session-only gate is not; both security alternatives below are listed, only one is guaranteed correct.",
         "tags": [
           "Personal Access Tokens"
@@ -11491,6 +11690,7 @@
     "/api/tokens/{tokenId}": {
       "delete": {
         "operationId": "DeleteAPIToken",
+        "summary": "Delete API Token",
         "tags": [
           "Personal Access Tokens"
         ],
@@ -11542,6 +11742,7 @@
     "/api/users": {
       "get": {
         "operationId": "ListUsers",
+        "summary": "List Users",
         "tags": [
           "Admin — Users \u0026 Invitations"
         ],
@@ -11583,6 +11784,7 @@
       },
       "post": {
         "operationId": "CreateUser",
+        "summary": "Create User",
         "description": "Session-gate UNVERIFIED (id-less mutating route, skipped for safety — see apidocSkipFullScopeReason). Scope is confirmed — every route is probed at zero scope — but whether a personal access token is additionally rejected here by a session-only gate is not; both security alternatives below are listed, only one is guaranteed correct.",
         "tags": [
           "Admin — Users \u0026 Invitations"
@@ -11635,6 +11837,7 @@
     "/api/users/invitations": {
       "get": {
         "operationId": "ListPendingInvitations",
+        "summary": "List Pending Invitations",
         "tags": [
           "Admin — Users \u0026 Invitations"
         ],
@@ -11678,6 +11881,7 @@
     "/api/users/invitations/{invitationId}": {
       "delete": {
         "operationId": "RevokeInvitation",
+        "summary": "Revoke Invitation",
         "tags": [
           "Admin — Users \u0026 Invitations"
         ],
@@ -11722,6 +11926,7 @@
     "/api/users/invite": {
       "post": {
         "operationId": "InviteUser",
+        "summary": "Invite User",
         "description": "Session-gate UNVERIFIED (id-less mutating route, skipped for safety — see apidocSkipFullScopeReason). Scope is confirmed — every route is probed at zero scope — but whether a personal access token is additionally rejected here by a session-only gate is not; both security alternatives below are listed, only one is guaranteed correct.",
         "tags": [
           "Admin — Users \u0026 Invitations"
@@ -11774,6 +11979,7 @@
     "/api/users/{userId}": {
       "delete": {
         "operationId": "DeleteUser",
+        "summary": "Delete User",
         "tags": [
           "Admin — Users \u0026 Invitations"
         ],
@@ -11826,6 +12032,7 @@
     "/api/users/{userId}/password": {
       "put": {
         "operationId": "ResetUserPassword",
+        "summary": "Reset User Password",
         "tags": [
           "Admin — Users \u0026 Invitations"
         ],
@@ -11888,6 +12095,7 @@
     "/api/users/{userId}/role": {
       "put": {
         "operationId": "UpdateUserRole",
+        "summary": "Update User Role",
         "tags": [
           "Admin — Users \u0026 Invitations"
         ],
@@ -11945,6 +12153,7 @@
     "/api/users/{userId}/totp/reset": {
       "post": {
         "operationId": "AdminResetUserTOTP",
+        "summary": "Admin Reset User TOTP",
         "tags": [
           "Admin — Users \u0026 Invitations"
         ],
@@ -12007,6 +12216,7 @@
     "/api/ws": {
       "get": {
         "operationId": "HandleWebSocket",
+        "summary": "Handle Web Socket",
         "tags": [
           "Live Updates (WebSocket Hub)"
         ],
@@ -12038,6 +12248,7 @@
     "/api/ws/terminal/{sessionId}": {
       "get": {
         "operationId": "HandleTerminalWebSocket",
+        "summary": "Handle Terminal Web Socket",
         "tags": [
           "Terminal Access"
         ],
@@ -12077,6 +12288,7 @@
     "/metrics": {
       "get": {
         "operationId": "func1",
+        "summary": "func1",
         "tags": [
           "Admin — Metrics \u0026 Live Streams"
         ],

@@ -1,0 +1,16 @@
+{
+  "title": "Logs & Request Traces",
+  "pages": [
+    "get-platform-logs",
+    "stream-logs",
+    "list-application-logs",
+    "list-application-log-sessions",
+    "list-request-logs",
+    "stream-request-logs",
+    "list-database-logs",
+    "list-database-log-sessions",
+    "list-all-request-logs",
+    "stream-all-request-logs",
+    "get-all-requests-summary"
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "title": "Applications",
+  "pages": [
+    "list-applications",
+    "create-application",
+    "get-application",
+    "delete-application",
+    "update-application",
+    "get-build-cache",
+    "clear-build-cache",
+    "change-application-source",
+    "get-deploy-hook",
+    "generate-deploy-hook",
+    "delete-deploy-hook",
+    "reveal-deploy-hook",
+    "get-application-health",
+    "set-health-check",
+    "set-resources",
+    "update-application-runtime",
+    "list-app-volume-backup-configs",
+    "update-application-webhook",
+    "reveal-webhook-secret"
+  ]
+}

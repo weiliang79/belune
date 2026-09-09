@@ -1,0 +1,14 @@
+{
+  "title": "Admin — Users & Invitations",
+  "pages": [
+    "list-users",
+    "create-user",
+    "list-pending-invitations",
+    "revoke-invitation",
+    "invite-user",
+    "delete-user",
+    "reset-user-password",
+    "update-user-role",
+    "admin-reset-user-totp"
+  ]
+}

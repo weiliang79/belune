@@ -1,0 +1,9 @@
+{
+  "title": "Admin — Metrics & Live Streams",
+  "pages": [
+    "get-metrics",
+    "get-host-historical-metrics",
+    "stream-host-metrics",
+    "func1"
+  ]
+}

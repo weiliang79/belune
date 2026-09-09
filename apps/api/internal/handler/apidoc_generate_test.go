@@ -95,6 +95,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"runtime"
 	"sort"
 	"strconv"
@@ -979,6 +980,7 @@ type oasParameter struct {
 }
 type oasOperation struct {
 	OperationID        string                 `json:"operationId"`
+	Summary            string                 `json:"summary,omitempty"`
 	Description        string                 `json:"description,omitempty"`
 	Tags               []string               `json:"tags,omitempty"`
 	Parameters         []oasParameter         `json:"parameters,omitempty"`
@@ -1006,6 +1008,28 @@ type oasSecurityScheme struct {
 	Type        string `json:"type"`
 	Scheme      string `json:"scheme"`
 	Description string `json:"description"`
+}
+
+// apidocTitleWordBoundary1/2 split a PascalCase identifier into words,
+// acronym-aware: a lowercase-to-uppercase transition is always a boundary
+// (ListDatabase -> List Database), but a RUN of uppercase letters is kept
+// together except at its own final letter, where the next word actually
+// starts (ListAPITokens -> List API Tokens, not List A P I Tokens). Two
+// passes, applied in this order, is the standard technique for this.
+var (
+	apidocTitleWordBoundary1 = regexp.MustCompile(`([a-z0-9])([A-Z])`)
+	apidocTitleWordBoundary2 = regexp.MustCompile(`([A-Z]+)([A-Z][a-z])`)
+)
+
+// apidocTitleFromOperationID gives fumadocs-openapi's generated pages a
+// clean title. Without this, it falls back to its own operationId splitter
+// for both the page <h1> and every sidebar entry — found live, not assumed:
+// the fallback splits on EVERY capital letter uniformly, mangling
+// "ListAPITokens" into "List A P I Tokens" in the sidebar.
+func apidocTitleFromOperationID(id string) string {
+	s := apidocTitleWordBoundary1.ReplaceAllString(id, "$1 $2")
+	s = apidocTitleWordBoundary2.ReplaceAllString(s, "$1 $2")
+	return s
 }
 
 // apidocScopeScheme maps a probed scope requirement to the security scheme
@@ -1155,6 +1179,10 @@ func apidocBuildDocument(t *testing.T, routes []apidocRoute, sig map[string]apid
 
 		op := oasOperation{
 			OperationID: opID,
+			// r.Handler, not opID — opID can carry a disambiguation suffix
+			// (_get/_post) on the rare handler reused across two routes; the
+			// title should stay clean regardless.
+			Summary:     apidocTitleFromOperationID(r.Handler),
 			Tags:        []string{domainTitleByRoute[r]},
 			Description: apidocOperationDescription(r),
 			Parameters:  apidocPathParameters(r.Path),

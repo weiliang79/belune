@@ -1,0 +1,10 @@
+{
+  "title": "File Mounts",
+  "pages": [
+    "list-file-mounts",
+    "create-file-mount",
+    "delete-file-mount",
+    "update-file-mount",
+    "reveal-file-mount"
+  ]
+}

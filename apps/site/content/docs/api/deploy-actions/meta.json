@@ -1,0 +1,17 @@
+{
+  "title": "Deploy & Lifecycle Actions",
+  "pages": [
+    "build-application",
+    "deploy-application",
+    "rebuild-application",
+    "reload-application",
+    "restart-application",
+    "rollback-deployment",
+    "start-application",
+    "stop-application",
+    "reload-database",
+    "restart-database",
+    "start-database",
+    "stop-database"
+  ]
+}
