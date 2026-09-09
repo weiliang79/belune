@@ -35,6 +35,12 @@ TOTP, and regenerating recovery codes already required your current
 password (and a current second factor, where one is enrolled) before this.
 It's a narrower surface for a leaked token to see, not a vulnerability fix.
 
+**Upgrading from 0.1.6:** all four bullets above were PAT-callable there. If
+you have a script that changes its own password, manages TOTP, edits
+notification preferences, or lists its own tokens using a personal access
+token, it will start getting `403` instead of `200` — point it at a session
+credential instead, or drop the call if it isn't essential.
+
 ## [0.1.6]
 
 ### Projects can now be shared with your team
