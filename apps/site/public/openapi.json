@@ -117,7 +117,7 @@
         },
         "security": [
           {
-            "patRead": []
+            "read": []
           },
           {
             "session": []
@@ -164,7 +164,7 @@
         },
         "security": [
           {
-            "patWrite": []
+            "write": []
           },
           {
             "session": []
@@ -215,7 +215,7 @@
         "security": [
           {
             "adminRole": [],
-            "patRead": []
+            "read": []
           },
           {
             "adminRole": [],
@@ -259,7 +259,7 @@
         "security": [
           {
             "adminRole": [],
-            "patRead": []
+            "read": []
           },
           {
             "adminRole": [],
@@ -293,7 +293,7 @@
         "security": [
           {
             "adminRole": [],
-            "patRead": []
+            "read": []
           },
           {
             "adminRole": [],
@@ -401,7 +401,7 @@
         },
         "security": [
           {
-            "patRead": []
+            "read": []
           },
           {
             "session": []
@@ -824,7 +824,7 @@
         "security": [
           {
             "adminRole": [],
-            "patRead": []
+            "read": []
           },
           {
             "adminRole": [],
@@ -883,7 +883,7 @@
         "security": [
           {
             "adminRole": [],
-            "patWrite": []
+            "write": []
           },
           {
             "adminRole": [],
@@ -929,7 +929,7 @@
         "security": [
           {
             "adminRole": [],
-            "patWrite": []
+            "write": []
           },
           {
             "adminRole": [],
@@ -970,7 +970,7 @@
         "security": [
           {
             "adminRole": [],
-            "patRead": []
+            "read": []
           },
           {
             "adminRole": [],
@@ -1016,7 +1016,7 @@
         "security": [
           {
             "adminRole": [],
-            "patWrite": []
+            "write": []
           },
           {
             "adminRole": [],
@@ -1060,7 +1060,7 @@
         "security": [
           {
             "adminRole": [],
-            "patRead": []
+            "read": []
           },
           {
             "adminRole": [],
@@ -1109,7 +1109,7 @@
         "security": [
           {
             "adminRole": [],
-            "patWrite": []
+            "write": []
           },
           {
             "adminRole": [],
@@ -1154,7 +1154,7 @@
         "security": [
           {
             "adminRole": [],
-            "patWrite": []
+            "write": []
           },
           {
             "adminRole": [],
@@ -1210,7 +1210,7 @@
         "security": [
           {
             "adminRole": [],
-            "patWrite": []
+            "write": []
           },
           {
             "adminRole": [],
@@ -1253,7 +1253,7 @@
         },
         "security": [
           {
-            "patRead": []
+            "read": []
           },
           {
             "session": []
@@ -1296,7 +1296,7 @@
         "security": [
           {
             "adminRole": [],
-            "patRead": []
+            "read": []
           },
           {
             "adminRole": [],
@@ -1340,7 +1340,7 @@
         "security": [
           {
             "adminRole": [],
-            "patRead": []
+            "read": []
           },
           {
             "adminRole": [],
@@ -1384,7 +1384,7 @@
         "security": [
           {
             "adminRole": [],
-            "patRead": []
+            "read": []
           },
           {
             "adminRole": [],
@@ -1425,7 +1425,7 @@
         "security": [
           {
             "adminRole": [],
-            "patRead": []
+            "read": []
           },
           {
             "adminRole": [],
@@ -1469,7 +1469,7 @@
         "security": [
           {
             "adminRole": [],
-            "patRead": []
+            "read": []
           },
           {
             "adminRole": [],
@@ -1513,7 +1513,7 @@
         "security": [
           {
             "adminRole": [],
-            "patRead": []
+            "read": []
           },
           {
             "adminRole": [],
@@ -1556,7 +1556,7 @@
         },
         "security": [
           {
-            "patRead": []
+            "read": []
           },
           {
             "session": []
@@ -1598,7 +1598,7 @@
         },
         "security": [
           {
-            "patRead": []
+            "read": []
           },
           {
             "session": []
@@ -1642,7 +1642,7 @@
         },
         "security": [
           {
-            "patRead": []
+            "read": []
           },
           {
             "session": []
@@ -1697,7 +1697,7 @@
         },
         "security": [
           {
-            "patWrite": []
+            "write": []
           },
           {
             "session": []
@@ -1750,7 +1750,7 @@
         },
         "security": [
           {
-            "patRead": []
+            "read": []
           },
           {
             "session": []
@@ -1803,7 +1803,7 @@
         },
         "security": [
           {
-            "patRead": []
+            "read": []
           },
           {
             "session": []
@@ -1846,7 +1846,7 @@
         "security": [
           {
             "adminRole": [],
-            "patRead": []
+            "read": []
           },
           {
             "adminRole": [],
@@ -1895,7 +1895,7 @@
         "security": [
           {
             "adminRole": [],
-            "patWrite": []
+            "write": []
           },
           {
             "adminRole": [],
@@ -1951,7 +1951,7 @@
         "security": [
           {
             "adminRole": [],
-            "patRead": []
+            "read": []
           },
           {
             "adminRole": [],
@@ -2008,7 +2008,7 @@
         "security": [
           {
             "adminRole": [],
-            "patWrite": []
+            "write": []
           },
           {
             "adminRole": [],
@@ -2075,7 +2075,7 @@
         "security": [
           {
             "adminRole": [],
-            "patWrite": []
+            "write": []
           },
           {
             "adminRole": [],
@@ -2116,7 +2116,7 @@
         "security": [
           {
             "adminRole": [],
-            "patRead": []
+            "read": []
           },
           {
             "adminRole": [],
@@ -2157,7 +2157,7 @@
         "security": [
           {
             "adminRole": [],
-            "patRead": []
+            "read": []
           },
           {
             "adminRole": [],
@@ -2203,7 +2203,7 @@
         "security": [
           {
             "adminRole": [],
-            "patWrite": []
+            "write": []
           },
           {
             "adminRole": [],
@@ -2249,7 +2249,7 @@
         "security": [
           {
             "adminRole": [],
-            "patWrite": []
+            "write": []
           },
           {
             "adminRole": [],
@@ -2298,7 +2298,7 @@
         "security": [
           {
             "adminRole": [],
-            "patWrite": []
+            "write": []
           },
           {
             "adminRole": [],
@@ -2339,7 +2339,7 @@
         "security": [
           {
             "adminRole": [],
-            "patRead": []
+            "read": []
           },
           {
             "adminRole": [],
@@ -2380,7 +2380,7 @@
         "security": [
           {
             "adminRole": [],
-            "patMetrics": []
+            "metrics": []
           },
           {
             "adminRole": [],
@@ -2424,7 +2424,7 @@
         "security": [
           {
             "adminRole": [],
-            "patMetrics": []
+            "metrics": []
           },
           {
             "adminRole": [],
@@ -2458,7 +2458,7 @@
         "security": [
           {
             "adminRole": [],
-            "patMetrics": []
+            "metrics": []
           },
           {
             "adminRole": [],
@@ -2502,7 +2502,7 @@
         "security": [
           {
             "adminRole": [],
-            "patRead": []
+            "read": []
           },
           {
             "adminRole": [],
@@ -2551,7 +2551,7 @@
         "security": [
           {
             "adminRole": [],
-            "patWrite": []
+            "write": []
           },
           {
             "adminRole": [],
@@ -2607,7 +2607,7 @@
         "security": [
           {
             "adminRole": [],
-            "patWrite": []
+            "write": []
           },
           {
             "adminRole": [],
@@ -2664,7 +2664,7 @@
         "security": [
           {
             "adminRole": [],
-            "patWrite": []
+            "write": []
           },
           {
             "adminRole": [],
@@ -2724,7 +2724,7 @@
         "security": [
           {
             "adminRole": [],
-            "patWrite": []
+            "write": []
           },
           {
             "adminRole": [],
@@ -2784,7 +2784,7 @@
         "security": [
           {
             "adminRole": [],
-            "patWrite": []
+            "write": []
           },
           {
             "adminRole": [],
@@ -2841,7 +2841,7 @@
         "security": [
           {
             "adminRole": [],
-            "patWrite": []
+            "write": []
           },
           {
             "adminRole": [],
@@ -2885,7 +2885,7 @@
         "security": [
           {
             "adminRole": [],
-            "patRead": []
+            "read": []
           },
           {
             "adminRole": [],
@@ -2936,7 +2936,7 @@
         },
         "security": [
           {
-            "patRead": []
+            "read": []
           },
           {
             "session": []
@@ -2968,7 +2968,7 @@
         },
         "security": [
           {
-            "patWrite": []
+            "write": []
           },
           {
             "session": []
@@ -3000,7 +3000,7 @@
         },
         "security": [
           {
-            "patRead": []
+            "read": []
           },
           {
             "session": []
@@ -3044,7 +3044,7 @@
         },
         "security": [
           {
-            "patRead": []
+            "read": []
           },
           {
             "session": []
@@ -3094,7 +3094,7 @@
         },
         "security": [
           {
-            "patWrite": []
+            "write": []
           },
           {
             "session": []
@@ -3136,7 +3136,7 @@
         },
         "security": [
           {
-            "patRead": []
+            "read": []
           },
           {
             "session": []
@@ -3183,7 +3183,7 @@
         },
         "security": [
           {
-            "patWrite": []
+            "write": []
           },
           {
             "session": []
@@ -3285,7 +3285,7 @@
         },
         "security": [
           {
-            "patRead": []
+            "read": []
           },
           {
             "session": []
@@ -3344,7 +3344,7 @@
         },
         "security": [
           {
-            "patWrite": []
+            "write": []
           },
           {
             "session": []
@@ -3398,7 +3398,7 @@
         },
         "security": [
           {
-            "patRead": []
+            "read": []
           },
           {
             "session": []
@@ -3457,7 +3457,7 @@
         },
         "security": [
           {
-            "patWrite": []
+            "write": []
           },
           {
             "session": []
@@ -3577,7 +3577,7 @@
         },
         "security": [
           {
-            "patRead": []
+            "read": []
           },
           {
             "session": []
@@ -3645,7 +3645,7 @@
         },
         "security": [
           {
-            "patWrite": []
+            "write": []
           },
           {
             "session": []
@@ -3705,7 +3705,7 @@
         },
         "security": [
           {
-            "patDeploy": []
+            "deploy": []
           },
           {
             "session": []
@@ -3770,7 +3770,7 @@
         },
         "security": [
           {
-            "patWrite": []
+            "write": []
           },
           {
             "session": []
@@ -3839,7 +3839,7 @@
         },
         "security": [
           {
-            "patRead": []
+            "read": []
           },
           {
             "session": []
@@ -3909,7 +3909,7 @@
         },
         "security": [
           {
-            "patWrite": []
+            "write": []
           },
           {
             "session": []
@@ -3969,7 +3969,7 @@
         },
         "security": [
           {
-            "patDeploy": []
+            "deploy": []
           },
           {
             "session": []
@@ -4029,7 +4029,7 @@
         },
         "security": [
           {
-            "patWrite": []
+            "write": []
           },
           {
             "session": []
@@ -4087,7 +4087,7 @@
         },
         "security": [
           {
-            "patRead": []
+            "read": []
           },
           {
             "session": []
@@ -4145,7 +4145,7 @@
         },
         "security": [
           {
-            "patWrite": []
+            "write": []
           },
           {
             "session": []
@@ -4265,7 +4265,7 @@
         },
         "security": [
           {
-            "patRead": []
+            "read": []
           },
           {
             "session": []
@@ -4334,7 +4334,7 @@
         },
         "security": [
           {
-            "patRead": []
+            "read": []
           },
           {
             "session": []
@@ -4396,7 +4396,7 @@
         },
         "security": [
           {
-            "patRead": []
+            "read": []
           },
           {
             "session": []
@@ -4459,7 +4459,7 @@
         },
         "security": [
           {
-            "patRead": []
+            "read": []
           },
           {
             "session": []
@@ -4527,7 +4527,7 @@
         },
         "security": [
           {
-            "patWrite": []
+            "write": []
           },
           {
             "session": []
@@ -4675,7 +4675,7 @@
         },
         "security": [
           {
-            "patWrite": []
+            "write": []
           },
           {
             "session": []
@@ -4747,7 +4747,7 @@
         },
         "security": [
           {
-            "patRead": []
+            "read": []
           },
           {
             "session": []
@@ -4824,7 +4824,7 @@
         },
         "security": [
           {
-            "patWrite": []
+            "write": []
           },
           {
             "session": []
@@ -4907,7 +4907,7 @@
         },
         "security": [
           {
-            "patWrite": []
+            "write": []
           },
           {
             "session": []
@@ -4969,7 +4969,7 @@
         },
         "security": [
           {
-            "patWrite": []
+            "write": []
           },
           {
             "session": []
@@ -5032,7 +5032,7 @@
         },
         "security": [
           {
-            "patRead": []
+            "read": []
           },
           {
             "session": []
@@ -5105,7 +5105,7 @@
         },
         "security": [
           {
-            "patWrite": []
+            "write": []
           },
           {
             "session": []
@@ -5239,7 +5239,7 @@
         },
         "security": [
           {
-            "patRead": []
+            "read": []
           },
           {
             "session": []
@@ -5307,7 +5307,7 @@
         },
         "security": [
           {
-            "patWrite": []
+            "write": []
           },
           {
             "session": []
@@ -5381,7 +5381,7 @@
         },
         "security": [
           {
-            "patWrite": []
+            "write": []
           },
           {
             "session": []
@@ -5458,7 +5458,7 @@
         },
         "security": [
           {
-            "patWrite": []
+            "write": []
           },
           {
             "session": []
@@ -5590,7 +5590,7 @@
         },
         "security": [
           {
-            "patRead": []
+            "read": []
           },
           {
             "session": []
@@ -5660,7 +5660,7 @@
         },
         "security": [
           {
-            "patWrite": []
+            "write": []
           },
           {
             "session": []
@@ -5713,7 +5713,7 @@
         },
         "security": [
           {
-            "patRead": []
+            "read": []
           },
           {
             "session": []
@@ -5776,7 +5776,7 @@
         },
         "security": [
           {
-            "patRead": []
+            "read": []
           },
           {
             "session": []
@@ -5839,7 +5839,7 @@
         },
         "security": [
           {
-            "patRead": []
+            "read": []
           },
           {
             "session": []
@@ -5892,7 +5892,7 @@
         },
         "security": [
           {
-            "patMetrics": []
+            "metrics": []
           },
           {
             "session": []
@@ -5960,7 +5960,7 @@
         },
         "security": [
           {
-            "patRead": []
+            "read": []
           },
           {
             "session": []
@@ -6030,7 +6030,7 @@
         },
         "security": [
           {
-            "patWrite": []
+            "write": []
           },
           {
             "session": []
@@ -6104,7 +6104,7 @@
         },
         "security": [
           {
-            "patWrite": []
+            "write": []
           },
           {
             "session": []
@@ -6164,7 +6164,7 @@
         },
         "security": [
           {
-            "patDeploy": []
+            "deploy": []
           },
           {
             "session": []
@@ -6224,7 +6224,7 @@
         },
         "security": [
           {
-            "patDeploy": []
+            "deploy": []
           },
           {
             "session": []
@@ -6287,7 +6287,7 @@
         },
         "security": [
           {
-            "patRead": []
+            "read": []
           },
           {
             "session": []
@@ -6340,7 +6340,7 @@
         },
         "security": [
           {
-            "patRead": []
+            "read": []
           },
           {
             "session": []
@@ -6410,7 +6410,7 @@
         },
         "security": [
           {
-            "patWrite": []
+            "write": []
           },
           {
             "session": []
@@ -6470,7 +6470,7 @@
         },
         "security": [
           {
-            "patDeploy": []
+            "deploy": []
           },
           {
             "session": []
@@ -6540,7 +6540,7 @@
         },
         "security": [
           {
-            "patDeploy": []
+            "deploy": []
           },
           {
             "session": []
@@ -6618,7 +6618,7 @@
         },
         "security": [
           {
-            "patWrite": []
+            "write": []
           },
           {
             "session": []
@@ -6678,7 +6678,7 @@
         },
         "security": [
           {
-            "patDeploy": []
+            "deploy": []
           },
           {
             "session": []
@@ -6738,7 +6738,7 @@
         },
         "security": [
           {
-            "patDeploy": []
+            "deploy": []
           },
           {
             "session": []
@@ -6878,7 +6878,7 @@
         },
         "security": [
           {
-            "patRead": []
+            "read": []
           },
           {
             "session": []
@@ -6941,7 +6941,7 @@
         },
         "security": [
           {
-            "patRead": []
+            "read": []
           },
           {
             "session": []
@@ -7009,7 +7009,7 @@
         },
         "security": [
           {
-            "patWrite": []
+            "write": []
           },
           {
             "session": []
@@ -7150,7 +7150,7 @@
         },
         "security": [
           {
-            "patRead": []
+            "read": []
           },
           {
             "session": []
@@ -7227,7 +7227,7 @@
         },
         "security": [
           {
-            "patWrite": []
+            "write": []
           },
           {
             "session": []
@@ -7310,7 +7310,7 @@
         },
         "security": [
           {
-            "patWrite": []
+            "write": []
           },
           {
             "session": []
@@ -7396,7 +7396,7 @@
         },
         "security": [
           {
-            "patWrite": []
+            "write": []
           },
           {
             "session": []
@@ -7479,7 +7479,7 @@
         },
         "security": [
           {
-            "patWrite": []
+            "write": []
           },
           {
             "session": []
@@ -7551,7 +7551,7 @@
         },
         "security": [
           {
-            "patRead": []
+            "read": []
           },
           {
             "session": []
@@ -7703,7 +7703,7 @@
         },
         "security": [
           {
-            "patRead": []
+            "read": []
           },
           {
             "session": []
@@ -7773,7 +7773,7 @@
         },
         "security": [
           {
-            "patWrite": []
+            "write": []
           },
           {
             "session": []
@@ -7889,7 +7889,7 @@
         },
         "security": [
           {
-            "patRead": []
+            "read": []
           },
           {
             "session": []
@@ -7948,7 +7948,7 @@
         },
         "security": [
           {
-            "patWrite": []
+            "write": []
           },
           {
             "session": []
@@ -8014,7 +8014,7 @@
         },
         "security": [
           {
-            "patWrite": []
+            "write": []
           },
           {
             "session": []
@@ -8079,7 +8079,7 @@
         },
         "security": [
           {
-            "patWrite": []
+            "write": []
           },
           {
             "session": []
@@ -8147,7 +8147,7 @@
         },
         "security": [
           {
-            "patWrite": []
+            "write": []
           },
           {
             "session": []
@@ -8212,7 +8212,7 @@
         },
         "security": [
           {
-            "patWrite": []
+            "write": []
           },
           {
             "session": []
@@ -8266,7 +8266,7 @@
         },
         "security": [
           {
-            "patRead": []
+            "read": []
           },
           {
             "session": []
@@ -8320,7 +8320,7 @@
         },
         "security": [
           {
-            "patRead": []
+            "read": []
           },
           {
             "session": []
@@ -8379,7 +8379,7 @@
         },
         "security": [
           {
-            "patWrite": []
+            "write": []
           },
           {
             "session": []
@@ -8499,7 +8499,7 @@
         },
         "security": [
           {
-            "patRead": []
+            "read": []
           },
           {
             "session": []
@@ -8567,7 +8567,7 @@
         },
         "security": [
           {
-            "patWrite": []
+            "write": []
           },
           {
             "session": []
@@ -8630,7 +8630,7 @@
         },
         "security": [
           {
-            "patRead": []
+            "read": []
           },
           {
             "session": []
@@ -8698,7 +8698,7 @@
         },
         "security": [
           {
-            "patWrite": []
+            "write": []
           },
           {
             "session": []
@@ -8772,7 +8772,7 @@
         },
         "security": [
           {
-            "patWrite": []
+            "write": []
           },
           {
             "session": []
@@ -8849,7 +8849,7 @@
         },
         "security": [
           {
-            "patWrite": []
+            "write": []
           },
           {
             "session": []
@@ -8923,7 +8923,7 @@
         },
         "security": [
           {
-            "patWrite": []
+            "write": []
           },
           {
             "session": []
@@ -8986,7 +8986,7 @@
         },
         "security": [
           {
-            "patRead": []
+            "read": []
           },
           {
             "session": []
@@ -9049,7 +9049,7 @@
         },
         "security": [
           {
-            "patWrite": []
+            "write": []
           },
           {
             "session": []
@@ -9248,7 +9248,7 @@
         },
         "security": [
           {
-            "patRead": []
+            "read": []
           },
           {
             "session": []
@@ -9338,7 +9338,7 @@
         },
         "security": [
           {
-            "patWrite": []
+            "write": []
           },
           {
             "session": []
@@ -9401,7 +9401,7 @@
         },
         "security": [
           {
-            "patRead": []
+            "read": []
           },
           {
             "session": []
@@ -9464,7 +9464,7 @@
         },
         "security": [
           {
-            "patRead": []
+            "read": []
           },
           {
             "session": []
@@ -9529,7 +9529,7 @@
         },
         "security": [
           {
-            "patDeploy": []
+            "deploy": []
           },
           {
             "session": []
@@ -9589,7 +9589,7 @@
         },
         "security": [
           {
-            "patDeploy": []
+            "deploy": []
           },
           {
             "session": []
@@ -9724,7 +9724,7 @@
         },
         "security": [
           {
-            "patRead": []
+            "read": []
           },
           {
             "session": []
@@ -9784,7 +9784,7 @@
         },
         "security": [
           {
-            "patDeploy": []
+            "deploy": []
           },
           {
             "session": []
@@ -9844,7 +9844,7 @@
         },
         "security": [
           {
-            "patDeploy": []
+            "deploy": []
           },
           {
             "session": []
@@ -9919,7 +9919,7 @@
         },
         "security": [
           {
-            "patWrite": []
+            "write": []
           },
           {
             "session": []
@@ -9979,7 +9979,7 @@
         },
         "security": [
           {
-            "patRead": []
+            "read": []
           },
           {
             "session": []
@@ -10033,7 +10033,7 @@
         },
         "security": [
           {
-            "patRead": []
+            "read": []
           },
           {
             "session": []
@@ -10097,7 +10097,7 @@
         },
         "security": [
           {
-            "patWrite": []
+            "write": []
           },
           {
             "session": []
@@ -10213,7 +10213,7 @@
         },
         "security": [
           {
-            "patMetrics": []
+            "metrics": []
           },
           {
             "session": []
@@ -10267,7 +10267,7 @@
         },
         "security": [
           {
-            "patRead": []
+            "read": []
           },
           {
             "session": []
@@ -10447,7 +10447,7 @@
         },
         "security": [
           {
-            "patWrite": []
+            "write": []
           },
           {
             "session": []
@@ -10508,7 +10508,7 @@
         },
         "security": [
           {
-            "patWrite": []
+            "write": []
           },
           {
             "session": []
@@ -10548,7 +10548,7 @@
         "security": [
           {
             "adminRole": [],
-            "patWrite": []
+            "write": []
           },
           {
             "adminRole": [],
@@ -10589,7 +10589,7 @@
         "security": [
           {
             "adminRole": [],
-            "patRead": []
+            "read": []
           },
           {
             "adminRole": [],
@@ -10633,7 +10633,7 @@
         "security": [
           {
             "adminRole": [],
-            "patRead": []
+            "read": []
           },
           {
             "adminRole": [],
@@ -10699,7 +10699,7 @@
         "security": [
           {
             "adminRole": [],
-            "patWrite": []
+            "write": []
           },
           {
             "adminRole": [],
@@ -10758,7 +10758,7 @@
         "security": [
           {
             "adminRole": [],
-            "patRead": []
+            "read": []
           },
           {
             "adminRole": [],
@@ -10827,7 +10827,7 @@
         "security": [
           {
             "adminRole": [],
-            "patWrite": []
+            "write": []
           },
           {
             "adminRole": [],
@@ -10871,7 +10871,7 @@
         "security": [
           {
             "adminRole": [],
-            "patRead": []
+            "read": []
           },
           {
             "adminRole": [],
@@ -10905,7 +10905,7 @@
         "security": [
           {
             "adminRole": [],
-            "patRead": []
+            "read": []
           },
           {
             "adminRole": [],
@@ -10946,7 +10946,7 @@
         "security": [
           {
             "adminRole": [],
-            "patRead": []
+            "read": []
           },
           {
             "adminRole": [],
@@ -10987,7 +10987,7 @@
         "security": [
           {
             "adminRole": [],
-            "patRead": []
+            "read": []
           },
           {
             "adminRole": [],
@@ -11028,7 +11028,7 @@
         "security": [
           {
             "adminRole": [],
-            "patRead": []
+            "read": []
           },
           {
             "adminRole": [],
@@ -11072,7 +11072,7 @@
         "security": [
           {
             "adminRole": [],
-            "patRead": []
+            "read": []
           },
           {
             "adminRole": [],
@@ -11129,7 +11129,7 @@
         "security": [
           {
             "adminRole": [],
-            "patWrite": []
+            "write": []
           },
           {
             "adminRole": [],
@@ -11170,7 +11170,7 @@
         "security": [
           {
             "adminRole": [],
-            "patRead": []
+            "read": []
           },
           {
             "adminRole": [],
@@ -11224,7 +11224,7 @@
         "security": [
           {
             "adminRole": [],
-            "patWrite": []
+            "write": []
           },
           {
             "adminRole": [],
@@ -11280,7 +11280,7 @@
         "security": [
           {
             "adminRole": [],
-            "patWrite": []
+            "write": []
           },
           {
             "adminRole": [],
@@ -11320,7 +11320,7 @@
         },
         "security": [
           {
-            "patRead": []
+            "read": []
           },
           {
             "session": []
@@ -11362,7 +11362,7 @@
         },
         "security": [
           {
-            "patRead": []
+            "read": []
           },
           {
             "session": []
@@ -11412,7 +11412,7 @@
         },
         "security": [
           {
-            "patRead": []
+            "read": []
           },
           {
             "session": []
@@ -11472,7 +11472,7 @@
         },
         "security": [
           {
-            "patWrite": []
+            "write": []
           },
           {
             "session": []
@@ -11684,7 +11684,7 @@
         "security": [
           {
             "adminRole": [],
-            "patRead": []
+            "read": []
           },
           {
             "adminRole": [],
@@ -11773,7 +11773,7 @@
         "security": [
           {
             "adminRole": [],
-            "patRead": []
+            "read": []
           },
           {
             "adminRole": [],
@@ -11818,7 +11818,7 @@
         "security": [
           {
             "adminRole": [],
-            "patWrite": []
+            "write": []
           },
           {
             "adminRole": [],
@@ -12135,7 +12135,7 @@
         },
         "security": [
           {
-            "patRead": []
+            "read": []
           },
           {
             "session": []
@@ -12208,7 +12208,7 @@
         "security": [
           {
             "adminRole": [],
-            "patMetrics": []
+            "metrics": []
           },
           {
             "adminRole": [],
@@ -17018,30 +17018,30 @@
         "scheme": "bearer",
         "description": "The authenticated user, by token or session, must have the Admin role."
       },
-      "patDeploy": {
+      "deploy": {
         "type": "http",
         "scheme": "bearer",
         "description": "Personal access token whose scope satisfies `deploy` — deploy or write qualify."
       },
-      "patMetrics": {
+      "metrics": {
         "type": "http",
         "scheme": "bearer",
         "description": "Personal access token whose scope satisfies `metrics` — metrics, read, deploy, or write all qualify (Belune's scopes form a total order)."
       },
-      "patRead": {
+      "read": {
         "type": "http",
         "scheme": "bearer",
         "description": "Personal access token whose scope satisfies `read` — read, deploy, or write all qualify."
-      },
-      "patWrite": {
-        "type": "http",
-        "scheme": "bearer",
-        "description": "Personal access token whose scope satisfies `write`."
       },
       "session": {
         "type": "http",
         "scheme": "bearer",
         "description": "Dashboard session JWT — satisfies every scope requirement unconditionally."
+      },
+      "write": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "Personal access token whose scope satisfies `write`."
       }
     }
   }

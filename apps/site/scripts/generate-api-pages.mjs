@@ -106,10 +106,18 @@ function kebabCase(name) {
   return s.toLowerCase();
 }
 
+// SCOPE_SCHEMES: the security-scheme names that mean "a PAT holding this
+// scope authenticates the route" — the Go side names each scheme for the
+// scope itself now (apidocScopeScheme). "session" is deliberately not here;
+// "adminRole", when present, is an extra AND requirement, never a way in on
+// its own. This set is THE thing that used to be a `scheme.startsWith('pat')`
+// check, before the schemes were renamed off the pat* prefix.
+const SCOPE_SCHEMES = new Set(['metrics', 'read', 'deploy', 'write']);
+
 // isPatCallable is THE single predicate for "does this operation belong in
 // the human-facing reference" — derived from the same structural fact
-// TestAPIDocAllMarshalerTypesHandled's sibling guard checks on the Go side
-// (every RequireSession route's security carries no pat* scheme), not a
+// TestGenerateAPIReference's session-gate invariant checks on the Go side
+// (no RequireSession route's security carries a scope scheme), not a
 // hand-maintained path list that would rot the way destroy_boundary_test.go's
 // own comments warn a resource list would. Kept in exactly one place on
 // purpose: the user is still reviewing which operations should actually be
@@ -117,7 +125,7 @@ function kebabCase(name) {
 // being session-gated) should be one documented line added here, not a
 // change threaded through the generator or the tag/domain machinery.
 function isPatCallable(operation) {
-  return (operation.security ?? []).some((requirement) => Object.keys(requirement).some((scheme) => scheme.startsWith('pat')));
+  return (operation.security ?? []).some((requirement) => Object.keys(requirement).some((scheme) => SCOPE_SCHEMES.has(scheme)));
 }
 
 // isAdminGated is THE single predicate the sidebar's "Admin only" badges

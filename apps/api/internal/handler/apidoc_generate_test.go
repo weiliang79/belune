@@ -72,8 +72,9 @@
 // carried in the SECURITY SCHEME NAME, named by what a token must SATISFY
 // (not what it holds), reusing the scope lattice's own total order
 // (metrics ⊂ read ⊂ deploy ⊂ write — see the comment on scopeGrants in
-// middleware/scope.go): patMetrics/patRead/patDeploy/patWrite/session/adminRole.
-// A route needing `read` lists ONLY `patRead` — a token holding read, deploy,
+// middleware/scope.go): each scheme is named for the scope it satisfies —
+// metrics/read/deploy/write — plus session and adminRole. A route needing
+// `read` lists ONLY `read` — a token holding read, deploy,
 // OR write all satisfy it, so naming by minimum keeps it to one scheme per
 // route instead of enumerating every tier that would also work. `session` is
 // OR'd into every non-session-exclusive requirement, since RequireScope lets
@@ -346,17 +347,17 @@ func TestGenerateAPIReference(t *testing.T) {
 		}
 		// RequireSession rejects every PAT unconditionally (see
 		// middleware.RequireSession) — a session-gated route's emitted
-		// security must never list a pat* scheme as an alternative, or the
-		// spec documents an escalation that doesn't exist. This is the
-		// invariant a peer review found broken for exactly the three
-		// highest-stakes routes it could be broken for (POST /api/tokens,
-		// POST /api/users, POST /api/users/invite) — checked directly
-		// against the real router's middleware chain, not re-derived.
+		// security must never list a scope scheme (metrics/read/deploy/write)
+		// as an alternative, or the spec documents an escalation that doesn't
+		// exist. This is the invariant a peer review found broken for exactly
+		// the three highest-stakes routes it could be broken for (POST
+		// /api/tokens, POST /api/users, POST /api/users/invite) — checked
+		// directly against the real router's middleware chain, not re-derived.
 		if r.Session {
 			sessionRoutes++
 			for _, req := range apidocSecurity(r) {
 				for scheme := range req {
-					if strings.HasPrefix(scheme, "pat") {
+					if apidocScopeScheme(scheme) != "" {
 						t.Errorf("apidoc: %s %s is RequireSession-gated but its emitted security still lists %q — a personal access token would be wrongly documented as able to call it", r.Method, r.Path, scheme)
 					}
 				}
@@ -1191,23 +1192,21 @@ func apidocTitleFromOperationID(id string) string {
 	return s
 }
 
-// apidocScopeScheme maps a probed scope requirement to the security scheme
-// that SATISFIES it (not the scheme matching it exactly) — Belune's scopes
-// are a total order (metrics ⊂ read ⊂ deploy ⊂ write; scopeGrants in
-// middleware/scope.go), so a route needing `read` is satisfied by a token
-// holding read, deploy, OR write. Naming the scheme by the minimum keeps
-// each route to ONE scheme reference instead of enumerating every tier that
-// would also work.
+// apidocScopeScheme validates a probed scope requirement and returns the
+// security-scheme name for it — which is just the scope string itself
+// (metrics/read/deploy/write), so this is really a whitelist: a scope not in
+// the lattice returns "" and apidocSecurity turns that into a loud
+// UNRECOGNIZED. The scheme is named by the MINIMUM scope that satisfies the
+// route (Belune's scopes are a total order, metrics ⊂ read ⊂ deploy ⊂
+// write; scopeGrants in middleware/scope.go), so a route needing `read`
+// lists only `read` even though a `write` token also passes — one scheme
+// per route instead of every tier that would work. Also the canonical
+// "is this string one of the four scope schemes" test — see the
+// session-gate invariant in TestGenerateAPIReference.
 func apidocScopeScheme(scope string) string {
 	switch scope {
-	case "metrics":
-		return "patMetrics"
-	case "read":
-		return "patRead"
-	case "deploy":
-		return "patDeploy"
-	case "write":
-		return "patWrite"
+	case "metrics", "read", "deploy", "write":
+		return scope
 	default:
 		return ""
 	}
@@ -1292,12 +1291,12 @@ const apidocSpecDescription = `Generated from the running API by probing every r
 
 func apidocSecuritySchemes() map[string]oasSecurityScheme {
 	return map[string]oasSecurityScheme{
-		"patMetrics": {Type: "http", Scheme: "bearer", Description: "Personal access token whose scope satisfies `metrics` — metrics, read, deploy, or write all qualify (Belune's scopes form a total order)."},
-		"patRead":    {Type: "http", Scheme: "bearer", Description: "Personal access token whose scope satisfies `read` — read, deploy, or write all qualify."},
-		"patDeploy":  {Type: "http", Scheme: "bearer", Description: "Personal access token whose scope satisfies `deploy` — deploy or write qualify."},
-		"patWrite":   {Type: "http", Scheme: "bearer", Description: "Personal access token whose scope satisfies `write`."},
-		"session":    {Type: "http", Scheme: "bearer", Description: "Dashboard session JWT — satisfies every scope requirement unconditionally."},
-		"adminRole":  {Type: "http", Scheme: "bearer", Description: "The authenticated user, by token or session, must have the Admin role."},
+		"metrics":   {Type: "http", Scheme: "bearer", Description: "Personal access token whose scope satisfies `metrics` — metrics, read, deploy, or write all qualify (Belune's scopes form a total order)."},
+		"read":      {Type: "http", Scheme: "bearer", Description: "Personal access token whose scope satisfies `read` — read, deploy, or write all qualify."},
+		"deploy":    {Type: "http", Scheme: "bearer", Description: "Personal access token whose scope satisfies `deploy` — deploy or write qualify."},
+		"write":     {Type: "http", Scheme: "bearer", Description: "Personal access token whose scope satisfies `write`."},
+		"session":   {Type: "http", Scheme: "bearer", Description: "Dashboard session JWT — satisfies every scope requirement unconditionally."},
+		"adminRole": {Type: "http", Scheme: "bearer", Description: "The authenticated user, by token or session, must have the Admin role."},
 	}
 }
 
