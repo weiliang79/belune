@@ -139,6 +139,32 @@ for (const [path, methods] of Object.entries(pagesSpec.paths)) {
   if (Object.keys(methods).length === 0) delete pagesSpec.paths[path];
 }
 
+// DEFAULT_ORDER is the //apidoc:order sidebar weight an operation gets when
+// its handler set none. The Go side emits x-belune-order ONLY for operations
+// that carried an explicit //apidoc:order directive (see apidocDirective in
+// apidoc_generate_test.go), so almost every operation arrives here with no
+// weight and falls through to this value.
+//
+// Hugo's "weight" convention: lower sorts earlier, and the default sits
+// mid-range on purpose — //apidoc:order 10 lifts an operation above the
+// undirected ones, //apidoc:order 500 drops it below them, and neither
+// direction needs a negative number. Do NOT "simplify" this to 0: that
+// forces every promotion to be written negative, which reads badly and
+// invites order -1 / -2 churn.
+const DEFAULT_ORDER = 100;
+
+// ORDER_BY_SLUG maps a generated page's slug (kebabCase of the operationId —
+// the exact transform generateFiles's name() applies below) to that
+// operation's sort weight, for the pages-array re-sort in fixDomainMeta.
+// Built from pagesSpec, the same filtered clone generateFiles runs against,
+// so every page that ends up on disk has an entry here.
+const ORDER_BY_SLUG = new Map();
+for (const methods of Object.values(pagesSpec.paths)) {
+  for (const operation of Object.values(methods)) {
+    ORDER_BY_SLUG.set(kebabCase(operation.operationId), operation['x-belune-order'] ?? DEFAULT_ORDER);
+  }
+}
+
 // generateFiles only ever mkdir+writeFiles — it never deletes, so a
 // operation that WAS generated on a previous run and is filtered out on this
 // one (every operation in a shrinking or now-empty domain, e.g. "Terminal
@@ -329,6 +355,19 @@ function fixDomainMeta(nodes, parentDir) {
       const metaPath = join(dir, 'meta.json');
       const meta = JSON.parse(readFileSync(metaPath, 'utf8'));
       meta.title = node.title ?? node.tag;
+      // Re-sort the sidebar page list by //apidoc:order weight, stably.
+      // Undirected operations all share DEFAULT_ORDER, so they keep the
+      // sequence generateFiles already built (spec path order, then
+      // fumadocs' fixed methodKeys order within a path); the explicit
+      // index tie-break preserves exactly that — deliberately not a key
+      // re-derived from path or method, which would reimplement fumadocs'
+      // own ordering and drift from it the moment it changes. With zero
+      // //apidoc:order directives every weight is equal and this is a
+      // no-op, keeping the file byte-identical.
+      meta.pages = meta.pages
+        .map((slug, i) => ({ slug, i, order: ORDER_BY_SLUG.get(slug) ?? DEFAULT_ORDER }))
+        .sort((a, b) => a.order - b.order || a.i - b.i)
+        .map((e) => e.slug);
       writeFileSync(metaPath, JSON.stringify(meta, null, 2));
     }
   }

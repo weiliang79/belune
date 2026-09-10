@@ -821,23 +821,37 @@ func apidocWalkMapLiteral(reg *apidocSchemaRegistry, info *types.Info, lit *ast.
 	return apidocSchema{"type": "object", "properties": props}, true
 }
 
-// apidocDirective is one handler's //apidoc: directive comment, the ONLY
-// source of a route's domain classification (apidocClassify's old
-// path/scope-based heuristic is retired — see apidocRouteDomain). Tag is
-// mandatory for every documented handler; Title/Description are optional
-// and fall back to the auto-generated forms (apidocTitleFromOperationID,
-// and the derived pinning note alone) when empty.
+// apidocDirective is one handler's //apidoc: directive comment. Four keys,
+// all optional except tag:
 //
-// Directives are for EDITORIAL FACTS ONLY — a name, never a permission.
-// There is deliberately no //apidoc:admin or anything asserting scope,
-// session gating, or role: those stay derived from the probe and the
-// middleware chain, same as before. A directive is a claim, a claim can be
-// wrong, and "docs assert a restriction the code doesn't enforce" is the
-// exact failure this generator exists to prevent — the same class as the
-// three routes once documented as PAT-callable when RequireSession
-// actually rejected them.
+//   - tag: the route's domain slug — the ONLY source of a route's domain
+//     classification (apidocClassify's old path/scope heuristic is retired,
+//     see apidocRouteDomain). Mandatory for every documented handler.
+//   - title: sidebar label and operation summary; falls back to
+//     apidocTitleFromOperationID when empty.
+//   - description: editorial lead sentence; composed with — never replaced
+//     by — the derived pinning note (see apidocOperationDescription).
+//   - order: an integer sidebar sort weight for this operation within its
+//     domain, emitted as the x-belune-order vendor extension and consumed
+//     by the site's generate-api-pages.mjs, which re-sorts each domain's
+//     page list by it. Order is a *int — nil, and absent from the spec
+//     entirely, unless the directive set it: the spec's paths object is a
+//     Go map that serializes in key order regardless, so a vendor
+//     extension is the only channel a curated per-operation order can
+//     reach the site on. Weight semantics and the default value live where
+//     they're applied, on the JS side.
+//
+// Directives are for EDITORIAL / PRESENTATION FACTS ONLY — a name or a
+// display order, never a permission. There is deliberately no //apidoc:admin
+// or anything asserting scope, session gating, or role: those stay derived
+// from the probe and the middleware chain, same as before. A directive is a
+// claim, a claim can be wrong, and "docs assert a restriction the code
+// doesn't enforce" is the exact failure this generator exists to prevent —
+// the same class as the three routes once documented as PAT-callable when
+// RequireSession actually rejected them.
 type apidocDirective struct {
 	Tag, Title, Description string
+	Order                   *int // nil unless //apidoc:order set it
 }
 
 // apidocDirectivePrefix has NO space after "//" — it's a directive line,
@@ -851,11 +865,14 @@ const apidocDirectivePrefix = "//apidoc:"
 // position relative to ordinary prose in the same comment group — see the
 // package-level doc comment on ServeMetrics in metrics.go for what a real
 // one looks like next to prose. A nil doc (no comment at all) returns the
-// zero value, which apidocRouteDomain reads as "no directive."
-func apidocParseDirective(doc *ast.CommentGroup) apidocDirective {
+// zero value, which apidocRouteDomain reads as "no directive." Returns an
+// error for a malformed directive (today: an //apidoc:order whose value
+// isn't an integer) rather than ignoring it — a typo'd sort weight should
+// be heard about, not silently treated as "no opinion."
+func apidocParseDirective(doc *ast.CommentGroup) (apidocDirective, error) {
 	var d apidocDirective
 	if doc == nil {
-		return d
+		return d, nil
 	}
 	for _, c := range doc.List {
 		rest, ok := strings.CutPrefix(c.Text, apidocDirectivePrefix)
@@ -870,9 +887,15 @@ func apidocParseDirective(doc *ast.CommentGroup) apidocDirective {
 			d.Title = value
 		case "description":
 			d.Description = value
+		case "order":
+			n, err := strconv.Atoi(strings.TrimSpace(value))
+			if err != nil {
+				return d, fmt.Errorf("%sorder %q: not an integer", apidocDirectivePrefix, value)
+			}
+			d.Order = &n
 		}
 	}
-	return d
+	return d, nil
 }
 
 // apidocExtractTypes loads ./internal/handler (this package) via go/packages
@@ -925,7 +948,9 @@ func apidocExtractTypes(t *testing.T) (map[string]apidocOperationTypes, map[stri
 			if !apidocIsHandlerReceiver(fn.Recv.List[0].Type) {
 				continue
 			}
-			if d := apidocParseDirective(fn.Doc); d.Tag != "" {
+			d, err := apidocParseDirective(fn.Doc)
+			require.NoErrorf(t, err, "parsing //apidoc: directives on handler %s", fn.Name.Name)
+			if d.Tag != "" {
 				directives[fn.Name.Name] = d
 			}
 
@@ -1100,10 +1125,19 @@ type oasParameter struct {
 	Schema   apidocSchema `json:"schema"`
 }
 type oasOperation struct {
-	OperationID string                 `json:"operationId"`
-	Summary     string                 `json:"summary,omitempty"`
-	Description string                 `json:"description,omitempty"`
-	Tags        []string               `json:"tags,omitempty"`
+	OperationID string   `json:"operationId"`
+	Summary     string   `json:"summary,omitempty"`
+	Description string   `json:"description,omitempty"`
+	Tags        []string `json:"tags,omitempty"`
+	// Order carries an //apidoc:order directive's sort weight, emitted only
+	// when a handler set one (nil otherwise, so x-belune-order is absent
+	// from every operation by default and a spec with no order directives is
+	// byte-identical to one written before this key existed). The site's
+	// generate-api-pages.mjs re-sorts each domain's sidebar page list by it —
+	// the paths object here is a Go map and serializes in key order no matter
+	// the route slice's order, so this extension is the only way a curated
+	// per-operation order reaches the site.
+	Order       *int                   `json:"x-belune-order,omitempty"`
 	Parameters  []oasParameter         `json:"parameters,omitempty"`
 	RequestBody *oasRequestBody        `json:"requestBody,omitempty"`
 	Responses   map[string]oasResponse `json:"responses"`
@@ -1330,6 +1364,7 @@ func apidocBuildDocument(t *testing.T, routes []apidocRoute, sig map[string]apid
 			OperationID: opID,
 			Summary:     summary,
 			Tags:        []string{domainTitleByRoute[r]},
+			Order:       directive.Order,
 			Description: apidocOperationDescription(r, directive),
 			Parameters:  apidocPathParameters(r.Path),
 			Security:    apidocSecurity(r),
