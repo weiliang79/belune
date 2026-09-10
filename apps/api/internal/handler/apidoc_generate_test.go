@@ -73,15 +73,22 @@
 // (not what it holds), reusing the scope lattice's own total order
 // (metrics ⊂ read ⊂ deploy ⊂ write — see the comment on scopeGrants in
 // middleware/scope.go): each scheme is named for the scope it satisfies —
-// metrics/read/deploy/write — plus session and adminRole. A route needing
-// `read` lists ONLY `read` — a token holding read, deploy,
-// OR write all satisfy it, so naming by minimum keeps it to one scheme per
-// route instead of enumerating every tier that would also work. `session` is
-// OR'd into every non-session-exclusive requirement, since RequireScope lets
-// a session JWT pass unconditionally (ScopesFromContext returns nil for one).
-// `adminRole` is ANDed in separately when RequireRole is present, applying to
-// both the PAT and session alternatives — RequireRole reads role from
-// request context uniformly regardless of auth method.
+// metrics/read/deploy/write — plus session. A route needing `read` lists
+// ONLY `read` — a token holding read, deploy, OR write all satisfy it, so
+// naming by minimum keeps it to one scheme per route instead of enumerating
+// every tier that would also work. `session` is OR'd into every
+// non-session-exclusive requirement, since RequireScope lets a session JWT
+// pass unconditionally (ScopesFromContext returns nil for one).
+//
+// RequireRole gating is NOT a scheme. A role is not a credential — an
+// earlier "adminRole" scheme typed as http/bearer made renderers offer a
+// bearer field nobody can fill. r.Admin is emitted as the x-belune-admin
+// vendor extension (apidocBuildDocument) and a "Requires the Admin role."
+// sentence in the operation description (apidocOperationDescription); the
+// site turns x-belune-admin into a page frontmatter flag and an "Admin
+// only" sidebar badge. TestGenerateAPIReference's admin invariant checks
+// r.Admin against api-domains.json's " (Admin)" tag suffix, the one admin
+// signal not derived from r.Admin.
 package handler_test
 
 import (
@@ -422,6 +429,11 @@ const apidocDomainsPath = "../../../site/api-domains.json"
 // for sidebar nesting on the site side, and apidocLoadDomains flattens
 // through it, so this generator only ever sees leaves. Recursive, not
 // hard-limited to one level, even though only "git" nests today.
+//
+// A Tag ending " (Admin)" is load-bearing: TestGenerateAPIReference's admin
+// invariant checks every route grouped under such a tag is actually
+// RequireRole-gated (see that check for why — it's the one admin signal not
+// derived from r.Admin). The JSON file can't say so itself (no comments).
 type apidocDomainEntry struct {
 	Slug     string              `json:"slug"`
 	Tag      string              `json:"tag,omitempty"`
@@ -1143,7 +1155,14 @@ type oasOperation struct {
 	// the paths object here is a Go map and serializes in key order no matter
 	// the route slice's order, so this extension is the only way a curated
 	// per-operation order reaches the site.
-	Order       *int                   `json:"x-belune-order,omitempty"`
+	Order *int `json:"x-belune-order,omitempty"`
+	// Admin is r.Admin (the RequireRole middleware fact), emitted as
+	// x-belune-admin only when true. It replaces the adminRole security
+	// scheme — a role is not a credential. generate-api-pages.mjs's
+	// isAdminGated reads it back to write each admin page's `admin: true`
+	// frontmatter, which drives the sidebar's "Admin only" badge; the
+	// description also carries "Requires the Admin role." for the page body.
+	Admin       bool                   `json:"x-belune-admin,omitempty"`
 	Parameters  []oasParameter         `json:"parameters,omitempty"`
 	RequestBody *oasRequestBody        `json:"requestBody,omitempty"`
 	Responses   map[string]oasResponse `json:"responses"`
@@ -1218,39 +1237,31 @@ func apidocScopeScheme(scope string) string {
 // has no OAuth2 authorization server for PATs, so the requirement is carried
 // in the SCHEME NAME instead (see apidocScopeScheme), with `session` OR'd
 // into every non-session-exclusive requirement (RequireScope lets a session
-// JWT pass unconditionally) and `adminRole` ANDed in when RequireRole gates
-// the route (applies uniformly to both PAT and session auth).
+// JWT pass unconditionally).
+//
+// RequireRole gating is deliberately NOT here. A role is not a credential —
+// modelling it as a bearer scheme (as an earlier "adminRole" scheme did)
+// made renderers offer a bearer field nobody can fill. r.Admin is emitted as
+// the x-belune-admin vendor extension and stated in the operation
+// description instead; see apidocBuildDocument and apidocOperationDescription.
 func apidocSecurity(r apidocRoute) []map[string][]string {
-	var reqs []map[string][]string
 	switch {
 	case r.Scope == "none" && r.Session:
 		// No RequireScope* at all — only RequireSession gates it (e.g. the WS
 		// terminal tunnel). No PAT alternative exists at any scope.
-		reqs = []map[string][]string{{"session": {}}}
+		return []map[string][]string{{"session": {}}}
 	case r.Session:
 		// A scope requirement exists too (probe 1 still resolved one), but
 		// RequireSession rejects every PAT regardless — the scope is real but
 		// moot for authorization purposes, so only session is listed.
-		reqs = []map[string][]string{{"session": {}}}
+		return []map[string][]string{{"session": {}}}
 	default:
 		scheme := apidocScopeScheme(r.Scope)
 		if scheme == "" {
 			return nil // UNRECOGNIZED — TestGenerateAPIReference already fails loudly on this
 		}
-		reqs = []map[string][]string{{scheme: {}}, {"session": {}}}
+		return []map[string][]string{{scheme: {}}, {"session": {}}}
 	}
-	if !r.Admin {
-		return reqs
-	}
-	out := make([]map[string][]string, len(reqs))
-	for i, req := range reqs {
-		merged := map[string][]string{"adminRole": {}}
-		for k, v := range req {
-			merged[k] = v
-		}
-		out[i] = merged
-	}
-	return out
 }
 
 func apidocPathParameters(path string) []oasParameter {
@@ -1268,17 +1279,27 @@ func apidocPathParameters(path string) []oasParameter {
 
 // apidocOperationDescription composes a //apidoc:description directive (an
 // EDITORIAL claim) with the caveats a schema alone can't carry (DERIVED
-// facts — project-pinning has no OpenAPI concept at all). Editorial text
-// always comes first, since it's the more useful framing for a reader, but
-// the derived note is APPENDED, never suppressed by it — a declaration must
-// never be able to turn off something the generator discovered, same rule
-// as directives not carrying permissions. If a route is project-pinned,
-// that sentence appears whether or not anyone wrote a description, and no
-// directive can turn it off.
+// facts the generator discovered). Editorial text always comes first, since
+// it's the more useful framing for a reader; each derived note is APPENDED
+// and can never be suppressed by a directive — a declaration must not be
+// able to turn off something the generator found, same rule as directives
+// not carrying permissions.
+//
+// Two derived notes, in this FIXED order (don't append a third arbitrarily —
+// decide where it reads):
+//
+//  1. project-pinning (r.Pinned) — has no OpenAPI representation at all
+//  2. Admin role (r.Admin) — the adminRole security scheme was removed for
+//     being a fake credential, and the "Admin only" sidebar badge is
+//     sidebar-only, so without this sentence an admin operation's PAGE body
+//     would state the role requirement nowhere
 func apidocOperationDescription(r apidocRoute, directive apidocDirective) string {
 	var notes []string
 	if r.Pinned {
 		notes = append(notes, "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.")
+	}
+	if r.Admin {
+		notes = append(notes, "Requires the Admin role.")
 	}
 	return strings.TrimSpace(directive.Description + " " + strings.Join(notes, " "))
 }
@@ -1291,12 +1312,13 @@ const apidocSpecDescription = `Generated from the running API by probing every r
 
 func apidocSecuritySchemes() map[string]oasSecurityScheme {
 	return map[string]oasSecurityScheme{
-		"metrics":   {Type: "http", Scheme: "bearer", Description: "Personal access token whose scope satisfies `metrics` — metrics, read, deploy, or write all qualify (Belune's scopes form a total order)."},
-		"read":      {Type: "http", Scheme: "bearer", Description: "Personal access token whose scope satisfies `read` — read, deploy, or write all qualify."},
-		"deploy":    {Type: "http", Scheme: "bearer", Description: "Personal access token whose scope satisfies `deploy` — deploy or write qualify."},
-		"write":     {Type: "http", Scheme: "bearer", Description: "Personal access token whose scope satisfies `write`."},
-		"session":   {Type: "http", Scheme: "bearer", Description: "Dashboard session JWT — satisfies every scope requirement unconditionally."},
-		"adminRole": {Type: "http", Scheme: "bearer", Description: "The authenticated user, by token or session, must have the Admin role."},
+		"metrics": {Type: "http", Scheme: "bearer", Description: "Personal access token whose scope satisfies `metrics` — metrics, read, deploy, or write all qualify (Belune's scopes form a total order)."},
+		"read":    {Type: "http", Scheme: "bearer", Description: "Personal access token whose scope satisfies `read` — read, deploy, or write all qualify."},
+		"deploy":  {Type: "http", Scheme: "bearer", Description: "Personal access token whose scope satisfies `deploy` — deploy or write qualify."},
+		"write":   {Type: "http", Scheme: "bearer", Description: "Personal access token whose scope satisfies `write`."},
+		"session": {Type: "http", Scheme: "bearer", Description: "Dashboard session JWT — satisfies every scope requirement unconditionally."},
+		// No adminRole scheme: a role isn't a credential. Admin gating is
+		// x-belune-admin + a description sentence — see apidocSecurity.
 	}
 }
 
@@ -1326,6 +1348,65 @@ func apidocBuildDocument(t *testing.T, routes []apidocRoute, sig map[string]apid
 			missing = append(missing, fmt.Sprintf("%s %s (%s)", r.Method, r.Path, r.Handler))
 		}
 		require.Empty(t, missing, "routes with no //apidoc:tag directive on their handler")
+	}
+
+	// Permanent invariant: the admin signal the docs show must agree with the
+	// RequireRole middleware fact. Admin gating is emitted as x-belune-admin
+	// (op.Admin, straight from r.Admin) and rendered as the "Admin only"
+	// sidebar badge — all one derivation, so checking x-belune-admin against
+	// r.Admin would be vacuous. api-domains.json's " (Admin)" tag suffix is
+	// the ONE admin signal a human curates independently of r.Admin, so it's
+	// what this checks, both directions:
+	//
+	//   - every route under a " (Admin)"-suffixed tag must be RequireRole-gated
+	//     (a mixed domain mis-tagged, or a route in an admin domain that lost
+	//     its gate, surfaces here)
+	//   - the RequireRole-gated routes whose tag is NOT "(Admin)"-suffixed —
+	//     the ones that take an item-level badge in an otherwise-mixed section
+	//     — are pinned to exactly adminInMixedDomain. A 7th appearing, or one
+	//     of these moving/losing its gate, becomes a deliberate edit to that
+	//     list rather than silent drift (same intent as the 35-session pin).
+	//
+	// The " (Admin)" suffix in api-domains.json is load-bearing for this
+	// check — JSON can't carry a comment saying so, hence this one.
+	{
+		adminInMixedDomain := map[string]bool{
+			"GET /api/docker/volumes":   true,
+			"GET /api/domains/tls":      true,
+			"GET /api/maintenance/logs": true,
+			"GET /api/requests":         true,
+			"GET /api/requests/stream":  true,
+			"GET /api/requests/summary": true,
+		}
+		var overstated, unpinned []string
+		foundInMixed := map[string]bool{}
+		for _, d := range grouped {
+			adminTag := strings.HasSuffix(d.Title, " (Admin)")
+			for _, r := range d.Rows {
+				key := r.Method + " " + r.Path
+				switch {
+				case adminTag && !r.Admin:
+					overstated = append(overstated, key)
+				case !adminTag && r.Admin && !r.Session:
+					// !r.Session: a session-gated admin route has no page and
+					// no sidebar entry, so there's no rendered signal to pin.
+					if adminInMixedDomain[key] {
+						foundInMixed[key] = true
+					} else {
+						unpinned = append(unpinned, key)
+					}
+				}
+			}
+		}
+		require.Empty(t, overstated, "route(s) under a \" (Admin)\"-suffixed tag that RequireRole does NOT gate — api-domains.json overstates the restriction (fix the tag or the route)")
+		require.Empty(t, unpinned, "RequireRole-gated route(s) in a non-\"(Admin)\" domain and not in adminInMixedDomain — if the item-level badge is intended, add them there")
+		var movedOrUngated []string
+		for key := range adminInMixedDomain {
+			if !foundInMixed[key] {
+				movedOrUngated = append(movedOrUngated, key)
+			}
+		}
+		require.Empty(t, movedOrUngated, "adminInMixedDomain lists route(s) the probe no longer sees as RequireRole-gated outside an \"(Admin)\" tag — moved, renamed, or lost the gate")
 	}
 
 	domainTitleByRoute := map[apidocRoute]string{}
@@ -1369,6 +1450,7 @@ func apidocBuildDocument(t *testing.T, routes []apidocRoute, sig map[string]apid
 			Summary:     summary,
 			Tags:        []string{domainTitleByRoute[r]},
 			Order:       directive.Order,
+			Admin:       r.Admin,
 			Description: apidocOperationDescription(r, directive),
 			Parameters:  apidocPathParameters(r.Path),
 			Security:    apidocSecurity(r),

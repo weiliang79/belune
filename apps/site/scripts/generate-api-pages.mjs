@@ -55,6 +55,12 @@ const DOMAINS_PATH = './api-domains.json';
 // container entry like "git" has none, since nothing in the spec is
 // tagged "Git" itself), `title` (the sidebar label, defaulting to `tag`
 // when omitted, which keeps most entries to two fields).
+//
+// A `tag` ending " (Admin)" is load-bearing, not decoration: it's the one
+// admin signal that isn't derived from RequireRole, so
+// TestGenerateAPIReference's admin invariant checks every route it groups
+// is actually RequireRole-gated. Don't add or drop the suffix to tidy a
+// label. (This note can't live in the JSON — strict JSON, no comments.)
 const DOMAINS = JSON.parse(readFileSync(DOMAINS_PATH, 'utf8'));
 
 // walkDomains visits every node (leaf or container, at any depth — nesting
@@ -132,10 +138,12 @@ function isPatCallable(operation) {
 // derive from (src/lib/source.tsx reads it back off each page's own
 // frontmatter, not the spec directly — see markAdminOperations below for
 // why) — same "derive it, don't hand-list it" reasoning as isPatCallable.
-// apidocSecurity ANDs adminRole into every alternative uniformly when
-// RequireRole gates a route, so checking any one alternative is enough.
+// The Go side emits x-belune-admin from the RequireRole middleware fact
+// (r.Admin); there is no adminRole security scheme any more (a role isn't a
+// credential). TestGenerateAPIReference's admin invariant checks this
+// against api-domains.json's "(Admin)" tag suffix.
 function isAdminGated(operation) {
-  return (operation.security ?? []).some((requirement) => 'adminRole' in requirement);
+  return operation['x-belune-admin'] === true;
 }
 
 const fullSpec = JSON.parse(readFileSync(SPEC_PATH, 'utf8'));

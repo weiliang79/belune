@@ -176,9 +176,11 @@
       "get": {
         "operationId": "ListAuditLogs",
         "summary": "List Audit Logs",
+        "description": "Requires the Admin role.",
         "tags": [
           "Platform (Admin)"
         ],
+        "x-belune-admin": true,
         "responses": {
           "200": {
             "description": "OK",
@@ -214,11 +216,9 @@
         },
         "security": [
           {
-            "adminRole": [],
             "read": []
           },
           {
-            "adminRole": [],
             "session": []
           }
         ]
@@ -228,9 +228,11 @@
       "get": {
         "operationId": "ListAuditActions",
         "summary": "List Audit Actions",
+        "description": "Requires the Admin role.",
         "tags": [
           "Platform (Admin)"
         ],
+        "x-belune-admin": true,
         "responses": {
           "200": {
             "description": "OK",
@@ -258,11 +260,9 @@
         },
         "security": [
           {
-            "adminRole": [],
             "read": []
           },
           {
-            "adminRole": [],
             "session": []
           }
         ]
@@ -272,9 +272,11 @@
       "get": {
         "operationId": "ExportAuditLogs",
         "summary": "Export Audit Logs",
+        "description": "Requires the Admin role.",
         "tags": [
           "Platform (Admin)"
         ],
+        "x-belune-admin": true,
         "responses": {
           "403": {
             "description": "Forbidden",
@@ -292,11 +294,9 @@
         },
         "security": [
           {
-            "adminRole": [],
             "read": []
           },
           {
-            "adminRole": [],
             "session": []
           }
         ]
@@ -793,9 +793,11 @@
       "get": {
         "operationId": "ListBackupRuns",
         "summary": "List Backup Runs",
+        "description": "Requires the Admin role.",
         "tags": [
           "Platform Backups (Admin)"
         ],
+        "x-belune-admin": true,
         "responses": {
           "200": {
             "description": "OK",
@@ -823,11 +825,9 @@
         },
         "security": [
           {
-            "adminRole": [],
             "read": []
           },
           {
-            "adminRole": [],
             "session": []
           }
         ]
@@ -837,9 +837,11 @@
       "put": {
         "operationId": "UpdateBackupRemote",
         "summary": "Update Backup Remote",
+        "description": "Requires the Admin role.",
         "tags": [
           "Platform Backups (Admin)"
         ],
+        "x-belune-admin": true,
         "requestBody": {
           "required": true,
           "content": {
@@ -882,11 +884,9 @@
         },
         "security": [
           {
-            "adminRole": [],
             "write": []
           },
           {
-            "adminRole": [],
             "session": []
           }
         ]
@@ -896,9 +896,11 @@
       "post": {
         "operationId": "TriggerBackupRun",
         "summary": "Trigger Backup Run",
+        "description": "Requires the Admin role.",
         "tags": [
           "Platform Backups (Admin)"
         ],
+        "x-belune-admin": true,
         "responses": {
           "202": {
             "description": "Accepted",
@@ -928,11 +930,9 @@
         },
         "security": [
           {
-            "adminRole": [],
             "write": []
           },
           {
-            "adminRole": [],
             "session": []
           }
         ]
@@ -942,9 +942,11 @@
       "get": {
         "operationId": "GetBackupStatus",
         "summary": "Get Backup Status",
+        "description": "Requires the Admin role.",
         "tags": [
           "Platform Backups (Admin)"
         ],
+        "x-belune-admin": true,
         "responses": {
           "200": {
             "description": "OK",
@@ -969,11 +971,9 @@
         },
         "security": [
           {
-            "adminRole": [],
             "read": []
           },
           {
-            "adminRole": [],
             "session": []
           }
         ]
@@ -983,9 +983,11 @@
       "post": {
         "operationId": "TestBackupRemote",
         "summary": "Test Backup Remote",
+        "description": "Requires the Admin role.",
         "tags": [
           "Platform Backups (Admin)"
         ],
+        "x-belune-admin": true,
         "responses": {
           "200": {
             "description": "OK",
@@ -1015,11 +1017,9 @@
         },
         "security": [
           {
-            "adminRole": [],
             "write": []
           },
           {
-            "adminRole": [],
             "session": []
           }
         ]
@@ -1029,9 +1029,11 @@
       "get": {
         "operationId": "ListCertificates",
         "summary": "List Certificates",
+        "description": "Requires the Admin role.",
         "tags": [
           "Platform (Admin)"
         ],
+        "x-belune-admin": true,
         "responses": {
           "200": {
             "description": "OK",
@@ -1059,11 +1061,9 @@
         },
         "security": [
           {
-            "adminRole": [],
             "read": []
           },
           {
-            "adminRole": [],
             "session": []
           }
         ]
@@ -1071,9 +1071,11 @@
       "post": {
         "operationId": "UploadCertificate",
         "summary": "Upload Certificate",
+        "description": "Requires the Admin role.",
         "tags": [
           "Platform (Admin)"
         ],
+        "x-belune-admin": true,
         "requestBody": {
           "required": true,
           "content": {
@@ -1108,11 +1110,9 @@
         },
         "security": [
           {
-            "adminRole": [],
             "write": []
           },
           {
-            "adminRole": [],
             "session": []
           }
         ]
@@ -1122,9 +1122,11 @@
       "delete": {
         "operationId": "DeleteCertificate",
         "summary": "Delete Certificate",
+        "description": "Requires the Admin role.",
         "tags": [
           "Platform (Admin)"
         ],
+        "x-belune-admin": true,
         "parameters": [
           {
             "name": "certificateId",
@@ -1153,11 +1155,9 @@
         },
         "security": [
           {
-            "adminRole": [],
             "write": []
           },
           {
-            "adminRole": [],
             "session": []
           }
         ]
@@ -1167,9 +1167,11 @@
       "post": {
         "operationId": "TriggerCleanup",
         "summary": "Trigger Cleanup",
+        "description": "Requires the Admin role.",
         "tags": [
           "Platform (Admin)"
         ],
+        "x-belune-admin": true,
         "requestBody": {
           "required": true,
           "content": {
@@ -1209,11 +1211,9 @@
         },
         "security": [
           {
-            "adminRole": [],
             "write": []
           },
           {
-            "adminRole": [],
             "session": []
           }
         ]
@@ -1265,9 +1265,11 @@
       "get": {
         "operationId": "ListDockerContainers",
         "summary": "List Docker Containers",
+        "description": "Requires the Admin role.",
         "tags": [
           "Platform (Admin)"
         ],
+        "x-belune-admin": true,
         "responses": {
           "200": {
             "description": "OK",
@@ -1295,11 +1297,9 @@
         },
         "security": [
           {
-            "adminRole": [],
             "read": []
           },
           {
-            "adminRole": [],
             "session": []
           }
         ]
@@ -1309,9 +1309,11 @@
       "get": {
         "operationId": "ListDockerImages",
         "summary": "List Docker Images",
+        "description": "Requires the Admin role.",
         "tags": [
           "Platform (Admin)"
         ],
+        "x-belune-admin": true,
         "responses": {
           "200": {
             "description": "OK",
@@ -1339,11 +1341,9 @@
         },
         "security": [
           {
-            "adminRole": [],
             "read": []
           },
           {
-            "adminRole": [],
             "session": []
           }
         ]
@@ -1353,9 +1353,11 @@
       "get": {
         "operationId": "ListDockerNetworks",
         "summary": "List Docker Networks",
+        "description": "Requires the Admin role.",
         "tags": [
           "Platform (Admin)"
         ],
+        "x-belune-admin": true,
         "responses": {
           "200": {
             "description": "OK",
@@ -1383,11 +1385,9 @@
         },
         "security": [
           {
-            "adminRole": [],
             "read": []
           },
           {
-            "adminRole": [],
             "session": []
           }
         ]
@@ -1397,9 +1397,11 @@
       "get": {
         "operationId": "GetDockerOverview",
         "summary": "Get Docker Overview",
+        "description": "Requires the Admin role.",
         "tags": [
           "Platform (Admin)"
         ],
+        "x-belune-admin": true,
         "responses": {
           "200": {
             "description": "OK",
@@ -1424,11 +1426,9 @@
         },
         "security": [
           {
-            "adminRole": [],
             "read": []
           },
           {
-            "adminRole": [],
             "session": []
           }
         ]
@@ -1438,9 +1438,11 @@
       "get": {
         "operationId": "ListDockerVolumes",
         "summary": "List Docker Volumes",
+        "description": "Requires the Admin role.",
         "tags": [
           "Application Volumes \u0026 Backups"
         ],
+        "x-belune-admin": true,
         "responses": {
           "200": {
             "description": "OK",
@@ -1468,11 +1470,9 @@
         },
         "security": [
           {
-            "adminRole": [],
             "read": []
           },
           {
-            "adminRole": [],
             "session": []
           }
         ]
@@ -1482,9 +1482,11 @@
       "get": {
         "operationId": "ListDomainTLSStatus",
         "summary": "List Domain TLS Status",
+        "description": "Requires the Admin role.",
         "tags": [
           "Domains \u0026 TLS"
         ],
+        "x-belune-admin": true,
         "responses": {
           "200": {
             "description": "OK",
@@ -1512,11 +1514,9 @@
         },
         "security": [
           {
-            "adminRole": [],
             "read": []
           },
           {
-            "adminRole": [],
             "session": []
           }
         ]
@@ -1815,9 +1815,11 @@
       "get": {
         "operationId": "ListGitProviderConfigs",
         "summary": "List Git Provider Configs",
+        "description": "Requires the Admin role.",
         "tags": [
           "Git Provider Configs (Admin)"
         ],
+        "x-belune-admin": true,
         "responses": {
           "200": {
             "description": "OK",
@@ -1845,11 +1847,9 @@
         },
         "security": [
           {
-            "adminRole": [],
             "read": []
           },
           {
-            "adminRole": [],
             "session": []
           }
         ]
@@ -1857,9 +1857,11 @@
       "put": {
         "operationId": "SaveGitProviderConfig",
         "summary": "Save Git Provider Config",
+        "description": "Requires the Admin role.",
         "tags": [
           "Git Provider Configs (Admin)"
         ],
+        "x-belune-admin": true,
         "requestBody": {
           "required": true,
           "content": {
@@ -1894,11 +1896,9 @@
         },
         "security": [
           {
-            "adminRole": [],
             "write": []
           },
           {
-            "adminRole": [],
             "session": []
           }
         ]
@@ -1908,9 +1908,11 @@
       "get": {
         "operationId": "GetGitHubAppManifest",
         "summary": "Get GitHub App Manifest",
+        "description": "Requires the Admin role.",
         "tags": [
           "Git Provider Configs (Admin)"
         ],
+        "x-belune-admin": true,
         "responses": {
           "200": {
             "description": "OK",
@@ -1950,11 +1952,9 @@
         },
         "security": [
           {
-            "adminRole": [],
             "read": []
           },
           {
-            "adminRole": [],
             "session": []
           }
         ]
@@ -1964,9 +1964,11 @@
       "delete": {
         "operationId": "DeleteGitProviderConfig",
         "summary": "Delete Git Provider Config",
+        "description": "Requires the Admin role.",
         "tags": [
           "Git Provider Configs (Admin)"
         ],
+        "x-belune-admin": true,
         "parameters": [
           {
             "name": "configId",
@@ -2007,11 +2009,9 @@
         },
         "security": [
           {
-            "adminRole": [],
             "write": []
           },
           {
-            "adminRole": [],
             "session": []
           }
         ]
@@ -2021,9 +2021,11 @@
       "post": {
         "operationId": "CreateHostShellSession",
         "summary": "Create Host Shell Session",
+        "description": "Requires the Admin role.",
         "tags": [
           "Platform (Admin)"
         ],
+        "x-belune-admin": true,
         "requestBody": {
           "required": true,
           "content": {
@@ -2074,11 +2076,9 @@
         },
         "security": [
           {
-            "adminRole": [],
             "write": []
           },
           {
-            "adminRole": [],
             "session": []
           }
         ]
@@ -2088,9 +2088,11 @@
       "get": {
         "operationId": "GetPlatformLogs",
         "summary": "Get Platform Logs",
+        "description": "Requires the Admin role.",
         "tags": [
           "Logs \u0026 Request Traces"
         ],
+        "x-belune-admin": true,
         "responses": {
           "200": {
             "description": "OK",
@@ -2115,11 +2117,9 @@
         },
         "security": [
           {
-            "adminRole": [],
             "read": []
           },
           {
-            "adminRole": [],
             "session": []
           }
         ]
@@ -2129,9 +2129,11 @@
       "get": {
         "operationId": "GetQueueStatus",
         "summary": "Get Queue Status",
+        "description": "Requires the Admin role.",
         "tags": [
           "Platform (Admin)"
         ],
+        "x-belune-admin": true,
         "responses": {
           "200": {
             "description": "OK",
@@ -2156,11 +2158,9 @@
         },
         "security": [
           {
-            "adminRole": [],
             "read": []
           },
           {
-            "adminRole": [],
             "session": []
           }
         ]
@@ -2170,9 +2170,11 @@
       "post": {
         "operationId": "ClearQueue",
         "summary": "Clear Queue",
+        "description": "Requires the Admin role.",
         "tags": [
           "Platform (Admin)"
         ],
+        "x-belune-admin": true,
         "responses": {
           "200": {
             "description": "OK",
@@ -2202,11 +2204,9 @@
         },
         "security": [
           {
-            "adminRole": [],
             "write": []
           },
           {
-            "adminRole": [],
             "session": []
           }
         ]
@@ -2216,9 +2216,11 @@
       "post": {
         "operationId": "ClearPendingQueue",
         "summary": "Clear Pending Queue",
+        "description": "Requires the Admin role.",
         "tags": [
           "Platform (Admin)"
         ],
+        "x-belune-admin": true,
         "responses": {
           "200": {
             "description": "OK",
@@ -2248,11 +2250,9 @@
         },
         "security": [
           {
-            "adminRole": [],
             "write": []
           },
           {
-            "adminRole": [],
             "session": []
           }
         ]
@@ -2262,9 +2262,11 @@
       "post": {
         "operationId": "RestartService",
         "summary": "Restart Service",
+        "description": "Requires the Admin role.",
         "tags": [
           "Platform (Admin)"
         ],
+        "x-belune-admin": true,
         "responses": {
           "200": {
             "description": "OK",
@@ -2297,11 +2299,9 @@
         },
         "security": [
           {
-            "adminRole": [],
             "write": []
           },
           {
-            "adminRole": [],
             "session": []
           }
         ]
@@ -2311,9 +2311,11 @@
       "get": {
         "operationId": "GetServerIP",
         "summary": "Get Server IP",
+        "description": "Requires the Admin role.",
         "tags": [
           "Platform (Admin)"
         ],
+        "x-belune-admin": true,
         "responses": {
           "200": {
             "description": "OK",
@@ -2338,11 +2340,9 @@
         },
         "security": [
           {
-            "adminRole": [],
             "read": []
           },
           {
-            "adminRole": [],
             "session": []
           }
         ]
@@ -2352,9 +2352,11 @@
       "get": {
         "operationId": "GetMetrics",
         "summary": "Get Metrics",
+        "description": "Requires the Admin role.",
         "tags": [
           "Metrics \u0026 Live Streams (Admin)"
         ],
+        "x-belune-admin": true,
         "responses": {
           "200": {
             "description": "OK",
@@ -2379,11 +2381,9 @@
         },
         "security": [
           {
-            "adminRole": [],
             "metrics": []
           },
           {
-            "adminRole": [],
             "session": []
           }
         ]
@@ -2393,9 +2393,11 @@
       "get": {
         "operationId": "GetHostHistoricalMetrics",
         "summary": "Get Host Historical Metrics",
+        "description": "Requires the Admin role.",
         "tags": [
           "Metrics \u0026 Live Streams (Admin)"
         ],
+        "x-belune-admin": true,
         "responses": {
           "200": {
             "description": "OK",
@@ -2423,11 +2425,9 @@
         },
         "security": [
           {
-            "adminRole": [],
             "metrics": []
           },
           {
-            "adminRole": [],
             "session": []
           }
         ]
@@ -2437,9 +2437,11 @@
       "get": {
         "operationId": "StreamHostMetrics",
         "summary": "Stream Host Metrics",
+        "description": "Requires the Admin role.",
         "tags": [
           "Metrics \u0026 Live Streams (Admin)"
         ],
+        "x-belune-admin": true,
         "responses": {
           "403": {
             "description": "Forbidden",
@@ -2457,11 +2459,9 @@
         },
         "security": [
           {
-            "adminRole": [],
             "metrics": []
           },
           {
-            "adminRole": [],
             "session": []
           }
         ]
@@ -2471,9 +2471,11 @@
       "get": {
         "operationId": "ListNotificationChannels",
         "summary": "List Notification Channels",
+        "description": "Requires the Admin role.",
         "tags": [
           "Platform (Admin)"
         ],
+        "x-belune-admin": true,
         "responses": {
           "200": {
             "description": "OK",
@@ -2501,11 +2503,9 @@
         },
         "security": [
           {
-            "adminRole": [],
             "read": []
           },
           {
-            "adminRole": [],
             "session": []
           }
         ]
@@ -2513,9 +2513,11 @@
       "post": {
         "operationId": "CreateNotificationChannel",
         "summary": "Create Notification Channel",
+        "description": "Requires the Admin role.",
         "tags": [
           "Platform (Admin)"
         ],
+        "x-belune-admin": true,
         "requestBody": {
           "required": true,
           "content": {
@@ -2550,11 +2552,9 @@
         },
         "security": [
           {
-            "adminRole": [],
             "write": []
           },
           {
-            "adminRole": [],
             "session": []
           }
         ]
@@ -2564,9 +2564,11 @@
       "post": {
         "operationId": "TestNotificationChannelParams",
         "summary": "Test Notification Channel Params",
+        "description": "Requires the Admin role.",
         "tags": [
           "Platform (Admin)"
         ],
+        "x-belune-admin": true,
         "requestBody": {
           "required": true,
           "content": {
@@ -2606,11 +2608,9 @@
         },
         "security": [
           {
-            "adminRole": [],
             "write": []
           },
           {
-            "adminRole": [],
             "session": []
           }
         ]
@@ -2620,9 +2620,11 @@
       "delete": {
         "operationId": "DeleteNotificationChannel",
         "summary": "Delete Notification Channel",
+        "description": "Requires the Admin role.",
         "tags": [
           "Platform (Admin)"
         ],
+        "x-belune-admin": true,
         "parameters": [
           {
             "name": "channelId",
@@ -2663,11 +2665,9 @@
         },
         "security": [
           {
-            "adminRole": [],
             "write": []
           },
           {
-            "adminRole": [],
             "session": []
           }
         ]
@@ -2675,9 +2675,11 @@
       "patch": {
         "operationId": "SetNotificationChannelEnabled",
         "summary": "Set Notification Channel Enabled",
+        "description": "Requires the Admin role.",
         "tags": [
           "Platform (Admin)"
         ],
+        "x-belune-admin": true,
         "parameters": [
           {
             "name": "channelId",
@@ -2723,11 +2725,9 @@
         },
         "security": [
           {
-            "adminRole": [],
             "write": []
           },
           {
-            "adminRole": [],
             "session": []
           }
         ]
@@ -2735,9 +2735,11 @@
       "put": {
         "operationId": "UpdateNotificationChannel",
         "summary": "Update Notification Channel",
+        "description": "Requires the Admin role.",
         "tags": [
           "Platform (Admin)"
         ],
+        "x-belune-admin": true,
         "parameters": [
           {
             "name": "channelId",
@@ -2783,11 +2785,9 @@
         },
         "security": [
           {
-            "adminRole": [],
             "write": []
           },
           {
-            "adminRole": [],
             "session": []
           }
         ]
@@ -2797,9 +2797,11 @@
       "post": {
         "operationId": "TestNotificationChannel",
         "summary": "Test Notification Channel",
+        "description": "Requires the Admin role.",
         "tags": [
           "Platform (Admin)"
         ],
+        "x-belune-admin": true,
         "parameters": [
           {
             "name": "channelId",
@@ -2840,11 +2842,9 @@
         },
         "security": [
           {
-            "adminRole": [],
             "write": []
           },
           {
-            "adminRole": [],
             "session": []
           }
         ]
@@ -2854,9 +2854,11 @@
       "get": {
         "operationId": "ListNotificationEvents",
         "summary": "List Notification Events",
+        "description": "Requires the Admin role.",
         "tags": [
           "Platform (Admin)"
         ],
+        "x-belune-admin": true,
         "responses": {
           "200": {
             "description": "OK",
@@ -2884,11 +2886,9 @@
         },
         "security": [
           {
-            "adminRole": [],
             "read": []
           },
           {
-            "adminRole": [],
             "session": []
           }
         ]
@@ -10520,9 +10520,11 @@
       "post": {
         "operationId": "ReconcileProxy",
         "summary": "Reconcile Proxy",
+        "description": "Requires the Admin role.",
         "tags": [
           "Platform (Admin)"
         ],
+        "x-belune-admin": true,
         "responses": {
           "200": {
             "description": "OK",
@@ -10547,11 +10549,9 @@
         },
         "security": [
           {
-            "adminRole": [],
             "write": []
           },
           {
-            "adminRole": [],
             "session": []
           }
         ]
@@ -10561,9 +10561,11 @@
       "get": {
         "operationId": "GetProxyReconcilerStatus",
         "summary": "Get Proxy Reconciler Status",
+        "description": "Requires the Admin role.",
         "tags": [
           "Platform (Admin)"
         ],
+        "x-belune-admin": true,
         "responses": {
           "200": {
             "description": "OK",
@@ -10588,11 +10590,9 @@
         },
         "security": [
           {
-            "adminRole": [],
             "read": []
           },
           {
-            "adminRole": [],
             "session": []
           }
         ]
@@ -10602,9 +10602,11 @@
       "get": {
         "operationId": "ListQuotas",
         "summary": "List Quotas",
+        "description": "Requires the Admin role.",
         "tags": [
           "Platform (Admin)"
         ],
+        "x-belune-admin": true,
         "responses": {
           "200": {
             "description": "OK",
@@ -10632,11 +10634,9 @@
         },
         "security": [
           {
-            "adminRole": [],
             "read": []
           },
           {
-            "adminRole": [],
             "session": []
           }
         ]
@@ -10646,9 +10646,11 @@
       "delete": {
         "operationId": "DeleteQuota",
         "summary": "Delete Quota",
+        "description": "Requires the Admin role.",
         "tags": [
           "Platform (Admin)"
         ],
+        "x-belune-admin": true,
         "parameters": [
           {
             "name": "scope",
@@ -10698,11 +10700,9 @@
         },
         "security": [
           {
-            "adminRole": [],
             "write": []
           },
           {
-            "adminRole": [],
             "session": []
           }
         ]
@@ -10710,9 +10710,11 @@
       "get": {
         "operationId": "GetQuota",
         "summary": "Get Quota",
+        "description": "Requires the Admin role.",
         "tags": [
           "Platform (Admin)"
         ],
+        "x-belune-admin": true,
         "parameters": [
           {
             "name": "scope",
@@ -10757,11 +10759,9 @@
         },
         "security": [
           {
-            "adminRole": [],
             "read": []
           },
           {
-            "adminRole": [],
             "session": []
           }
         ]
@@ -10769,9 +10769,11 @@
       "put": {
         "operationId": "UpsertQuota",
         "summary": "Upsert Quota",
+        "description": "Requires the Admin role.",
         "tags": [
           "Platform (Admin)"
         ],
+        "x-belune-admin": true,
         "parameters": [
           {
             "name": "scope",
@@ -10826,11 +10828,9 @@
         },
         "security": [
           {
-            "adminRole": [],
             "write": []
           },
           {
-            "adminRole": [],
             "session": []
           }
         ]
@@ -10840,9 +10840,11 @@
       "get": {
         "operationId": "ListAllRequestLogs",
         "summary": "List All Request Logs",
+        "description": "Requires the Admin role.",
         "tags": [
           "Logs \u0026 Request Traces"
         ],
+        "x-belune-admin": true,
         "responses": {
           "200": {
             "description": "OK",
@@ -10870,11 +10872,9 @@
         },
         "security": [
           {
-            "adminRole": [],
             "read": []
           },
           {
-            "adminRole": [],
             "session": []
           }
         ]
@@ -10884,9 +10884,11 @@
       "get": {
         "operationId": "StreamAllRequestLogs",
         "summary": "Stream All Request Logs",
+        "description": "Requires the Admin role.",
         "tags": [
           "Logs \u0026 Request Traces"
         ],
+        "x-belune-admin": true,
         "responses": {
           "403": {
             "description": "Forbidden",
@@ -10904,11 +10906,9 @@
         },
         "security": [
           {
-            "adminRole": [],
             "read": []
           },
           {
-            "adminRole": [],
             "session": []
           }
         ]
@@ -10918,9 +10918,11 @@
       "get": {
         "operationId": "GetAllRequestsSummary",
         "summary": "Get All Requests Summary",
+        "description": "Requires the Admin role.",
         "tags": [
           "Logs \u0026 Request Traces"
         ],
+        "x-belune-admin": true,
         "responses": {
           "200": {
             "description": "OK",
@@ -10945,11 +10947,9 @@
         },
         "security": [
           {
-            "adminRole": [],
             "read": []
           },
           {
-            "adminRole": [],
             "session": []
           }
         ]
@@ -10959,9 +10959,11 @@
       "get": {
         "operationId": "GetDashboardTLS",
         "summary": "Get Dashboard TLS",
+        "description": "Requires the Admin role.",
         "tags": [
           "Platform (Admin)"
         ],
+        "x-belune-admin": true,
         "responses": {
           "200": {
             "description": "OK",
@@ -10986,11 +10988,9 @@
         },
         "security": [
           {
-            "adminRole": [],
             "read": []
           },
           {
-            "adminRole": [],
             "session": []
           }
         ]
@@ -11000,9 +11000,11 @@
       "get": {
         "operationId": "GetServerServices",
         "summary": "Get Server Services",
+        "description": "Requires the Admin role.",
         "tags": [
           "Platform (Admin)"
         ],
+        "x-belune-admin": true,
         "responses": {
           "200": {
             "description": "OK",
@@ -11027,11 +11029,9 @@
         },
         "security": [
           {
-            "adminRole": [],
             "read": []
           },
           {
-            "adminRole": [],
             "session": []
           }
         ]
@@ -11041,9 +11041,11 @@
       "get": {
         "operationId": "ListSettings",
         "summary": "List Settings",
+        "description": "Requires the Admin role.",
         "tags": [
           "Platform (Admin)"
         ],
+        "x-belune-admin": true,
         "responses": {
           "200": {
             "description": "OK",
@@ -11071,11 +11073,9 @@
         },
         "security": [
           {
-            "adminRole": [],
             "read": []
           },
           {
-            "adminRole": [],
             "session": []
           }
         ]
@@ -11083,9 +11083,11 @@
       "put": {
         "operationId": "UpdateSettings",
         "summary": "Update Settings",
+        "description": "Requires the Admin role.",
         "tags": [
           "Platform (Admin)"
         ],
+        "x-belune-admin": true,
         "requestBody": {
           "required": true,
           "content": {
@@ -11128,11 +11130,9 @@
         },
         "security": [
           {
-            "adminRole": [],
             "write": []
           },
           {
-            "adminRole": [],
             "session": []
           }
         ]
@@ -11142,9 +11142,11 @@
       "get": {
         "operationId": "GetSMTPSettings",
         "summary": "Get SMTP Settings",
+        "description": "Requires the Admin role.",
         "tags": [
           "Platform (Admin)"
         ],
+        "x-belune-admin": true,
         "responses": {
           "200": {
             "description": "OK",
@@ -11169,11 +11171,9 @@
         },
         "security": [
           {
-            "adminRole": [],
             "read": []
           },
           {
-            "adminRole": [],
             "session": []
           }
         ]
@@ -11181,9 +11181,11 @@
       "put": {
         "operationId": "UpdateSMTPSettings",
         "summary": "Update SMTP Settings",
+        "description": "Requires the Admin role.",
         "tags": [
           "Platform (Admin)"
         ],
+        "x-belune-admin": true,
         "requestBody": {
           "required": true,
           "content": {
@@ -11223,11 +11225,9 @@
         },
         "security": [
           {
-            "adminRole": [],
             "write": []
           },
           {
-            "adminRole": [],
             "session": []
           }
         ]
@@ -11237,9 +11237,11 @@
       "post": {
         "operationId": "TestSMTPSettings",
         "summary": "Test SMTP Settings",
+        "description": "Requires the Admin role.",
         "tags": [
           "Platform (Admin)"
         ],
+        "x-belune-admin": true,
         "requestBody": {
           "required": true,
           "content": {
@@ -11279,11 +11281,9 @@
         },
         "security": [
           {
-            "adminRole": [],
             "write": []
           },
           {
-            "adminRole": [],
             "session": []
           }
         ]
@@ -11653,9 +11653,11 @@
       "get": {
         "operationId": "ListUsers",
         "summary": "List Users",
+        "description": "Requires the Admin role.",
         "tags": [
           "Users \u0026 Invitations (Admin)"
         ],
+        "x-belune-admin": true,
         "responses": {
           "200": {
             "description": "OK",
@@ -11683,11 +11685,9 @@
         },
         "security": [
           {
-            "adminRole": [],
             "read": []
           },
           {
-            "adminRole": [],
             "session": []
           }
         ]
@@ -11695,9 +11695,11 @@
       "post": {
         "operationId": "CreateUser",
         "summary": "Create User",
+        "description": "Requires the Admin role.",
         "tags": [
           "Users \u0026 Invitations (Admin)"
         ],
+        "x-belune-admin": true,
         "requestBody": {
           "required": true,
           "content": {
@@ -11732,7 +11734,6 @@
         },
         "security": [
           {
-            "adminRole": [],
             "session": []
           }
         ]
@@ -11742,9 +11743,11 @@
       "get": {
         "operationId": "ListPendingInvitations",
         "summary": "List Pending Invitations",
+        "description": "Requires the Admin role.",
         "tags": [
           "Users \u0026 Invitations (Admin)"
         ],
+        "x-belune-admin": true,
         "responses": {
           "200": {
             "description": "OK",
@@ -11772,11 +11775,9 @@
         },
         "security": [
           {
-            "adminRole": [],
             "read": []
           },
           {
-            "adminRole": [],
             "session": []
           }
         ]
@@ -11786,9 +11787,11 @@
       "delete": {
         "operationId": "RevokeInvitation",
         "summary": "Revoke Invitation",
+        "description": "Requires the Admin role.",
         "tags": [
           "Users \u0026 Invitations (Admin)"
         ],
+        "x-belune-admin": true,
         "parameters": [
           {
             "name": "invitationId",
@@ -11817,11 +11820,9 @@
         },
         "security": [
           {
-            "adminRole": [],
             "write": []
           },
           {
-            "adminRole": [],
             "session": []
           }
         ]
@@ -11831,9 +11832,11 @@
       "post": {
         "operationId": "InviteUser",
         "summary": "Invite User",
+        "description": "Requires the Admin role.",
         "tags": [
           "Users \u0026 Invitations (Admin)"
         ],
+        "x-belune-admin": true,
         "requestBody": {
           "required": true,
           "content": {
@@ -11868,7 +11871,6 @@
         },
         "security": [
           {
-            "adminRole": [],
             "session": []
           }
         ]
@@ -11878,9 +11880,11 @@
       "delete": {
         "operationId": "DeleteUser",
         "summary": "Delete User",
+        "description": "Requires the Admin role.",
         "tags": [
           "Users \u0026 Invitations (Admin)"
         ],
+        "x-belune-admin": true,
         "parameters": [
           {
             "name": "userId",
@@ -11921,7 +11925,6 @@
         },
         "security": [
           {
-            "adminRole": [],
             "session": []
           }
         ]
@@ -11931,9 +11934,11 @@
       "put": {
         "operationId": "ResetUserPassword",
         "summary": "Reset User Password",
+        "description": "Requires the Admin role.",
         "tags": [
           "Users \u0026 Invitations (Admin)"
         ],
+        "x-belune-admin": true,
         "parameters": [
           {
             "name": "userId",
@@ -11984,7 +11989,6 @@
         },
         "security": [
           {
-            "adminRole": [],
             "session": []
           }
         ]
@@ -11994,9 +11998,11 @@
       "put": {
         "operationId": "UpdateUserRole",
         "summary": "Update User Role",
+        "description": "Requires the Admin role.",
         "tags": [
           "Users \u0026 Invitations (Admin)"
         ],
+        "x-belune-admin": true,
         "parameters": [
           {
             "name": "userId",
@@ -12042,7 +12048,6 @@
         },
         "security": [
           {
-            "adminRole": [],
             "session": []
           }
         ]
@@ -12052,9 +12057,11 @@
       "post": {
         "operationId": "AdminResetUserTOTP",
         "summary": "Admin Reset User TOTP",
+        "description": "Requires the Admin role.",
         "tags": [
           "Users \u0026 Invitations (Admin)"
         ],
+        "x-belune-admin": true,
         "parameters": [
           {
             "name": "userId",
@@ -12105,7 +12112,6 @@
         },
         "security": [
           {
-            "adminRole": [],
             "session": []
           }
         ]
@@ -12187,9 +12193,11 @@
       "get": {
         "operationId": "ServeMetrics",
         "summary": "Serve Metrics",
+        "description": "Requires the Admin role.",
         "tags": [
           "Metrics \u0026 Live Streams (Admin)"
         ],
+        "x-belune-admin": true,
         "responses": {
           "403": {
             "description": "Forbidden",
@@ -12207,11 +12215,9 @@
         },
         "security": [
           {
-            "adminRole": [],
             "metrics": []
           },
           {
-            "adminRole": [],
             "session": []
           }
         ]
@@ -17013,11 +17019,6 @@
       }
     },
     "securitySchemes": {
-      "adminRole": {
-        "type": "http",
-        "scheme": "bearer",
-        "description": "The authenticated user, by token or session, must have the Admin role."
-      },
       "deploy": {
         "type": "http",
         "scheme": "bearer",
