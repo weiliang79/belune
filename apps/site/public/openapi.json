@@ -180,7 +180,9 @@
         "tags": [
           "Platform (Admin)"
         ],
-        "x-belune-admin": true,
+        "x-belune-roles": [
+          "admin"
+        ],
         "responses": {
           "200": {
             "description": "OK",
@@ -232,7 +234,9 @@
         "tags": [
           "Platform (Admin)"
         ],
-        "x-belune-admin": true,
+        "x-belune-roles": [
+          "admin"
+        ],
         "responses": {
           "200": {
             "description": "OK",
@@ -276,7 +280,9 @@
         "tags": [
           "Platform (Admin)"
         ],
-        "x-belune-admin": true,
+        "x-belune-roles": [
+          "admin"
+        ],
         "responses": {
           "403": {
             "description": "Forbidden",
@@ -797,7 +803,9 @@
         "tags": [
           "Platform Backups (Admin)"
         ],
-        "x-belune-admin": true,
+        "x-belune-roles": [
+          "admin"
+        ],
         "responses": {
           "200": {
             "description": "OK",
@@ -841,7 +849,9 @@
         "tags": [
           "Platform Backups (Admin)"
         ],
-        "x-belune-admin": true,
+        "x-belune-roles": [
+          "admin"
+        ],
         "requestBody": {
           "required": true,
           "content": {
@@ -900,7 +910,9 @@
         "tags": [
           "Platform Backups (Admin)"
         ],
-        "x-belune-admin": true,
+        "x-belune-roles": [
+          "admin"
+        ],
         "responses": {
           "202": {
             "description": "Accepted",
@@ -946,7 +958,9 @@
         "tags": [
           "Platform Backups (Admin)"
         ],
-        "x-belune-admin": true,
+        "x-belune-roles": [
+          "admin"
+        ],
         "responses": {
           "200": {
             "description": "OK",
@@ -987,7 +1001,9 @@
         "tags": [
           "Platform Backups (Admin)"
         ],
-        "x-belune-admin": true,
+        "x-belune-roles": [
+          "admin"
+        ],
         "responses": {
           "200": {
             "description": "OK",
@@ -1033,7 +1049,9 @@
         "tags": [
           "Platform (Admin)"
         ],
-        "x-belune-admin": true,
+        "x-belune-roles": [
+          "admin"
+        ],
         "responses": {
           "200": {
             "description": "OK",
@@ -1075,7 +1093,9 @@
         "tags": [
           "Platform (Admin)"
         ],
-        "x-belune-admin": true,
+        "x-belune-roles": [
+          "admin"
+        ],
         "requestBody": {
           "required": true,
           "content": {
@@ -1126,7 +1146,9 @@
         "tags": [
           "Platform (Admin)"
         ],
-        "x-belune-admin": true,
+        "x-belune-roles": [
+          "admin"
+        ],
         "parameters": [
           {
             "name": "certificateId",
@@ -1171,7 +1193,9 @@
         "tags": [
           "Platform (Admin)"
         ],
-        "x-belune-admin": true,
+        "x-belune-roles": [
+          "admin"
+        ],
         "requestBody": {
           "required": true,
           "content": {
@@ -1269,7 +1293,9 @@
         "tags": [
           "Platform (Admin)"
         ],
-        "x-belune-admin": true,
+        "x-belune-roles": [
+          "admin"
+        ],
         "responses": {
           "200": {
             "description": "OK",
@@ -1313,7 +1339,9 @@
         "tags": [
           "Platform (Admin)"
         ],
-        "x-belune-admin": true,
+        "x-belune-roles": [
+          "admin"
+        ],
         "responses": {
           "200": {
             "description": "OK",
@@ -1357,7 +1385,9 @@
         "tags": [
           "Platform (Admin)"
         ],
-        "x-belune-admin": true,
+        "x-belune-roles": [
+          "admin"
+        ],
         "responses": {
           "200": {
             "description": "OK",
@@ -1401,7 +1431,9 @@
         "tags": [
           "Platform (Admin)"
         ],
-        "x-belune-admin": true,
+        "x-belune-roles": [
+          "admin"
+        ],
         "responses": {
           "200": {
             "description": "OK",
@@ -1442,7 +1474,9 @@
         "tags": [
           "Application Volumes \u0026 Backups"
         ],
-        "x-belune-admin": true,
+        "x-belune-roles": [
+          "admin"
+        ],
         "responses": {
           "200": {
             "description": "OK",
@@ -1486,7 +1520,9 @@
         "tags": [
           "Domains \u0026 TLS"
         ],
-        "x-belune-admin": true,
+        "x-belune-roles": [
+          "admin"
+        ],
         "responses": {
           "200": {
             "description": "OK",
@@ -1819,7 +1855,9 @@
         "tags": [
           "Git Provider Configs (Admin)"
         ],
-        "x-belune-admin": true,
+        "x-belune-roles": [
+          "admin"
+        ],
         "responses": {
           "200": {
             "description": "OK",
@@ -1861,7 +1899,9 @@
         "tags": [
           "Git Provider Configs (Admin)"
         ],
-        "x-belune-admin": true,
+        "x-belune-roles": [
+          "admin"
+        ],
         "requestBody": {
           "required": true,
           "content": {
@@ -1912,7 +1952,9 @@
         "tags": [
           "Git Provider Configs (Admin)"
         ],
-        "x-belune-admin": true,
+        "x-belune-roles": [
+          "admin"
+        ],
         "responses": {
           "200": {
             "description": "OK",
@@ -1968,7 +2010,9 @@
         "tags": [
           "Git Provider Configs (Admin)"
         ],
-        "x-belune-admin": true,
+        "x-belune-roles": [
+          "admin"
+        ],
         "parameters": [
           {
             "name": "configId",
@@ -2025,7 +2069,9 @@
         "tags": [
           "Platform (Admin)"
         ],
-        "x-belune-admin": true,
+        "x-belune-roles": [
+          "admin"
+        ],
         "requestBody": {
           "required": true,
           "content": {
@@ -2092,7 +2138,9 @@
         "tags": [
           "Logs \u0026 Request Traces"
         ],
-        "x-belune-admin": true,
+        "x-belune-roles": [
+          "admin"
+        ],
         "responses": {
           "200": {
             "description": "OK",
@@ -2133,7 +2181,9 @@
         "tags": [
           "Platform (Admin)"
         ],
-        "x-belune-admin": true,
+        "x-belune-roles": [
+          "admin"
+        ],
         "responses": {
           "200": {
             "description": "OK",
@@ -2174,7 +2224,9 @@
         "tags": [
           "Platform (Admin)"
         ],
-        "x-belune-admin": true,
+        "x-belune-roles": [
+          "admin"
+        ],
         "responses": {
           "200": {
             "description": "OK",
@@ -2220,7 +2272,9 @@
         "tags": [
           "Platform (Admin)"
         ],
-        "x-belune-admin": true,
+        "x-belune-roles": [
+          "admin"
+        ],
         "responses": {
           "200": {
             "description": "OK",
@@ -2266,7 +2320,9 @@
         "tags": [
           "Platform (Admin)"
         ],
-        "x-belune-admin": true,
+        "x-belune-roles": [
+          "admin"
+        ],
         "responses": {
           "200": {
             "description": "OK",
@@ -2315,7 +2371,9 @@
         "tags": [
           "Platform (Admin)"
         ],
-        "x-belune-admin": true,
+        "x-belune-roles": [
+          "admin"
+        ],
         "responses": {
           "200": {
             "description": "OK",
@@ -2356,7 +2414,9 @@
         "tags": [
           "Metrics \u0026 Live Streams (Admin)"
         ],
-        "x-belune-admin": true,
+        "x-belune-roles": [
+          "admin"
+        ],
         "responses": {
           "200": {
             "description": "OK",
@@ -2397,7 +2457,9 @@
         "tags": [
           "Metrics \u0026 Live Streams (Admin)"
         ],
-        "x-belune-admin": true,
+        "x-belune-roles": [
+          "admin"
+        ],
         "responses": {
           "200": {
             "description": "OK",
@@ -2441,7 +2503,9 @@
         "tags": [
           "Metrics \u0026 Live Streams (Admin)"
         ],
-        "x-belune-admin": true,
+        "x-belune-roles": [
+          "admin"
+        ],
         "responses": {
           "403": {
             "description": "Forbidden",
@@ -2475,7 +2539,9 @@
         "tags": [
           "Platform (Admin)"
         ],
-        "x-belune-admin": true,
+        "x-belune-roles": [
+          "admin"
+        ],
         "responses": {
           "200": {
             "description": "OK",
@@ -2517,7 +2583,9 @@
         "tags": [
           "Platform (Admin)"
         ],
-        "x-belune-admin": true,
+        "x-belune-roles": [
+          "admin"
+        ],
         "requestBody": {
           "required": true,
           "content": {
@@ -2568,7 +2636,9 @@
         "tags": [
           "Platform (Admin)"
         ],
-        "x-belune-admin": true,
+        "x-belune-roles": [
+          "admin"
+        ],
         "requestBody": {
           "required": true,
           "content": {
@@ -2624,7 +2694,9 @@
         "tags": [
           "Platform (Admin)"
         ],
-        "x-belune-admin": true,
+        "x-belune-roles": [
+          "admin"
+        ],
         "parameters": [
           {
             "name": "channelId",
@@ -2679,7 +2751,9 @@
         "tags": [
           "Platform (Admin)"
         ],
-        "x-belune-admin": true,
+        "x-belune-roles": [
+          "admin"
+        ],
         "parameters": [
           {
             "name": "channelId",
@@ -2739,7 +2813,9 @@
         "tags": [
           "Platform (Admin)"
         ],
-        "x-belune-admin": true,
+        "x-belune-roles": [
+          "admin"
+        ],
         "parameters": [
           {
             "name": "channelId",
@@ -2801,7 +2877,9 @@
         "tags": [
           "Platform (Admin)"
         ],
-        "x-belune-admin": true,
+        "x-belune-roles": [
+          "admin"
+        ],
         "parameters": [
           {
             "name": "channelId",
@@ -2858,7 +2936,9 @@
         "tags": [
           "Platform (Admin)"
         ],
-        "x-belune-admin": true,
+        "x-belune-roles": [
+          "admin"
+        ],
         "responses": {
           "200": {
             "description": "OK",
@@ -10524,7 +10604,9 @@
         "tags": [
           "Platform (Admin)"
         ],
-        "x-belune-admin": true,
+        "x-belune-roles": [
+          "admin"
+        ],
         "responses": {
           "200": {
             "description": "OK",
@@ -10565,7 +10647,9 @@
         "tags": [
           "Platform (Admin)"
         ],
-        "x-belune-admin": true,
+        "x-belune-roles": [
+          "admin"
+        ],
         "responses": {
           "200": {
             "description": "OK",
@@ -10606,7 +10690,9 @@
         "tags": [
           "Platform (Admin)"
         ],
-        "x-belune-admin": true,
+        "x-belune-roles": [
+          "admin"
+        ],
         "responses": {
           "200": {
             "description": "OK",
@@ -10650,7 +10736,9 @@
         "tags": [
           "Platform (Admin)"
         ],
-        "x-belune-admin": true,
+        "x-belune-roles": [
+          "admin"
+        ],
         "parameters": [
           {
             "name": "scope",
@@ -10714,7 +10802,9 @@
         "tags": [
           "Platform (Admin)"
         ],
-        "x-belune-admin": true,
+        "x-belune-roles": [
+          "admin"
+        ],
         "parameters": [
           {
             "name": "scope",
@@ -10773,7 +10863,9 @@
         "tags": [
           "Platform (Admin)"
         ],
-        "x-belune-admin": true,
+        "x-belune-roles": [
+          "admin"
+        ],
         "parameters": [
           {
             "name": "scope",
@@ -10844,7 +10936,9 @@
         "tags": [
           "Logs \u0026 Request Traces"
         ],
-        "x-belune-admin": true,
+        "x-belune-roles": [
+          "admin"
+        ],
         "responses": {
           "200": {
             "description": "OK",
@@ -10888,7 +10982,9 @@
         "tags": [
           "Logs \u0026 Request Traces"
         ],
-        "x-belune-admin": true,
+        "x-belune-roles": [
+          "admin"
+        ],
         "responses": {
           "403": {
             "description": "Forbidden",
@@ -10922,7 +11018,9 @@
         "tags": [
           "Logs \u0026 Request Traces"
         ],
-        "x-belune-admin": true,
+        "x-belune-roles": [
+          "admin"
+        ],
         "responses": {
           "200": {
             "description": "OK",
@@ -10963,7 +11061,9 @@
         "tags": [
           "Platform (Admin)"
         ],
-        "x-belune-admin": true,
+        "x-belune-roles": [
+          "admin"
+        ],
         "responses": {
           "200": {
             "description": "OK",
@@ -11004,7 +11104,9 @@
         "tags": [
           "Platform (Admin)"
         ],
-        "x-belune-admin": true,
+        "x-belune-roles": [
+          "admin"
+        ],
         "responses": {
           "200": {
             "description": "OK",
@@ -11045,7 +11147,9 @@
         "tags": [
           "Platform (Admin)"
         ],
-        "x-belune-admin": true,
+        "x-belune-roles": [
+          "admin"
+        ],
         "responses": {
           "200": {
             "description": "OK",
@@ -11087,7 +11191,9 @@
         "tags": [
           "Platform (Admin)"
         ],
-        "x-belune-admin": true,
+        "x-belune-roles": [
+          "admin"
+        ],
         "requestBody": {
           "required": true,
           "content": {
@@ -11146,7 +11252,9 @@
         "tags": [
           "Platform (Admin)"
         ],
-        "x-belune-admin": true,
+        "x-belune-roles": [
+          "admin"
+        ],
         "responses": {
           "200": {
             "description": "OK",
@@ -11185,7 +11293,9 @@
         "tags": [
           "Platform (Admin)"
         ],
-        "x-belune-admin": true,
+        "x-belune-roles": [
+          "admin"
+        ],
         "requestBody": {
           "required": true,
           "content": {
@@ -11241,7 +11351,9 @@
         "tags": [
           "Platform (Admin)"
         ],
-        "x-belune-admin": true,
+        "x-belune-roles": [
+          "admin"
+        ],
         "requestBody": {
           "required": true,
           "content": {
@@ -11657,7 +11769,9 @@
         "tags": [
           "Users \u0026 Invitations (Admin)"
         ],
-        "x-belune-admin": true,
+        "x-belune-roles": [
+          "admin"
+        ],
         "responses": {
           "200": {
             "description": "OK",
@@ -11699,7 +11813,9 @@
         "tags": [
           "Users \u0026 Invitations (Admin)"
         ],
-        "x-belune-admin": true,
+        "x-belune-roles": [
+          "admin"
+        ],
         "requestBody": {
           "required": true,
           "content": {
@@ -11747,7 +11863,9 @@
         "tags": [
           "Users \u0026 Invitations (Admin)"
         ],
-        "x-belune-admin": true,
+        "x-belune-roles": [
+          "admin"
+        ],
         "responses": {
           "200": {
             "description": "OK",
@@ -11791,7 +11909,9 @@
         "tags": [
           "Users \u0026 Invitations (Admin)"
         ],
-        "x-belune-admin": true,
+        "x-belune-roles": [
+          "admin"
+        ],
         "parameters": [
           {
             "name": "invitationId",
@@ -11836,7 +11956,9 @@
         "tags": [
           "Users \u0026 Invitations (Admin)"
         ],
-        "x-belune-admin": true,
+        "x-belune-roles": [
+          "admin"
+        ],
         "requestBody": {
           "required": true,
           "content": {
@@ -11884,7 +12006,9 @@
         "tags": [
           "Users \u0026 Invitations (Admin)"
         ],
-        "x-belune-admin": true,
+        "x-belune-roles": [
+          "admin"
+        ],
         "parameters": [
           {
             "name": "userId",
@@ -11938,7 +12062,9 @@
         "tags": [
           "Users \u0026 Invitations (Admin)"
         ],
-        "x-belune-admin": true,
+        "x-belune-roles": [
+          "admin"
+        ],
         "parameters": [
           {
             "name": "userId",
@@ -12002,7 +12128,9 @@
         "tags": [
           "Users \u0026 Invitations (Admin)"
         ],
-        "x-belune-admin": true,
+        "x-belune-roles": [
+          "admin"
+        ],
         "parameters": [
           {
             "name": "userId",
@@ -12061,7 +12189,9 @@
         "tags": [
           "Users \u0026 Invitations (Admin)"
         ],
-        "x-belune-admin": true,
+        "x-belune-roles": [
+          "admin"
+        ],
         "parameters": [
           {
             "name": "userId",
@@ -12197,7 +12327,9 @@
         "tags": [
           "Metrics \u0026 Live Streams (Admin)"
         ],
-        "x-belune-admin": true,
+        "x-belune-roles": [
+          "admin"
+        ],
         "responses": {
           "403": {
             "description": "Forbidden",

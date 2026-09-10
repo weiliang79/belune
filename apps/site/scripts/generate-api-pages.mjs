@@ -57,10 +57,12 @@ const DOMAINS_PATH = './api-domains.json';
 // when omitted, which keeps most entries to two fields).
 //
 // A `tag` ending " (Admin)" is load-bearing, not decoration: it's the one
-// admin signal that isn't derived from RequireRole, so
-// TestGenerateAPIReference's admin invariant checks every route it groups
-// is actually RequireRole-gated. Don't add or drop the suffix to tidy a
-// label. (This note can't live in the JSON — strict JSON, no comments.)
+// role signal that isn't derived from RequireRole, so
+// TestGenerateAPIReference's role invariant checks every route it groups is
+// actually RequireRole-gated. It stays literally "(Admin)" even if the role
+// set is renamed — it's a grouping label, not derived text. Don't add or
+// drop the suffix to tidy a label. (This note can't live in the JSON —
+// strict JSON, no comments.)
 const DOMAINS = JSON.parse(readFileSync(DOMAINS_PATH, 'utf8'));
 
 // walkDomains visits every node (leaf or container, at any depth — nesting
@@ -114,10 +116,11 @@ function kebabCase(name) {
 
 // SCOPE_SCHEMES: the security-scheme names that mean "a PAT holding this
 // scope authenticates the route" — the Go side names each scheme for the
-// scope itself now (apidocScopeScheme). "session" is deliberately not here;
-// "adminRole", when present, is an extra AND requirement, never a way in on
-// its own. This set is THE thing that used to be a `scheme.startsWith('pat')`
-// check, before the schemes were renamed off the pat* prefix.
+// scope itself now (apidocScopeScheme). "session" is deliberately not here.
+// A role requirement isn't a scheme at all — it's x-belune-roles (see
+// operationRoles). This set is THE thing that used to be a
+// `scheme.startsWith('pat')` check, before the schemes were renamed off the
+// pat* prefix.
 const SCOPE_SCHEMES = new Set(['metrics', 'read', 'deploy', 'write']);
 
 // isPatCallable is THE single predicate for "does this operation belong in
@@ -134,16 +137,18 @@ function isPatCallable(operation) {
   return (operation.security ?? []).some((requirement) => Object.keys(requirement).some((scheme) => SCOPE_SCHEMES.has(scheme)));
 }
 
-// isAdminGated is THE single predicate the sidebar's "Admin only" badges
-// derive from (src/lib/source.tsx reads it back off each page's own
-// frontmatter, not the spec directly — see markAdminOperations below for
-// why) — same "derive it, don't hand-list it" reasoning as isPatCallable.
-// The Go side emits x-belune-admin from the RequireRole middleware fact
-// (r.Admin); there is no adminRole security scheme any more (a role isn't a
-// credential). TestGenerateAPIReference's admin invariant checks this
-// against api-domains.json's "(Admin)" tag suffix.
-function isAdminGated(operation) {
-  return operation['x-belune-admin'] === true;
+// operationRoles is THE single source the sidebar's role badges derive from
+// (src/lib/source.tsx reads it back off each page's own frontmatter, not the
+// spec directly — see markAdminOperations below for why) — same "derive it,
+// don't hand-list it" reasoning as isPatCallable. The Go side emits
+// x-belune-roles from the RequireRole middleware fact (r.Roles, itself
+// parsed from routes.go); there is no role security scheme (a role isn't a
+// credential). Returns the role array (non-empty) or null.
+// TestGenerateAPIReference's role invariant checks this against
+// api-domains.json's "(Admin)" tag suffix.
+function operationRoles(operation) {
+  const roles = operation['x-belune-roles'];
+  return Array.isArray(roles) && roles.length > 0 ? roles : null;
 }
 
 const fullSpec = JSON.parse(readFileSync(SPEC_PATH, 'utf8'));
@@ -217,8 +222,8 @@ for (const e of readdirSync(OUT_DIR, { withFileTypes: true })) {
 
 // markAdminOperations is generateFiles's beforeWrite hook (documented as
 // "can add/change/remove output files before writing to file system") — the
-// seam used to inject an `admin: true` frontmatter flag onto every
-// admin-gated operation's page, WITHOUT threading a second lookup through
+// seam used to inject a `roles:` frontmatter key onto every role-gated
+// operation's page, WITHOUT threading a second lookup through
 // fumadocs-openapi's own template generation (which has no option for
 // extra frontmatter fields). Each generated .mdx already embeds the
 // operation it covers as `operations={[{"path":...,"method":...}]}` in its
@@ -228,18 +233,18 @@ for (const e of readdirSync(OUT_DIR, { withFileTypes: true })) {
 // doesn't otherwise need to know) — resolving that back against pagesSpec
 // (the same filtered clone generateFiles itself ran against, so every
 // operation a file exists for is guaranteed present in it) gives the
-// answer. `admin` is a plain top-level frontmatter key, inserted right
-// after the `title:` line — always the first line, always a single line
-// (never folds, unlike `description`), so anchoring there is unambiguous.
+// answer. `roles` is a plain top-level frontmatter key, inserted right
+// after the `title:` line — always line 2, always a single line (never
+// folds, unlike `description`), so anchoring there is unambiguous.
 //
 // Why frontmatter and not a wired-through prop: src/lib/source.tsx builds
 // the SIDEBAR TREE from page data (source.getPages()), which has no
 // `security` field at all — the spec never reaches that far. Emitting the
-// flag onto each generated page keeps openapi.json the single source of
+// role set onto each generated page keeps openapi.json the single source of
 // truth while still making it visible where the sidebar-tree code needs
-// it. source.config.ts's pageSchema has to declare `admin` too, or Zod
+// it. source.config.ts's pageSchema has to declare `roles` too, or Zod
 // silently strips it (checked by reading the schema, not assumed) — see
-// the `admin: z.boolean().optional()` extension there.
+// the `roles: z.array(z.string()).optional()` extension there.
 function markAdminOperations(files) {
   for (const file of files) {
     if (!file.path.endsWith('.mdx')) continue;
@@ -247,8 +252,13 @@ function markAdminOperations(files) {
     if (!match) continue;
     const [, path, method] = match;
     const operation = pagesSpec.paths[path]?.[method];
-    if (operation && isAdminGated(operation)) {
-      file.content = file.content.replace(/^(---\ntitle: .*\n)/, '$1admin: true\n');
+    const roles = operation && operationRoles(operation);
+    if (roles) {
+      // `roles: ["admin"]` — a YAML flow sequence, one line, right after
+      // `title:` (always line 2, never folds), so anchoring there is
+      // unambiguous. The array, not a bool: source.tsx derives the badge
+      // label from the role names.
+      file.content = file.content.replace(/^(---\ntitle: .*\n)/, `$1roles: ${JSON.stringify(roles)}\n`);
     }
   }
 }

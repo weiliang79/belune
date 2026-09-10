@@ -11,13 +11,13 @@ export const docs = defineDocs({
   docs: {
     // pageSchema is z.object({...}), which strips unknown keys by default
     // (Zod 4's z.core.$strip) rather than erroring or passing them through
-    // — checked by reading fumadocs-core/source/schema.js, not assumed. An
-    // `admin: true` frontmatter flag (written by
+    // — checked by reading fumadocs-core/source/schema.js, not assumed. A
+    // `roles: ["admin"]` frontmatter key (written by
     // apps/site/scripts/generate-api-pages.mjs's markAdminOperations, read
     // by src/lib/source.tsx's sidebar-badge logic) would otherwise parse to
     // `undefined` silently, with no error to point at why the badge never
     // showed up.
-    schema: pageSchema.extend({ admin: z.boolean().optional() }),
+    schema: pageSchema.extend({ roles: z.array(z.string()).optional() }),
     postprocess: {
       includeProcessedMarkdown: true,
     },

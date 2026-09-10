@@ -64,33 +64,42 @@ export const source = loader({
 type PageTreeRoot = ReturnType<typeof source.getPageTree>;
 type PageTreeNode = PageTreeRoot['children'][number];
 
-// AdminOnlyBadge marks a sidebar entry — item, folder, or (post-flatten)
-// separator — whose operation(s) all require the Admin role, derived from
-// each page's own `admin` frontmatter (written by
+// roleBadgeLabel renders a role set as the badge text — ["admin"] ->
+// "Admin only", ["admin","owner"] -> "Admin or Owner only". Derived from the
+// role names (which come from routes.go via x-belune-roles), so a role
+// rename flows through with nothing here to update. The set arrives sorted
+// from the Go side, so the label is stable.
+function roleBadgeLabel(roles: string[]): string {
+  return roles.map((r) => r[0].toUpperCase() + r.slice(1)).join(' or ') + ' only';
+}
+
+// RoleBadge marks a sidebar entry — item, folder, or (post-flatten)
+// separator — whose operation(s) all require the same role set, derived from
+// each page's own `roles` frontmatter (written by
 // apps/site/scripts/generate-api-pages.mjs's markAdminOperations off the
-// spec's `security` block; see source.config.ts for why the flag has to be
+// spec's x-belune-roles; see source.config.ts for why the key has to be
 // declared on pageSchema too, or Zod silently drops it). Styled off the same
 // fd-* CSS variables layout.tsx's TabIcon already uses, so it reads as part
 // of the same design language rather than a one-off.
-function AdminOnlyBadge() {
+function RoleBadge({ label }: { label: string }) {
   return (
     <span className="border-fd-border bg-fd-muted text-fd-muted-foreground shrink-0 rounded-full border px-1.5 py-0.5 text-[10px] leading-none font-medium">
-      Admin only
+      {label}
     </span>
   );
 }
 
-// decorate adds the badge when `admin` is true; otherwise returns `name`
-// untouched. No prefix-stripping here — apps/site/api-domains.json gives
-// every admin domain a `title` that already carries no "(Admin)" qualifier
-// (the tag itself keeps it, since openapi.json has no concept of a badge —
-// see the file-level comment on DOMAINS in generate-api-pages.mjs), so the
-// name arriving here is already clean. An earlier version of this function
-// stripped an "Admin — " prefix at render time because tag and sidebar
-// title were still the same string doing two jobs; splitting them into
-// separate fields made that stripping dead code.
-function decorate(name: ReactNode, admin: boolean): ReactNode {
-  if (!admin) return name;
+// decorate adds the badge when `roles` is a non-empty set; otherwise returns
+// `name` untouched. No prefix-stripping here — apps/site/api-domains.json
+// gives every role-gated domain a `title` that already carries no "(Admin)"
+// qualifier (the tag itself keeps it, since openapi.json has no concept of a
+// badge — see the file-level comment on DOMAINS in generate-api-pages.mjs),
+// so the name arriving here is already clean. An earlier version of this
+// function stripped an "Admin — " prefix at render time because tag and
+// sidebar title were still the same string doing two jobs; splitting them
+// into separate fields made that stripping dead code.
+function decorate(name: ReactNode, roles: string[] | null): ReactNode {
+  if (!roles || roles.length === 0) return name;
   return (
     // key: found live, not predicted — fumadocs-ui's sidebar button/
     // separator renderers pass their `name` prop straight into a list of
@@ -99,46 +108,61 @@ function decorate(name: ReactNode, admin: boolean): ReactNode {
     // replacement does. A shared constant is fine — key uniqueness is only
     // required among the siblings in ONE such list, and each rendered name
     // is the only badge-bearing span in its own.
-    <span key="admin-only-name" className="inline-flex items-center gap-1.5">
+    <span key="role-badge-name" className="inline-flex items-center gap-1.5">
       {name}
-      <AdminOnlyBadge />
+      <RoleBadge label={roleBadgeLabel(roles)} />
     </span>
   );
 }
 
-// allAdmin reports whether every operation page reachable under `node` is
-// admin-gated — a Folder with no reachable pages is NOT vacuously true (an
-// empty section badged "Admin only" would be actively wrong), and a bare
-// Separator (no children to inspect) never is either. This is the single
-// derivation FOLDER/SEPARATOR badging uses — "every child is admin" is
-// computed structurally, not tracked as a second, separately-set flag that
-// could drift from what the items actually say.
-function allAdmin(node: PageTreeNode, adminUrls: Set<string>): boolean {
-  if (node.type === 'page') return adminUrls.has(node.url);
-  if (node.type === 'separator') return false;
+// rolesKey is a canonical string for a role set, for equality checks. The
+// set arrives sorted from Go, so JSON.stringify is a stable key.
+function rolesKey(roles: string[]): string {
+  return JSON.stringify(roles);
+}
+
+// sharedRoles returns the role set common to EVERY operation page reachable
+// under `node`, or null if they don't all share exactly one set — a Folder
+// with no reachable pages is null (an empty section badged would be actively
+// wrong), a bare Separator is always null, and a folder mixing role sets (or
+// role-gated with ungated) is null so it gets no folder badge and its
+// children are badged individually instead. This is the single derivation
+// FOLDER/SEPARATOR badging uses — computed structurally, not a second flag
+// that could drift from what the items say.
+function sharedRoles(node: PageTreeNode, rolesByUrl: Map<string, string[]>): string[] | null {
+  if (node.type === 'page') return rolesByUrl.get(node.url) ?? null;
+  if (node.type === 'separator') return null;
   const leaves = node.index ? [node.index, ...node.children] : node.children;
-  return leaves.length > 0 && leaves.every((child) => allAdmin(child, adminUrls));
+  if (leaves.length === 0) return null;
+  const first = sharedRoles(leaves[0], rolesByUrl);
+  if (first === null) return null;
+  const key = rolesKey(first);
+  for (let i = 1; i < leaves.length; i++) {
+    const roles = sharedRoles(leaves[i], rolesByUrl);
+    if (roles === null || rolesKey(roles) !== key) return null;
+  }
+  return first;
 }
 
 // decorateChildren applies item-level badges to `children`, but ONLY when
-// `containerAllAdmin` is false — when the immediate container (the folder
-// these children sit directly under) is itself getting a folder-level
-// badge, badging every child too would be redundant clutter for no extra
-// signal (see the 6 item-badge cases living in otherwise-mixed sections
-// like Logs & Request Traces, vs. the ~40 operations under Admin — Platform
-// that get exactly one badge, on the section, not one each). A child that
-// is itself a folder (only "git"'s two children today) is decorated with
-// its OWN freshly computed badge, recursing independently — a section can
-// be mixed overall while one of its own sub-folders is fully admin, or vice
-// versa, and each level's badge has to reflect only that level's children.
-function decorateChildren(children: PageTreeNode[], containerAllAdmin: boolean, adminUrls: Set<string>): PageTreeNode[] {
+// `containerRoles` is null — when the immediate container (the folder these
+// children sit directly under) is itself getting a folder-level badge,
+// badging every child too would be redundant clutter for no extra signal
+// (see the 6 item-badge cases living in otherwise-mixed sections like Logs &
+// Request Traces, vs. the ~40 operations under Platform (Admin) that get
+// exactly one badge, on the section, not one each). A child that is itself a
+// folder (only "git"'s two children today) is decorated with its OWN freshly
+// computed set, recursing independently — a section can be mixed overall
+// while one of its own sub-folders is uniform, or vice versa, and each
+// level's badge has to reflect only that level's children.
+function decorateChildren(children: PageTreeNode[], containerRoles: string[] | null, rolesByUrl: Map<string, string[]>): PageTreeNode[] {
   return children.map((child) => {
     if (child.type === 'folder') {
-      const badge = allAdmin(child, adminUrls);
-      return { ...child, name: decorate(child.name, badge), children: decorateChildren(child.children, badge, adminUrls) };
+      const roles = sharedRoles(child, rolesByUrl);
+      return { ...child, name: decorate(child.name, roles), children: decorateChildren(child.children, roles, rolesByUrl) };
     }
-    if (child.type === 'page' && !containerAllAdmin && adminUrls.has(child.url)) {
-      return { ...child, name: decorate(child.name, true) };
+    if (child.type === 'page' && !containerRoles && rolesByUrl.has(child.url)) {
+      return { ...child, name: decorate(child.name, rolesByUrl.get(child.url) ?? null) };
     }
     return child;
   });
@@ -152,19 +176,18 @@ function decorateChildren(children: PageTreeNode[], containerAllAdmin: boolean, 
 // folders (e.g. Application → Frameworks, or API's git → integrations/
 // providers) stay collapsible — this only flattens one level.
 //
-// adminUrls badging rides along here rather than as a separate pass: badge
-// status has to be computed BEFORE a folder collapses into a separator (a
-// bare Separator has no `.children` left to inspect), so it has to happen
-// at the same point flattening decides a node is a section in the first
-// place.
-function flattenSections(nodes: PageTreeNode[], adminUrls: Set<string>): PageTreeNode[] {
+// role badging rides along here rather than as a separate pass: badge status
+// has to be computed BEFORE a folder collapses into a separator (a bare
+// Separator has no `.children` left to inspect), so it has to happen at the
+// same point flattening decides a node is a section in the first place.
+function flattenSections(nodes: PageTreeNode[], rolesByUrl: Map<string, string[]>): PageTreeNode[] {
   const out: PageTreeNode[] = [];
   for (const node of nodes) {
     if (node.type === 'folder') {
-      const badge = allAdmin(node, adminUrls);
-      out.push({ type: 'separator', name: decorate(node.name, badge) });
-      if (node.index) out.push(...decorateChildren([node.index], badge, adminUrls));
-      out.push(...decorateChildren(node.children, badge, adminUrls));
+      const roles = sharedRoles(node, rolesByUrl);
+      out.push({ type: 'separator', name: decorate(node.name, roles) });
+      if (node.index) out.push(...decorateChildren([node.index], roles, rolesByUrl));
+      out.push(...decorateChildren(node.children, roles, rolesByUrl));
     } else {
       out.push(node);
     }
@@ -184,17 +207,21 @@ export function getSidebarTree(): PageTreeRoot {
   const tree = source.getPageTree();
   const children: PageTreeNode[] = [];
 
-  // Page tree nodes carry no `security` field — building this set from
+  // Page tree nodes carry no `security` field — building this map from
   // source.getPages() (public API, not the tree's own @internal $ref) is
-  // the one place admin status is read off page data, then threaded through
+  // the one place role gating is read off page data, then threaded through
   // flattenSections/decorateChildren by URL rather than re-derived per node.
-  const adminUrls = new Set(source.getPages().filter((page) => page.data.admin).map((page) => page.url));
+  const rolesByUrl = new Map<string, string[]>();
+  for (const page of source.getPages()) {
+    const roles = page.data.roles;
+    if (Array.isArray(roles) && roles.length > 0) rolesByUrl.set(page.url, roles);
+  }
 
   for (const node of tree.children) {
     if (node.type === 'folder' && node.root) {
-      children.push({ ...node, children: flattenSections(node.children, adminUrls) });
+      children.push({ ...node, children: flattenSections(node.children, rolesByUrl) });
     } else if (node.type === 'folder') {
-      children.push(...flattenSections([node], adminUrls));
+      children.push(...flattenSections([node], rolesByUrl));
     } else {
       children.push(node);
     }
