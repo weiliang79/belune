@@ -1,5 +1,5 @@
 {
-  "title": "Admin — Platform Backups",
+  "title": "Platform Backups",
   "pages": [
     "list-backup-runs",
     "update-backup-remote",

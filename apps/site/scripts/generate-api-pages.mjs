@@ -37,58 +37,53 @@
 // itself is still the user's call to finalize.
 import { createOpenAPI } from 'fumadocs-openapi/server';
 import { generateFiles } from 'fumadocs-openapi';
-import { writeFileSync, readFileSync, readdirSync, rmSync } from 'node:fs';
+import { writeFileSync, readFileSync, readdirSync, existsSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 
 const OUT_DIR = './content/docs/api';
 const SPEC_PATH = './public/openapi.json';
+const DOMAINS_PATH = './api-domains.json';
 
-// Mirrors apidocDomainOrder in apps/api/internal/handler/apidoc_generate_test.go
-// (tag title -> slug) — both this script's folder names and the top-level
-// meta.json's `pages` array (rewritten below) have to agree with it. Default
-// slugification (lowercasing the title verbatim) produces folder names like
-// "admin-—-git-provider-configs" that don't match, so this is used as the
-// slugify hook instead of trying to reconcile two independent slugifiers.
-// A domain can legitimately end up with zero surviving pages once
-// isPatCallable below filters it (e.g. "Terminal Access" — both of its
-// operations are session-only) — handled structurally, not listed here: see
-// the presentDirs filter at the bottom.
-const SLUG_BY_TITLE = {
-  'Live Updates (WebSocket Hub)': 'live-updates',
-  'Terminal Access': 'terminal',
-  'Personal Access Tokens': 'tokens',
-  'Session & Account': 'account',
-  // Slashes here are deliberate — see the "Nest the two Git domains" block
-  // near the bottom, which is the only place that depends on it.
-  'Git Integrations': 'git/integrations',
-  'Admin — Git Provider Configs': 'git/providers',
-  'App Templates': 'templates',
-  'Deploy & Lifecycle Actions': 'deploy-actions',
-  Metrics: 'metrics',
-  'Admin — Metrics & Live Streams': 'admin-metrics',
-  'Preview Environments': 'previews',
-  Deployments: 'deployments',
-  'Logs & Request Traces': 'logs',
-  'Domains & TLS': 'domains',
-  'Application Volumes & Backups': 'volumes',
-  'File Mounts': 'file-mounts',
-  'Environment Variables': 'env',
-  'Databases & Backups': 'databases',
-  Applications: 'applications',
-  'Stats & Notifications': 'stats-notifications',
-  Projects: 'projects',
-  'Admin — Users & Invitations': 'admin-users',
-  'Admin — Platform Backups': 'admin-backups',
-  'Admin — Platform': 'admin-platform',
-  Uncategorized: 'uncategorized',
-};
+// DOMAINS is the single source both this script and
+// apps/api/internal/handler/apidoc_generate_test.go (apidocLoadDomains)
+// read for domain slugs/tags/sidebar titles — replacing what used to be
+// two independently hand-maintained lists (this file's own SLUG_BY_TITLE,
+// and the Go side's apidocDomainOrder) that agreed only by discipline, not
+// by construction. Three fields per entry: `slug` (folder name and URL
+// segment — nested entries produce nested paths, "git" + "providers" ->
+// "git/providers"), `tag` (the OpenAPI tag name a leaf entry carries — a
+// container entry like "git" has none, since nothing in the spec is
+// tagged "Git" itself), `title` (the sidebar label, defaulting to `tag`
+// when omitted, which keeps most entries to two fields).
+const DOMAINS = JSON.parse(readFileSync(DOMAINS_PATH, 'utf8'));
+
+// walkDomains visits every node (leaf or container, at any depth — nesting
+// isn't hard-limited to one level even though only "git" uses it today)
+// with its full path slug ("git/providers", not bare "providers" — one
+// slug-addressing scheme shared with apidocLoadDomains's directive
+// validation on the Go side, not two that could drift apart).
+function walkDomains(nodes, parentSlug, visit) {
+  for (const node of nodes) {
+    const slug = parentSlug ? `${parentSlug}/${node.slug}` : node.slug;
+    visit(node, slug);
+    if (node.children) walkDomains(node.children, slug, visit);
+  }
+}
+
+// SLUG_BY_TAG: every leaf's OpenAPI tag name -> its full path slug, for
+// slugifyTag below. A domain can legitimately end up with zero surviving
+// pages once isPatCallable filters it (e.g. "Terminal Access" — both of
+// its operations are session-only) — handled structurally, not listed
+// here: see the presentDirs filter further down.
+const SLUG_BY_TAG = new Map();
+walkDomains(DOMAINS, '', (node, slug) => {
+  if (node.tag) SLUG_BY_TAG.set(node.tag, slug);
+});
 
 function slugifyTag(name) {
-  const slug = SLUG_BY_TITLE[name];
+  const slug = SLUG_BY_TAG.get(name);
   if (!slug) {
-    throw new Error(
-      `generate-api-pages: no slug mapped for tag "${name}" — add it to SLUG_BY_TITLE, keeping it in sync with apidocDomainOrder in apidoc_generate_test.go`,
-    );
+    throw new Error(`generate-api-pages: no slug mapped for tag "${name}" — add it to ${DOMAINS_PATH}`);
   }
   return slug;
 }
@@ -109,16 +104,6 @@ function slugifyTag(name) {
 function kebabCase(name) {
   const s = name.replace(/([a-z0-9])([A-Z])/g, '$1-$2').replace(/([A-Z]+)([A-Z][a-z])/g, '$1-$2');
   return s.toLowerCase();
-}
-
-// topSegment reduces a SLUG_BY_TITLE value to the TOP-LEVEL directory it
-// actually lands in on disk — identity for a plain slug ("tokens"), the
-// first path component for a nested one ("git/integrations" -> "git").
-// Both the OWNED sweep and the top-level meta.json's pages array need this:
-// they operate on/list top-level directory names, and a slug containing a
-// slash no longer equals the directory it produces.
-function topSegment(slug) {
-  return slug.split('/')[0];
 }
 
 // isPatCallable is THE single predicate for "does this operation belong in
@@ -161,7 +146,7 @@ for (const [path, methods] of Object.entries(pagesSpec.paths)) {
 // filesystem, still routable, just no longer linked from anywhere — the same
 // class of bug the top-level meta.json write once had to guard against.
 //
-// Scoped to OWNED (every slug SLUG_BY_TITLE can produce) rather than every
+// Scoped to OWNED (every TOP-LEVEL slug DOMAINS lists) rather than every
 // directory under OUT_DIR — deliberately, not for convenience: "every
 // directory here is generator output" is the same allowlist-shaped
 // assumption that already bit the Go side once (a hardcoded written :=
@@ -173,19 +158,17 @@ for (const [path, methods] of Object.entries(pagesSpec.paths)) {
 // one as safe to keep, so sweeping "everything" would silently delete it on
 // the next regeneration with no warning and no trace beyond the deletion.
 // Restricting to OWNED still empties a domain that shrinks to nothing
-// (terminal stays in SLUG_BY_TITLE even at zero operations, so its stale
-// folder is still swept — the actual case this cleanup exists for) while
-// leaving anything with another name alone. Don't widen this back to "all
+// (terminal stays in DOMAINS even at zero operations, so its stale folder
+// is still swept — the actual case this cleanup exists for) while leaving
+// anything with another name alone. Don't widen this back to "all
 // directories."
 //
-// topSegment matters here specifically because of git/integrations and
-// git/providers: OWNED has to contain "git" (what actually appears as a
-// top-level directory under OUT_DIR), not the full slug — a set built from
-// the raw slug values would never match "git", the sweep would silently
-// stop cleaning that whole subtree, and a stale page from a deleted
-// operation would survive as exactly the orphan class this sweep exists to
-// prevent. Checked, not assumed: see the "Nest the two Git domains" block.
-const OWNED = new Set(Object.values(SLUG_BY_TITLE).map(topSegment));
+// DOMAINS' own top-level entries ARE the top-level directory names — "git"
+// nests its children as a genuine sub-tree in the JSON now, so no
+// string-splitting is needed to recover the top segment the way an earlier
+// version of this file had to when slugs were still flat "git/integrations"
+// strings with no structure backing them.
+const OWNED = new Set(DOMAINS.map((d) => d.slug));
 for (const e of readdirSync(OUT_DIR, { withFileTypes: true })) {
   if (e.isDirectory() && OWNED.has(e.name)) rmSync(join(OUT_DIR, e.name), { recursive: true, force: true });
 }
@@ -279,25 +262,24 @@ await generateFiles({
 // importantly, `root: true` is dropped entirely, which would silently break
 // the API tab out of the sidebar's tab switcher. Restored here instead of
 // trying to suppress the library's own top-level write. Order comes from
-// SLUG_BY_TITLE itself (written in the same order as apidocDomainOrder), not
-// an alphabetical directory listing — losing that curated reading order
-// would be a real regression, not just cosmetic. presentDirs.has(slug) also
-// does double duty as the empty-domain guard: a domain every one of whose
-// operations isPatCallable filtered out (e.g. "Terminal Access") never gets
-// a folder from generateFiles in the first place — group() in
-// fumadocs-openapi's preset only creates a tag's group when an operation
-// still references that tag — so it's excluded here the same way a domain
-// with zero routes always was, no special-casing needed.
+// DOMAINS itself, not an alphabetical directory listing — losing that
+// curated reading order would be a real regression, not just cosmetic.
+// presentDirs.has(slug) also does double duty as the empty-domain guard: a
+// domain every one of whose operations isPatCallable filtered out (e.g.
+// "Terminal Access") never gets a folder from generateFiles in the first
+// place — group() in fumadocs-openapi's preset only creates a tag's group
+// when an operation still references that tag — so it's excluded here the
+// same way a domain with zero routes always was, no special-casing needed.
+// "git" collapsing its two children into one top-level entry needs no
+// special handling either now — DOMAINS already lists it once, since
+// nesting is real tree structure here, not a flattened slash-slug a
+// string split had to reconstruct.
 const presentDirs = new Set(
   readdirSync(OUT_DIR, { withFileTypes: true })
     .filter((e) => e.isDirectory())
     .map((e) => e.name),
 );
-// topSegment collapses git/integrations and git/providers to one "git"
-// entry — the Set dedupes it to a single occurrence, at the position of
-// whichever one SLUG_BY_TITLE lists first, which is exactly "replace the
-// two entries with the single entry git, in the same position."
-const domainSlugs = [...new Set(Object.values(SLUG_BY_TITLE).map(topSegment))].filter((slug) => presentDirs.has(slug));
+const domainSlugs = DOMAINS.map((d) => d.slug).filter((slug) => presentDirs.has(slug));
 
 writeFileSync(
   join(OUT_DIR, 'meta.json'),
@@ -313,58 +295,42 @@ writeFileSync(
   ) + '\n',
 );
 
-// PREVIEW, not the final shape (2026-09-10) — nests "Git Integrations" and
-// "Admin — Git Provider Configs" under a shared "Git" separator, so the
-// user can see it before deciding. flattenSections in src/lib/source.ts
-// flattens exactly ONE level inside a root tab — checked by reading it, not
-// assumed — so a git/ folder containing integrations/ and providers/
-// collapses to a "Git" separator with the two as collapsible dropdowns
-// underneath, for free; the sidebar needs no changes for this.
+// fixDomainMeta corrects what generateFiles's own meta:{folderStyle:'folder'}
+// gets wrong for every domain, not just git's two children the way an
+// earlier, git-specific version of this block did:
 //
-// The slash embedded in SLUG_BY_TITLE's two "git/..." values already made
-// slugifyTag place their operations at git/integrations/*.mdx and
-// git/providers/*.mdx (path.join tolerates a slash inside one argument —
-// verified against the actual output below, not assumed) and made
-// generateFiles's own meta:{folderStyle:'folder'} write correct
-// git/integrations/meta.json and git/providers/meta.json files, with
-// correct `pages` arrays — just with the ORIGINAL full tag names as their
-// titles, and no git/meta.json, since fumadocs-openapi has no concept of
-// these two groups sharing a "git" parent (that would need tag.parent in
-// the spec, a heavier change out of scope for a preview). Both gaps are
-// closed here: read each child meta.json back, replace only its title
-// (CHILD_TITLES is a two-entry, hand-written map on purpose — this isn't a
-// general nesting mechanism, just this one preview), and synthesize the
-// parent's.
+//  - A LEAF (tag-bearing) folder's meta.json is auto-written by the
+//    library with the OpenAPI tag name as its title, since it has no
+//    concept of a separate "sidebar title" — wrong wherever DOMAINS gives
+//    an entry an explicit `title` shorter than its `tag` (every "(Admin)"
+//    domain: the badge in src/lib/source.tsx carries the qualifier now, so
+//    the sidebar title carries none of it — see the file-level comment on
+//    DOMAINS).
+//  - A CONTAINER entry ("git") gets no meta.json from the library at all —
+//    it has no tag, so nothing in the spec ever groups under it, and
+//    fumadocs-openapi has no concept of two tags sharing a parent (that
+//    would need tag.parent in the spec, out of scope here). Synthesized
+//    from scratch, recursing depth-first so a container's own `pages`
+//    array only lists children that actually produced a folder.
 //
-// "Admin — Git Provider Configs" carried its admin-only audience in its
-// title; renaming it to "Provider Configs" here would have lost that signal
-// on its own. Restored by the "Admin only" sidebar badge in
-// src/lib/source.tsx (Folder.name/Separator.name/Item.name are all
-// ReactNode in fumadocs-core — same technique the tab icons already use),
-// computed there from each page's `admin` frontmatter (markAdminOperations
-// above), not hand-listed here.
-if (presentDirs.has('git')) {
-  const CHILD_TITLES = { integrations: 'Integrations', providers: 'Provider Configs' };
-  const gitChildren = readdirSync(join(OUT_DIR, 'git'), { withFileTypes: true })
-    .filter((e) => e.isDirectory())
-    .map((e) => e.name);
-
-  for (const child of gitChildren) {
-    const metaPath = join(OUT_DIR, 'git', child, 'meta.json');
-    const meta = JSON.parse(readFileSync(metaPath, 'utf8'));
-    meta.title = CHILD_TITLES[child] ?? meta.title;
-    writeFileSync(metaPath, JSON.stringify(meta, null, 2));
+// Only recurses into a node when its own folder exists on disk — a domain
+// isPatCallable filtered to zero pages, or (for git) a container whose
+// every child was filtered, is skipped rather than writing a meta.json
+// for a folder that was never created.
+function fixDomainMeta(nodes, parentDir) {
+  for (const node of nodes) {
+    const dir = join(parentDir, node.slug);
+    if (!existsSync(dir)) continue;
+    if (node.children) {
+      fixDomainMeta(node.children, dir);
+      const presentChildren = node.children.map((c) => c.slug).filter((slug) => existsSync(join(dir, slug)));
+      writeFileSync(join(dir, 'meta.json'), JSON.stringify({ title: node.title, pages: presentChildren }, null, 2));
+    } else {
+      const metaPath = join(dir, 'meta.json');
+      const meta = JSON.parse(readFileSync(metaPath, 'utf8'));
+      meta.title = node.title ?? node.tag;
+      writeFileSync(metaPath, JSON.stringify(meta, null, 2));
+    }
   }
-
-  writeFileSync(
-    join(OUT_DIR, 'git', 'meta.json'),
-    JSON.stringify(
-      {
-        title: 'Git',
-        pages: ['integrations', 'providers'].filter((c) => gitChildren.includes(c)),
-      },
-      null,
-      2,
-    ),
-  );
 }
+fixDomainMeta(DOMAINS, OUT_DIR);

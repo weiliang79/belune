@@ -38,25 +38,15 @@ function AdminOnlyBadge() {
   );
 }
 
-// stripAdminPrefix removes a leading "Admin — " from a plain-string name.
-// Only called from decorate() below, paired with adding the badge — never
-// on its own. The four remaining "Admin — "-prefixed section titles (Admin
-// — Platform, Admin — Platform Backups, Admin — Metrics & Live Streams,
-// Admin — Users & Invitations) still carry that prefix in apidocDomainOrder
-// and the spec's own tag names, deliberately: openapi.json has no concept
-// of a badge, so a third party reading it loses the signal entirely if the
-// prefix is ever dropped there too. Only this sidebar substitutes a badge
-// for the prefix — don't "tidy" the Go list to match.
-function stripAdminPrefix(name: ReactNode): ReactNode {
-  return typeof name === 'string' ? name.replace(/^Admin — /, '') : name;
-}
-
-// decorate adds the badge (and, exactly together with it, strips the
-// "Admin — " prefix) when `admin` is true; otherwise returns `name`
-// untouched. The pairing is structural, not just documented — a mixed
-// section that happened to have "Admin" in its title (none exist today,
-// see the file-level comment on ADMIN_URLS) would keep its prefix rather
-// than silently losing the signal with nothing replacing it.
+// decorate adds the badge when `admin` is true; otherwise returns `name`
+// untouched. No prefix-stripping here — apps/site/api-domains.json gives
+// every admin domain a `title` that already carries no "(Admin)" qualifier
+// (the tag itself keeps it, since openapi.json has no concept of a badge —
+// see the file-level comment on DOMAINS in generate-api-pages.mjs), so the
+// name arriving here is already clean. An earlier version of this function
+// stripped an "Admin — " prefix at render time because tag and sidebar
+// title were still the same string doing two jobs; splitting them into
+// separate fields made that stripping dead code.
 function decorate(name: ReactNode, admin: boolean): ReactNode {
   if (!admin) return name;
   return (
@@ -68,7 +58,7 @@ function decorate(name: ReactNode, admin: boolean): ReactNode {
     // required among the siblings in ONE such list, and each rendered name
     // is the only badge-bearing span in its own.
     <span key="admin-only-name" className="inline-flex items-center gap-1.5">
-      {stripAdminPrefix(name)}
+      {name}
       <AdminOnlyBadge />
     </span>
   );
@@ -130,12 +120,7 @@ function flattenSections(nodes: PageTreeNode[], adminUrls: Set<string>): PageTre
   for (const node of nodes) {
     if (node.type === 'folder') {
       const badge = allAdmin(node, adminUrls);
-      out.push({ type: 'separator', name: decorate(stripAdminPrefix(node.name), badge) });
-      // stripAdminPrefix here too: an UNBADGED "Admin — X" separator (none
-      // exist in the current dataset, every "Admin — "-titled domain is
-      // fully admin-gated — but the two are independent facts, and this
-      // must not assume they'll always coincide) keeps its prefix, same as
-      // decorate() already guarantees for the badged case.
+      out.push({ type: 'separator', name: decorate(node.name, badge) });
       if (node.index) out.push(...decorateChildren([node.index], badge, adminUrls));
       out.push(...decorateChildren(node.children, badge, adminUrls));
     } else {

@@ -401,38 +401,62 @@ type apidocDomain struct {
 	Rows        []apidocRoute
 }
 
-// apidocDomainOrder is the generated reference's table of contents — a
-// curated presentation order, not a safety mechanism. Unlike
-// apidocSkipPublicPrefixes, getting this list wrong costs nothing but
-// tidiness: apidocClassify's default case ("uncategorized")
-// guarantees a route can never be silently dropped for lack of a matching
-// domain, only poorly filed until someone adds a rule for it.
-var apidocDomainOrder = []struct{ slug, title string }{
-	{"live-updates", "Live Updates (WebSocket Hub)"},
-	{"terminal", "Terminal Access"},
-	{"tokens", "Personal Access Tokens"},
-	{"account", "Session & Account"},
-	{"git-integrations", "Git Integrations"},
-	{"git-providers", "Admin — Git Provider Configs"},
-	{"templates", "App Templates"},
-	{"deploy-actions", "Deploy & Lifecycle Actions"},
-	{"metrics", "Metrics"},
-	{"admin-metrics", "Admin — Metrics & Live Streams"},
-	{"previews", "Preview Environments"},
-	{"deployments", "Deployments"},
-	{"logs", "Logs & Request Traces"},
-	{"domains", "Domains & TLS"},
-	{"volumes", "Application Volumes & Backups"},
-	{"file-mounts", "File Mounts"},
-	{"env", "Environment Variables"},
-	{"databases", "Databases & Backups"},
-	{"applications", "Applications"},
-	{"stats-notifications", "Stats & Notifications"},
-	{"projects", "Projects"},
-	{"admin-users", "Admin — Users & Invitations"},
-	{"admin-backups", "Admin — Platform Backups"},
-	{"admin-platform", "Admin — Platform"},
-	{"uncategorized", "Uncategorized"},
+// apidocDomainsPath is relative to this package's directory, mirroring
+// apidocSpecPath's own reach into apps/site — this is the single source
+// both this generator and apps/site/scripts/generate-api-pages.mjs read
+// for domain slugs/tags/sidebar titles, replacing what used to be two
+// independently hand-maintained lists (this file's own apidocDomainOrder,
+// and the JS script's SLUG_BY_TITLE) that agreed only by discipline, not
+// by construction.
+const apidocDomainsPath = "../../../site/api-domains.json"
+
+// apidocDomainEntry mirrors one node of apidocDomainsPath's JSON tree. A
+// leaf (Tag non-empty) names a real OpenAPI tag; a container entry (Tag
+// empty, Children non-empty — "git" is the only one today) exists purely
+// for sidebar nesting on the site side, and apidocLoadDomains flattens
+// through it, so this generator only ever sees leaves. Recursive, not
+// hard-limited to one level, even though only "git" nests today.
+type apidocDomainEntry struct {
+	Slug     string              `json:"slug"`
+	Tag      string              `json:"tag,omitempty"`
+	Title    string              `json:"title,omitempty"`
+	Children []apidocDomainEntry `json:"children,omitempty"`
+}
+
+// apidocLoadDomains reads apidocDomainsPath and flattens it into the
+// ordered (slug, tag) pairs apidocGroupByDomain has always worked with —
+// apidocDomainOrder's old literal shape, now sourced from a file the site
+// side reads too instead of a second hand-copy. A nested entry's own slug
+// is prefixed by its ancestors' ("git/providers"), matching the
+// folder-path convention generate-api-pages.mjs already uses — one
+// slug-addressing scheme, not two that could drift apart. Getting this
+// file wrong costs nothing but tidiness: apidocClassify's default case
+// ("uncategorized") guarantees a route can never be silently dropped for
+// lack of a matching domain, only poorly filed until someone adds a rule
+// for it.
+func apidocLoadDomains(t *testing.T) []struct{ slug, title string } {
+	t.Helper()
+	raw, err := os.ReadFile(apidocDomainsPath)
+	require.NoError(t, err, "reading %s", apidocDomainsPath)
+	var entries []apidocDomainEntry
+	require.NoError(t, json.Unmarshal(raw, &entries))
+
+	var out []struct{ slug, title string }
+	var walk func(prefix string, nodes []apidocDomainEntry)
+	walk = func(prefix string, nodes []apidocDomainEntry) {
+		for _, n := range nodes {
+			slug := n.Slug
+			if prefix != "" {
+				slug = prefix + "/" + slug
+			}
+			if n.Tag != "" {
+				out = append(out, struct{ slug, title string }{slug, n.Tag})
+			}
+			walk(slug, n.Children)
+		}
+	}
+	walk("", entries)
+	return out
 }
 
 // apidocClassify assigns a route to a domain slug, evaluated as a priority
@@ -451,9 +475,9 @@ func apidocClassify(r apidocRoute) string {
 	case strings.HasPrefix(r.Path, "/api/auth/") || strings.HasPrefix(r.Path, "/api/account/"):
 		return "account"
 	case strings.HasPrefix(r.Path, "/api/git/integrations"):
-		return "git-integrations"
+		return "git/integrations"
 	case strings.HasPrefix(r.Path, "/api/git/providers"):
-		return "git-providers"
+		return "git/providers"
 	case strings.HasPrefix(r.Path, "/api/templates"):
 		return "templates"
 	case r.Scope == "deploy":
@@ -495,21 +519,22 @@ func apidocClassify(r apidocRoute) string {
 	}
 }
 
-func apidocGroupByDomain(routes []apidocRoute) []apidocDomain {
-	bySlug := make(map[string]*apidocDomain, len(apidocDomainOrder))
-	for _, o := range apidocDomainOrder {
+func apidocGroupByDomain(t *testing.T, routes []apidocRoute, domains []struct{ slug, title string }) []apidocDomain {
+	t.Helper()
+	bySlug := make(map[string]*apidocDomain, len(domains))
+	for _, o := range domains {
 		bySlug[o.slug] = &apidocDomain{Slug: o.slug, Title: o.title}
 	}
 	for _, r := range routes {
 		slug := apidocClassify(r)
 		d, ok := bySlug[slug]
 		if !ok {
-			panic(fmt.Sprintf("apidocClassify returned %q, which is not in apidocDomainOrder", slug))
+			panic(fmt.Sprintf("apidocClassify returned %q, which is not in %s", slug, apidocDomainsPath))
 		}
 		d.Rows = append(d.Rows, r)
 	}
 	var out []apidocDomain
-	for _, o := range apidocDomainOrder {
+	for _, o := range domains {
 		d := *bySlug[o.slug]
 		if len(d.Rows) > 0 {
 			out = append(out, d)
@@ -1208,8 +1233,10 @@ func apidocSecuritySchemes() map[string]oasSecurityScheme {
 func apidocBuildDocument(t *testing.T, routes []apidocRoute, sig map[string]apidocOperationTypes, reg *apidocSchemaRegistry) oasDocument {
 	t.Helper()
 
+	domains := apidocLoadDomains(t)
+
 	domainTitleByRoute := map[apidocRoute]string{}
-	for _, d := range apidocGroupByDomain(routes) {
+	for _, d := range apidocGroupByDomain(t, routes, domains) {
 		for _, r := range d.Rows {
 			domainTitleByRoute[r] = d.Title
 		}
@@ -1285,7 +1312,7 @@ func apidocBuildDocument(t *testing.T, routes []apidocRoute, sig map[string]apid
 	// .mdx page from apps/site/scripts/generate-api-pages.mjs, reachable by
 	// direct URL despite meta.json never listing it.
 	var tags []oasTag
-	for _, d := range apidocGroupByDomain(routes) {
+	for _, d := range apidocGroupByDomain(t, routes, domains) {
 		tags = append(tags, oasTag{Name: d.Title})
 	}
 

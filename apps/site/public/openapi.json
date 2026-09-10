@@ -28,7 +28,7 @@
       "name": "Git Integrations"
     },
     {
-      "name": "Admin — Git Provider Configs"
+      "name": "Git Provider Configs (Admin)"
     },
     {
       "name": "App Templates"
@@ -40,7 +40,7 @@
       "name": "Metrics"
     },
     {
-      "name": "Admin — Metrics \u0026 Live Streams"
+      "name": "Metrics \u0026 Live Streams (Admin)"
     },
     {
       "name": "Preview Environments"
@@ -76,13 +76,13 @@
       "name": "Projects"
     },
     {
-      "name": "Admin — Users \u0026 Invitations"
+      "name": "Users \u0026 Invitations (Admin)"
     },
     {
-      "name": "Admin — Platform Backups"
+      "name": "Platform Backups (Admin)"
     },
     {
-      "name": "Admin — Platform"
+      "name": "Platform (Admin)"
     }
   ],
   "paths": {
@@ -177,7 +177,7 @@
         "operationId": "ListAuditLogs",
         "summary": "List Audit Logs",
         "tags": [
-          "Admin — Platform"
+          "Platform (Admin)"
         ],
         "responses": {
           "200": {
@@ -229,7 +229,7 @@
         "operationId": "ListAuditActions",
         "summary": "List Audit Actions",
         "tags": [
-          "Admin — Platform"
+          "Platform (Admin)"
         ],
         "responses": {
           "200": {
@@ -273,7 +273,7 @@
         "operationId": "ExportAuditLogs",
         "summary": "Export Audit Logs",
         "tags": [
-          "Admin — Platform"
+          "Platform (Admin)"
         ],
         "responses": {
           "403": {
@@ -794,7 +794,7 @@
         "operationId": "ListBackupRuns",
         "summary": "List Backup Runs",
         "tags": [
-          "Admin — Platform Backups"
+          "Platform Backups (Admin)"
         ],
         "responses": {
           "200": {
@@ -838,7 +838,7 @@
         "operationId": "UpdateBackupRemote",
         "summary": "Update Backup Remote",
         "tags": [
-          "Admin — Platform Backups"
+          "Platform Backups (Admin)"
         ],
         "requestBody": {
           "required": true,
@@ -897,7 +897,7 @@
         "operationId": "TriggerBackupRun",
         "summary": "Trigger Backup Run",
         "tags": [
-          "Admin — Platform Backups"
+          "Platform Backups (Admin)"
         ],
         "responses": {
           "202": {
@@ -943,7 +943,7 @@
         "operationId": "GetBackupStatus",
         "summary": "Get Backup Status",
         "tags": [
-          "Admin — Platform Backups"
+          "Platform Backups (Admin)"
         ],
         "responses": {
           "200": {
@@ -984,7 +984,7 @@
         "operationId": "TestBackupRemote",
         "summary": "Test Backup Remote",
         "tags": [
-          "Admin — Platform Backups"
+          "Platform Backups (Admin)"
         ],
         "responses": {
           "200": {
@@ -1030,7 +1030,7 @@
         "operationId": "ListCertificates",
         "summary": "List Certificates",
         "tags": [
-          "Admin — Platform"
+          "Platform (Admin)"
         ],
         "responses": {
           "200": {
@@ -1072,7 +1072,7 @@
         "operationId": "UploadCertificate",
         "summary": "Upload Certificate",
         "tags": [
-          "Admin — Platform"
+          "Platform (Admin)"
         ],
         "requestBody": {
           "required": true,
@@ -1123,7 +1123,7 @@
         "operationId": "DeleteCertificate",
         "summary": "Delete Certificate",
         "tags": [
-          "Admin — Platform"
+          "Platform (Admin)"
         ],
         "parameters": [
           {
@@ -1164,7 +1164,7 @@
         "operationId": "TriggerCleanup",
         "summary": "Trigger Cleanup",
         "tags": [
-          "Admin — Platform"
+          "Platform (Admin)"
         ],
         "requestBody": {
           "required": true,
@@ -1262,7 +1262,7 @@
         "operationId": "ListDockerContainers",
         "summary": "List Docker Containers",
         "tags": [
-          "Admin — Platform"
+          "Platform (Admin)"
         ],
         "responses": {
           "200": {
@@ -1306,7 +1306,7 @@
         "operationId": "ListDockerImages",
         "summary": "List Docker Images",
         "tags": [
-          "Admin — Platform"
+          "Platform (Admin)"
         ],
         "responses": {
           "200": {
@@ -1350,7 +1350,7 @@
         "operationId": "ListDockerNetworks",
         "summary": "List Docker Networks",
         "tags": [
-          "Admin — Platform"
+          "Platform (Admin)"
         ],
         "responses": {
           "200": {
@@ -1394,7 +1394,7 @@
         "operationId": "GetDockerOverview",
         "summary": "Get Docker Overview",
         "tags": [
-          "Admin — Platform"
+          "Platform (Admin)"
         ],
         "responses": {
           "200": {
@@ -1812,7 +1812,7 @@
         "operationId": "ListGitProviderConfigs",
         "summary": "List Git Provider Configs",
         "tags": [
-          "Admin — Git Provider Configs"
+          "Git Provider Configs (Admin)"
         ],
         "responses": {
           "200": {
@@ -1854,7 +1854,7 @@
         "operationId": "SaveGitProviderConfig",
         "summary": "Save Git Provider Config",
         "tags": [
-          "Admin — Git Provider Configs"
+          "Git Provider Configs (Admin)"
         ],
         "requestBody": {
           "required": true,
@@ -1905,7 +1905,7 @@
         "operationId": "GetGitHubAppManifest",
         "summary": "Get Git Hub App Manifest",
         "tags": [
-          "Admin — Git Provider Configs"
+          "Git Provider Configs (Admin)"
         ],
         "responses": {
           "200": {
@@ -1961,7 +1961,7 @@
         "operationId": "DeleteGitProviderConfig",
         "summary": "Delete Git Provider Config",
         "tags": [
-          "Admin — Git Provider Configs"
+          "Git Provider Configs (Admin)"
         ],
         "parameters": [
           {
@@ -2018,7 +2018,7 @@
         "operationId": "CreateHostShellSession",
         "summary": "Create Host Shell Session",
         "tags": [
-          "Admin — Platform"
+          "Platform (Admin)"
         ],
         "requestBody": {
           "required": true,
@@ -2126,7 +2126,7 @@
         "operationId": "GetQueueStatus",
         "summary": "Get Queue Status",
         "tags": [
-          "Admin — Platform"
+          "Platform (Admin)"
         ],
         "responses": {
           "200": {
@@ -2167,7 +2167,7 @@
         "operationId": "ClearQueue",
         "summary": "Clear Queue",
         "tags": [
-          "Admin — Platform"
+          "Platform (Admin)"
         ],
         "responses": {
           "200": {
@@ -2213,7 +2213,7 @@
         "operationId": "ClearPendingQueue",
         "summary": "Clear Pending Queue",
         "tags": [
-          "Admin — Platform"
+          "Platform (Admin)"
         ],
         "responses": {
           "200": {
@@ -2259,7 +2259,7 @@
         "operationId": "RestartService",
         "summary": "Restart Service",
         "tags": [
-          "Admin — Platform"
+          "Platform (Admin)"
         ],
         "responses": {
           "200": {
@@ -2308,7 +2308,7 @@
         "operationId": "GetServerIP",
         "summary": "Get Server IP",
         "tags": [
-          "Admin — Platform"
+          "Platform (Admin)"
         ],
         "responses": {
           "200": {
@@ -2349,7 +2349,7 @@
         "operationId": "GetMetrics",
         "summary": "Get Metrics",
         "tags": [
-          "Admin — Metrics \u0026 Live Streams"
+          "Metrics \u0026 Live Streams (Admin)"
         ],
         "responses": {
           "200": {
@@ -2390,7 +2390,7 @@
         "operationId": "GetHostHistoricalMetrics",
         "summary": "Get Host Historical Metrics",
         "tags": [
-          "Admin — Metrics \u0026 Live Streams"
+          "Metrics \u0026 Live Streams (Admin)"
         ],
         "responses": {
           "200": {
@@ -2434,7 +2434,7 @@
         "operationId": "StreamHostMetrics",
         "summary": "Stream Host Metrics",
         "tags": [
-          "Admin — Metrics \u0026 Live Streams"
+          "Metrics \u0026 Live Streams (Admin)"
         ],
         "responses": {
           "403": {
@@ -2468,7 +2468,7 @@
         "operationId": "ListNotificationChannels",
         "summary": "List Notification Channels",
         "tags": [
-          "Admin — Platform"
+          "Platform (Admin)"
         ],
         "responses": {
           "200": {
@@ -2510,7 +2510,7 @@
         "operationId": "CreateNotificationChannel",
         "summary": "Create Notification Channel",
         "tags": [
-          "Admin — Platform"
+          "Platform (Admin)"
         ],
         "requestBody": {
           "required": true,
@@ -2561,7 +2561,7 @@
         "operationId": "TestNotificationChannelParams",
         "summary": "Test Notification Channel Params",
         "tags": [
-          "Admin — Platform"
+          "Platform (Admin)"
         ],
         "requestBody": {
           "required": true,
@@ -2617,7 +2617,7 @@
         "operationId": "DeleteNotificationChannel",
         "summary": "Delete Notification Channel",
         "tags": [
-          "Admin — Platform"
+          "Platform (Admin)"
         ],
         "parameters": [
           {
@@ -2672,7 +2672,7 @@
         "operationId": "SetNotificationChannelEnabled",
         "summary": "Set Notification Channel Enabled",
         "tags": [
-          "Admin — Platform"
+          "Platform (Admin)"
         ],
         "parameters": [
           {
@@ -2732,7 +2732,7 @@
         "operationId": "UpdateNotificationChannel",
         "summary": "Update Notification Channel",
         "tags": [
-          "Admin — Platform"
+          "Platform (Admin)"
         ],
         "parameters": [
           {
@@ -2794,7 +2794,7 @@
         "operationId": "TestNotificationChannel",
         "summary": "Test Notification Channel",
         "tags": [
-          "Admin — Platform"
+          "Platform (Admin)"
         ],
         "parameters": [
           {
@@ -2851,7 +2851,7 @@
         "operationId": "ListNotificationEvents",
         "summary": "List Notification Events",
         "tags": [
-          "Admin — Platform"
+          "Platform (Admin)"
         ],
         "responses": {
           "200": {
@@ -10517,7 +10517,7 @@
         "operationId": "ReconcileProxy",
         "summary": "Reconcile Proxy",
         "tags": [
-          "Admin — Platform"
+          "Platform (Admin)"
         ],
         "responses": {
           "200": {
@@ -10558,7 +10558,7 @@
         "operationId": "GetProxyReconcilerStatus",
         "summary": "Get Proxy Reconciler Status",
         "tags": [
-          "Admin — Platform"
+          "Platform (Admin)"
         ],
         "responses": {
           "200": {
@@ -10599,7 +10599,7 @@
         "operationId": "ListQuotas",
         "summary": "List Quotas",
         "tags": [
-          "Admin — Platform"
+          "Platform (Admin)"
         ],
         "responses": {
           "200": {
@@ -10643,7 +10643,7 @@
         "operationId": "DeleteQuota",
         "summary": "Delete Quota",
         "tags": [
-          "Admin — Platform"
+          "Platform (Admin)"
         ],
         "parameters": [
           {
@@ -10707,7 +10707,7 @@
         "operationId": "GetQuota",
         "summary": "Get Quota",
         "tags": [
-          "Admin — Platform"
+          "Platform (Admin)"
         ],
         "parameters": [
           {
@@ -10766,7 +10766,7 @@
         "operationId": "UpsertQuota",
         "summary": "Upsert Quota",
         "tags": [
-          "Admin — Platform"
+          "Platform (Admin)"
         ],
         "parameters": [
           {
@@ -10956,7 +10956,7 @@
         "operationId": "GetDashboardTLS",
         "summary": "Get Dashboard TLS",
         "tags": [
-          "Admin — Platform"
+          "Platform (Admin)"
         ],
         "responses": {
           "200": {
@@ -10997,7 +10997,7 @@
         "operationId": "GetServerServices",
         "summary": "Get Server Services",
         "tags": [
-          "Admin — Platform"
+          "Platform (Admin)"
         ],
         "responses": {
           "200": {
@@ -11038,7 +11038,7 @@
         "operationId": "ListSettings",
         "summary": "List Settings",
         "tags": [
-          "Admin — Platform"
+          "Platform (Admin)"
         ],
         "responses": {
           "200": {
@@ -11080,7 +11080,7 @@
         "operationId": "UpdateSettings",
         "summary": "Update Settings",
         "tags": [
-          "Admin — Platform"
+          "Platform (Admin)"
         ],
         "requestBody": {
           "required": true,
@@ -11139,7 +11139,7 @@
         "operationId": "GetSMTPSettings",
         "summary": "Get SMTP Settings",
         "tags": [
-          "Admin — Platform"
+          "Platform (Admin)"
         ],
         "responses": {
           "200": {
@@ -11178,7 +11178,7 @@
         "operationId": "UpdateSMTPSettings",
         "summary": "Update SMTP Settings",
         "tags": [
-          "Admin — Platform"
+          "Platform (Admin)"
         ],
         "requestBody": {
           "required": true,
@@ -11234,7 +11234,7 @@
         "operationId": "TestSMTPSettings",
         "summary": "Test SMTP Settings",
         "tags": [
-          "Admin — Platform"
+          "Platform (Admin)"
         ],
         "requestBody": {
           "required": true,
@@ -11650,7 +11650,7 @@
         "operationId": "ListUsers",
         "summary": "List Users",
         "tags": [
-          "Admin — Users \u0026 Invitations"
+          "Users \u0026 Invitations (Admin)"
         ],
         "responses": {
           "200": {
@@ -11692,7 +11692,7 @@
         "operationId": "CreateUser",
         "summary": "Create User",
         "tags": [
-          "Admin — Users \u0026 Invitations"
+          "Users \u0026 Invitations (Admin)"
         ],
         "requestBody": {
           "required": true,
@@ -11739,7 +11739,7 @@
         "operationId": "ListPendingInvitations",
         "summary": "List Pending Invitations",
         "tags": [
-          "Admin — Users \u0026 Invitations"
+          "Users \u0026 Invitations (Admin)"
         ],
         "responses": {
           "200": {
@@ -11783,7 +11783,7 @@
         "operationId": "RevokeInvitation",
         "summary": "Revoke Invitation",
         "tags": [
-          "Admin — Users \u0026 Invitations"
+          "Users \u0026 Invitations (Admin)"
         ],
         "parameters": [
           {
@@ -11828,7 +11828,7 @@
         "operationId": "InviteUser",
         "summary": "Invite User",
         "tags": [
-          "Admin — Users \u0026 Invitations"
+          "Users \u0026 Invitations (Admin)"
         ],
         "requestBody": {
           "required": true,
@@ -11875,7 +11875,7 @@
         "operationId": "DeleteUser",
         "summary": "Delete User",
         "tags": [
-          "Admin — Users \u0026 Invitations"
+          "Users \u0026 Invitations (Admin)"
         ],
         "parameters": [
           {
@@ -11928,7 +11928,7 @@
         "operationId": "ResetUserPassword",
         "summary": "Reset User Password",
         "tags": [
-          "Admin — Users \u0026 Invitations"
+          "Users \u0026 Invitations (Admin)"
         ],
         "parameters": [
           {
@@ -11991,7 +11991,7 @@
         "operationId": "UpdateUserRole",
         "summary": "Update User Role",
         "tags": [
-          "Admin — Users \u0026 Invitations"
+          "Users \u0026 Invitations (Admin)"
         ],
         "parameters": [
           {
@@ -12049,7 +12049,7 @@
         "operationId": "AdminResetUserTOTP",
         "summary": "Admin Reset User TOTP",
         "tags": [
-          "Admin — Users \u0026 Invitations"
+          "Users \u0026 Invitations (Admin)"
         ],
         "parameters": [
           {
@@ -12184,7 +12184,7 @@
         "operationId": "func1",
         "summary": "func1",
         "tags": [
-          "Admin — Metrics \u0026 Live Streams"
+          "Metrics \u0026 Live Streams (Admin)"
         ],
         "responses": {
           "403": {
