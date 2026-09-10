@@ -59,6 +59,8 @@ func generateDeployHookToken() (token string, digest []byte, err error) {
 // GenerateDeployHook creates (or rotates) the deploy hook token for an
 // application and returns it once in full. Rotating overwrites the stored hash,
 // so the previous URL stops working immediately.
+//
+//apidoc:tag applications
 func (h *Handler) GenerateDeployHook(w http.ResponseWriter, r *http.Request) {
 	applicationID := chi.URLParam(r, "applicationId")
 	var applicationUUID pgtype.UUID
@@ -117,6 +119,8 @@ func (h *Handler) GenerateDeployHook(w http.ResponseWriter, r *http.Request) {
 // GetDeployHook reports whether the hook is enabled without returning the
 // token — the settings page renders this on every load, and the token only
 // leaves the server through the explicit reveal below.
+//
+//apidoc:tag applications
 func (h *Handler) GetDeployHook(w http.ResponseWriter, r *http.Request) {
 	applicationID := chi.URLParam(r, "applicationId")
 	var applicationUUID pgtype.UUID
@@ -141,6 +145,8 @@ func (h *Handler) GetDeployHook(w http.ResponseWriter, r *http.Request) {
 // RevealDeployHook returns the stored token so the operator can copy the URL
 // again later (the alternative — show-once — means a lost URL forces a rotation
 // and a CI config change). Audited, because it hands back a live credential.
+//
+//apidoc:tag applications
 func (h *Handler) RevealDeployHook(w http.ResponseWriter, r *http.Request) {
 	applicationID := chi.URLParam(r, "applicationId")
 	var applicationUUID pgtype.UUID
@@ -181,6 +187,8 @@ func (h *Handler) RevealDeployHook(w http.ResponseWriter, r *http.Request) {
 
 // DeleteDeployHook disables the hook. The stored hash goes away, so the URL
 // stops resolving on the next request.
+//
+//apidoc:tag applications
 func (h *Handler) DeleteDeployHook(w http.ResponseWriter, r *http.Request) {
 	applicationID := chi.URLParam(r, "applicationId")
 	var applicationUUID pgtype.UUID

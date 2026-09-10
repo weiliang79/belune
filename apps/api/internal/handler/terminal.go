@@ -39,6 +39,8 @@ type termMsg struct {
 
 // CreateTerminalSession creates a Docker exec session and returns a session ID.
 // POST /api/projects/{projectId}/applications/{applicationId}/terminal
+//
+//apidoc:tag terminal
 func (h *Handler) CreateTerminalSession(w http.ResponseWriter, r *http.Request) {
 	ctx, span := tracing.Tracer().Start(r.Context(), "terminal.create")
 	defer span.End()
@@ -116,6 +118,8 @@ func (h *Handler) CreateTerminalSession(w http.ResponseWriter, r *http.Request) 
 
 // HandleTerminalWebSocket proxies a WebSocket connection to an active exec session.
 // GET /api/ws/terminal/{sessionId}
+//
+//apidoc:tag terminal
 func (h *Handler) HandleTerminalWebSocket(w http.ResponseWriter, r *http.Request) {
 	if h.termManager == nil {
 		writeError(w, http.StatusServiceUnavailable, "terminal not available")

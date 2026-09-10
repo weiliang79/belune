@@ -25,6 +25,8 @@ func currentUserUUID(r *http.Request) (pgtype.UUID, bool) {
 // ListNotifications returns the current user's notifications, newest first,
 // along with the current unread count so the bell can render in one request.
 // GET /api/notifications?limit=&offset=
+//
+//apidoc:tag stats-notifications
 func (h *Handler) ListNotifications(w http.ResponseWriter, r *http.Request) {
 	userUUID, ok := currentUserUUID(r)
 	if !ok {
@@ -58,6 +60,8 @@ func (h *Handler) ListNotifications(w http.ResponseWriter, r *http.Request) {
 // UnreadNotificationCount returns just the unread count — a cheap poll target
 // and the value the SSE stream keeps live between full reloads.
 // GET /api/notifications/unread-count
+//
+//apidoc:tag stats-notifications
 func (h *Handler) UnreadNotificationCount(w http.ResponseWriter, r *http.Request) {
 	userUUID, ok := currentUserUUID(r)
 	if !ok {
@@ -75,6 +79,8 @@ func (h *Handler) UnreadNotificationCount(w http.ResponseWriter, r *http.Request
 // MarkNotificationRead marks a single notification read. Scoped by user_id so a
 // user can only mark their own rows.
 // POST /api/notifications/{notificationId}/read
+//
+//apidoc:tag stats-notifications
 func (h *Handler) MarkNotificationRead(w http.ResponseWriter, r *http.Request) {
 	userUUID, ok := currentUserUUID(r)
 	if !ok {
@@ -101,6 +107,8 @@ func (h *Handler) MarkNotificationRead(w http.ResponseWriter, r *http.Request) {
 
 // MarkAllNotificationsRead marks every unread notification for the user read.
 // POST /api/notifications/read-all
+//
+//apidoc:tag stats-notifications
 func (h *Handler) MarkAllNotificationsRead(w http.ResponseWriter, r *http.Request) {
 	userUUID, ok := currentUserUUID(r)
 	if !ok {
@@ -117,6 +125,8 @@ func (h *Handler) MarkAllNotificationsRead(w http.ResponseWriter, r *http.Reques
 // StreamNotifications pushes new notifications for the current user via SSE.
 // Subscribes to the per-user Redis channel the NotificationService publishes to.
 // GET /api/notifications/stream
+//
+//apidoc:tag stats-notifications
 func (h *Handler) StreamNotifications(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.UserIDFromContext(r.Context())
 	if userID == "" {

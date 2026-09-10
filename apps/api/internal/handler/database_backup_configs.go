@@ -138,6 +138,8 @@ func (h *Handler) validateConfigRequest(r *http.Request, db generated.Database, 
 }
 
 // ListDatabaseBackupConfigs returns a database's backup configurations.
+//
+//apidoc:tag databases
 func (h *Handler) ListDatabaseBackupConfigs(w http.ResponseWriter, r *http.Request) {
 	db, ok := h.databaseFromPath(w, r)
 	if !ok {
@@ -156,6 +158,8 @@ func (h *Handler) ListDatabaseBackupConfigs(w http.ResponseWriter, r *http.Reque
 }
 
 // CreateDatabaseBackupConfig creates a scheduled backup configuration.
+//
+//apidoc:tag databases
 func (h *Handler) CreateDatabaseBackupConfig(w http.ResponseWriter, r *http.Request) {
 	db, ok := h.databaseFromPath(w, r)
 	if !ok {
@@ -217,6 +221,8 @@ func (h *Handler) configInDatabase(w http.ResponseWriter, r *http.Request, db ge
 }
 
 // UpdateDatabaseBackupConfig updates a scheduled backup configuration.
+//
+//apidoc:tag databases
 func (h *Handler) UpdateDatabaseBackupConfig(w http.ResponseWriter, r *http.Request) {
 	db, ok := h.databaseFromPath(w, r)
 	if !ok {
@@ -260,6 +266,8 @@ func (h *Handler) UpdateDatabaseBackupConfig(w http.ResponseWriter, r *http.Requ
 
 // DeleteDatabaseBackupConfig deletes a config and its produced backups (rows +
 // local files + remote objects), so nothing is orphaned in the destination.
+//
+//apidoc:tag databases
 func (h *Handler) DeleteDatabaseBackupConfig(w http.ResponseWriter, r *http.Request) {
 	db, ok := h.databaseFromPath(w, r)
 	if !ok {
@@ -295,6 +303,8 @@ func (h *Handler) DeleteDatabaseBackupConfig(w http.ResponseWriter, r *http.Requ
 }
 
 // RunDatabaseBackupConfig triggers an immediate backup for a config.
+//
+//apidoc:tag databases
 func (h *Handler) RunDatabaseBackupConfig(w http.ResponseWriter, r *http.Request) {
 	db, ok := h.databaseFromPath(w, r)
 	if !ok {
@@ -345,6 +355,8 @@ type projectBackupActivityResponse struct {
 // ListProjectBackups returns recent backup runs across all of a project's
 // databases AND application volumes (newest first) for the project
 // Backups-tab activity summary.
+//
+//apidoc:tag projects
 func (h *Handler) ListProjectBackups(w http.ResponseWriter, r *http.Request) {
 	projectUUID, ok := h.projectFromPath(w, r)
 	if !ok {

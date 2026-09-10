@@ -79,6 +79,8 @@ func resolveEncryptionRecipient(keyOrPath string) string {
 
 // ListBackupRuns returns backup runs most-recent-first, paginated via
 // limit/offset query params (see parsePagination).
+//
+//apidoc:tag admin-backups
 func (h *Handler) ListBackupRuns(w http.ResponseWriter, r *http.Request) {
 	limit, offset := parsePagination(r)
 	runs, err := h.queries.ListBackupRuns(r.Context(), generated.ListBackupRunsParams{
@@ -137,6 +139,8 @@ func (h *Handler) resolveBackupRetention(ctx context.Context) (days, count int) 
 }
 
 // GetBackupStatus returns a summary of the most recent backup activity.
+//
+//apidoc:tag admin-backups
 func (h *Handler) GetBackupStatus(w http.ResponseWriter, r *http.Request) {
 	rc := backup.LoadRemoteConfig(h.cfg)
 	retainDays, retainCount := h.resolveBackupRetention(r.Context())
@@ -183,6 +187,8 @@ func (h *Handler) GetBackupStatus(w http.ResponseWriter, r *http.Request) {
 }
 
 // TriggerBackupRun enqueues a TypeBackupNow task.
+//
+//apidoc:tag admin-backups
 func (h *Handler) TriggerBackupRun(w http.ResponseWriter, r *http.Request) {
 	// Reject if a backup is already in progress to avoid concurrent archive writes.
 	last, err := h.queries.GetLastBackupRun(r.Context())
@@ -209,6 +215,8 @@ func (h *Handler) TriggerBackupRun(w http.ResponseWriter, r *http.Request) {
 // (dashboard-managed file, falling back to .env) is reachable and the bucket
 // exists, without mutating anything. Read-only diagnostic for the admin
 // Backups tab.
+//
+//apidoc:tag admin-backups
 func (h *Handler) TestBackupRemote(w http.ResponseWriter, r *http.Request) {
 	if !backup.LoadRemoteConfig(h.cfg).Enabled {
 		writeError(w, http.StatusBadRequest,
@@ -241,6 +249,8 @@ type updateBackupRemoteRequest struct {
 // the currently stored one (same convention as project backup destinations),
 // so the dashboard never has to redisplay a saved secret to let the operator
 // edit unrelated fields.
+//
+//apidoc:tag admin-backups
 func (h *Handler) UpdateBackupRemote(w http.ResponseWriter, r *http.Request) {
 	var req updateBackupRemoteRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {

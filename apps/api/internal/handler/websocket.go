@@ -14,6 +14,8 @@ import (
 
 // HandleWebSocket upgrades the connection to WebSocket and registers the client.
 // Authentication is performed via the session cookie (WebSocket can't send custom headers).
+//
+//apidoc:tag live-updates
 func (h *Handler) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 	if h.hub == nil {
 		writeError(w, http.StatusServiceUnavailable, "websocket not available")

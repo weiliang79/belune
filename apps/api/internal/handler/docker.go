@@ -152,6 +152,8 @@ func (c *diskUsageCache) refresh(rt runtime.ContainerRuntime) {
 
 // GetDockerOverview returns `docker info` + `docker system df` for the admin
 // Docker overview tab. GET /api/docker/overview (admin only).
+//
+//apidoc:tag admin-platform
 func (h *Handler) GetDockerOverview(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), dockerTimeout)
 	defer cancel()
@@ -201,6 +203,8 @@ type dockerContainerResponse struct {
 // ListDockerContainers lists every container on the host (running + stopped),
 // flagging platform-managed ones and linking them to their app/database.
 // GET /api/docker/containers (admin only).
+//
+//apidoc:tag admin-platform
 func (h *Handler) ListDockerContainers(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), dockerTimeout)
 	defer cancel()
@@ -315,6 +319,8 @@ type dockerImageResponse struct {
 }
 
 // ListDockerImages lists all images on the host. GET /api/docker/images (admin only).
+//
+//apidoc:tag admin-platform
 func (h *Handler) ListDockerImages(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), dockerTimeout)
 	defer cancel()
@@ -399,6 +405,8 @@ type dockerVolumeResponse struct {
 
 // ListDockerVolumes lists all volumes on the host with sizes.
 // GET /api/docker/volumes (admin only).
+//
+//apidoc:tag volumes
 func (h *Handler) ListDockerVolumes(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), dockerTimeout)
 	defer cancel()
@@ -503,6 +511,8 @@ type dockerNetworkResponse struct {
 
 // ListDockerNetworks lists all networks on the host with attached containers.
 // GET /api/docker/networks (admin only).
+//
+//apidoc:tag admin-platform
 func (h *Handler) ListDockerNetworks(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), dockerTimeout)
 	defer cancel()

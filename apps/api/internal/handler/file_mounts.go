@@ -109,6 +109,8 @@ func (h *Handler) toFileMountResponse(fm generated.ApplicationFileMount) fileMou
 // into the editor for in-place editing instead of forcing a full rewrite. The
 // reveal is audited because it deliberately hands back plaintext the UI
 // otherwise hides.
+//
+//apidoc:tag file-mounts
 func (h *Handler) RevealFileMount(w http.ResponseWriter, r *http.Request) {
 	applicationID := chi.URLParam(r, "applicationId")
 	var applicationUUID pgtype.UUID
@@ -153,6 +155,7 @@ func (h *Handler) RevealFileMount(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"content": string(content)})
 }
 
+//apidoc:tag file-mounts
 func (h *Handler) ListFileMounts(w http.ResponseWriter, r *http.Request) {
 	applicationID := chi.URLParam(r, "applicationId")
 	var applicationUUID pgtype.UUID
@@ -186,6 +189,7 @@ type createFileMountRequest struct {
 	FileMode  string `json:"file_mode"`
 }
 
+//apidoc:tag file-mounts
 func (h *Handler) CreateFileMount(w http.ResponseWriter, r *http.Request) {
 	applicationID := chi.URLParam(r, "applicationId")
 	var applicationUUID pgtype.UUID
@@ -257,6 +261,7 @@ type updateFileMountRequest struct {
 	FileMode string  `json:"file_mode"`
 }
 
+//apidoc:tag file-mounts
 func (h *Handler) UpdateFileMount(w http.ResponseWriter, r *http.Request) {
 	applicationID := chi.URLParam(r, "applicationId")
 	var applicationUUID pgtype.UUID
@@ -331,6 +336,7 @@ func (h *Handler) UpdateFileMount(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, h.toFileMountResponse(fm))
 }
 
+//apidoc:tag file-mounts
 func (h *Handler) DeleteFileMount(w http.ResponseWriter, r *http.Request) {
 	applicationID := chi.URLParam(r, "applicationId")
 	var applicationUUID pgtype.UUID

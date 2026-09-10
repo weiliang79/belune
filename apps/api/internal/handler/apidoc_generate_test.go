@@ -379,8 +379,8 @@ func TestGenerateAPIReference(t *testing.T) {
 	// own sanity floors give for their sets.
 	require.Equal(t, 36, sessionRoutes, "expected exactly 36 RequireSession routes")
 
-	sig, reg := apidocExtractTypes(t)
-	doc := apidocBuildDocument(t, routes, sig, reg)
+	sig, directives, reg := apidocExtractTypes(t)
+	doc := apidocBuildDocument(t, routes, sig, directives, reg)
 	apidocWriteSpec(t, doc)
 	// Per-domain site pages are generated separately, by
 	// apps/site/scripts/generate-api-pages.mjs (fumadocs-openapi's own
@@ -429,11 +429,13 @@ type apidocDomainEntry struct {
 // side reads too instead of a second hand-copy. A nested entry's own slug
 // is prefixed by its ancestors' ("git/providers"), matching the
 // folder-path convention generate-api-pages.mjs already uses — one
-// slug-addressing scheme, not two that could drift apart. Getting this
-// file wrong costs nothing but tidiness: apidocClassify's default case
-// ("uncategorized") guarantees a route can never be silently dropped for
-// lack of a matching domain, only poorly filed until someone adds a rule
-// for it.
+// slug-addressing scheme, not two that could drift apart. A slug named by
+// a //apidoc:tag directive but missing here still panics in
+// apidocGroupByDomain, same as always — getting THIS file wrong (a typo, a
+// removed entry still referenced) is the one way that panic still fires;
+// a route with no directive at all fails a different, permanent check
+// instead (see apidocBuildDocument's uncategorized-must-be-empty
+// assertion) now that a directive is the only way a route is classified.
 func apidocLoadDomains(t *testing.T) []struct{ slug, title string } {
 	t.Helper()
 	raw, err := os.ReadFile(apidocDomainsPath)
@@ -459,77 +461,38 @@ func apidocLoadDomains(t *testing.T) []struct{ slug, title string } {
 	return out
 }
 
-// apidocClassify assigns a route to a domain slug, evaluated as a priority
-// list — first match wins. Some rules match on the route's OBSERVED scope
-// (deploy, metrics) rather than its path, which is both simpler and more
-// honest than pattern-matching the path shape a second time: the domain
-// literally IS "the routes reachable at this scope" for those two.
-func apidocClassify(r apidocRoute) string {
-	switch {
-	case r.Path == "/api/ws":
-		return "live-updates"
-	case strings.Contains(r.Path, "/terminal"):
-		return "terminal"
-	case strings.HasPrefix(r.Path, "/api/tokens"):
-		return "tokens"
-	case strings.HasPrefix(r.Path, "/api/auth/") || strings.HasPrefix(r.Path, "/api/account/"):
-		return "account"
-	case strings.HasPrefix(r.Path, "/api/git/integrations"):
-		return "git/integrations"
-	case strings.HasPrefix(r.Path, "/api/git/providers"):
-		return "git/providers"
-	case strings.HasPrefix(r.Path, "/api/templates"):
-		return "templates"
-	case r.Scope == "deploy":
-		return "deploy-actions"
-	case r.Scope == "metrics" && r.Admin:
-		return "admin-metrics"
-	case r.Scope == "metrics":
-		return "metrics"
-	case strings.Contains(r.Path, "/previews"):
-		return "previews"
-	case strings.Contains(r.Path, "/deployments") || r.Path == "/api/deployments":
-		return "deployments"
-	case strings.Contains(r.Path, "/logs") || strings.Contains(r.Path, "/requests"):
-		return "logs"
-	case strings.Contains(r.Path, "/domains"):
-		return "domains"
-	case strings.Contains(r.Path, "/volumes"):
-		return "volumes"
-	case strings.Contains(r.Path, "/file-mounts"):
-		return "file-mounts"
-	case strings.Contains(r.Path, "/env"):
-		return "env"
-	case strings.Contains(r.Path, "/databases") || strings.Contains(r.Path, "/orphaned-backups") || strings.Contains(r.Path, "/backup-destinations"):
-		return "databases"
-	case strings.Contains(r.Path, "/applications"):
-		return "applications"
-	case strings.HasPrefix(r.Path, "/api/stats") || strings.HasPrefix(r.Path, "/api/notifications"):
-		return "stats-notifications"
-	case strings.HasPrefix(r.Path, "/api/projects"):
-		return "projects"
-	case strings.HasPrefix(r.Path, "/api/users"):
-		return "admin-users"
-	case strings.HasPrefix(r.Path, "/api/backups"):
-		return "admin-backups"
-	case r.Admin:
-		return "admin-platform"
-	default:
+// apidocRouteDomain resolves a route's domain slug from its handler's
+// //apidoc:tag directive — the ONLY source now. apidocClassify, the
+// path/scope-based priority list this replaced (25 ordered cases where
+// position was load-bearing — "/terminal" only worked because it sat above
+// "/applications" and "/api/projects" — plus r.Scope/r.Admin-derived cases
+// that existed only because nothing declared a tag), is retired entirely,
+// not just unused: a directive removes the failure mode, so keeping the
+// old heuristic around as a fallback would have kept it too. A handler
+// with no directive (or one this run's probe never reached, e.g. a route
+// added but not yet wired up) falls back to "uncategorized" — the
+// permanent check in apidocBuildDocument fails generation if that bucket
+// is ever non-empty, so this fallback is a loud failure waiting to happen,
+// not a silent one.
+func apidocRouteDomain(directives map[string]apidocDirective, r apidocRoute) string {
+	d, ok := directives[r.Handler]
+	if !ok || d.Tag == "" {
 		return "uncategorized"
 	}
+	return d.Tag
 }
 
-func apidocGroupByDomain(t *testing.T, routes []apidocRoute, domains []struct{ slug, title string }) []apidocDomain {
+func apidocGroupByDomain(t *testing.T, routes []apidocRoute, domains []struct{ slug, title string }, directives map[string]apidocDirective) []apidocDomain {
 	t.Helper()
 	bySlug := make(map[string]*apidocDomain, len(domains))
 	for _, o := range domains {
 		bySlug[o.slug] = &apidocDomain{Slug: o.slug, Title: o.title}
 	}
 	for _, r := range routes {
-		slug := apidocClassify(r)
+		slug := apidocRouteDomain(directives, r)
 		d, ok := bySlug[slug]
 		if !ok {
-			panic(fmt.Sprintf("apidocClassify returned %q, which is not in %s", slug, apidocDomainsPath))
+			panic(fmt.Sprintf("apidocRouteDomain returned %q (from a //apidoc:tag directive), which is not in %s", slug, apidocDomainsPath))
 		}
 		d.Rows = append(d.Rows, r)
 	}
@@ -858,13 +821,69 @@ func apidocWalkMapLiteral(reg *apidocSchemaRegistry, info *types.Info, lit *ast.
 	return apidocSchema{"type": "object", "properties": props}, true
 }
 
+// apidocDirective is one handler's //apidoc: directive comment, the ONLY
+// source of a route's domain classification (apidocClassify's old
+// path/scope-based heuristic is retired — see apidocRouteDomain). Tag is
+// mandatory for every documented handler; Title/Description are optional
+// and fall back to the auto-generated forms (apidocTitleFromOperationID,
+// and the derived pinning note alone) when empty.
+//
+// Directives are for EDITORIAL FACTS ONLY — a name, never a permission.
+// There is deliberately no //apidoc:admin or anything asserting scope,
+// session gating, or role: those stay derived from the probe and the
+// middleware chain, same as before. A directive is a claim, a claim can be
+// wrong, and "docs assert a restriction the code doesn't enforce" is the
+// exact failure this generator exists to prevent — the same class as the
+// three routes once documented as PAT-callable when RequireSession
+// actually rejected them.
+type apidocDirective struct {
+	Tag, Title, Description string
+}
+
+// apidocDirectivePrefix has NO space after "//" — it's a directive line,
+// not prose, so it can sit inside an otherwise ordinary doc comment
+// without reading as part of it (CLAUDE.md's "comments explain why, not
+// what" is about prose comments; this is closer to //go:generate or
+// //nolint:, an established idiom for a machine-read comment).
+const apidocDirectivePrefix = "//apidoc:"
+
+// apidocParseDirective scans a doc comment for //apidoc: lines, in any
+// position relative to ordinary prose in the same comment group — see the
+// package-level doc comment on ServeMetrics in metrics.go for what a real
+// one looks like next to prose. A nil doc (no comment at all) returns the
+// zero value, which apidocRouteDomain reads as "no directive."
+func apidocParseDirective(doc *ast.CommentGroup) apidocDirective {
+	var d apidocDirective
+	if doc == nil {
+		return d
+	}
+	for _, c := range doc.List {
+		rest, ok := strings.CutPrefix(c.Text, apidocDirectivePrefix)
+		if !ok {
+			continue
+		}
+		key, value, _ := strings.Cut(rest, " ")
+		switch key {
+		case "tag":
+			d.Tag = value
+		case "title":
+			d.Title = value
+		case "description":
+			d.Description = value
+		}
+	}
+	return d
+}
+
 // apidocExtractTypes loads ./internal/handler (this package) via go/packages
 // — a full go/types load, the same information `go vet` has — and resolves
 // every *Handler method's writeJSON calls and json.Decoder.Decode target to
-// a static type. "." as both Dir and pattern: `go test` always runs with the
-// working directory set to the package under test, so "." IS
-// apps/api/internal/handler already; no absolute path needed.
-func apidocExtractTypes(t *testing.T) (map[string]apidocOperationTypes, *apidocSchemaRegistry) {
+// a static type, PLUS (new) each method's //apidoc: directive, off the same
+// FuncDecl.Doc packages.NeedSyntax already makes available. "." as both Dir
+// and pattern: `go test` always runs with the working directory set to the
+// package under test, so "." IS apps/api/internal/handler already; no
+// absolute path needed.
+func apidocExtractTypes(t *testing.T) (map[string]apidocOperationTypes, map[string]apidocDirective, *apidocSchemaRegistry) {
 	t.Helper()
 	cfg := &packages.Config{
 		Mode: packages.NeedName | packages.NeedFiles | packages.NeedSyntax | packages.NeedTypes |
@@ -894,6 +913,7 @@ func apidocExtractTypes(t *testing.T) (map[string]apidocOperationTypes, *apidocS
 
 	reg := newApidocSchemaRegistry()
 	result := map[string]apidocOperationTypes{}
+	directives := map[string]apidocDirective{}
 	delegates := map[string][]string{}
 
 	for _, file := range pkg.Syntax {
@@ -904,6 +924,9 @@ func apidocExtractTypes(t *testing.T) (map[string]apidocOperationTypes, *apidocS
 			}
 			if !apidocIsHandlerReceiver(fn.Recv.List[0].Type) {
 				continue
+			}
+			if d := apidocParseDirective(fn.Doc); d.Tag != "" {
+				directives[fn.Name.Name] = d
 			}
 
 			ops := apidocOperationTypes{Responses: map[int]apidocSchema{}}
@@ -980,7 +1003,12 @@ func apidocExtractTypes(t *testing.T) (map[string]apidocOperationTypes, *apidocS
 			delete(result, name) // no signal at all, direct or delegated — apidocBuildDocument's zero-value lookup on a missing key is equivalent, dropping it just keeps the map small
 		}
 	}
-	return result, reg
+	// directives is NOT pruned this way — unlike result, a handler's domain
+	// classification doesn't depend on whether static extraction found any
+	// request/response type worth keeping, and pruning it the same way
+	// would silently lose a real directive on a handler with no writeJSON/
+	// Decode call of its own (a pure delegate, say).
+	return result, directives, reg
 }
 
 // apidocKnownMarshalerTypes are the type strings walkType already
@@ -1017,7 +1045,7 @@ func TestAPIDocAllMarshalerTypesHandled(t *testing.T) {
 		t.Skip("set GENERATE_API_REFERENCE=1 to run — see task generate:api-docs")
 	}
 
-	_, reg := apidocExtractTypes(t)
+	_, _, reg := apidocExtractTypes(t)
 
 	cfg := &packages.Config{Mode: packages.NeedTypes | packages.NeedDeps | packages.NeedImports}
 	pkgs, err := packages.Load(cfg, "encoding/json")
@@ -1200,14 +1228,21 @@ func apidocPathParameters(path string) []oasParameter {
 	return params
 }
 
-// apidocOperationDescription surfaces the caveats a schema alone can't carry
-// — project-pinning has no OpenAPI concept at all.
-func apidocOperationDescription(r apidocRoute) string {
+// apidocOperationDescription composes a //apidoc:description directive (an
+// EDITORIAL claim) with the caveats a schema alone can't carry (DERIVED
+// facts — project-pinning has no OpenAPI concept at all). Editorial text
+// always comes first, since it's the more useful framing for a reader, but
+// the derived note is APPENDED, never suppressed by it — a declaration must
+// never be able to turn off something the generator discovered, same rule
+// as directives not carrying permissions. If a route is project-pinned,
+// that sentence appears whether or not anyone wrote a description, and no
+// directive can turn it off.
+func apidocOperationDescription(r apidocRoute, directive apidocDirective) string {
 	var notes []string
 	if r.Pinned {
 		notes = append(notes, "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.")
 	}
-	return strings.Join(notes, " ")
+	return strings.TrimSpace(directive.Description + " " + strings.Join(notes, " "))
 }
 
 const apidocSpecDescription = `Generated from the running API by probing every registered route with a personal access token and statically resolving every request/response Go type — not hand-written, and not a reading of routes.go. See the API Access guide for how to authenticate and the scope model.
@@ -1230,13 +1265,33 @@ func apidocSecuritySchemes() map[string]oasSecurityScheme {
 // apidocBuildDocument assembles the full OpenAPI document from the probed
 // routes and the statically-extracted request/response types, joining the
 // two on handler function name.
-func apidocBuildDocument(t *testing.T, routes []apidocRoute, sig map[string]apidocOperationTypes, reg *apidocSchemaRegistry) oasDocument {
+func apidocBuildDocument(t *testing.T, routes []apidocRoute, sig map[string]apidocOperationTypes, directives map[string]apidocDirective, reg *apidocSchemaRegistry) oasDocument {
 	t.Helper()
 
 	domains := apidocLoadDomains(t)
+	grouped := apidocGroupByDomain(t, routes, domains, directives)
+
+	// Permanent invariant, not a one-time migration check: every documented
+	// route's handler must carry a //apidoc:tag directive. A route with no
+	// directive lands in "uncategorized" (apidocRouteDomain's fallback)
+	// instead of panicking outright — same "never silently drop a route"
+	// reasoning apidocClassify's old default case had — but leaving it
+	// there is now always a bug, not just untidy, since a directive is the
+	// ONLY way a route gets classified anymore. Fails loud here rather than
+	// shipping an "Uncategorized" tag nobody meant to keep.
+	for _, d := range grouped {
+		if d.Slug != "uncategorized" {
+			continue
+		}
+		var missing []string
+		for _, r := range d.Rows {
+			missing = append(missing, fmt.Sprintf("%s %s (%s)", r.Method, r.Path, r.Handler))
+		}
+		require.Empty(t, missing, "routes with no //apidoc:tag directive on their handler")
+	}
 
 	domainTitleByRoute := map[apidocRoute]string{}
-	for _, d := range apidocGroupByDomain(t, routes, domains) {
+	for _, d := range grouped {
 		for _, r := range d.Rows {
 			domainTitleByRoute[r] = d.Title
 		}
@@ -1262,14 +1317,20 @@ func apidocBuildDocument(t *testing.T, routes []apidocRoute, sig map[string]apid
 		}
 		seenOperationIDs[opID] = true
 
-		op := oasOperation{
-			OperationID: opID,
+		directive := directives[r.Handler]
+		summary := directive.Title
+		if summary == "" {
 			// r.Handler, not opID — opID can carry a disambiguation suffix
 			// (_get/_post) on the rare handler reused across two routes; the
 			// title should stay clean regardless.
-			Summary:     apidocTitleFromOperationID(r.Handler),
+			summary = apidocTitleFromOperationID(r.Handler)
+		}
+
+		op := oasOperation{
+			OperationID: opID,
+			Summary:     summary,
 			Tags:        []string{domainTitleByRoute[r]},
-			Description: apidocOperationDescription(r),
+			Description: apidocOperationDescription(r, directive),
 			Parameters:  apidocPathParameters(r.Path),
 			Security:    apidocSecurity(r),
 			Responses:   map[string]oasResponse{},
@@ -1301,18 +1362,19 @@ func apidocBuildDocument(t *testing.T, routes []apidocRoute, sig map[string]apid
 		paths[r.Path] = item
 	}
 
-	// Top-level tags, in apidocDomainOrder's curated order — the SOURCE fumadocs-openapi's
-	// own per-tag page generation reads for page order too, so the site's sidebar
-	// and this spec's own tag list stay in the one order this generator defines,
-	// rather than falling back to whatever order operations happen to appear in.
-	// Only domains that actually classified a route this run — "uncategorized"
-	// is a permanent safety valve in apidocGroupByDomain (a route can never
-	// silently drop for lack of a matching rule), not a domain meant to
-	// always exist on the wire: an empty tag here becomes an empty, unlisted
-	// .mdx page from apps/site/scripts/generate-api-pages.mjs, reachable by
-	// direct URL despite meta.json never listing it.
+	// Top-level tags, in apidocDomainsPath's curated order — the SOURCE
+	// fumadocs-openapi's own per-tag page generation reads for page order
+	// too, so the site's sidebar and this spec's own tag list stay in the
+	// one order this generator defines, rather than falling back to
+	// whatever order operations happen to appear in. Reuses `grouped` from
+	// above (not a second apidocGroupByDomain call) — same "only domains
+	// that actually classified a route this run" filtering the
+	// uncategorized check above already relied on: an empty tag here
+	// becomes an empty, unlisted .mdx page from
+	// apps/site/scripts/generate-api-pages.mjs, reachable by direct URL
+	// despite meta.json never listing it.
 	var tags []oasTag
-	for _, d := range apidocGroupByDomain(t, routes, domains) {
+	for _, d := range grouped {
 		tags = append(tags, oasTag{Name: d.Title})
 	}
 

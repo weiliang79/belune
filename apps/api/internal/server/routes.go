@@ -8,7 +8,6 @@ import (
 	"github.com/go-chi/httprate"
 
 	"github.com/weiliang79/belune/internal/handler"
-	"github.com/weiliang79/belune/internal/pkg/metrics"
 	"github.com/weiliang79/belune/internal/server/middleware"
 	"github.com/weiliang79/belune/internal/service"
 )
@@ -446,8 +445,12 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService,
 					// Scoped to "metrics", not RequireScopeByMethod's "read" — a
 					// metrics-only token is explicitly sold as a scraper token
 					// (see api-tokens-card.tsx) and must be able to reach the one
-					// route that description promises.
-					r.Method("GET", "/metrics", metrics.Handler())
+					// route that description promises. h.ServeMetrics, not
+					// metrics.Handler() registered directly — a bare third-party
+					// http.Handler has no name reflection can recover (this
+					// generated the meaningless operationId "func1") and no doc
+					// comment a //apidoc:tag directive could attach to.
+					r.Get("/metrics", h.ServeMetrics)
 				})
 
 				r.Group(func(r chi.Router) {

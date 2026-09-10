@@ -103,6 +103,7 @@ type databaseCredentialsResponse struct {
 	ConnectionString string            `json:"connection_string,omitempty"`
 }
 
+//apidoc:tag databases
 func (h *Handler) CreateDatabase(w http.ResponseWriter, r *http.Request) {
 	projectID := chi.URLParam(r, "projectId")
 	var projectUUID pgtype.UUID
@@ -357,6 +358,7 @@ func (h *Handler) createDatabaseRecord(ctx context.Context, project generated.Pr
 	return db, creds, nil
 }
 
+//apidoc:tag databases
 func (h *Handler) ListDatabases(w http.ResponseWriter, r *http.Request) {
 	projectID := chi.URLParam(r, "projectId")
 	var projectUUID pgtype.UUID
@@ -410,6 +412,7 @@ func (h *Handler) ListDatabases(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, resp)
 }
 
+//apidoc:tag databases
 func (h *Handler) GetDatabase(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "databaseId")
 	var uuid pgtype.UUID
@@ -483,6 +486,8 @@ func (h *Handler) GetDatabase(w http.ResponseWriter, r *http.Request) {
 // plaintext, not a masked/derived value. Ends in "/reveal" on purpose so
 // reveal_boundary_test.go's structural sweep discovers it automatically.
 // GET /api/projects/{projectId}/databases/{databaseId}/credentials/reveal
+//
+//apidoc:tag databases
 func (h *Handler) RevealDatabaseCredentials(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "databaseId")
 	var uuid pgtype.UUID
@@ -534,6 +539,8 @@ type databaseVolumeResponse struct {
 // of GetDatabase because the size query (`docker system df -v`) can take tens of
 // seconds on a busy host; here it has its own request, spinner, and timeout.
 // GET /api/projects/{projectId}/databases/{databaseId}/volume
+//
+//apidoc:tag databases
 func (h *Handler) GetDatabaseVolume(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "databaseId")
 	var uuid pgtype.UUID
@@ -576,6 +583,8 @@ type externalAccessRequest struct {
 // recreating the database container with/without a loopback host-port binding.
 // The recreate runs as an async task; the database is marked transitional
 // (creating) so the UI reflects the brief downtime.
+//
+//apidoc:tag databases
 func (h *Handler) SetDatabaseExternalAccess(w http.ResponseWriter, r *http.Request) {
 	databaseID := chi.URLParam(r, "databaseId")
 	var dbUUID pgtype.UUID
@@ -644,6 +653,8 @@ type updateDatabaseRequest struct {
 // UpdateDatabase edits a managed database's resource limits (CPU cores / memory
 // bytes) and applies them live to the running container. The limit is persisted
 // regardless, so it also takes effect if the container is later recreated.
+//
+//apidoc:tag databases
 func (h *Handler) UpdateDatabase(w http.ResponseWriter, r *http.Request) {
 	databaseID := chi.URLParam(r, "databaseId")
 	var dbUUID pgtype.UUID
@@ -751,6 +762,8 @@ func toBackupResponse(b generated.DatabaseBackup) databaseBackupResponse {
 }
 
 // ListDatabaseBackups returns the recent backup runs for a database (newest first).
+//
+//apidoc:tag databases
 func (h *Handler) ListDatabaseBackups(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "databaseId")
 	var dbUUID pgtype.UUID
@@ -790,6 +803,8 @@ type databaseRestoreResponse struct {
 }
 
 // ListDatabaseRestores returns the recent restore runs for a database.
+//
+//apidoc:tag databases
 func (h *Handler) ListDatabaseRestores(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "databaseId")
 	var dbUUID pgtype.UUID
@@ -832,6 +847,8 @@ func (h *Handler) ListDatabaseRestores(w http.ResponseWriter, r *http.Request) {
 }
 
 // DeleteDatabaseBackup removes one backup (row + local file + S3 object).
+//
+//apidoc:tag databases
 func (h *Handler) DeleteDatabaseBackup(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "databaseId")
 	var dbUUID pgtype.UUID
@@ -859,6 +876,8 @@ func (h *Handler) DeleteDatabaseBackup(w http.ResponseWriter, r *http.Request) {
 }
 
 // BackupDatabase enqueues an online logical-dump backup of a running database.
+//
+//apidoc:tag databases
 func (h *Handler) BackupDatabase(w http.ResponseWriter, r *http.Request) {
 	databaseID := chi.URLParam(r, "databaseId")
 	var dbUUID pgtype.UUID
@@ -915,6 +934,8 @@ type restoreDatabaseRequest struct {
 }
 
 // RestoreDatabase enqueues a restore of a database from one of its recorded backups.
+//
+//apidoc:tag databases
 func (h *Handler) RestoreDatabase(w http.ResponseWriter, r *http.Request) {
 	databaseID := chi.URLParam(r, "databaseId")
 	var dbUUID pgtype.UUID
@@ -993,6 +1014,8 @@ type upgradeDatabaseRequest struct {
 // UpgradeDatabase enqueues a guarded major-version upgrade: the worker dumps the
 // current data, rebuilds the container at the target version, and restores the
 // dump (rolling back to the prior version on failure). Brief downtime.
+//
+//apidoc:tag databases
 func (h *Handler) UpgradeDatabase(w http.ResponseWriter, r *http.Request) {
 	databaseID := chi.URLParam(r, "databaseId")
 	var dbUUID pgtype.UUID
@@ -1060,6 +1083,8 @@ func (h *Handler) UpgradeDatabase(w http.ResponseWriter, r *http.Request) {
 }
 
 // StopDatabase stops the managed database container without removing it.
+//
+//apidoc:tag deploy-actions
 func (h *Handler) StopDatabase(w http.ResponseWriter, r *http.Request) {
 	databaseID := chi.URLParam(r, "databaseId")
 	var dbUUID pgtype.UUID
@@ -1106,6 +1131,8 @@ func (h *Handler) StopDatabase(w http.ResponseWriter, r *http.Request) {
 }
 
 // StartDatabase starts a stopped database container.
+//
+//apidoc:tag deploy-actions
 func (h *Handler) StartDatabase(w http.ResponseWriter, r *http.Request) {
 	databaseID := chi.URLParam(r, "databaseId")
 	var dbUUID pgtype.UUID
@@ -1151,6 +1178,8 @@ func (h *Handler) StartDatabase(w http.ResponseWriter, r *http.Request) {
 }
 
 // RestartDatabase stops and starts the existing database container (no recreate).
+//
+//apidoc:tag deploy-actions
 func (h *Handler) RestartDatabase(w http.ResponseWriter, r *http.Request) {
 	databaseID := chi.URLParam(r, "databaseId")
 	var dbUUID pgtype.UUID
@@ -1208,6 +1237,8 @@ func (h *Handler) RestartDatabase(w http.ResponseWriter, r *http.Request) {
 // The recreate runs as an async task; the database is marked transitional so the
 // UI reflects the brief downtime. External-access (loopback host port) state is
 // preserved.
+//
+//apidoc:tag deploy-actions
 func (h *Handler) ReloadDatabase(w http.ResponseWriter, r *http.Request) {
 	databaseID := chi.URLParam(r, "databaseId")
 	var dbUUID pgtype.UUID
@@ -1259,6 +1290,7 @@ func (h *Handler) ReloadDatabase(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusAccepted, map[string]string{"status": status.DatabaseCreating})
 }
 
+//apidoc:tag databases
 func (h *Handler) DeleteDatabase(w http.ResponseWriter, r *http.Request) {
 	databaseID := chi.URLParam(r, "databaseId")
 	var dbUUID pgtype.UUID
@@ -1313,6 +1345,8 @@ func (h *Handler) DeleteDatabase(w http.ResponseWriter, r *http.Request) {
 // GetDatabaseDeletionImpact reports what deleting this database would destroy
 // beyond the database itself, so the confirmation dialog can state the real
 // consequence instead of implying only the container and its data are at stake.
+//
+//apidoc:tag databases
 func (h *Handler) GetDatabaseDeletionImpact(w http.ResponseWriter, r *http.Request) {
 	databaseID := chi.URLParam(r, "databaseId")
 	var dbUUID pgtype.UUID
@@ -1375,6 +1409,8 @@ func buildConnectionString(db generated.Database, creds map[string]string) strin
 // a database injects no connection variables, so a differently-named
 // replacement leaves every dependent application pointing at a host that is not
 // there.
+//
+//apidoc:tag databases
 func (h *Handler) RestoreDatabaseFromTombstone(w http.ResponseWriter, r *http.Request) {
 	projectID := chi.URLParam(r, "projectId")
 	var projectUUID pgtype.UUID
@@ -1465,6 +1501,8 @@ type orphanedBackupResponse struct {
 // ListProjectOrphanedBackups returns the backups in a project whose database has
 // been deleted. Without this they exist and are billed but appear nowhere: the
 // per-database Backups tab is gone along with the database.
+//
+//apidoc:tag databases
 func (h *Handler) ListProjectOrphanedBackups(w http.ResponseWriter, r *http.Request) {
 	projectID := chi.URLParam(r, "projectId")
 	var projectUUID pgtype.UUID
@@ -1510,6 +1548,8 @@ func (h *Handler) ListProjectOrphanedBackups(w http.ResponseWriter, r *http.Requ
 
 // DeleteOrphanedBackup erases a backup whose database is gone. The per-database
 // delete cannot reach these — the database it hung off is what disappeared.
+//
+//apidoc:tag databases
 func (h *Handler) DeleteOrphanedBackup(w http.ResponseWriter, r *http.Request) {
 	projectID := chi.URLParam(r, "projectId")
 	var projectUUID pgtype.UUID

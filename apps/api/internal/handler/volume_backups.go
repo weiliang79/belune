@@ -79,6 +79,7 @@ func toVolumeBackupConfigResponse(c generated.ApplicationVolumeBackupConfig) vol
 	return resp
 }
 
+//apidoc:tag volumes
 func (h *Handler) ListVolumeBackupConfigs(w http.ResponseWriter, r *http.Request) {
 	vol, _, ok := h.resolveVolumeForBackup(w, r)
 	if !ok {
@@ -106,6 +107,8 @@ type appVolumeBackupConfigResponse struct {
 
 // ListAppVolumeBackupConfigs lists every volume backup config across all volumes
 // of an application, so the Mounts tab can render a single backup-configs list.
+//
+//apidoc:tag applications
 func (h *Handler) ListAppVolumeBackupConfigs(w http.ResponseWriter, r *http.Request) {
 	var appUUID pgtype.UUID
 	if err := appUUID.Scan(chi.URLParam(r, "applicationId")); err != nil {
@@ -170,6 +173,7 @@ func validateVolumeBackupSchedule(req volumeBackupConfigRequest) (string, bool) 
 	return "", true
 }
 
+//apidoc:tag volumes
 func (h *Handler) CreateVolumeBackupConfig(w http.ResponseWriter, r *http.Request) {
 	vol, appUUID, ok := h.resolveVolumeForBackup(w, r)
 	if !ok {
@@ -219,6 +223,7 @@ func (h *Handler) CreateVolumeBackupConfig(w http.ResponseWriter, r *http.Reques
 	writeJSON(w, http.StatusCreated, toVolumeBackupConfigResponse(cfg))
 }
 
+//apidoc:tag volumes
 func (h *Handler) UpdateVolumeBackupConfig(w http.ResponseWriter, r *http.Request) {
 	vol, appUUID, ok := h.resolveVolumeForBackup(w, r)
 	if !ok {
@@ -268,6 +273,7 @@ func (h *Handler) UpdateVolumeBackupConfig(w http.ResponseWriter, r *http.Reques
 	writeJSON(w, http.StatusOK, toVolumeBackupConfigResponse(updated))
 }
 
+//apidoc:tag volumes
 func (h *Handler) DeleteVolumeBackupConfig(w http.ResponseWriter, r *http.Request) {
 	vol, _, ok := h.resolveVolumeForBackup(w, r)
 	if !ok {
@@ -308,6 +314,8 @@ func (h *Handler) DeleteVolumeBackupConfig(w http.ResponseWriter, r *http.Reques
 }
 
 // RunVolumeBackupConfig enqueues a manual backup of the volume using a config.
+//
+//apidoc:tag volumes
 func (h *Handler) RunVolumeBackupConfig(w http.ResponseWriter, r *http.Request) {
 	vol, _, ok := h.resolveVolumeForBackup(w, r)
 	if !ok {
@@ -342,6 +350,7 @@ type volumeBackupResponse struct {
 	Log        string     `json:"log,omitempty"`
 }
 
+//apidoc:tag volumes
 func (h *Handler) ListVolumeBackups(w http.ResponseWriter, r *http.Request) {
 	vol, _, ok := h.resolveVolumeForBackup(w, r)
 	if !ok {
@@ -379,6 +388,8 @@ func (h *Handler) ListVolumeBackups(w http.ResponseWriter, r *http.Request) {
 }
 
 // RestoreVolumeBackup enqueues an in-app restore of a backup into its volume.
+//
+//apidoc:tag volumes
 func (h *Handler) RestoreVolumeBackup(w http.ResponseWriter, r *http.Request) {
 	vol, _, ok := h.resolveVolumeForBackup(w, r)
 	if !ok {
@@ -426,6 +437,8 @@ type volumeRestoreResponse struct {
 }
 
 // ListVolumeRestores returns the recent restore runs for a volume.
+//
+//apidoc:tag volumes
 func (h *Handler) ListVolumeRestores(w http.ResponseWriter, r *http.Request) {
 	vol, _, ok := h.resolveVolumeForBackup(w, r)
 	if !ok {

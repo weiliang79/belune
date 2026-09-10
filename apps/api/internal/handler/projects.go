@@ -18,6 +18,7 @@ type createProjectRequest struct {
 	Slug string `json:"slug"`
 }
 
+//apidoc:tag projects
 func (h *Handler) CreateProject(w http.ResponseWriter, r *http.Request) {
 	// middleware.RequireProjectAccess only ever compares against a
 	// {projectId} URL param, so it has nothing to check here — creating a
@@ -92,6 +93,7 @@ func (h *Handler) isProjectOwner(r *http.Request, projectID pgtype.UUID) bool {
 	return h.isOwnerOnly(r, h.projectOwner(projectID))
 }
 
+//apidoc:tag projects
 func (h *Handler) GetProject(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "projectId")
 	var uuid pgtype.UUID
@@ -114,6 +116,7 @@ func (h *Handler) GetProject(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, project)
 }
 
+//apidoc:tag projects
 func (h *Handler) ListProjects(w http.ResponseWriter, r *http.Request) {
 	role := middleware.RoleFromContext(r.Context())
 	// This list has no {projectId} URL param for middleware.RequireProjectAccess
@@ -167,6 +170,7 @@ type updateProjectRequest struct {
 	Name string `json:"name"`
 }
 
+//apidoc:tag projects
 func (h *Handler) UpdateProject(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "projectId")
 	var uuid pgtype.UUID
@@ -205,6 +209,7 @@ func (h *Handler) UpdateProject(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, project)
 }
 
+//apidoc:tag projects
 func (h *Handler) DeleteProject(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "projectId")
 	var uuid pgtype.UUID
@@ -232,6 +237,7 @@ type transferProjectRequest struct {
 	UserID string `json:"user_id"`
 }
 
+//apidoc:tag projects
 func (h *Handler) TransferProject(w http.ResponseWriter, r *http.Request) {
 	// Admin-only operation
 	role := middleware.RoleFromContext(r.Context())
@@ -289,6 +295,8 @@ type updateProjectSharingRequest struct {
 // UpdateProjectSharing turns project sharing on or off. Owner or admin only —
 // a Member who only has shared access must not be able to unshare or reshare
 // a project they do not own.
+//
+//apidoc:tag projects
 func (h *Handler) UpdateProjectSharing(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "projectId")
 	var uuid pgtype.UUID

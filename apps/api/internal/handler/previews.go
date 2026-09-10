@@ -22,6 +22,8 @@ type previewConfigRequest struct {
 // field leaves the stored value untouched; an empty string disables that side.
 // Disabling both effectively turns previews off for this parent (future pushes
 // that don't match auto_deploy_branch are ignored).
+//
+//apidoc:tag previews
 func (h *Handler) UpdatePreviewConfig(w http.ResponseWriter, r *http.Request) {
 	applicationID := chi.URLParam(r, "applicationId")
 	var applicationUUID pgtype.UUID
@@ -93,6 +95,8 @@ type previewView struct {
 }
 
 // ListPreviews returns all preview children of the given parent application.
+//
+//apidoc:tag previews
 func (h *Handler) ListPreviews(w http.ResponseWriter, r *http.Request) {
 	applicationID := chi.URLParam(r, "applicationId")
 	var applicationUUID pgtype.UUID
@@ -133,6 +137,8 @@ func (h *Handler) ListPreviews(w http.ResponseWriter, r *http.Request) {
 
 // DeletePreview removes a single preview child. Same semantics as
 // DeleteApplication except callers cannot use this path on a non-preview.
+//
+//apidoc:tag previews
 func (h *Handler) DeletePreview(w http.ResponseWriter, r *http.Request) {
 	previewID := chi.URLParam(r, "previewId")
 	var previewUUID pgtype.UUID

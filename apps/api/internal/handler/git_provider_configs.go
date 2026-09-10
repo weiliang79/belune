@@ -38,6 +38,8 @@ type providerConfigResponse struct {
 }
 
 // ListGitProviderConfigs returns all configured provider apps (without secrets).
+//
+//apidoc:tag git/providers
 func (h *Handler) ListGitProviderConfigs(w http.ResponseWriter, r *http.Request) {
 	rows, err := h.gitProviderSvc.List(r.Context())
 	if err != nil {
@@ -75,6 +77,8 @@ type saveGitProviderConfigRequest struct {
 }
 
 // SaveGitProviderConfig upserts a provider app config from manual admin entry.
+//
+//apidoc:tag git/providers
 func (h *Handler) SaveGitProviderConfig(w http.ResponseWriter, r *http.Request) {
 	var req saveGitProviderConfigRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -144,6 +148,8 @@ func (h *Handler) mergeProviderSecret(ctx context.Context, req saveGitProviderCo
 }
 
 // DeleteGitProviderConfig removes a provider app config.
+//
+//apidoc:tag git/providers
 func (h *Handler) DeleteGitProviderConfig(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "configId")
 	var uuid pgtype.UUID
@@ -165,6 +171,9 @@ func (h *Handler) DeleteGitProviderConfig(w http.ResponseWriter, r *http.Request
 // and the URL the browser should POST the manifest to. The admin's browser then
 // submits the manifest form to GitHub, which creates the App and redirects to
 // our public callback with a temporary code.
+//
+//apidoc:tag git/providers
+//apidoc:title Get GitHub App Manifest
 func (h *Handler) GetGitHubAppManifest(w http.ResponseWriter, r *http.Request) {
 	// Resolve the public origin the same way the OAuth connect flow does:
 	// PUBLIC_BASE_URL when set, otherwise the configured dashboard domain (over

@@ -91,6 +91,7 @@ type envVarResponse struct {
 	UpdatedAt string      `json:"updated_at"`
 }
 
+//apidoc:tag env
 func (h *Handler) ListEnvVars(w http.ResponseWriter, r *http.Request) {
 	applicationID := chi.URLParam(r, "applicationId")
 	var applicationUUID pgtype.UUID
@@ -140,6 +141,8 @@ func (h *Handler) ListEnvVars(w http.ResponseWriter, r *http.Request) {
 // secret (masked in the list response) can be loaded into the editor without
 // forcing a rewrite of every row. The reveal is audited because it deliberately
 // hands back plaintext the UI otherwise hides.
+//
+//apidoc:tag env
 func (h *Handler) RevealEnvVar(w http.ResponseWriter, r *http.Request) {
 	applicationID := chi.URLParam(r, "applicationId")
 	var applicationUUID pgtype.UUID
@@ -199,6 +202,7 @@ type envVarInput struct {
 	Unchanged bool `json:"unchanged,omitempty"`
 }
 
+//apidoc:tag env
 func (h *Handler) UpdateEnvVars(w http.ResponseWriter, r *http.Request) {
 	applicationID := chi.URLParam(r, "applicationId")
 	var applicationUUID pgtype.UUID

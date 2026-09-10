@@ -21,6 +21,7 @@ type quotaView struct {
 	Meta    map[string]any `json:"meta,omitempty"`
 }
 
+//apidoc:tag admin-platform
 func (h *Handler) ListQuotas(w http.ResponseWriter, r *http.Request) {
 	if h.quotaSvc == nil {
 		writeError(w, http.StatusServiceUnavailable, "quotas unavailable")
@@ -44,6 +45,7 @@ func (h *Handler) ListQuotas(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, views)
 }
 
+//apidoc:tag admin-platform
 func (h *Handler) GetQuota(w http.ResponseWriter, r *http.Request) {
 	if h.quotaSvc == nil {
 		writeError(w, http.StatusServiceUnavailable, "quotas unavailable")
@@ -77,6 +79,7 @@ type upsertQuotaRequest struct {
 	MaxMemoryMB     *int64   `json:"max_memory_mb"`
 }
 
+//apidoc:tag admin-platform
 func (h *Handler) UpsertQuota(w http.ResponseWriter, r *http.Request) {
 	if h.quotaSvc == nil {
 		writeError(w, http.StatusServiceUnavailable, "quotas unavailable")
@@ -135,6 +138,7 @@ func (h *Handler) UpsertQuota(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, view)
 }
 
+//apidoc:tag admin-platform
 func (h *Handler) DeleteQuota(w http.ResponseWriter, r *http.Request) {
 	if h.quotaSvc == nil {
 		writeError(w, http.StatusServiceUnavailable, "quotas unavailable")

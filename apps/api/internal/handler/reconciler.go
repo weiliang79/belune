@@ -13,6 +13,8 @@ import (
 // Useful for operators tracking whether Caddy drifts from the DB-declared
 // routes between deploys.
 // GET /api/proxy/reconciler (admin only)
+//
+//apidoc:tag admin-platform
 func (h *Handler) GetProxyReconcilerStatus(w http.ResponseWriter, r *http.Request) {
 	if h.reconciler == nil {
 		writeJSON(w, http.StatusOK, proxy.ReconcilerStatus{})
@@ -24,6 +26,8 @@ func (h *Handler) GetProxyReconcilerStatus(w http.ResponseWriter, r *http.Reques
 // ReconcileProxy triggers an on-demand reconciliation of Caddy's routes against
 // the DB-declared state (fixing any drift) and returns the resulting status.
 // POST /api/proxy/reconcile (admin only)
+//
+//apidoc:tag admin-platform
 func (h *Handler) ReconcileProxy(w http.ResponseWriter, r *http.Request) {
 	if h.reconciler == nil {
 		writeError(w, http.StatusServiceUnavailable, "reconciler unavailable")

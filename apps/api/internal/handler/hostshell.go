@@ -28,6 +28,8 @@ const hostShellScope = "host"
 // triple-gated: the host_shell_enabled setting must be on, the caller must be an
 // admin (enforced by the route group), and they must re-enter their password.
 // Every session is audited. POST /api/maintenance/host-shell (admin only)
+//
+//apidoc:tag admin-platform
 func (h *Handler) CreateHostShellSession(w http.ResponseWriter, r *http.Request) {
 	if h.termManager == nil {
 		writeError(w, http.StatusServiceUnavailable, "terminal not available")

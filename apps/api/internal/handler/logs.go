@@ -14,6 +14,7 @@ import (
 	"github.com/weiliang79/belune/internal/store/generated"
 )
 
+//apidoc:tag logs
 func (h *Handler) StreamLogs(w http.ResponseWriter, r *http.Request) {
 	applicationID := chi.URLParam(r, "applicationId")
 	var applicationUUID pgtype.UUID
@@ -68,6 +69,8 @@ func (h *Handler) StreamLogs(w http.ResponseWriter, r *http.Request) {
 
 // ListApplicationLogs returns paginated, filterable historical application logs.
 // GET /api/projects/{projectId}/applications/{applicationId}/logs/history
+//
+//apidoc:tag logs
 func (h *Handler) ListApplicationLogs(w http.ResponseWriter, r *http.Request) {
 	appID := chi.URLParam(r, "applicationId")
 	var appUUID pgtype.UUID
@@ -84,6 +87,8 @@ func (h *Handler) ListApplicationLogs(w http.ResponseWriter, r *http.Request) {
 
 // ListDatabaseLogs returns paginated, filterable historical database logs.
 // GET /api/projects/{projectId}/databases/{databaseId}/logs/history
+//
+//apidoc:tag logs
 func (h *Handler) ListDatabaseLogs(w http.ResponseWriter, r *http.Request) {
 	dbID := chi.URLParam(r, "databaseId")
 	var dbUUID pgtype.UUID
@@ -102,6 +107,8 @@ func (h *Handler) ListDatabaseLogs(w http.ResponseWriter, r *http.Request) {
 // produced log lines, plus a NULL bucket for earlier/unassigned logs) for an
 // application, so the viewer can offer a session picker.
 // GET /api/projects/{projectId}/applications/{applicationId}/logs/sessions
+//
+//apidoc:tag logs
 func (h *Handler) ListApplicationLogSessions(w http.ResponseWriter, r *http.Request) {
 	appID := chi.URLParam(r, "applicationId")
 	var appUUID pgtype.UUID
@@ -120,6 +127,8 @@ func (h *Handler) ListApplicationLogSessions(w http.ResponseWriter, r *http.Requ
 // deployments, so this collapses to a single NULL-bucket session, but it keeps
 // the viewer's data shape uniform across resource types.
 // GET /api/projects/{projectId}/databases/{databaseId}/logs/sessions
+//
+//apidoc:tag logs
 func (h *Handler) ListDatabaseLogSessions(w http.ResponseWriter, r *http.Request) {
 	dbID := chi.URLParam(r, "databaseId")
 	var dbUUID pgtype.UUID

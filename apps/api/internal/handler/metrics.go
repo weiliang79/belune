@@ -7,6 +7,7 @@ import (
 
 	"github.com/hibiken/asynq"
 
+	"github.com/weiliang79/belune/internal/pkg/metrics"
 	"github.com/weiliang79/belune/internal/runtime"
 	"github.com/weiliang79/belune/internal/status"
 )
@@ -35,6 +36,7 @@ type containerStats struct {
 	ByType map[string]containerTypeCount `json:"by_type"`
 }
 
+//apidoc:tag admin-metrics
 func (h *Handler) GetMetrics(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
@@ -95,6 +97,20 @@ func (h *Handler) GetMetrics(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// ServeMetrics wraps metrics.Handler() (the Prometheus registry's own
+// promhttp handler) as a named *Handler method instead of registering that
+// third-party http.Handler directly. It's otherwise a pure passthrough —
+// the wrapping exists only so this route has a real FuncDecl: an inline
+// third-party handler value has no name reflection can recover (it showed
+// up as the meaningless operationId "func1") and no doc comment a
+// //apidoc:tag directive could attach to.
+//
+//apidoc:tag admin-metrics
+func (h *Handler) ServeMetrics(w http.ResponseWriter, r *http.Request) {
+	metrics.Handler().ServeHTTP(w, r)
+}
+
+//apidoc:tag admin-platform
 func (h *Handler) TriggerCleanup(w http.ResponseWriter, r *http.Request) {
 	type cleanupRequest struct {
 		RetainCount int      `json:"retain_count,omitempty"`

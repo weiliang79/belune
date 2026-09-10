@@ -12,6 +12,7 @@ import (
 	"github.com/weiliang79/belune/internal/store/generated"
 )
 
+//apidoc:tag env
 func (h *Handler) ListProjectEnvVars(w http.ResponseWriter, r *http.Request) {
 	projectID := chi.URLParam(r, "projectId")
 	var projectUUID pgtype.UUID
@@ -61,6 +62,8 @@ func (h *Handler) ListProjectEnvVars(w http.ResponseWriter, r *http.Request) {
 // env var. Project counterpart of RevealEnvVar — an inherited secret revealed
 // from an application's env page hits this endpoint, audited as a
 // project-level reveal.
+//
+//apidoc:tag env
 func (h *Handler) RevealProjectEnvVar(w http.ResponseWriter, r *http.Request) {
 	projectID := chi.URLParam(r, "projectId")
 	var projectUUID pgtype.UUID
@@ -105,6 +108,7 @@ func (h *Handler) RevealProjectEnvVar(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"value": string(decrypted)})
 }
 
+//apidoc:tag env
 func (h *Handler) UpdateProjectEnvVars(w http.ResponseWriter, r *http.Request) {
 	projectID := chi.URLParam(r, "projectId")
 	var projectUUID pgtype.UUID

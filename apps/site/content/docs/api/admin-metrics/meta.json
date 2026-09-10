@@ -4,6 +4,6 @@
     "get-metrics",
     "get-host-historical-metrics",
     "stream-host-metrics",
-    "func1"
+    "serve-metrics"
   ]
 }

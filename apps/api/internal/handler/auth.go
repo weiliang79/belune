@@ -144,6 +144,7 @@ func (h *Handler) Refresh(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, result)
 }
 
+//apidoc:tag account
 func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
 	// Revoke the refresh token (DB) first — survives Redis being down.
 	if cookie, err := r.Cookie(refreshCookieName); err == nil && cookie.Value != "" {
@@ -326,6 +327,7 @@ func extractTokenFromRequest(r *http.Request) string {
 	return ""
 }
 
+//apidoc:tag account
 func (h *Handler) Me(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.UserIDFromContext(r.Context())
 	if userID == "" {
@@ -362,6 +364,7 @@ type updateProfileRequest struct {
 	LastName  string `json:"last_name"`
 }
 
+//apidoc:tag account
 func (h *Handler) UpdateProfile(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.UserIDFromContext(r.Context())
 	var userUUID pgtype.UUID
@@ -395,6 +398,7 @@ type changePasswordRequest struct {
 	NewPassword     string `json:"new_password"`
 }
 
+//apidoc:tag account
 func (h *Handler) ChangeOwnPassword(w http.ResponseWriter, r *http.Request) {
 	var req changePasswordRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {

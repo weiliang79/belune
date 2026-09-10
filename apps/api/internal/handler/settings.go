@@ -39,6 +39,7 @@ func (h *Handler) instanceName(ctx context.Context) string {
 	return strings.TrimSpace(s.Value)
 }
 
+//apidoc:tag admin-platform
 func (h *Handler) ListSettings(w http.ResponseWriter, r *http.Request) {
 	settings, err := h.queries.ListSettings(r.Context())
 	if err != nil {
@@ -62,6 +63,7 @@ func (h *Handler) ListSettings(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, result)
 }
 
+//apidoc:tag admin-platform
 func (h *Handler) UpdateSettings(w http.ResponseWriter, r *http.Request) {
 	var req []settingResponse
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {

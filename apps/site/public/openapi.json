@@ -1903,7 +1903,7 @@
     "/api/git/providers/github/manifest": {
       "get": {
         "operationId": "GetGitHubAppManifest",
-        "summary": "Get Git Hub App Manifest",
+        "summary": "Get GitHub App Manifest",
         "tags": [
           "Git Provider Configs (Admin)"
         ],
@@ -12181,8 +12181,8 @@
     },
     "/metrics": {
       "get": {
-        "operationId": "func1",
-        "summary": "func1",
+        "operationId": "ServeMetrics",
+        "summary": "Serve Metrics",
         "tags": [
           "Metrics \u0026 Live Streams (Admin)"
         ],

@@ -24,6 +24,8 @@ type serverServicesResponse struct {
 // services (Caddy, Docker, PostgreSQL, Redis, BuildKit) for the Server page
 // (admin only). Each probe is bounded by a short timeout so one hung dependency
 // can't stall the response. GET /api/server/services
+//
+//apidoc:tag admin-platform
 func (h *Handler) GetServerServices(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
 	defer cancel()
