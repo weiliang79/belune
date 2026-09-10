@@ -22,12 +22,18 @@ import (
 // config and deliberately stay reachable, same as PR1's treatment of
 // deploy-hooks/file-mounts/route-features/preview environments).
 //
-// "users" and "certificates" were added after a review found DeleteUser
-// (cascades away every project the target owns — projects.user_id is
-// ON DELETE CASCADE) and DeleteCertificate (an uploaded cert+key is
-// unrecoverable) were both missing RequireSession AND missing from this set,
-// so the structural test that exists specifically to catch such omissions
-// had itself been blind to them.
+// "users" was added after a review found DeleteUser (cascades away every
+// project the target owns — projects.user_id is ON DELETE CASCADE) was
+// missing RequireSession AND missing from this set, so the structural test
+// that exists specifically to catch such omissions had itself been blind to
+// it.
+//
+// "certificates" was here too, for the same reason, then removed when
+// DeleteCertificate was deliberately un-gated: domains.certificate_id is
+// ON DELETE RESTRICT so only an unused cert is reachable, the route still
+// requires admin + write, and a cert is re-uploadable from the PEM that
+// created it — it isn't the "destroys unrecoverable stored data" category
+// this set is for. See the comment on that route in routes.go.
 var destroyResourceKinds = map[string]bool{
 	"projects":         true,
 	"applications":     true,
@@ -37,7 +43,6 @@ var destroyResourceKinds = map[string]bool{
 	"backups":          true,
 	"orphaned-backups": true,
 	"users":            true,
-	"certificates":     true,
 }
 
 // destroyRouteResourceKind classifies a chi route pattern as a delete/restore
@@ -117,14 +122,15 @@ func TestDestroyRoutes_RequireSession(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// Sanity floor: the twelve routes RequireSession is known to be on
+	// Sanity floor: the eleven routes RequireSession is known to be on
 	// (DeleteProject, DeleteApplication, RemoveDomain, DeleteApplicationVolume,
 	// RestoreVolumeBackup, DeleteDatabaseBackup, RestoreDatabase,
 	// RestoreDatabaseFromTombstone, DeleteOrphanedBackup, DeleteDatabase,
-	// DeleteUser, DeleteCertificate). If this drops, either a route's path
-	// changed shape or one was removed — worth knowing either way, not
-	// silently passing on zero routes checked.
-	assert.GreaterOrEqual(t, tested, 12, "the walk should discover at least the twelve known destroy/restore routes")
+	// DeleteUser). DeleteCertificate was here until it was deliberately
+	// un-gated (see destroyResourceKinds above). If this drops, either a
+	// route's path changed shape or one was removed — worth knowing either
+	// way, not silently passing on zero routes checked.
+	assert.GreaterOrEqual(t, tested, 11, "the walk should discover at least the eleven known destroy/restore routes")
 }
 
 // TestDestroyRoutes_ClassifierExcludesOperationalConfig pins the negative

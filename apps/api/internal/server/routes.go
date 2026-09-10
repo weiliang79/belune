@@ -496,10 +496,14 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService,
 					// Every domain's observed TLS state in one view.
 					r.Get("/api/domains/tls", h.ListDomainTLSStatus)
 					r.Post("/api/certificates", h.UploadCertificate)
-					// An uploaded cert+key is unrecoverable once deleted — the
-					// same "destroys real stored data" category as the
-					// project/app/db/volume/domain/backup set below.
-					r.With(middleware.RequireSession()).Delete("/api/certificates/{certificateId}", h.DeleteCertificate)
+					// Deletable with an admin, write-scoped token — not
+					// session-only like the project/app/db/volume/domain/backup
+					// set below. domains.certificate_id is ON DELETE RESTRICT
+					// (migration 000035), so a cert any domain still serves
+					// can't be deleted at all; only an unused cert is reachable
+					// here, and it is re-uploadable from the same PEM material
+					// that created it, unlike a dropped database.
+					r.Delete("/api/certificates/{certificateId}", h.DeleteCertificate)
 					// Notification channels: route existing events out to providers.
 					r.Get("/api/notification-events", h.ListNotificationEvents)
 					r.Get("/api/notification-channels", h.ListNotificationChannels)

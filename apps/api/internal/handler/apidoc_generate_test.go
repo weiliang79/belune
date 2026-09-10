@@ -363,21 +363,26 @@ func TestGenerateAPIReference(t *testing.T) {
 			}
 		}
 	}
-	// Pinned, not a floor: 27 (destroy/restore + reveal + terminal +
+	// Pinned, not a floor: 26 (destroy/restore + reveal + terminal +
 	// mint/revoke-token routes, all pre-existing) + 9 (GET /api/tokens plus
 	// the account/auth/TOTP routes gated afterward — a PAT manages
 	// infrastructure, not the account itself; see routes.go). Was 38 with
 	// GET/PUT /api/account/alert-preferences also gated — reverted (see
 	// routes.go): alert preferences are infrastructure config, not account
 	// security, and gating them bought no credential exposure or takeover
-	// protection. This constant is deliberately edited only after watching
-	// the test fail at the old value first (confirmed: 38 -> 36 when the
-	// routes changed, before this constant did), the same way a floor
-	// assertion is meant to be moved. If this moves again, a route was
-	// added, removed, or re-gated — worth an explicit look either way, the
-	// same reasoning destroy_boundary_test.go and reveal_boundary_test.go's
-	// own sanity floors give for their sets.
-	require.Equal(t, 36, sessionRoutes, "expected exactly 36 RequireSession routes")
+	// protection. Then 36 -> 35 when DELETE /api/certificates/{certificateId}
+	// was un-gated (see routes.go): domains.certificate_id is ON DELETE
+	// RESTRICT so only an unused cert is reachable, the route still requires
+	// admin + write, and a cert is re-uploadable — the "unrecoverable stored
+	// data" argument the session gate rested on doesn't hold for it, unlike
+	// the rest of the destroy/restore set. This constant is deliberately
+	// edited only after watching the test fail at the old value first
+	// (confirmed each time: 38 -> 36, then 36 -> 35, before this constant
+	// did), the same way a floor assertion is meant to be moved. If this
+	// moves again, a route was added, removed, or re-gated — worth an
+	// explicit look either way, the same reasoning destroy_boundary_test.go
+	// and reveal_boundary_test.go's own sanity floors give for their sets.
+	require.Equal(t, 35, sessionRoutes, "expected exactly 35 RequireSession routes")
 
 	sig, directives, reg := apidocExtractTypes(t)
 	doc := apidocBuildDocument(t, routes, sig, directives, reg)

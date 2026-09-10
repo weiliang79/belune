@@ -45,6 +45,29 @@ own tokens using a personal access token, it will start getting `403`
 instead of `200` — point it at a session credential instead, or drop the
 call if it isn't essential. Notification-preference calls are unaffected.
 
+### Deleting a TLS certificate no longer requires a dashboard session
+
+This loosens a boundary that shipped in 0.1.6. `DELETE /api/certificates/{id}`
+was session-only — one of the things [a token could never
+do](https://belune.dev/docs/api/access#what-a-token-can-never-do). It now
+also accepts a personal access token that has `write` scope **and** belongs
+to an Admin, the same bar as every other write in the platform-admin route
+group.
+
+Why this is a narrow relaxation and not a hole:
+
+- `domains.certificate_id` is `ON DELETE RESTRICT`, so a certificate any
+  domain still serves cannot be deleted at all — only an unused one is
+  reachable.
+- The route still requires the Admin role, so a leaked Member token, or any
+  token without `write`, still gets `403`.
+- A deleted certificate is re-uploadable from the same certificate and key
+  that created it — unlike a dropped database, nothing is lost for good.
+
+**Upgrading from 0.1.6:** nothing breaks — this only widens what a token is
+allowed to do. If you audit the token boundary, this is the one place it has
+moved outward.
+
 ## [0.1.6]
 
 ### Projects can now be shared with your team

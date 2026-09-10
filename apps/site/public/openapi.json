@@ -1154,6 +1154,10 @@
         "security": [
           {
             "adminRole": [],
+            "patWrite": []
+          },
+          {
+            "adminRole": [],
             "session": []
           }
         ]
