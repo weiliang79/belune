@@ -457,13 +457,31 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService,
 					r.Use(middleware.RequireScopeByMethod())
 
 					r.Post("/api/cleanup", h.TriggerCleanup)
-					r.Get("/api/settings", h.ListSettings)
-					r.Put("/api/settings", h.UpdateSettings)
+					// Platform configuration, session-only. UpdateSettings is the one
+					// that actually matters: it writes ANY key by name (a handful are
+					// validated in a switch, everything else passes straight to
+					// UpsertSetting with only an empty-key check) — and
+					// host_shell_enabled, the flag that turns on the in-UI host shell,
+					// is itself a setting (see hostshell.go's settingHostShellEnabled).
+					// Without this gate, a write-scoped admin PAT could flip the most
+					// security-critical flag in the product with no human at a
+					// keyboard; opening a session from there still needs the password
+					// and a second factor, but a token should never reach the switch at
+					// all. The same endpoint also sets the dashboard's own domain and
+					// TLS mode — where Caddy gets its certificate from. ListSettings and
+					// the SMTP endpoints are gated alongside it for consistency, not
+					// because they leak a credential: GetSMTPSettings already masks the
+					// password to a presence flag, and ListSettings already skips it —
+					// but ListSettings still dumps every other key (host shell flag,
+					// dashboard domain/TLS, public IP, backup schedule), which is
+					// config disclosure and posture recon a leaked token shouldn't get.
+					r.With(middleware.RequireSession()).Get("/api/settings", h.ListSettings)
+					r.With(middleware.RequireSession()).Put("/api/settings", h.UpdateSettings)
 					// SMTP config: dedicated endpoints so the password stays
 					// keyring-encrypted and masked (never in the generic settings list).
-					r.Get("/api/settings/smtp", h.GetSMTPSettings)
-					r.Put("/api/settings/smtp", h.UpdateSMTPSettings)
-					r.Post("/api/settings/smtp/test", h.TestSMTPSettings)
+					r.With(middleware.RequireSession()).Get("/api/settings/smtp", h.GetSMTPSettings)
+					r.With(middleware.RequireSession()).Put("/api/settings/smtp", h.UpdateSMTPSettings)
+					r.With(middleware.RequireSession()).Post("/api/settings/smtp/test", h.TestSMTPSettings)
 					r.Get("/api/requests", h.ListAllRequestLogs)
 					r.Get("/api/requests/summary", h.GetAllRequestsSummary)
 					r.Get("/api/server/services", h.GetServerServices)
@@ -484,9 +502,20 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService,
 					r.Post("/api/maintenance/queue/clear", h.ClearQueue)
 					r.Post("/api/maintenance/queue/clear-pending", h.ClearPendingQueue)
 					r.Get("/api/maintenance/logs", h.GetPlatformLogs)
+					// A public fact (the address the box is reachable at), legitimately
+					// useful to a provisioning script — stays PAT-callable, unlike its
+					// neighbors below.
 					r.Get("/api/maintenance/server-ip", h.GetServerIP)
-					r.Post("/api/maintenance/restart", h.RestartService)
-					r.Post("/api/maintenance/host-shell", h.CreateHostShellSession)
+					// Session-only: restarting a service and opening a host shell are
+					// both maintenance actions on the box itself, not application
+					// deploys — see the settings block above for the fuller reasoning
+					// (this pair sits in the same "platform configuration and control,
+					// not app management" category). CreateHostShellSession was already
+					// triple-gated (host_shell_enabled, admin role, step-up re-auth) —
+					// RequireSession closes the remaining gap: a PAT could still reach
+					// its handler and get exactly as far as "password required".
+					r.With(middleware.RequireSession()).Post("/api/maintenance/restart", h.RestartService)
+					r.With(middleware.RequireSession()).Post("/api/maintenance/host-shell", h.CreateHostShellSession)
 					r.Get("/api/quotas", h.ListQuotas)
 					r.Get("/api/quotas/{scope}/{scopeId}", h.GetQuota)
 					r.Put("/api/quotas/{scope}/{scopeId}", h.UpsertQuota)

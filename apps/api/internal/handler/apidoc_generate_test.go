@@ -452,14 +452,23 @@ func TestGenerateAPIReference(t *testing.T) {
 	// RESTRICT so only an unused cert is reachable, the route still requires
 	// admin + write, and a cert is re-uploadable — the "unrecoverable stored
 	// data" argument the session gate rested on doesn't hold for it, unlike
-	// the rest of the destroy/restore set. This constant is deliberately
-	// edited only after watching the test fail at the old value first
-	// (confirmed each time: 38 -> 36, then 36 -> 35, before this constant
-	// did), the same way a floor assertion is meant to be moved. If this
-	// moves again, a route was added, removed, or re-gated — worth an
-	// explicit look either way, the same reasoning destroy_boundary_test.go
-	// and reveal_boundary_test.go's own sanity floors give for their sets.
-	require.Equal(t, 35, sessionRoutes, "expected exactly 35 RequireSession routes")
+	// the rest of the destroy/restore set. Then 35 -> 42 when platform
+	// configuration was gated (see routes.go): settings, SMTP config, service
+	// restart, and the host shell — ListSettings/UpdateSettings, the three
+	// SMTP endpoints, RestartService, CreateHostShellSession. Not a leaked
+	// credential this time (GetSMTPSettings already masks the password,
+	// ListSettings already skips it) — the reason is UpdateSettings writes
+	// ANY key by name, and host_shell_enabled is one of those keys; a PAT
+	// should never reach the switch that turns on the host shell.
+	// GET /api/maintenance/server-ip stayed PAT-callable — a public fact, not
+	// configuration. This constant is deliberately edited only after watching
+	// the test fail at the old value first (confirmed each time: 38 -> 36,
+	// 36 -> 35, then 35 -> 42, before this constant did), the same way a
+	// floor assertion is meant to be moved. If this moves again, a route was
+	// added, removed, or re-gated — worth an explicit look either way, the
+	// same reasoning destroy_boundary_test.go and reveal_boundary_test.go's
+	// own sanity floors give for their sets.
+	require.Equal(t, 42, sessionRoutes, "expected exactly 42 RequireSession routes")
 
 	sig, directives, reg := apidocExtractTypes(t)
 	doc := apidocBuildDocument(t, routes, sig, directives, reg)

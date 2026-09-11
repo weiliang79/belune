@@ -68,6 +68,42 @@ Why this is a narrow relaxation and not a hole:
 allowed to do. If you audit the token boundary, this is the one place it has
 moved outward.
 
+### Platform configuration now requires a dashboard session
+
+Reading or changing platform settings, restarting a service, or opening a
+host shell now requires a live dashboard session — a personal access token
+is rejected outright, joining [everything else a token can never
+do](https://belune.dev/docs/api/access#what-a-token-can-never-do). Gated:
+listing and updating instance settings, the SMTP configuration, restarting a
+service, and starting a host shell session. `GET /api/maintenance/server-ip`
+stays token-callable — a public fact, not configuration.
+
+**The reason this matters: the settings endpoint writes any key by name.** A
+handful of keys are validated (the dashboard's own domain and TLS mode, the
+backup schedule, the server IP override); everything else passes straight
+through to storage. `host_shell_enabled` — the flag that turns on the in-UI
+host shell — is one of those keys. Before this, an admin's write-scoped
+token could flip that flag with nobody at a keyboard; opening a session from
+there still required the password and a second factor, but a token should
+never have been able to reach the switch at all. The same endpoint also sets
+the dashboard's own domain and TLS mode — where Caddy gets its certificate
+from.
+
+The SMTP and settings-listing endpoints are gated alongside it for
+consistency, not because either leaks a credential: the SMTP password was
+already masked to a presence flag on read, and the settings list already
+skipped it. Reading them is still configuration disclosure and
+security-posture reconnaissance — the host shell flag, the dashboard's
+domain and TLS mode, the public IP override, the backup schedule — that a
+leaked token shouldn't get for free, so they move with the write.
+
+**Upgrading from 0.1.6: breaking.** If you have a script that reads or
+writes instance settings, manages the SMTP config, restarts a service, or
+opens a host shell using a personal access token, it will start getting
+`403` instead of `200` — point it at a session credential instead, or drop
+the call if it isn't essential. `GET /api/maintenance/server-ip` is
+unaffected.
+
 ## [0.1.6]
 
 ### Projects can now be shared with your team

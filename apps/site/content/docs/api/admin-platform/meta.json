@@ -12,11 +12,9 @@
     "list-docker-images",
     "list-docker-networks",
     "get-docker-overview",
-    "create-host-shell-session",
     "get-queue-status",
     "clear-queue",
     "clear-pending-queue",
-    "restart-service",
     "get-server-ip",
     "list-notification-channels",
     "create-notification-channel",
@@ -33,11 +31,6 @@
     "delete-quota",
     "upsert-quota",
     "get-dashboard-tls",
-    "get-server-services",
-    "list-settings",
-    "update-settings",
-    "get-smtp-settings",
-    "update-smtp-settings",
-    "test-smtp-settings"
+    "get-server-services"
   ]
 }
