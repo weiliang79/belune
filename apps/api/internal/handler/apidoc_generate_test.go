@@ -542,6 +542,15 @@ func apidocLoadDomains(t *testing.T) []struct{ slug, title string } {
 	require.NoError(t, json.Unmarshal(raw, &entries))
 
 	var out []struct{ slug, title string }
+	// slugByTag enforces tag uniqueness. Two entries may legitimately share
+	// neither slug nor tag, but a REPEATED tag is always a mistake: the tag
+	// is the join key between the two halves of this pipeline — Go groups
+	// operations by it, and generate-api-pages.mjs maps it back to a folder
+	// slug through a Map keyed on it. A duplicate silently resolves to
+	// whichever entry is written last, so operations land in one folder and
+	// the other renders empty, with no error anywhere. It is also invalid
+	// OpenAPI: the spec's `tags` array would carry the name twice.
+	slugByTag := map[string]string{}
 	var walk func(prefix string, nodes []apidocDomainEntry)
 	walk = func(prefix string, nodes []apidocDomainEntry) {
 		for _, n := range nodes {
@@ -550,6 +559,11 @@ func apidocLoadDomains(t *testing.T) []struct{ slug, title string } {
 				slug = prefix + "/" + slug
 			}
 			if n.Tag != "" {
+				if prev, dup := slugByTag[n.Tag]; dup {
+					require.Failf(t, "duplicate tag in "+apidocDomainsPath,
+						"tag %q is declared by both %q and %q — a tag names exactly one domain, and the duplicate would silently resolve to whichever is written last", n.Tag, prev, slug)
+				}
+				slugByTag[n.Tag] = slug
 				out = append(out, struct{ slug, title string }{slug, n.Tag})
 			}
 			walk(slug, n.Children)

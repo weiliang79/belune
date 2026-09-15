@@ -85,7 +85,20 @@ function walkDomains(nodes, parentSlug, visit) {
 // here: see the presentDirs filter further down.
 const SLUG_BY_TAG = new Map();
 walkDomains(DOMAINS, '', (node, slug) => {
-  if (node.tag) SLUG_BY_TAG.set(node.tag, slug);
+  if (!node.tag) return;
+  // A repeated tag is always a mistake, and a SILENT one without this check:
+  // the Map resolves it to whichever entry is written last, so every operation
+  // carrying that tag lands in one folder while the other domain renders empty
+  // — no error, no warning, just pages in the wrong section. The Go side
+  // refuses the same thing (apidocLoadDomains); both check because each reads
+  // this file independently.
+  const existing = SLUG_BY_TAG.get(node.tag);
+  if (existing !== undefined) {
+    throw new Error(
+      `generate-api-pages: tag "${node.tag}" is declared by both "${existing}" and "${slug}" in ${DOMAINS_PATH} — a tag names exactly one domain`,
+    );
+  }
+  SLUG_BY_TAG.set(node.tag, slug);
 });
 
 function slugifyTag(name) {
