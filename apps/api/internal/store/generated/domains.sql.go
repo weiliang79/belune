@@ -481,8 +481,21 @@ FROM domains d
 JOIN applications a ON a.id = d.application_id
 JOIN projects p ON p.id = a.project_id
 LEFT JOIN certificates c ON c.id = d.certificate_id
+WHERE ($1::uuid IS NULL
+       OR p.user_id = $1
+       OR p.shared)
+  -- project_id is the PAT pin, not a user-facing filter. This route has no
+  -- {projectId} param, so middleware.RequireProjectAccess never fires on it and
+  -- a pinned token would otherwise read every domain its owner can reach —
+  -- the same hole GetGlobalDeployments closes in its own handler.
+  AND ($2::uuid IS NULL OR p.id = $2)
 ORDER BY d.hostname
 `
+
+type ListDomainsWithTLSStatusParams struct {
+	UserID    pgtype.UUID `json:"user_id"`
+	ProjectID pgtype.UUID `json:"project_id"`
+}
 
 type ListDomainsWithTLSStatusRow struct {
 	ID               pgtype.UUID        `json:"id"`
@@ -502,8 +515,18 @@ type ListDomainsWithTLSStatusRow struct {
 
 // The central "Domain TLS" table on the certificates page: every domain with the
 // certificate it serves and what the server last observed for it.
-func (q *Queries) ListDomainsWithTLSStatus(ctx context.Context) ([]ListDomainsWithTLSStatusRow, error) {
-	rows, err := q.db.Query(ctx, listDomainsWithTLSStatus)
+//
+// user_id NULL means "every domain on the install" and is what an admin passes;
+// a member passes their own id and gets the same rows narrowed to projects they
+// can reach. Same OR p.shared idiom as ListGlobalDeploymentsFiltered and
+// ListProjectsByUser, and for the same reason: sharing grants operational access,
+// so a shared project's domains are as visible as an owned one's.
+//
+// The certificate join is why this matters to a member at all. ListDomainsByApplication
+// is SELECT * FROM domains, so it returns certificate_id as a bare UUID with nothing
+// to resolve it against — this is the only query that turns that into a name.
+func (q *Queries) ListDomainsWithTLSStatus(ctx context.Context, arg ListDomainsWithTLSStatusParams) ([]ListDomainsWithTLSStatusRow, error) {
+	rows, err := q.db.Query(ctx, listDomainsWithTLSStatus, arg.UserID, arg.ProjectID)
 	if err != nil {
 		return nil, err
 	}

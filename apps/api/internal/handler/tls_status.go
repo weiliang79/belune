@@ -12,6 +12,8 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/weiliang79/belune/internal/proxy"
+	"github.com/weiliang79/belune/internal/server/middleware"
+	"github.com/weiliang79/belune/internal/store/generated"
 	"github.com/weiliang79/belune/internal/tlsstatus"
 	"github.com/weiliang79/belune/internal/worker"
 )
@@ -43,9 +45,37 @@ type domainTLSStatus struct {
 //
 //apidoc:tag platform
 //apidoc:title Get Domain TLS Status
+//apidoc:description Every domain's observed TLS state, with the name of the certificate it serves. An admin sees every domain on the install; a member sees only domains in their own projects and any shared with them.
 //apidoc:order 2
 func (h *Handler) ListDomainTLSStatus(w http.ResponseWriter, r *http.Request) {
-	rows, err := h.queries.ListDomainsWithTLSStatus(r.Context())
+	// A NULL user_id asks for every domain. Admins get that; everyone else is
+	// narrowed to what they can already reach, which is what lets this route
+	// serve both audiences instead of staying admin-only — a member has no
+	// other way to resolve their domain's certificate_id to a name.
+	var scope pgtype.UUID
+	if middleware.RoleFromContext(r.Context()) != "admin" {
+		if err := scope.Scan(middleware.UserIDFromContext(r.Context())); err != nil {
+			writeError(w, http.StatusUnauthorized, "invalid user id")
+			return
+		}
+	}
+
+	// This route has no {projectId} param, so middleware.RequireProjectAccess
+	// never sees one — enforce the token's pin here or a pinned token would read
+	// every domain its owner can reach, which is the escape the pin exists to
+	// prevent. Same treatment GetGlobalDeployments gives its own query filter.
+	var pinnedProject pgtype.UUID
+	if pinned := middleware.TokenProjectFromContext(r.Context()); pinned != "" {
+		if err := pinnedProject.Scan(pinned); err != nil {
+			writeError(w, http.StatusInternalServerError, "invalid pinned project")
+			return
+		}
+	}
+
+	rows, err := h.queries.ListDomainsWithTLSStatus(r.Context(), generated.ListDomainsWithTLSStatusParams{
+		UserID:    scope,
+		ProjectID: pinnedProject,
+	})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to list domain TLS status")
 		return

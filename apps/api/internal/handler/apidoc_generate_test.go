@@ -1569,9 +1569,14 @@ func apidocBuildDocument(t *testing.T, routes []apidocRoute, sig map[string]apid
 	// literally "(Admin)" even if the role set is renamed: it's a human
 	// grouping label, not derived text.
 	{
-		roleGatedInMixedDomain := map[string]bool{
-			"GET /api/domains/tls": true,
-		}
+		// Empty, and that is the correct state rather than a stale list: every
+		// RequireRole-gated route now sits under a " (Admin)"-suffixed tag, so
+		// the DOMAIN states the restriction and no item-level badge has to.
+		// GET /api/domains/tls was the last entry and left when it stopped being
+		// role-gated at all (it is role-SCOPED now — admins see every domain,
+		// members their own). Keep the machinery: the next route that lands
+		// role-gated in a mixed domain must be a deliberate line here, not drift.
+		roleGatedInMixedDomain := map[string]bool{}
 		var overstated, unpinned []string
 		foundInMixed := map[string]bool{}
 		for _, d := range grouped {

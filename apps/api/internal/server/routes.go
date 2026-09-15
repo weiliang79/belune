@@ -397,6 +397,13 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService,
 				// Global deployments
 				r.Get("/api/deployments", h.GetGlobalDeployments)
 
+				// Every domain's observed TLS state in one view. Role-scoped
+				// rather than admin-only: it carries the certificate NAME, and
+				// ListDomainsByApplication returns only a bare certificate_id,
+				// so this is the one place a member can find out which
+				// certificate their own domain is serving.
+				r.Get("/api/domains/tls", h.ListDomainTLSStatus)
+
 				// Operator-health stat strip (member-scoped; admins see host + backups)
 				r.Get("/api/stats", h.GetStats)
 
@@ -535,8 +542,6 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService,
 					r.Delete("/api/quotas/{scope}/{scopeId}", h.DeleteQuota)
 					// Centralised TLS certificate store (upload once, use per-domain)
 					r.Get("/api/certificates", h.ListCertificates)
-					// Every domain's observed TLS state in one view.
-					r.Get("/api/domains/tls", h.ListDomainTLSStatus)
 					r.Post("/api/certificates", h.UploadCertificate)
 					// Deletable with an admin, write-scoped token — not
 					// session-only like the project/app/db/volume/domain/backup

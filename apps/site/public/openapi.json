@@ -1574,14 +1574,11 @@
       "get": {
         "operationId": "ListDomainTLSStatus",
         "summary": "Get Domain TLS Status",
-        "description": "Requires the Admin role.",
+        "description": "Every domain's observed TLS state, with the name of the certificate it serves. An admin sees every domain on the install; a member sees only domains in their own projects and any shared with them.",
         "tags": [
           "Platform"
         ],
         "x-belune-order": 2,
-        "x-belune-roles": [
-          "admin"
-        ],
         "responses": {
           "200": {
             "description": "OK",
