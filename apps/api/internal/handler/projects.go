@@ -237,15 +237,14 @@ type transferProjectRequest struct {
 	UserID string `json:"user_id"`
 }
 
+// TransferProject moves ownership to a named user. Admin-only and
+// session-only, both enforced in routes.go (middleware.RequireRole("admin")
+// and middleware.RequireSession()) rather than here — a role check in the
+// handler body would be invisible to the generator's x-belune-roles
+// derivation, which reads RequireRole structurally off the middleware chain.
+//
 //apidoc:tag projects
 func (h *Handler) TransferProject(w http.ResponseWriter, r *http.Request) {
-	// Admin-only operation
-	role := middleware.RoleFromContext(r.Context())
-	if role != "admin" {
-		writeError(w, http.StatusForbidden, "only admins can transfer projects")
-		return
-	}
-
 	id := chi.URLParam(r, "projectId")
 	var projectUUID pgtype.UUID
 	if err := projectUUID.Scan(id); err != nil {

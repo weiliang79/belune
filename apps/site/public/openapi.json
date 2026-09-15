@@ -10521,9 +10521,6 @@
         },
         "security": [
           {
-            "write": []
-          },
-          {
             "session": []
           }
         ]
@@ -10533,9 +10530,12 @@
       "put": {
         "operationId": "TransferProject",
         "summary": "Transfer Project",
-        "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
+        "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope. Requires the Admin role.",
         "tags": [
           "Projects"
+        ],
+        "x-belune-roles": [
+          "admin"
         ],
         "parameters": [
           {
@@ -10581,9 +10581,6 @@
           }
         },
         "security": [
-          {
-            "write": []
-          },
           {
             "session": []
           }

@@ -5,8 +5,6 @@
     "create-project",
     "get-project",
     "update-project",
-    "list-project-backups",
-    "update-project-sharing",
-    "transfer-project"
+    "list-project-backups"
   ]
 }

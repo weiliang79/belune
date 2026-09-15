@@ -292,8 +292,21 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService,
 				// other one below carrying RequireSession) mechanically rather
 				// than off a hand-maintained list.
 				r.With(middleware.RequireSession()).Delete("/api/projects/{projectId}", h.DeleteProject)
-				r.Put("/api/projects/{projectId}/transfer", h.TransferProject)
-				r.Put("/api/projects/{projectId}/sharing", h.UpdateProjectSharing)
+				// Both hand out project-owner-equivalent access rather than operate a
+				// workload — sharing extends it to every Member (canAccessOwned's
+				// `if shared { return true }` has no membership check, so this is
+				// what hands every Member RevealEnvVar access on the project), and
+				// transfer moves it outright to a named user. Same class as
+				// POST /api/users and POST /api/users/invite above: administering
+				// who can reach what, not operating what's already reachable.
+				// TransferProject's admin-only requirement moves here from the
+				// handler body too — enforcing it in routes.go, not a
+				// //apidoc:roles declaration, is what lets the generator DERIVE
+				// x-belune-roles instead of adding a second, driftable source of
+				// truth (see apidocRequireRoleSet in apidoc_generate_test.go).
+				r.With(middleware.RequireSession(), middleware.RequireRole("admin")).
+					Put("/api/projects/{projectId}/transfer", h.TransferProject)
+				r.With(middleware.RequireSession()).Put("/api/projects/{projectId}/sharing", h.UpdateProjectSharing)
 
 				// Applications
 				r.Get("/api/projects/{projectId}/applications", h.ListApplications)

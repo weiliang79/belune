@@ -461,14 +461,19 @@ func TestGenerateAPIReference(t *testing.T) {
 	// ANY key by name, and host_shell_enabled is one of those keys; a PAT
 	// should never reach the switch that turns on the host shell.
 	// GET /api/maintenance/server-ip stayed PAT-callable — a public fact, not
-	// configuration. This constant is deliberately edited only after watching
-	// the test fail at the old value first (confirmed each time: 38 -> 36,
-	// 36 -> 35, then 35 -> 42, before this constant did), the same way a
+	// configuration. Then 42 -> 44 when PUT .../transfer and PUT .../sharing
+	// were gated (see routes.go and grant_boundary_test.go): both hand out
+	// project-owner-equivalent access — sharing extends it to every Member
+	// with no membership check, transfer moves it outright — the same
+	// administering-who-can-reach-what class as POST /api/users. This
+	// constant is deliberately edited only after watching the test fail at
+	// the old value first (confirmed each time: 38 -> 36, 36 -> 35,
+	// 35 -> 42, then 42 -> 44, before this constant did), the same way a
 	// floor assertion is meant to be moved. If this moves again, a route was
 	// added, removed, or re-gated — worth an explicit look either way, the
 	// same reasoning destroy_boundary_test.go and reveal_boundary_test.go's
 	// own sanity floors give for their sets.
-	require.Equal(t, 42, sessionRoutes, "expected exactly 42 RequireSession routes")
+	require.Equal(t, 44, sessionRoutes, "expected exactly 44 RequireSession routes")
 
 	sig, directives, reg := apidocExtractTypes(t)
 	apidocAssertEmbedsPromoted(t, reg)
