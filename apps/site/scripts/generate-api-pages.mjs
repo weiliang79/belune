@@ -369,6 +369,16 @@ writeFileSync(
 // isPatCallable filtered to zero pages, or (for git) a container whose
 // every child was filtered, is skipped rather than writing a meta.json
 // for a folder that was never created.
+// sortPagesByOrder stably re-sorts a meta.json `pages` array by //apidoc:order
+// weight. Shared by both fixDomainMeta branches so a node carrying `tag` and
+// `children` orders its own operations exactly as a leaf does.
+function sortPagesByOrder(pages) {
+  return pages
+    .map((slug, i) => ({ slug, i, order: ORDER_BY_SLUG.get(slug) ?? DEFAULT_ORDER }))
+    .sort((a, b) => a.order - b.order || a.i - b.i)
+    .map((e) => e.slug);
+}
+
 function fixDomainMeta(nodes, parentDir) {
   for (const node of nodes) {
     const dir = join(parentDir, node.slug);
@@ -376,7 +386,25 @@ function fixDomainMeta(nodes, parentDir) {
     if (node.children) {
       fixDomainMeta(node.children, dir);
       const presentChildren = node.children.map((c) => c.slug).filter((slug) => existsSync(join(dir, slug)));
-      writeFileSync(join(dir, 'meta.json'), JSON.stringify({ title: node.title, pages: presentChildren }, null, 2));
+      // A node may carry BOTH `tag` and `children`: its own operations sit
+      // directly under it AND sub-sections nest below (Projects, with
+      // Environment Variables beneath it). The Go side already allows this —
+      // apidocLoadDomains emits a domain when Tag != "" and recurses into
+      // Children regardless — so generateFiles will have written operation
+      // pages into this same directory. Overwriting `pages` with only the
+      // child folders leaves those pages on disk, URL-reachable, and absent
+      // from the sidebar: the unlisted-page failure this generator has hit
+      // before. Merge instead — own operations first, sub-sections after.
+      const metaPath = join(dir, 'meta.json');
+      let ownPages = [];
+      if (node.tag && existsSync(metaPath)) {
+        const existing = JSON.parse(readFileSync(metaPath, 'utf8'));
+        ownPages = sortPagesByOrder((existing.pages ?? []).filter((slug) => !presentChildren.includes(slug)));
+      }
+      writeFileSync(
+        metaPath,
+        JSON.stringify({ title: node.title ?? node.tag, pages: [...ownPages, ...presentChildren] }, null, 2),
+      );
     } else {
       const metaPath = join(dir, 'meta.json');
       const meta = JSON.parse(readFileSync(metaPath, 'utf8'));
@@ -390,10 +418,7 @@ function fixDomainMeta(nodes, parentDir) {
       // own ordering and drift from it the moment it changes. With zero
       // //apidoc:order directives every weight is equal and this is a
       // no-op, keeping the file byte-identical.
-      meta.pages = meta.pages
-        .map((slug, i) => ({ slug, i, order: ORDER_BY_SLUG.get(slug) ?? DEFAULT_ORDER }))
-        .sort((a, b) => a.order - b.order || a.i - b.i)
-        .map((e) => e.slug);
+      meta.pages = sortPagesByOrder(meta.pages);
       writeFileSync(metaPath, JSON.stringify(meta, null, 2));
     }
   }
