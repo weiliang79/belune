@@ -39,10 +39,15 @@ export function useDeleteCertificate() {
   });
 }
 
-export function useDomainTLSStatus() {
+// enabled exists because this is an install-wide (member-scoped) fetch, and it
+// is now called from the per-application domains table as well as the
+// certificates page. There it is only needed to name a custom certificate, so
+// an app whose domains all use automatic TLS should not poll for it at all.
+export function useDomainTLSStatus(enabled = true) {
   return useQuery({
     queryKey: queryKeys.domainTLSStatus,
     queryFn: certificatesApi.listDomainTLSStatus,
+    enabled,
     // The sweep runs every minute; a domain mid-issuance should not look stuck
     // just because the page was left open.
     refetchInterval: 30000,

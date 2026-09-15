@@ -33,6 +33,7 @@ import {
 import { ExpiryCell } from "@/components/certificates/expiry-cell";
 import { useRemoveDomain } from "@/lib/hooks/use-domains";
 import type { DomainExpanded, RouteFeature } from "@/lib/types";
+import { useDomainTLSStatus } from "@/lib/hooks/use-certificates";
 import { DomainTLSBadge } from "./domain-tls-badge";
 
 const FEATURE_LABELS: Record<string, string> = {
@@ -73,6 +74,22 @@ export function DomainsTable({
   onEditFeatures: (domain: DomainExpanded) => void;
   canDelete: boolean;
 }) {
+  // A domain row carries certificate_id but nothing to resolve it with:
+  // ListDomainsByApplication is SELECT * FROM domains. /domains/tls is the only
+  // read that joins certificates for the name, and since it became member-scoped
+  // it is reachable here — so the operator who attached a certificate can see
+  // WHICH one without holding the admin role. Gated on a custom certificate
+  // actually being in use, so the common automatic-TLS case adds no request.
+  const usesCustomCertificate = domains.some((d) => !!d.certificate_id);
+  const { data: tlsRows } = useDomainTLSStatus(usesCustomCertificate);
+  const certificateNameByDomain = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const row of tlsRows ?? []) {
+      if (row.certificate_name) map.set(row.id, row.certificate_name);
+    }
+    return map;
+  }, [tlsRows]);
+
   const columns = useMemo<ColumnDef<DomainExpanded>[]>(
     () => [
       {
@@ -100,6 +117,7 @@ export function DomainsTable({
             domain={row.original}
             projectId={projectId}
             applicationId={applicationId}
+            certificateName={certificateNameByDomain.get(row.original.id)}
           />
         ),
       },
@@ -146,7 +164,14 @@ export function DomainsTable({
         ),
       }),
     ],
-    [projectId, applicationId, onEdit, onEditFeatures, canDelete],
+    [
+      projectId,
+      applicationId,
+      onEdit,
+      onEditFeatures,
+      canDelete,
+      certificateNameByDomain,
+    ],
   );
 
   return (
