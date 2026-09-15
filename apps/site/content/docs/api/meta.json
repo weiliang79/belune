@@ -5,6 +5,7 @@
   "pages": [
     "index",
     "access",
+    "websockets",
     "live-updates",
     "account",
     "projects",

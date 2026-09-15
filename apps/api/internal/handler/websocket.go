@@ -13,9 +13,12 @@ import (
 )
 
 // HandleWebSocket upgrades the connection to WebSocket and registers the client.
-// Authentication is performed via the session cookie (WebSocket can't send custom headers).
+// The dashboard authenticates with its session cookie, because a browser cannot
+// set headers on a WebSocket; a script sends the usual bearer token instead.
 //
 //apidoc:tag live-updates
+//apidoc:title Open the Live Updates Socket
+//apidoc:description Subscribe to live metrics, logs, request traces and container status over one socket. OpenAPI cannot describe a WebSocket protocol, so the frames, the channel list and the connection limits are documented in the [WebSockets guide](/docs/api/websockets).
 func (h *Handler) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 	if h.hub == nil {
 		writeError(w, http.StatusServiceUnavailable, "websocket not available")

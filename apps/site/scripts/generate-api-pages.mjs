@@ -353,7 +353,7 @@ writeFileSync(
       title: 'API',
       description: "Authenticate and script against Belune's HTTP API.",
       root: true,
-      pages: ['index', 'access', ...domainSlugs],
+      pages: ['index', 'access', 'websockets', ...domainSlugs],
     },
     null,
     2,
