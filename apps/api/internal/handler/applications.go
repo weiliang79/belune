@@ -68,6 +68,8 @@ type createApplicationRequest struct {
 }
 
 //apidoc:tag applications
+//apidoc:title Create Application
+//apidoc:order 3
 func (h *Handler) CreateApplication(w http.ResponseWriter, r *http.Request) {
 	projectID := chi.URLParam(r, "projectId")
 	var projectUUID pgtype.UUID
@@ -174,6 +176,8 @@ func (h *Handler) CreateApplication(w http.ResponseWriter, r *http.Request) {
 }
 
 //apidoc:tag applications
+//apidoc:title Get Application
+//apidoc:order 2
 func (h *Handler) GetApplication(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "applicationId")
 	var uuid pgtype.UUID
@@ -205,7 +209,9 @@ func (h *Handler) GetApplication(w http.ResponseWriter, r *http.Request) {
 //   - skipped            — app has no health_check_path configured
 //   - pending            — no deploy has run yet (no row found)
 //
-//apidoc:tag applications
+//apidoc:tag applications/resources
+//apidoc:title Get Health
+//apidoc:order 2
 func (h *Handler) GetApplicationHealth(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "applicationId")
 	var uuid pgtype.UUID
@@ -248,6 +254,8 @@ func (h *Handler) GetApplicationHealth(w http.ResponseWriter, r *http.Request) {
 }
 
 //apidoc:tag applications
+//apidoc:title Get Applications
+//apidoc:order 1
 func (h *Handler) ListApplications(w http.ResponseWriter, r *http.Request) {
 	projectID := chi.URLParam(r, "projectId")
 	var projectUUID pgtype.UUID
@@ -278,7 +286,9 @@ type deployPayload struct {
 	TraceCarrier     map[string]string `json:"trace_carrier,omitempty"`
 }
 
-//apidoc:tag deploy-actions
+//apidoc:tag applications/deployments
+//apidoc:title Deploy App
+//apidoc:order 1
 func (h *Handler) DeployApplication(w http.ResponseWriter, r *http.Request) {
 	applicationID := chi.URLParam(r, "applicationId")
 	var applicationUUID pgtype.UUID
@@ -337,7 +347,9 @@ func (h *Handler) DeployApplication(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusAccepted, deployment)
 }
 
-//apidoc:tag deploy-actions
+//apidoc:tag applications/actions
+//apidoc:title Stop App
+//apidoc:order 4
 func (h *Handler) StopApplication(w http.ResponseWriter, r *http.Request) {
 	applicationID := chi.URLParam(r, "applicationId")
 	var applicationUUID pgtype.UUID
@@ -383,7 +395,9 @@ func (h *Handler) StopApplication(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, toApplicationResponse(app))
 }
 
-//apidoc:tag deploy-actions
+//apidoc:tag applications/actions
+//apidoc:title Start App
+//apidoc:order 3
 func (h *Handler) StartApplication(w http.ResponseWriter, r *http.Request) {
 	applicationID := chi.URLParam(r, "applicationId")
 	var applicationUUID pgtype.UUID
@@ -430,7 +444,9 @@ func (h *Handler) StartApplication(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, toApplicationResponse(app))
 }
 
-//apidoc:tag deploy-actions
+//apidoc:tag applications/actions
+//apidoc:title Restart App
+//apidoc:order 5
 func (h *Handler) RestartApplication(w http.ResponseWriter, r *http.Request) {
 	applicationID := chi.URLParam(r, "applicationId")
 	var applicationUUID pgtype.UUID
@@ -489,7 +505,9 @@ func (h *Handler) RestartApplication(w http.ResponseWriter, r *http.Request) {
 // and without pulling new code. It reuses the deploy worker's skip-build path
 // (RollbackImageTag), which re-reads all config on container recreate.
 //
-//apidoc:tag deploy-actions
+//apidoc:tag applications/actions
+//apidoc:title Reload App
+//apidoc:order 6
 func (h *Handler) ReloadApplication(w http.ResponseWriter, r *http.Request) {
 	applicationID := chi.URLParam(r, "applicationId")
 	var applicationUUID pgtype.UUID
@@ -551,7 +569,9 @@ func (h *Handler) ReloadApplication(w http.ResponseWriter, r *http.Request) {
 // it re-runs the build for the running version, picking up patched base images
 // and refreshed dependencies without shipping new code.
 //
-//apidoc:tag deploy-actions
+//apidoc:tag applications/actions
+//apidoc:title Rebuild App
+//apidoc:order 2
 func (h *Handler) RebuildApplication(w http.ResponseWriter, r *http.Request) {
 	applicationID := chi.URLParam(r, "applicationId")
 	var applicationUUID pgtype.UUID
@@ -696,6 +716,8 @@ type updateApplicationRequest struct {
 }
 
 //apidoc:tag applications
+//apidoc:title Update Application
+//apidoc:order 4
 func (h *Handler) UpdateApplication(w http.ResponseWriter, r *http.Request) {
 	applicationID := chi.URLParam(r, "applicationId")
 	var applicationUUID pgtype.UUID
@@ -822,7 +844,9 @@ func (h *Handler) DeleteApplication(w http.ResponseWriter, r *http.Request) {
 // volumes for this application. Missing volumes contribute zero; an app that
 // has never built surfaces 0 B with no error.
 //
-//apidoc:tag applications
+//apidoc:tag applications/resources
+//apidoc:title Get Build Cache
+//apidoc:order 5
 func (h *Handler) GetBuildCache(w http.ResponseWriter, r *http.Request) {
 	applicationID := chi.URLParam(r, "applicationId")
 	var applicationUUID pgtype.UUID
@@ -870,7 +894,9 @@ func (h *Handler) GetBuildCache(w http.ResponseWriter, r *http.Request) {
 // build will re-create them from scratch — this is the "make it fresh"
 // escape hatch when a cache is suspected of poisoning output.
 //
-//apidoc:tag applications
+//apidoc:tag applications/resources
+//apidoc:title Clear Build Cache
+//apidoc:order 6
 func (h *Handler) ClearBuildCache(w http.ResponseWriter, r *http.Request) {
 	applicationID := chi.URLParam(r, "applicationId")
 	var applicationUUID pgtype.UUID
@@ -910,7 +936,9 @@ func (h *Handler) ClearBuildCache(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "cleared"})
 }
 
-//apidoc:tag deploy-actions
+//apidoc:tag applications/actions
+//apidoc:title Build App
+//apidoc:order 1
 func (h *Handler) BuildApplication(w http.ResponseWriter, r *http.Request) {
 	applicationID := chi.URLParam(r, "applicationId")
 	var applicationUUID pgtype.UUID

@@ -1,0 +1,7 @@
+{
+  "title": "Logs",
+  "pages": [
+    "list-database-log-sessions",
+    "list-database-logs"
+  ]
+}

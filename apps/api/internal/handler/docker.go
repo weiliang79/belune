@@ -153,7 +153,9 @@ func (c *diskUsageCache) refresh(rt runtime.ContainerRuntime) {
 // GetDockerOverview returns `docker info` + `docker system df` for the admin
 // Docker overview tab. GET /api/docker/overview (admin only).
 //
-//apidoc:tag admin-platform
+//apidoc:tag platform/docker
+//apidoc:title Get Overview
+//apidoc:order 1
 func (h *Handler) GetDockerOverview(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), dockerTimeout)
 	defer cancel()
@@ -204,7 +206,9 @@ type dockerContainerResponse struct {
 // flagging platform-managed ones and linking them to their app/database.
 // GET /api/docker/containers (admin only).
 //
-//apidoc:tag admin-platform
+//apidoc:tag platform/docker
+//apidoc:title Get Containers
+//apidoc:order 2
 func (h *Handler) ListDockerContainers(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), dockerTimeout)
 	defer cancel()
@@ -320,7 +324,9 @@ type dockerImageResponse struct {
 
 // ListDockerImages lists all images on the host. GET /api/docker/images (admin only).
 //
-//apidoc:tag admin-platform
+//apidoc:tag platform/docker
+//apidoc:title Get Images
+//apidoc:order 3
 func (h *Handler) ListDockerImages(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), dockerTimeout)
 	defer cancel()
@@ -406,7 +412,9 @@ type dockerVolumeResponse struct {
 // ListDockerVolumes lists all volumes on the host with sizes.
 // GET /api/docker/volumes (admin only).
 //
-//apidoc:tag volumes
+//apidoc:tag platform/docker
+//apidoc:title Get Volumes
+//apidoc:order 4
 func (h *Handler) ListDockerVolumes(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), dockerTimeout)
 	defer cancel()
@@ -512,7 +520,9 @@ type dockerNetworkResponse struct {
 // ListDockerNetworks lists all networks on the host with attached containers.
 // GET /api/docker/networks (admin only).
 //
-//apidoc:tag admin-platform
+//apidoc:tag platform/docker
+//apidoc:title Get Networks
+//apidoc:order 5
 func (h *Handler) ListDockerNetworks(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), dockerTimeout)
 	defer cancel()

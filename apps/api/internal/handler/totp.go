@@ -74,7 +74,7 @@ func (h *Handler) rotateSessionAfterFactorChange(w http.ResponseWriter, r *http.
 // codes are left — the number is what warns a user before they run out.
 // GET /api/auth/totp
 //
-//apidoc:tag account
+//apidoc:tag account/profile
 func (h *Handler) GetTOTPStatus(w http.ResponseWriter, r *http.Request) {
 	uid, user, err := h.currentUser(r)
 	if err != nil {
@@ -99,7 +99,7 @@ func (h *Handler) GetTOTPStatus(w http.ResponseWriter, r *http.Request) {
 // anything: a secret the user's app never actually stored must not be able to
 // lock them out. POST /api/auth/totp/enroll
 //
-//apidoc:tag account
+//apidoc:tag account/profile
 func (h *Handler) EnrollTOTP(w http.ResponseWriter, r *http.Request) {
 	var req enrollRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -149,7 +149,7 @@ type verifyEnrollmentRequest struct {
 // produced a code from the secret. The recovery codes are returned here and
 // never again. POST /api/auth/totp/enroll/verify
 //
-//apidoc:tag account
+//apidoc:tag account/profile
 func (h *Handler) VerifyTOTPEnrollment(w http.ResponseWriter, r *http.Request) {
 	var req verifyEnrollmentRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || strings.TrimSpace(req.Code) == "" {
@@ -189,7 +189,7 @@ type disableTOTPRequest struct {
 // is exactly what someone with a stolen session would want to do first.
 // POST /api/auth/totp/disable
 //
-//apidoc:tag account
+//apidoc:tag account/profile
 func (h *Handler) DisableTOTP(w http.ResponseWriter, r *http.Request) {
 	var req disableTOTPRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -241,7 +241,7 @@ type regenerateCodesRequest struct {
 // safe reading of the request, since the usual reason to ask is believing the
 // old list is compromised. POST /api/auth/totp/recovery-codes
 //
-//apidoc:tag account
+//apidoc:tag account/profile
 func (h *Handler) RegenerateRecoveryCodes(w http.ResponseWriter, r *http.Request) {
 	var req regenerateCodesRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -367,7 +367,7 @@ type adminResetUserTOTPRequest struct {
 // ELSE's factor should not need less proof than disabling your own.
 // POST /api/users/{userId}/totp/reset (admin only)
 //
-//apidoc:tag admin-users
+//apidoc:tag platform/users
 func (h *Handler) AdminResetUserTOTP(w http.ResponseWriter, r *http.Request) {
 	var uid pgtype.UUID
 	if err := uid.Scan(chi.URLParam(r, "userId")); err != nil {

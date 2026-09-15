@@ -180,7 +180,9 @@ func (h *Handler) destinationInProject(w http.ResponseWriter, r *http.Request, p
 
 // ListBackupDestinations returns a project's backup destinations (no secrets).
 //
-//apidoc:tag databases
+//apidoc:tag projects/backup-destinations
+//apidoc:title Get Destinations
+//apidoc:order 1
 func (h *Handler) ListBackupDestinations(w http.ResponseWriter, r *http.Request) {
 	projectUUID, ok := h.projectFromPath(w, r)
 	if !ok {
@@ -200,7 +202,9 @@ func (h *Handler) ListBackupDestinations(w http.ResponseWriter, r *http.Request)
 
 // CreateBackupDestination creates a project backup destination.
 //
-//apidoc:tag databases
+//apidoc:tag projects/backup-destinations
+//apidoc:title Create Destination
+//apidoc:order 2
 func (h *Handler) CreateBackupDestination(w http.ResponseWriter, r *http.Request) {
 	projectUUID, ok := h.projectFromPath(w, r)
 	if !ok {
@@ -227,7 +231,9 @@ func (h *Handler) CreateBackupDestination(w http.ResponseWriter, r *http.Request
 
 // UpdateBackupDestination updates a destination; empty creds preserve the secret.
 //
-//apidoc:tag databases
+//apidoc:tag projects/backup-destinations
+//apidoc:title Update Destination
+//apidoc:order 3
 func (h *Handler) UpdateBackupDestination(w http.ResponseWriter, r *http.Request) {
 	projectUUID, ok := h.projectFromPath(w, r)
 	if !ok {
@@ -269,7 +275,9 @@ func (h *Handler) UpdateBackupDestination(w http.ResponseWriter, r *http.Request
 // config references it (ON DELETE RESTRICT) or while any backup is recorded as
 // living in it (backup_locations) — surfaced as 409 naming whichever it is.
 //
-//apidoc:tag databases
+//apidoc:tag projects/backup-destinations
+//apidoc:title Delete Destination
+//apidoc:order 4
 func (h *Handler) DeleteBackupDestination(w http.ResponseWriter, r *http.Request) {
 	projectUUID, ok := h.projectFromPath(w, r)
 	if !ok {
@@ -297,7 +305,9 @@ func (h *Handler) DeleteBackupDestination(w http.ResponseWriter, r *http.Request
 
 // TestBackupDestination verifies connectivity + bucket access for a destination.
 //
-//apidoc:tag databases
+//apidoc:tag projects/backup-destinations
+//apidoc:title Test Destination
+//apidoc:order 5
 func (h *Handler) TestBackupDestination(w http.ResponseWriter, r *http.Request) {
 	projectUUID, ok := h.projectFromPath(w, r)
 	if !ok {
@@ -318,7 +328,9 @@ func (h *Handler) TestBackupDestination(w http.ResponseWriter, r *http.Request) 
 // form (before saving). On edit, a blank secret falls back to the stored one via
 // the optional body id (verified to belong to this project).
 //
-//apidoc:tag databases
+//apidoc:tag projects/backup-destinations
+//apidoc:title Test Configs
+//apidoc:order 6
 func (h *Handler) TestBackupDestinationParams(w http.ResponseWriter, r *http.Request) {
 	projectUUID, ok := h.projectFromPath(w, r)
 	if !ok {

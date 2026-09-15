@@ -29,7 +29,7 @@ const hostShellScope = "host"
 // admin (enforced by the route group), and they must re-enter their password.
 // Every session is audited. POST /api/maintenance/host-shell (admin only)
 //
-//apidoc:tag admin-platform
+//apidoc:tag platform/maintenance
 func (h *Handler) CreateHostShellSession(w http.ResponseWriter, r *http.Request) {
 	if h.termManager == nil {
 		writeError(w, http.StatusServiceUnavailable, "terminal not available")

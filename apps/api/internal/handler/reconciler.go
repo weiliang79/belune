@@ -14,7 +14,9 @@ import (
 // routes between deploys.
 // GET /api/proxy/reconciler (admin only)
 //
-//apidoc:tag admin-platform
+//apidoc:tag platform/maintenance
+//apidoc:title Get Proxy Status
+//apidoc:order 6
 func (h *Handler) GetProxyReconcilerStatus(w http.ResponseWriter, r *http.Request) {
 	if h.reconciler == nil {
 		writeJSON(w, http.StatusOK, proxy.ReconcilerStatus{})
@@ -27,7 +29,9 @@ func (h *Handler) GetProxyReconcilerStatus(w http.ResponseWriter, r *http.Reques
 // the DB-declared state (fixing any drift) and returns the resulting status.
 // POST /api/proxy/reconcile (admin only)
 //
-//apidoc:tag admin-platform
+//apidoc:tag platform/maintenance
+//apidoc:title Reconcile Proxy
+//apidoc:order 7
 func (h *Handler) ReconcileProxy(w http.ResponseWriter, r *http.Request) {
 	if h.reconciler == nil {
 		writeError(w, http.StatusServiceUnavailable, "reconciler unavailable")

@@ -1,0 +1,8 @@
+{
+  "title": "Requests",
+  "pages": [
+    "get-all-requests-summary",
+    "list-all-request-logs",
+    "stream-all-request-logs"
+  ]
+}

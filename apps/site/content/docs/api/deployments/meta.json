@@ -1,9 +1,0 @@
-{
-  "title": "Deployments",
-  "pages": [
-    "get-global-deployments",
-    "list-deployments",
-    "get-deployment",
-    "stream-build-logs"
-  ]
-}

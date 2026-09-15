@@ -15,7 +15,9 @@ import (
 	"github.com/weiliang79/belune/internal/store/generated"
 )
 
-//apidoc:tag admin-users
+//apidoc:tag platform/users
+//apidoc:title Get Users
+//apidoc:order 1
 func (h *Handler) ListUsers(w http.ResponseWriter, r *http.Request) {
 	users, err := h.queries.ListUsers(r.Context())
 	if err != nil {
@@ -37,7 +39,7 @@ type createUserRequest struct {
 // Deprecated: prefer POST /api/users/invite — the invitation flow avoids
 // transmitting plaintext passwords out-of-band.
 //
-//apidoc:tag admin-users
+//apidoc:tag platform/users
 func (h *Handler) CreateUser(w http.ResponseWriter, r *http.Request) {
 	slog.Warn("CreateUser: deprecated endpoint called — use POST /api/users/invite instead",
 		"remote_addr", r.RemoteAddr)
@@ -90,7 +92,7 @@ type updateUserRoleRequest struct {
 	Role string `json:"role"`
 }
 
-//apidoc:tag admin-users
+//apidoc:tag platform/users
 func (h *Handler) UpdateUserRole(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "userId")
 	var uuid pgtype.UUID
@@ -150,7 +152,7 @@ func (h *Handler) UpdateUserRole(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, updated)
 }
 
-//apidoc:tag admin-users
+//apidoc:tag platform/users
 func (h *Handler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "userId")
 	var uuid pgtype.UUID
@@ -206,7 +208,7 @@ type resetUserPasswordRequest struct {
 // with nothing re-checked. Step up the same way ChangeOwnPassword does: the
 // CALLER's own current password, not the target's.
 //
-//apidoc:tag admin-users
+//apidoc:tag platform/users
 func (h *Handler) ResetUserPassword(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "userId")
 	var uuid pgtype.UUID

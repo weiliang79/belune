@@ -18,7 +18,9 @@ import (
 // Subscribes to Redis pub/sub channel published by the metrics ticker.
 // GET /api/metrics/host/stream
 //
-//apidoc:tag admin-metrics
+//apidoc:tag platform/metrics
+//apidoc:title Steam Metrics
+//apidoc:order 3
 func (h *Handler) StreamHostMetrics(w http.ResponseWriter, r *http.Request) {
 	writer, err := sse.NewWriter(w)
 	if err != nil {
@@ -65,7 +67,9 @@ func (h *Handler) StreamHostMetrics(w http.ResponseWriter, r *http.Request) {
 // Queries Docker stats API on-demand every 2 seconds — no database storage.
 // GET /api/projects/{projectId}/applications/{applicationId}/metrics/stream
 //
-//apidoc:tag metrics
+//apidoc:tag applications/metrics-logs
+//apidoc:title Stream Metrics
+//apidoc:order 1
 func (h *Handler) StreamApplicationMetrics(w http.ResponseWriter, r *http.Request) {
 	applicationID := chi.URLParam(r, "applicationId")
 	var appUUID pgtype.UUID

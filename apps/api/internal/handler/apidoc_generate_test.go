@@ -1570,12 +1570,7 @@ func apidocBuildDocument(t *testing.T, routes []apidocRoute, sig map[string]apid
 	// grouping label, not derived text.
 	{
 		roleGatedInMixedDomain := map[string]bool{
-			"GET /api/docker/volumes":   true,
-			"GET /api/domains/tls":      true,
-			"GET /api/maintenance/logs": true,
-			"GET /api/requests":         true,
-			"GET /api/requests/stream":  true,
-			"GET /api/requests/summary": true,
+			"GET /api/domains/tls": true,
 		}
 		var overstated, unpinned []string
 		foundInMixed := map[string]bool{}

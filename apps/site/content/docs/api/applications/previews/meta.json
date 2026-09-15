@@ -1,0 +1,8 @@
+{
+  "title": "Preview Environments",
+  "pages": [
+    "update-preview-config",
+    "list-previews",
+    "delete-preview"
+  ]
+}

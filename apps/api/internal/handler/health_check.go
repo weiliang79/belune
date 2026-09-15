@@ -98,7 +98,9 @@ func validateHealthCheck(id pgtype.UUID, req healthCheckRequest) (generated.SetA
 // create time (command) or run by the deploy (http) — so the pending-change
 // marker is stamped, and the change is applied when the user next deploys.
 //
-//apidoc:tag applications
+//apidoc:tag applications/resources
+//apidoc:title Set Health Check
+//apidoc:order 3
 func (h *Handler) SetHealthCheck(w http.ResponseWriter, r *http.Request) {
 	applicationID := chi.URLParam(r, "applicationId")
 	var applicationUUID pgtype.UUID

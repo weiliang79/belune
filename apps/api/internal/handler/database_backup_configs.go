@@ -139,7 +139,9 @@ func (h *Handler) validateConfigRequest(r *http.Request, db generated.Database, 
 
 // ListDatabaseBackupConfigs returns a database's backup configurations.
 //
-//apidoc:tag databases
+//apidoc:tag databases/volumes-backups
+//apidoc:title Get Configs
+//apidoc:order 2
 func (h *Handler) ListDatabaseBackupConfigs(w http.ResponseWriter, r *http.Request) {
 	db, ok := h.databaseFromPath(w, r)
 	if !ok {
@@ -159,7 +161,9 @@ func (h *Handler) ListDatabaseBackupConfigs(w http.ResponseWriter, r *http.Reque
 
 // CreateDatabaseBackupConfig creates a scheduled backup configuration.
 //
-//apidoc:tag databases
+//apidoc:tag databases/volumes-backups
+//apidoc:title Create Config
+//apidoc:order 3
 func (h *Handler) CreateDatabaseBackupConfig(w http.ResponseWriter, r *http.Request) {
 	db, ok := h.databaseFromPath(w, r)
 	if !ok {
@@ -222,7 +226,9 @@ func (h *Handler) configInDatabase(w http.ResponseWriter, r *http.Request, db ge
 
 // UpdateDatabaseBackupConfig updates a scheduled backup configuration.
 //
-//apidoc:tag databases
+//apidoc:tag databases/volumes-backups
+//apidoc:title Update Config
+//apidoc:order 4
 func (h *Handler) UpdateDatabaseBackupConfig(w http.ResponseWriter, r *http.Request) {
 	db, ok := h.databaseFromPath(w, r)
 	if !ok {
@@ -267,7 +273,9 @@ func (h *Handler) UpdateDatabaseBackupConfig(w http.ResponseWriter, r *http.Requ
 // DeleteDatabaseBackupConfig deletes a config and its produced backups (rows +
 // local files + remote objects), so nothing is orphaned in the destination.
 //
-//apidoc:tag databases
+//apidoc:tag databases/volumes-backups
+//apidoc:title Delete Config
+//apidoc:order 5
 func (h *Handler) DeleteDatabaseBackupConfig(w http.ResponseWriter, r *http.Request) {
 	db, ok := h.databaseFromPath(w, r)
 	if !ok {
@@ -304,7 +312,9 @@ func (h *Handler) DeleteDatabaseBackupConfig(w http.ResponseWriter, r *http.Requ
 
 // RunDatabaseBackupConfig triggers an immediate backup for a config.
 //
-//apidoc:tag databases
+//apidoc:tag databases/volumes-backups
+//apidoc:title Run Config Backup
+//apidoc:order 6
 func (h *Handler) RunDatabaseBackupConfig(w http.ResponseWriter, r *http.Request) {
 	db, ok := h.databaseFromPath(w, r)
 	if !ok {
@@ -356,7 +366,9 @@ type projectBackupActivityResponse struct {
 // databases AND application volumes (newest first) for the project
 // Backups-tab activity summary.
 //
-//apidoc:tag projects
+//apidoc:tag projects/backup-destinations
+//apidoc:title Get Recent Backups
+//apidoc:order 7
 func (h *Handler) ListProjectBackups(w http.ResponseWriter, r *http.Request) {
 	projectUUID, ok := h.projectFromPath(w, r)
 	if !ok {

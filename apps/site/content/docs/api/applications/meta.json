@@ -2,20 +2,18 @@
   "title": "Applications",
   "pages": [
     "list-applications",
-    "create-application",
     "get-application",
+    "create-application",
     "update-application",
-    "get-build-cache",
-    "clear-build-cache",
     "change-application-source",
-    "get-deploy-hook",
-    "generate-deploy-hook",
-    "delete-deploy-hook",
-    "get-application-health",
-    "set-health-check",
-    "set-resources",
-    "update-application-runtime",
-    "list-app-volume-backup-configs",
-    "update-application-webhook"
+    "env",
+    "domains",
+    "actions",
+    "deployments",
+    "previews",
+    "metrics-logs",
+    "volumes-backups",
+    "file-mounts",
+    "resources"
   ]
 }

@@ -1,0 +1,7 @@
+{
+  "title": "Environment Variables",
+  "pages": [
+    "list-env-vars",
+    "update-env-vars"
+  ]
+}

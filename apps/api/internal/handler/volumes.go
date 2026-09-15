@@ -89,7 +89,9 @@ type applicationVolumeResponse struct {
 	CreatedAt string `json:"created_at"`
 }
 
-//apidoc:tag volumes
+//apidoc:tag applications/volumes-backups
+//apidoc:title Get Volumes
+//apidoc:order 1
 func (h *Handler) ListApplicationVolumes(w http.ResponseWriter, r *http.Request) {
 	applicationID := chi.URLParam(r, "applicationId")
 	var applicationUUID pgtype.UUID
@@ -140,7 +142,9 @@ type createVolumeRequest struct {
 	MountPath string `json:"mount_path"`
 }
 
-//apidoc:tag volumes
+//apidoc:tag applications/volumes-backups
+//apidoc:title Create Volume
+//apidoc:order 2
 func (h *Handler) CreateApplicationVolume(w http.ResponseWriter, r *http.Request) {
 	applicationID := chi.URLParam(r, "applicationId")
 	var applicationUUID pgtype.UUID
@@ -208,7 +212,7 @@ func (h *Handler) CreateApplicationVolume(w http.ResponseWriter, r *http.Request
 	})
 }
 
-//apidoc:tag volumes
+//apidoc:tag applications/volumes-backups
 func (h *Handler) DeleteApplicationVolume(w http.ResponseWriter, r *http.Request) {
 	applicationID := chi.URLParam(r, "applicationId")
 	var applicationUUID pgtype.UUID

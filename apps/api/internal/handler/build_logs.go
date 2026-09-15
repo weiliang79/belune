@@ -13,7 +13,9 @@ import (
 	"github.com/weiliang79/belune/internal/status"
 )
 
-//apidoc:tag deployments
+//apidoc:tag applications/deployments
+//apidoc:title Stream Build Logs
+//apidoc:order 5
 func (h *Handler) StreamBuildLogs(w http.ResponseWriter, r *http.Request) {
 	applicationID := chi.URLParam(r, "applicationId")
 	var applicationUUID pgtype.UUID

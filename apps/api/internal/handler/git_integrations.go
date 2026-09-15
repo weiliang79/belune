@@ -35,7 +35,8 @@ type gitIntegrationResponse struct {
 
 // ListGitIntegrations returns the current user's connected provider accounts.
 //
-//apidoc:tag git/integrations
+//apidoc:tag platform/git/integrations
+//apidoc:title Get Integrations
 func (h *Handler) ListGitIntegrations(w http.ResponseWriter, r *http.Request) {
 	var userID pgtype.UUID
 	if err := userID.Scan(middleware.UserIDFromContext(r.Context())); err != nil {
@@ -68,7 +69,8 @@ type availableProviderResponse struct {
 
 // ListAvailableProviders returns the configured providers a user can connect to.
 //
-//apidoc:tag git/integrations
+//apidoc:tag platform/git/integrations
+//apidoc:title Get Available Providers
 func (h *Handler) ListAvailableProviders(w http.ResponseWriter, r *http.Request) {
 	rows, err := h.gitProviderSvc.List(r.Context())
 	if err != nil {
@@ -97,7 +99,8 @@ func (h *Handler) ListAvailableProviders(w http.ResponseWriter, r *http.Request)
 
 // ListIntegrationRepos returns the repositories accessible to a connection.
 //
-//apidoc:tag git/integrations
+//apidoc:tag platform/git/integrations
+//apidoc:title Get Repos
 func (h *Handler) ListIntegrationRepos(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "integrationId")
 	var uuid pgtype.UUID
@@ -119,7 +122,8 @@ func (h *Handler) ListIntegrationRepos(w http.ResponseWriter, r *http.Request) {
 
 // ListIntegrationBranches returns the branches of a repo for a connection.
 //
-//apidoc:tag git/integrations
+//apidoc:tag platform/git/integrations
+//apidoc:title Get Repo Branches
 func (h *Handler) ListIntegrationBranches(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "integrationId")
 	var uuid pgtype.UUID
@@ -147,7 +151,7 @@ func (h *Handler) ListIntegrationBranches(w http.ResponseWriter, r *http.Request
 // StartGitIntegrationConnect generates a one-time state, stores the connect
 // context, and returns the provider auth URL for the browser to navigate to.
 //
-//apidoc:tag git/integrations
+//apidoc:tag platform/git/integrations
 func (h *Handler) StartGitIntegrationConnect(w http.ResponseWriter, r *http.Request) {
 	provider := r.URL.Query().Get("provider")
 	baseURL := r.URL.Query().Get("base_url")
@@ -254,7 +258,8 @@ func (h *Handler) HandleGitIntegrationCallback(w http.ResponseWriter, r *http.Re
 
 // DeleteGitIntegration disconnects a connected account.
 //
-//apidoc:tag git/integrations
+//apidoc:tag platform/git/integrations
+//apidoc:title Delete Integration
 func (h *Handler) DeleteGitIntegration(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "integrationId")
 	var uuid pgtype.UUID

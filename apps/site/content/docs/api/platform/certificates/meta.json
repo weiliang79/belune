@@ -1,0 +1,8 @@
+{
+  "title": "Certificates",
+  "pages": [
+    "list-certificates",
+    "upload-certificate",
+    "delete-certificate"
+  ]
+}

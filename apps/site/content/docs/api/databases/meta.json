@@ -1,28 +1,15 @@
 {
-  "title": "Databases & Backups",
+  "title": "Databases",
   "pages": [
-    "list-backup-destinations",
-    "create-backup-destination",
-    "test-backup-destination-params",
-    "delete-backup-destination",
-    "update-backup-destination",
-    "test-backup-destination",
     "list-databases",
-    "create-database",
     "get-database",
+    "create-database",
     "update-database",
-    "list-database-backup-configs",
-    "create-database-backup-config",
-    "delete-database-backup-config",
-    "update-database-backup-config",
-    "run-database-backup-config",
-    "list-database-backups",
-    "backup-database",
     "get-database-deletion-impact",
-    "set-database-external-access",
-    "list-database-restores",
     "upgrade-database",
-    "get-database-volume",
-    "list-project-orphaned-backups"
+    "set-database-external-access",
+    "actions",
+    "logs",
+    "volumes-backups"
   ]
 }

@@ -2,9 +2,12 @@
   "title": "Projects",
   "pages": [
     "list-projects",
-    "create-project",
     "get-project",
+    "create-project",
     "update-project",
-    "list-project-backups"
+    "get-project-metrics",
+    "env",
+    "backup-destinations",
+    "templates"
   ]
 }

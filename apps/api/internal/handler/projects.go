@@ -19,6 +19,8 @@ type createProjectRequest struct {
 }
 
 //apidoc:tag projects
+//apidoc:title Create Project
+//apidoc:order 3
 func (h *Handler) CreateProject(w http.ResponseWriter, r *http.Request) {
 	// middleware.RequireProjectAccess only ever compares against a
 	// {projectId} URL param, so it has nothing to check here — creating a
@@ -94,6 +96,8 @@ func (h *Handler) isProjectOwner(r *http.Request, projectID pgtype.UUID) bool {
 }
 
 //apidoc:tag projects
+//apidoc:title Get Project
+//apidoc:order 2
 func (h *Handler) GetProject(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "projectId")
 	var uuid pgtype.UUID
@@ -117,6 +121,8 @@ func (h *Handler) GetProject(w http.ResponseWriter, r *http.Request) {
 }
 
 //apidoc:tag projects
+//apidoc:title Get Projects
+//apidoc:order 1
 func (h *Handler) ListProjects(w http.ResponseWriter, r *http.Request) {
 	role := middleware.RoleFromContext(r.Context())
 	// This list has no {projectId} URL param for middleware.RequireProjectAccess
@@ -171,6 +177,8 @@ type updateProjectRequest struct {
 }
 
 //apidoc:tag projects
+//apidoc:title Update Project
+//apidoc:order 4
 func (h *Handler) UpdateProject(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "projectId")
 	var uuid pgtype.UUID

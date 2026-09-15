@@ -41,7 +41,9 @@ type domainTLSStatus struct {
 // that makes a stuck certificate obvious instead of requiring the operator to
 // click through each application to find it.
 //
-//apidoc:tag domains
+//apidoc:tag platform
+//apidoc:title Get Domain TLS Status
+//apidoc:order 2
 func (h *Handler) ListDomainTLSStatus(w http.ResponseWriter, r *http.Request) {
 	rows, err := h.queries.ListDomainsWithTLSStatus(r.Context())
 	if err != nil {
@@ -73,7 +75,9 @@ func (h *Handler) ListDomainTLSStatus(w http.ResponseWriter, r *http.Request) {
 // RecheckDomainTLS enqueues an immediate probe for one domain, so the user does
 // not have to wait out the sweep interval after fixing their DNS.
 //
-//apidoc:tag domains
+//apidoc:tag applications/domains
+//apidoc:title Recheck Domain TLS
+//apidoc:order 4
 func (h *Handler) RecheckDomainTLS(w http.ResponseWriter, r *http.Request) {
 	domainID := chi.URLParam(r, "domainId")
 	var domainUUID pgtype.UUID
@@ -128,7 +132,9 @@ type dashboardTLSResponse struct {
 // GetDashboardTLS probes the certificate the proxy currently serves for the
 // configured dashboard domain.
 //
-//apidoc:tag admin-platform
+//apidoc:tag platform/maintenance
+//apidoc:title Get LTS Status
+//apidoc:order 2
 func (h *Handler) GetDashboardTLS(w http.ResponseWriter, r *http.Request) {
 	setting, err := h.queries.GetSetting(r.Context(), proxy.SettingDashboardDomain)
 	domain := ""

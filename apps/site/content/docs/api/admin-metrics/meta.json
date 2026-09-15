@@ -1,9 +1,0 @@
-{
-  "title": "Metrics & Live Streams",
-  "pages": [
-    "get-metrics",
-    "get-host-historical-metrics",
-    "stream-host-metrics",
-    "serve-metrics"
-  ]
-}

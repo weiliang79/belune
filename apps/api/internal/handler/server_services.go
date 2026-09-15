@@ -25,7 +25,9 @@ type serverServicesResponse struct {
 // (admin only). Each probe is bounded by a short timeout so one hung dependency
 // can't stall the response. GET /api/server/services
 //
-//apidoc:tag admin-platform
+//apidoc:tag platform/maintenance
+//apidoc:title Get Server Services
+//apidoc:order 3
 func (h *Handler) GetServerServices(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
 	defer cancel()

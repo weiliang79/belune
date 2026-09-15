@@ -175,7 +175,9 @@ func (h *Handler) checkHostTLSAgreement(ctx context.Context, hostname, sslMode s
 	return ""
 }
 
-//apidoc:tag domains
+//apidoc:tag applications/domains
+//apidoc:title Get Domains
+//apidoc:order 1
 func (h *Handler) ListDomains(w http.ResponseWriter, r *http.Request) {
 	applicationID := chi.URLParam(r, "applicationId")
 	var applicationUUID pgtype.UUID
@@ -212,7 +214,9 @@ type addDomainRequest struct {
 	AdvancedConfig json.RawMessage `json:"advanced_config,omitempty"`
 }
 
-//apidoc:tag domains
+//apidoc:tag applications/domains
+//apidoc:title Create Domain
+//apidoc:order 2
 func (h *Handler) AddDomain(w http.ResponseWriter, r *http.Request) {
 	applicationID := chi.URLParam(r, "applicationId")
 	var applicationUUID pgtype.UUID
@@ -367,7 +371,9 @@ type updateDomainRequest struct {
 	AdvancedConfig json.RawMessage `json:"advanced_config,omitempty"`
 }
 
-//apidoc:tag domains
+//apidoc:tag applications/domains
+//apidoc:title Update Domain
+//apidoc:order 3
 func (h *Handler) UpdateDomain(w http.ResponseWriter, r *http.Request) {
 	domainID := chi.URLParam(r, "domainId")
 	var domainUUID pgtype.UUID
@@ -567,7 +573,9 @@ func (h *Handler) loadRouteFeatures(r *http.Request, domainID pgtype.UUID) []pro
 
 // --- Route Feature CRUD ---
 
-//apidoc:tag domains
+//apidoc:tag applications/domains
+//apidoc:title Get Route Features
+//apidoc:order 5
 func (h *Handler) ListRouteFeatures(w http.ResponseWriter, r *http.Request) {
 	domainID := chi.URLParam(r, "domainId")
 	var domainUUID pgtype.UUID
@@ -596,7 +604,9 @@ type upsertRouteFeatureRequest struct {
 	Enabled     bool            `json:"enabled"`
 }
 
-//apidoc:tag domains
+//apidoc:tag applications/domains
+//apidoc:title Update Route Features
+//apidoc:order 6
 func (h *Handler) UpsertRouteFeature(w http.ResponseWriter, r *http.Request) {
 	domainID := chi.URLParam(r, "domainId")
 	var domainUUID pgtype.UUID
@@ -646,7 +656,9 @@ func (h *Handler) UpsertRouteFeature(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, feature)
 }
 
-//apidoc:tag domains
+//apidoc:tag applications/domains
+//apidoc:title Get Route Features
+//apidoc:order 7
 func (h *Handler) DeleteRouteFeature(w http.ResponseWriter, r *http.Request) {
 	featureID := chi.URLParam(r, "featureId")
 	var featureUUID pgtype.UUID
@@ -721,7 +733,7 @@ func (h *Handler) rebuildDomainRoute(r *http.Request, domainID pgtype.UUID) {
 	}
 }
 
-//apidoc:tag domains
+//apidoc:tag applications/domains
 func (h *Handler) RemoveDomain(w http.ResponseWriter, r *http.Request) {
 	domainID := chi.URLParam(r, "domainId")
 	var domainUUID pgtype.UUID

@@ -1,0 +1,18 @@
+{
+  "title": "Platform",
+  "pages": [
+    "get-global-deployments",
+    "list-domain-tls-status",
+    "requests",
+    "git",
+    "certificates",
+    "notification-channels",
+    "users",
+    "quotas",
+    "audit-logs",
+    "docker",
+    "metrics",
+    "backups",
+    "maintenance"
+  ]
+}

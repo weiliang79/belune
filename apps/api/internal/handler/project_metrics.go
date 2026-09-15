@@ -27,7 +27,9 @@ type serviceMetrics struct {
 // application id. Container stats are a best-effort single poll — apps without a
 // running container simply omit live usage. GET /api/projects/{projectId}/metrics
 //
-//apidoc:tag metrics
+//apidoc:tag projects
+//apidoc:title Get Metrics
+//apidoc:order 5
 func (h *Handler) GetProjectMetrics(w http.ResponseWriter, r *http.Request) {
 	projectID := chi.URLParam(r, "projectId")
 	var projectUUID pgtype.UUID

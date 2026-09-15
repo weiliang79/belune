@@ -16,7 +16,9 @@ import (
 // ListCertificates returns metadata for every stored certificate. Responses
 // carry no key material — only what the leaf declares publicly.
 //
-//apidoc:tag admin-platform
+//apidoc:tag platform/certificates
+//apidoc:title Get Certificates
+//apidoc:order 1
 func (h *Handler) ListCertificates(w http.ResponseWriter, r *http.Request) {
 	certs, err := h.certSvc.ListCertificates(r.Context())
 	if err != nil {
@@ -36,7 +38,9 @@ type uploadCertificateRequest struct {
 // the operator's to fix, so they come back as 400 with the specific reason
 // (mismatched key, missing SANs, not PEM at all) rather than a generic failure.
 //
-//apidoc:tag admin-platform
+//apidoc:tag platform/certificates
+//apidoc:title Upload Certificate
+//apidoc:order 2
 func (h *Handler) UploadCertificate(w http.ResponseWriter, r *http.Request) {
 	var req uploadCertificateRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -70,7 +74,9 @@ func (h *Handler) UploadCertificate(w http.ResponseWriter, r *http.Request) {
 
 // DeleteCertificate removes a certificate unless domains still serve it.
 //
-//apidoc:tag admin-platform
+//apidoc:tag platform/certificates
+//apidoc:title Delete Certificate
+//apidoc:order 3
 func (h *Handler) DeleteCertificate(w http.ResponseWriter, r *http.Request) {
 	certificateID := chi.URLParam(r, "certificateId")
 	var certUUID pgtype.UUID

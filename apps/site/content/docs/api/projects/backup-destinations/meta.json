@@ -1,0 +1,12 @@
+{
+  "title": "Backup Destinations",
+  "pages": [
+    "list-backup-destinations",
+    "create-backup-destination",
+    "update-backup-destination",
+    "delete-backup-destination",
+    "test-backup-destination",
+    "test-backup-destination-params",
+    "list-project-backups"
+  ]
+}

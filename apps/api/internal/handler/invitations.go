@@ -53,7 +53,7 @@ func toInvitationResponse(inv generated.Invitation) invitationResponse {
 // enqueues the invitation email. Admin-only.
 // POST /api/users/invite
 //
-//apidoc:tag admin-users
+//apidoc:tag platform/users
 func (h *Handler) InviteUser(w http.ResponseWriter, r *http.Request) {
 	var req inviteUserRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -144,7 +144,9 @@ func (h *Handler) InviteUser(w http.ResponseWriter, r *http.Request) {
 // Admin-only.
 // GET /api/users/invitations
 //
-//apidoc:tag admin-users
+//apidoc:tag platform/users
+//apidoc:title Get Invitations
+//apidoc:order 2
 func (h *Handler) ListPendingInvitations(w http.ResponseWriter, r *http.Request) {
 	invs, err := h.queries.ListPendingInvitations(r.Context())
 	if err != nil {
@@ -161,7 +163,9 @@ func (h *Handler) ListPendingInvitations(w http.ResponseWriter, r *http.Request)
 // RevokeInvitation deletes a pending invitation. Admin-only.
 // DELETE /api/users/invitations/{invitationId}
 //
-//apidoc:tag admin-users
+//apidoc:tag platform/users
+//apidoc:title Revoke Invitation
+//apidoc:order 3
 func (h *Handler) RevokeInvitation(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	clientIP := middleware.ClientIP(r)

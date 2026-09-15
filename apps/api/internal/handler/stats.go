@@ -113,7 +113,9 @@ func appHealth(appH generated.CountApplicationHealthRow, dbH generated.CountData
 // backups; members see only their own projects' app health, deploy success,
 // and attention items (host + backups are admin-only signals).
 //
-//apidoc:tag stats-notifications
+//apidoc:tag account/notifications
+//apidoc:title Get Stats
+//apidoc:order 6
 func (h *Handler) GetStats(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	isAdmin := middleware.RoleFromContext(ctx) == "admin"

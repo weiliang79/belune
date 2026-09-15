@@ -7,24 +7,9 @@
     "access",
     "live-updates",
     "account",
-    "git",
-    "templates",
-    "deploy-actions",
-    "metrics",
-    "admin-metrics",
-    "previews",
-    "deployments",
-    "logs",
-    "domains",
-    "volumes",
-    "file-mounts",
-    "env",
-    "databases",
-    "applications",
-    "stats-notifications",
     "projects",
-    "admin-users",
-    "admin-backups",
-    "admin-platform"
+    "applications",
+    "databases",
+    "platform"
   ]
 }

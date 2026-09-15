@@ -1,0 +1,13 @@
+{
+  "title": "Notification Channels",
+  "pages": [
+    "list-notification-channels",
+    "create-notification-channel",
+    "update-notification-channel",
+    "set-notification-channel-enabled",
+    "delete-notification-channel",
+    "test-notification-channel",
+    "test-notification-channel-params",
+    "list-notification-events"
+  ]
+}

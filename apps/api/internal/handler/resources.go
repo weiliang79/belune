@@ -25,7 +25,9 @@ type setResourcesRequest struct {
 // Limits are applied when the container is next created, so this stamps the
 // config-changed marker and the badge points at Reload.
 //
-//apidoc:tag applications
+//apidoc:tag applications/resources
+//apidoc:title Set Resources
+//apidoc:order 1
 func (h *Handler) SetResources(w http.ResponseWriter, r *http.Request) {
 	applicationID := chi.URLParam(r, "applicationId")
 	var applicationUUID pgtype.UUID

@@ -1,0 +1,9 @@
+{
+  "title": "Actions",
+  "pages": [
+    "start-database",
+    "stop-database",
+    "restart-database",
+    "reload-database"
+  ]
+}

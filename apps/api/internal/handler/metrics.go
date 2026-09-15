@@ -36,7 +36,9 @@ type containerStats struct {
 	ByType map[string]containerTypeCount `json:"by_type"`
 }
 
-//apidoc:tag admin-metrics
+//apidoc:tag platform/metrics
+//apidoc:title Get Summary
+//apidoc:order 1
 func (h *Handler) GetMetrics(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
@@ -105,12 +107,16 @@ func (h *Handler) GetMetrics(w http.ResponseWriter, r *http.Request) {
 // up as the meaningless operationId "func1") and no doc comment a
 // //apidoc:tag directive could attach to.
 //
-//apidoc:tag admin-metrics
+//apidoc:tag platform/metrics
+//apidoc:title Serve Metrics
+//apidoc:order 4
 func (h *Handler) ServeMetrics(w http.ResponseWriter, r *http.Request) {
 	metrics.Handler().ServeHTTP(w, r)
 }
 
-//apidoc:tag admin-platform
+//apidoc:tag platform/maintenance
+//apidoc:title Trigger Cleanup
+//apidoc:order 5
 func (h *Handler) TriggerCleanup(w http.ResponseWriter, r *http.Request) {
 	type cleanupRequest struct {
 		RetainCount int      `json:"retain_count,omitempty"`

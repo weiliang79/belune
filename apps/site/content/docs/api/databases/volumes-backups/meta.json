@@ -1,0 +1,15 @@
+{
+  "title": "Volumes & Backups",
+  "pages": [
+    "get-database-volume",
+    "list-database-backup-configs",
+    "create-database-backup-config",
+    "update-database-backup-config",
+    "delete-database-backup-config",
+    "run-database-backup-config",
+    "list-database-backups",
+    "list-database-restores",
+    "list-project-orphaned-backups",
+    "backup-database"
+  ]
+}

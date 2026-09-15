@@ -1,33 +1,151 @@
 [
   { "slug": "live-updates", "tag": "Live Updates (WebSocket Hub)" },
-  { "slug": "terminal", "tag": "Terminal Access" },
-  { "slug": "tokens", "tag": "Personal Access Tokens" },
-  { "slug": "account", "tag": "Session & Account" },
   {
-    "slug": "git",
-    "title": "Git",
+    "slug": "account",
+    "title": "Account",
     "children": [
-      { "slug": "integrations", "tag": "Git Integrations", "title": "Integrations" },
-      { "slug": "providers", "tag": "Git Provider Configs (Admin)", "title": "Provider Configs" }
+      { "slug": "profile", "tag": "Profile", "title": "Profile" },
+      {
+        "slug": "notifications",
+        "tag": "Notifications",
+        "title": "Notifications & Stats"
+      }
     ]
   },
-  { "slug": "templates", "tag": "App Templates" },
-  { "slug": "deploy-actions", "tag": "Deploy & Lifecycle Actions" },
-  { "slug": "metrics", "tag": "Metrics" },
-  { "slug": "admin-metrics", "tag": "Metrics & Live Streams (Admin)", "title": "Metrics & Live Streams" },
-  { "slug": "previews", "tag": "Preview Environments" },
-  { "slug": "deployments", "tag": "Deployments" },
-  { "slug": "logs", "tag": "Logs & Request Traces" },
-  { "slug": "domains", "tag": "Domains & TLS" },
-  { "slug": "volumes", "tag": "Application Volumes & Backups" },
-  { "slug": "file-mounts", "tag": "File Mounts" },
-  { "slug": "env", "tag": "Environment Variables" },
-  { "slug": "databases", "tag": "Databases & Backups" },
-  { "slug": "applications", "tag": "Applications" },
-  { "slug": "stats-notifications", "tag": "Stats & Notifications" },
-  { "slug": "projects", "tag": "Projects" },
-  { "slug": "admin-users", "tag": "Users & Invitations (Admin)", "title": "Users & Invitations" },
-  { "slug": "admin-backups", "tag": "Platform Backups (Admin)", "title": "Platform Backups" },
-  { "slug": "admin-platform", "tag": "Platform (Admin)", "title": "Platform" },
+  {
+    "slug": "projects",
+    "tag": "Projects",
+    "children": [
+      {
+        "slug": "env",
+        "tag": "Project Environment Variables",
+        "title": "Environment Variables"
+      },
+      {
+        "slug": "backup-destinations",
+        "tag": "Backup Destinations",
+        "title": "Backup Destinations"
+      },
+      { "slug": "templates", "tag": "App Templates", "title": "App Templates" }
+    ]
+  },
+  {
+    "slug": "applications",
+    "tag": "Applications",
+    "children": [
+      {
+        "slug": "env",
+        "tag": "Application Environment Variables",
+        "title": "Environment Variables"
+      },
+      {
+        "slug": "domains",
+        "tag": "Application Domains & TLS",
+        "title": "Domains & TLS"
+      },
+      { "slug": "actions", "tag": "Application Actions", "title": "Actions" },
+      {
+        "slug": "deployments",
+        "tag": "Application Deployments",
+        "title": "Deployments"
+      },
+      {
+        "slug": "previews",
+        "tag": "Application Preview Environments",
+        "title": "Preview Environments"
+      },
+      {
+        "slug": "metrics-logs",
+        "tag": "Application Metrics & Logs",
+        "title": "Metrics & Logs"
+      },
+      {
+        "slug": "volumes-backups",
+        "tag": "Application Volumes & Backups",
+        "title": "Volumes & Backups"
+      },
+      {
+        "slug": "file-mounts",
+        "tag": "Application File Mounts",
+        "title": "File Mounts"
+      },
+      {
+        "slug": "resources",
+        "tag": "Application Resources",
+        "title": "Resources"
+      }
+    ]
+  },
+  {
+    "slug": "databases",
+    "tag": "Databases",
+    "children": [
+      { "slug": "actions", "tag": "Database Actions", "title": "Actions" },
+      { "slug": "logs", "tag": "Database Logs", "title": "Logs" },
+      {
+        "slug": "volumes-backups",
+        "tag": "Database Volumes & Backups",
+        "title": "Volumes & Backups"
+      }
+    ]
+  },
+  {
+    "slug": "platform",
+    "tag": "Platform",
+    "children": [
+      { "slug": "requests", "tag": "Requests (Admin)", "title": "Requests" },
+      {
+        "slug": "git",
+        "title": "Git",
+        "children": [
+          {
+            "slug": "integrations",
+            "tag": "Git Integrations",
+            "title": "Integrations"
+          },
+          {
+            "slug": "providers",
+            "tag": "Git Providers (Admin)",
+            "title": "Providers"
+          }
+        ]
+      },
+      {
+        "slug": "certificates",
+        "tag": "Certificates (Admin)",
+        "title": "Certificates"
+      },
+      {
+        "slug": "notification-channels",
+        "tag": "Notification Channels (Admin)",
+        "title": "Notification Channels"
+      },
+      {
+        "slug": "users",
+        "tag": "Users (Admin)",
+        "title": "Users"
+      },
+      { "slug": "quotas", "tag": "Quotas (Admin)", "title": "Quotas" },
+      {
+        "slug": "audit-logs",
+        "tag": "Audit Logs (Admin)",
+        "title": "Audit Logs"
+      },
+      { "slug": "docker", "tag": "Docker (Admin)", "title": "Docker" },
+      { "slug": "metrics", "tag": "Metrics (Admin)", "title": "Metrics" },
+      {
+        "slug": "backups",
+        "tag": "Backups (Admin)",
+        "title": "Backups"
+      },
+      {
+        "slug": "maintenance",
+        "tag": "Maintenance (Admin)",
+        "title": "Maintenance"
+      }
+    ]
+  },
+  { "slug": "terminal", "tag": "Terminal Access" },
+  { "slug": "tokens", "tag": "Personal Access Tokens" },
   { "slug": "uncategorized", "tag": "Uncategorized" }
 ]
