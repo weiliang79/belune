@@ -81,6 +81,7 @@ func (h *Handler) GetDeployment(w http.ResponseWriter, r *http.Request) {
 //
 //apidoc:tag platform
 //apidoc:title Get All Deployments
+//apidoc:description Deployments across every application. An admin sees all of them; a member sees only their own projects and any shared with them.
 //apidoc:order 1
 func (h *Handler) GetGlobalDeployments(w http.ResponseWriter, r *http.Request) {
 	limit, offset := parsePagination(r)

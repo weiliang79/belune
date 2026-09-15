@@ -122,6 +122,7 @@ func (h *Handler) GetProject(w http.ResponseWriter, r *http.Request) {
 
 //apidoc:tag projects
 //apidoc:title Get Projects
+//apidoc:description An admin sees every project on the install; a member sees only their own projects and any shared with them.
 //apidoc:order 1
 func (h *Handler) ListProjects(w http.ResponseWriter, r *http.Request) {
 	role := middleware.RoleFromContext(r.Context())

@@ -115,6 +115,7 @@ func appHealth(appH generated.CountApplicationHealthRow, dbH generated.CountData
 //
 //apidoc:tag account/notifications
 //apidoc:title Get Stats
+//apidoc:description Operator-health summary in one call. An admin sees every project plus host resources and failed backups; a member sees only their own projects and any shared with them, without the host and backup signals.
 //apidoc:order 6
 func (h *Handler) GetStats(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()

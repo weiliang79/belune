@@ -1298,6 +1298,7 @@
       "get": {
         "operationId": "GetGlobalDeployments",
         "summary": "Get All Deployments",
+        "description": "Deployments across every application. An admin sees all of them; a member sees only their own projects and any shared with them.",
         "tags": [
           "Platform"
         ],
@@ -3263,6 +3264,7 @@
       "get": {
         "operationId": "ListProjects",
         "summary": "Get Projects",
+        "description": "An admin sees every project on the install; a member sees only their own projects and any shared with them.",
         "tags": [
           "Projects"
         ],
@@ -11566,6 +11568,7 @@
       "get": {
         "operationId": "GetStats",
         "summary": "Get Stats",
+        "description": "Operator-health summary in one call. An admin sees every project plus host resources and failed backups; a member sees only their own projects and any shared with them, without the host and backup signals.",
         "tags": [
           "Notifications"
         ],
