@@ -471,6 +471,7 @@ func TestGenerateAPIReference(t *testing.T) {
 	require.Equal(t, 42, sessionRoutes, "expected exactly 42 RequireSession routes")
 
 	sig, directives, reg := apidocExtractTypes(t)
+	apidocAssertEmbedsPromoted(t, reg)
 	doc := apidocBuildDocument(t, routes, sig, directives, reg)
 	apidocWriteSpec(t, doc)
 	// Per-domain site pages are generated separately, by
@@ -790,17 +791,110 @@ func (reg *apidocSchemaRegistry) registerNamed(named *types.Named, u *types.Stru
 	return ref
 }
 
+// apidocAssertEmbedsPromoted closes the embedded-promotion class for good.
+//
+// encoding/json promotes an embedded struct's exported fields onto the parent,
+// and this generator has gotten that wrong TWICE: first by emitting a nested
+// object that doesn't exist on the wire (trap #2, databaseResponse), then by
+// dropping unexported embeds whole because the !f.Exported() test ran before
+// the f.Embedded() branch — silently truncating five schemas by 43 fields, a
+// defect invisible until someone happened to ask what one of those responses
+// actually looked like.
+//
+// Both were fixes to buildObjectSchema. Neither left anything behind that
+// would catch a third variant. This does: for every named struct the registry
+// resolved, every promoting embed's properties must ALSO appear on the parent.
+// It reads the finished schemas rather than re-deriving them, so it cannot
+// share a bug with the walk it checks — the same reasoning as
+// TestAPIDocAllMarshalerTypesHandled, which closed the custom-marshaler class
+// after time.Time was found the same accidental way.
+func apidocAssertEmbedsPromoted(t *testing.T, reg *apidocSchemaRegistry) {
+	t.Helper()
+
+	// Snapshot first: propertiesOf -> walkType can insert into namedTypes, and
+	// ranging a map while writing it leaves the new entries' visitation
+	// undefined.
+	type entry struct {
+		name  string
+		named *types.Named
+	}
+	snapshot := make([]entry, 0, len(reg.namedTypes))
+	for k, v := range reg.namedTypes {
+		snapshot = append(snapshot, entry{k, v})
+	}
+	sort.Slice(snapshot, func(i, j int) bool { return snapshot[i].name < snapshot[j].name })
+
+	var missing []string
+	for _, e := range snapshot {
+		st, ok := e.named.Underlying().(*types.Struct)
+		if !ok {
+			continue
+		}
+		parentProps, ok := reg.propertiesOf(reg.walkType(e.named))
+		if !ok {
+			continue // not an object schema (a special-cased marshaler type)
+		}
+		for i := 0; i < st.NumFields(); i++ {
+			f := st.Field(i)
+			if !f.Embedded() || !apidocPromotesFields(f.Type()) {
+				continue
+			}
+			// A json-tagged embed NESTS under that name instead of promoting,
+			// so it is correctly absent from the parent's own properties.
+			if _, tagged := reflect.StructTag(st.Tag(i)).Lookup("json"); tagged {
+				continue
+			}
+			embeddedProps, ok := reg.propertiesOf(reg.walkType(f.Type()))
+			if !ok {
+				continue
+			}
+			for k := range embeddedProps {
+				if _, present := parentProps[k]; !present {
+					missing = append(missing, fmt.Sprintf(
+						"%s: missing %q, which encoding/json promotes from embedded %s",
+						e.named.Obj().Name(), k, f.Type()))
+				}
+			}
+		}
+	}
+	sort.Strings(missing)
+	require.Empty(t, missing,
+		"schema(s) omit fields that encoding/json promotes from an embedded struct — buildObjectSchema dropped or nested an embed it should have flattened")
+}
+
+// apidocPromotesFields reports whether an embedded field's type is one whose
+// exported fields encoding/json promotes into the parent — a struct, or a
+// pointer to one. An embedded field of unexported NON-struct type (type myInt
+// int) is not marshaled at all, so the distinction is load-bearing, not
+// defensive.
+func apidocPromotesFields(t types.Type) bool {
+	if p, ok := t.Underlying().(*types.Pointer); ok {
+		t = p.Elem()
+	}
+	_, ok := t.Underlying().(*types.Struct)
+	return ok
+}
+
 // buildObjectSchema walks a struct's exported fields into an object schema.
 // Handles trap #2: an embedded field with no json tag is PROMOTED by
 // encoding/json — its own fields appear at the parent's top level on the
 // wire, not nested under a field named after the embedded type. Naive
 // extraction would emit a nested object that doesn't exist
 // (databaseResponse embeds generated.Database with no tag; 6 call sites).
+//
+// ⚠️ An EMBEDDED field's name IS its type's name, so embedding an unexported
+// type (appVolumeBackupConfigResponse embeds volumeBackupConfigResponse)
+// makes the FIELD unexported — yet encoding/json still promotes that struct's
+// exported fields. An earlier version tested !f.Exported() first and dropped
+// those embeds whole, silently truncating five schemas by 43 fields between
+// them. databaseResponse escaped only because generated.Database happens to
+// be exported. Hence the f.Embedded() carve-out below: skip an unexported
+// field ONLY when it is not a promoting embed.
 func (reg *apidocSchemaRegistry) buildObjectSchema(u *types.Struct) apidocSchema {
 	props := apidocSchema{}
 	for i := 0; i < u.NumFields(); i++ {
 		f := u.Field(i)
-		if !f.Exported() {
+		if !f.Exported() && !(f.Embedded() && apidocPromotesFields(f.Type())) {
 			continue
 		}
 		jsonTag, hasJSONTag := reflect.StructTag(u.Tag(i)).Lookup("json")

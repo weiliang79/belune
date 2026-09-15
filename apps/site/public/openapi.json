@@ -14064,7 +14064,45 @@
       },
       "appVolumeBackupConfigResponse": {
         "properties": {
+          "application_volume_id": {
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "destination_id": {
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "id": {
+            "type": "string"
+          },
+          "keep_latest": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "last_run_at": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "mount_path": {
+            "type": "string"
+          },
+          "prefix": {
+            "type": "string"
+          },
+          "quiesce": {
+            "type": "boolean"
+          },
+          "schedule": {
             "type": "string"
           },
           "volume_name": {
@@ -16050,6 +16088,12 @@
       },
       "orphanedBackupResponse": {
         "properties": {
+          "config_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "database_deleted_at": {
             "format": "date-time",
             "type": "string"
@@ -16061,6 +16105,41 @@
             "type": "string"
           },
           "database_type": {
+            "type": "string"
+          },
+          "error": {
+            "type": "string"
+          },
+          "finished_at": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "has_remote": {
+            "type": "boolean"
+          },
+          "id": {
+            "type": "string"
+          },
+          "log": {
+            "type": "string"
+          },
+          "remote_key": {
+            "type": "string"
+          },
+          "size_bytes": {
+            "type": "integer"
+          },
+          "started_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "target_database": {
             "type": "string"
           },
           "tombstone_id": {
@@ -16142,13 +16221,54 @@
               "null"
             ]
           },
+          "config_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "error": {
+            "type": "string"
+          },
+          "finished_at": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "has_remote": {
+            "type": "boolean"
+          },
+          "id": {
+            "type": "string"
+          },
           "kind": {
+            "type": "string"
+          },
+          "log": {
+            "type": "string"
+          },
+          "remote_key": {
             "type": "string"
           },
           "resource_id": {
             "type": "string"
           },
           "resource_name": {
+            "type": "string"
+          },
+          "size_bytes": {
+            "type": "integer"
+          },
+          "started_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "target_database": {
             "type": "string"
           }
         },
@@ -16555,17 +16675,38 @@
       },
       "templateDetail": {
         "properties": {
+          "category": {
+            "type": "string"
+          },
           "database_specs": {
             "items": {
               "$ref": "#/components/schemas/dbSpec"
             },
             "type": "array"
           },
+          "databases": {
+            "type": "integer"
+          },
+          "description": {
+            "type": "string"
+          },
+          "docs_url": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
           "inputs": {
             "items": {
               "$ref": "#/components/schemas/Input"
             },
             "type": "array"
+          },
+          "logo_url": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
           },
           "needs_hostname": {
             "type": "boolean"
@@ -16578,6 +16719,21 @@
               "type": "string"
             },
             "type": "array"
+          },
+          "services": {
+            "type": "integer"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "version": {
+            "type": "string"
+          },
+          "website": {
+            "type": "string"
           }
         },
         "type": "object"
@@ -16639,7 +16795,28 @@
       },
       "testSMTPRequest": {
         "properties": {
+          "from_email": {
+            "type": "string"
+          },
+          "from_name": {
+            "type": "string"
+          },
+          "host": {
+            "type": "string"
+          },
+          "password": {
+            "type": "string"
+          },
+          "port": {
+            "type": "integer"
+          },
+          "tls_mode": {
+            "type": "string"
+          },
           "to": {
+            "type": "string"
+          },
+          "user": {
             "type": "string"
           }
         },
