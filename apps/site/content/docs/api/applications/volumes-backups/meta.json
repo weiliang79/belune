@@ -3,8 +3,8 @@
   "pages": [
     "list-application-volumes",
     "create-application-volume",
-    "list-app-volume-backup-configs",
-    "list-volume-backup-configs",
+    "list-backup-configs-for-application",
+    "list-backup-configs-for-volume",
     "create-volume-backup-config",
     "update-volume-backup-config",
     "delete-volume-backup-config",

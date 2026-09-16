@@ -125,7 +125,7 @@ func TestDestroyRoutes_RequireSession(t *testing.T) {
 	// Sanity floor: the eleven routes RequireSession is known to be on
 	// (DeleteProject, DeleteApplication, RemoveDomain, DeleteApplicationVolume,
 	// RestoreVolumeBackup, DeleteDatabaseBackup, RestoreDatabase,
-	// RestoreDatabaseFromTombstone, DeleteOrphanedBackup, DeleteDatabase,
+	// RestoreDatabaseFromTombstone, DeleteOrphanedDatabaseBackup, DeleteDatabase,
 	// DeleteUser). DeleteCertificate was here until it was deliberately
 	// un-gated (see destroyResourceKinds above). If this drops, either a
 	// route's path changed shape or one was removed — worth knowing either

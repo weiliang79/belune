@@ -36,10 +36,16 @@ type containerStats struct {
 	ByType map[string]containerTypeCount `json:"by_type"`
 }
 
+// GetSummary returns the dashboard's overview tile: resource COUNTS, not
+// metrics. Named for what it returns — the old GetMetrics collided with
+// GetHostHistoricalMetrics and StreamHostMetrics, which are genuine host
+// time-series, and its route collided with the Prometheus scrape at /metrics.
+//
 //apidoc:tag platform/metrics
 //apidoc:title Get Summary
+//apidoc:description Resource counts for the dashboard overview — project, application, database and deployment totals plus a container census. Not time-series data: see `/api/metrics/host` for that, and `/metrics` for the Prometheus scrape endpoint.
 //apidoc:order 1
-func (h *Handler) GetMetrics(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) GetSummary(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	projects, err := h.queries.CountProjects(ctx)
@@ -109,7 +115,7 @@ func (h *Handler) GetMetrics(w http.ResponseWriter, r *http.Request) {
 //
 //apidoc:tag platform/metrics
 //apidoc:title Scrape Prometheus Metrics
-//apidoc:description The Prometheus scrape endpoint at `GET /metrics`, a passthrough to the registry's own promhttp handler. Unrelated to `GET /api/metrics`, which returns resource counts.
+//apidoc:description The Prometheus scrape endpoint at `GET /metrics`, a passthrough to the registry's own promhttp handler. Unrelated to `GET /api/summary`, which returns resource counts.
 //apidoc:order 4
 func (h *Handler) ServeMetrics(w http.ResponseWriter, r *http.Request) {
 	metrics.Handler().ServeHTTP(w, r)

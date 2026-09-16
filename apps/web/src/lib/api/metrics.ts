@@ -6,7 +6,7 @@ import type {
 import { api } from "./client";
 
 export function getMetrics() {
-  return api.get<MetricsOverview>("/metrics");
+  return api.get<MetricsOverview>("/summary");
 }
 
 export function getServerServices() {
@@ -14,7 +14,9 @@ export function getServerServices() {
 }
 
 export function triggerCleanup(retainCount?: number) {
-  return api.post<{ status: string }>("/cleanup", { retain_count: retainCount ?? 3 });
+  return api.post<{ status: string }>("/cleanup", {
+    retain_count: retainCount ?? 3,
+  });
 }
 
 export function getHostHistoricalMetrics(range: string) {

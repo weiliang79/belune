@@ -19,7 +19,7 @@ import (
 // GET /api/metrics/host/stream
 //
 //apidoc:tag platform/metrics
-//apidoc:title Steam Metrics
+//apidoc:title Stream Host Metrics
 //apidoc:order 3
 func (h *Handler) StreamHostMetrics(w http.ResponseWriter, r *http.Request) {
 	writer, err := sse.NewWriter(w)

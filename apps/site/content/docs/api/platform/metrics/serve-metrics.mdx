@@ -2,7 +2,7 @@
 title: Scrape Prometheus Metrics
 roles: ["admin"]
 description: The Prometheus scrape endpoint at `GET /metrics`, a passthrough to
-  the registry's own promhttp handler. Unrelated to `GET /api/metrics`, which
+  the registry's own promhttp handler. Unrelated to `GET /api/summary`, which
   returns resource counts. Requires the Admin role.
 full: true
 _openapi:
@@ -15,7 +15,7 @@ _openapi:
     headings: []
     contents:
       - content: The Prometheus scrape endpoint at `GET /metrics`, a passthrough to the
-          registry's own promhttp handler. Unrelated to `GET /api/metrics`,
+          registry's own promhttp handler. Unrelated to `GET /api/summary`,
           which returns resource counts. Requires the Admin role.
 ---
 

@@ -1526,7 +1526,7 @@ type orphanedBackupResponse struct {
 	DatabaseDeletedAt time.Time `json:"database_deleted_at"`
 }
 
-// ListProjectOrphanedBackups returns the backups in a project whose database has
+// ListProjectOrphanedDatabaseBackups returns the backups in a project whose database has
 // been deleted. Without this they exist and are billed but appear nowhere: the
 // per-database Backups tab is gone along with the database.
 //
@@ -1534,7 +1534,7 @@ type orphanedBackupResponse struct {
 //apidoc:title Get Orphaned Database Backups
 //apidoc:description Backups whose database has been deleted but which were kept, listed against the tombstone that now parents them. Database backups only — an application's volume backups are erased with the application and can never reach this state.
 //apidoc:order 10
-func (h *Handler) ListProjectOrphanedBackups(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) ListProjectOrphanedDatabaseBackups(w http.ResponseWriter, r *http.Request) {
 	projectID := chi.URLParam(r, "projectId")
 	var projectUUID pgtype.UUID
 	if err := projectUUID.Scan(projectID); err != nil {
@@ -1577,7 +1577,7 @@ func (h *Handler) ListProjectOrphanedBackups(w http.ResponseWriter, r *http.Requ
 	writeJSON(w, http.StatusOK, resp)
 }
 
-// DeleteOrphanedBackup erases a backup whose database is gone. The per-database
+// DeleteOrphanedDatabaseBackup erases a backup whose database is gone. The per-database
 // delete cannot reach these — the database it hung off is what disappeared.
 //
 // Session-gated, so this has no page in the reference — the title is for
@@ -1586,7 +1586,7 @@ func (h *Handler) ListProjectOrphanedBackups(w http.ResponseWriter, r *http.Requ
 //
 //apidoc:tag databases/volumes-backups
 //apidoc:title Delete Orphaned Database Backup
-func (h *Handler) DeleteOrphanedBackup(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) DeleteOrphanedDatabaseBackup(w http.ResponseWriter, r *http.Request) {
 	projectID := chi.URLParam(r, "projectId")
 	var projectUUID pgtype.UUID
 	if err := projectUUID.Scan(projectID); err != nil {

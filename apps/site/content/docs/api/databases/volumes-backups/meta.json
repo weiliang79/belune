@@ -9,7 +9,7 @@
     "run-database-backup-config",
     "list-database-backups",
     "list-database-restores",
-    "list-project-orphaned-backups",
+    "list-project-orphaned-database-backups",
     "backup-database"
   ]
 }

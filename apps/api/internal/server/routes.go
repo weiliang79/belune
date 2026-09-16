@@ -377,7 +377,7 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService,
 				r.With(middleware.RequireSession()).Delete("/api/projects/{projectId}/applications/{applicationId}/volumes/{volumeId}", h.DeleteApplicationVolume)
 
 				// Application volume backups
-				r.Get("/api/projects/{projectId}/applications/{applicationId}/volumes/{volumeId}/backup-configs", h.ListVolumeBackupConfigs)
+				r.Get("/api/projects/{projectId}/applications/{applicationId}/volumes/{volumeId}/backup-configs", h.ListBackupConfigsForVolume)
 				r.Post("/api/projects/{projectId}/applications/{applicationId}/volumes/{volumeId}/backup-configs", h.CreateVolumeBackupConfig)
 				r.Put("/api/projects/{projectId}/applications/{applicationId}/volumes/{volumeId}/backup-configs/{configId}", h.UpdateVolumeBackupConfig)
 				r.Delete("/api/projects/{projectId}/applications/{applicationId}/volumes/{volumeId}/backup-configs/{configId}", h.DeleteVolumeBackupConfig)
@@ -385,7 +385,7 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService,
 				r.Get("/api/projects/{projectId}/applications/{applicationId}/volumes/{volumeId}/backups", h.ListVolumeBackups)
 				r.With(middleware.RequireSession()).Post("/api/projects/{projectId}/applications/{applicationId}/volumes/{volumeId}/backups/{backupId}/restore", h.RestoreVolumeBackup)
 				r.Get("/api/projects/{projectId}/applications/{applicationId}/volumes/{volumeId}/restores", h.ListVolumeRestores)
-				r.Get("/api/projects/{projectId}/applications/{applicationId}/volume-backup-configs", h.ListAppVolumeBackupConfigs)
+				r.Get("/api/projects/{projectId}/applications/{applicationId}/volume-backup-configs", h.ListBackupConfigsForApplication)
 
 				// Application file/config mounts
 				r.Get("/api/projects/{projectId}/applications/{applicationId}/file-mounts", h.ListFileMounts)
@@ -463,7 +463,12 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService,
 				// everything else in this block defaults to read/write by method.
 				r.Group(func(r chi.Router) {
 					r.Use(middleware.RequireScope("metrics"))
-					r.Get("/api/metrics", h.GetMetrics)
+					// Resource counts, not metrics — hence /api/summary rather than
+					// /api/metrics, which left it one character from the Prometheus
+					// scrape at /metrics and adjacent to the real host time-series
+					// below. The scope stays "metrics": it is the most permissive
+					// requirement in the lattice, so no existing token loses access.
+					r.Get("/api/summary", h.GetSummary)
 					r.Get("/api/metrics/host", h.GetHostHistoricalMetrics)
 					// Prometheus scrape endpoint. When METRICS_BIND is configured
 					// the metrics are also exposed anonymously on that listener;
@@ -619,9 +624,9 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService,
 			// Backups whose database is gone. Project-scoped because the
 			// tombstone they hang off is — the project is the access boundary,
 			// so an orphaned backup has no owner above it.
-			r.Get("/api/projects/{projectId}/orphaned-backups", h.ListProjectOrphanedBackups)
+			r.Get("/api/projects/{projectId}/orphaned-backups", h.ListProjectOrphanedDatabaseBackups)
 			r.With(middleware.RequireSession()).Post("/api/projects/{projectId}/orphaned-backups/{backupId}/restore", h.RestoreDatabaseFromTombstone)
-			r.With(middleware.RequireSession()).Delete("/api/projects/{projectId}/orphaned-backups/{backupId}", h.DeleteOrphanedBackup)
+			r.With(middleware.RequireSession()).Delete("/api/projects/{projectId}/orphaned-backups/{backupId}", h.DeleteOrphanedDatabaseBackup)
 			r.With(middleware.RequireSession()).Delete("/api/projects/{projectId}/databases/{databaseId}", h.DeleteDatabase)
 
 			// Scheduled backup configurations per database

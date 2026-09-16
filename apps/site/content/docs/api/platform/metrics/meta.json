@@ -1,7 +1,7 @@
 {
   "title": "Metrics",
   "pages": [
-    "get-metrics",
+    "get-summary",
     "get-host-historical-metrics",
     "stream-host-metrics",
     "serve-metrics"

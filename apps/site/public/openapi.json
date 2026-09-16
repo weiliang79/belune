@@ -2783,50 +2783,6 @@
         ]
       }
     },
-    "/api/metrics": {
-      "get": {
-        "operationId": "GetMetrics",
-        "summary": "Get Summary",
-        "description": "Requires the Admin role.",
-        "tags": [
-          "Metrics (Admin)"
-        ],
-        "x-belune-order": 1,
-        "x-belune-roles": [
-          "admin"
-        ],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/metricsResponse"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Forbidden",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "metrics": []
-          },
-          {
-            "session": []
-          }
-        ]
-      }
-    },
     "/api/metrics/host": {
       "get": {
         "operationId": "GetHostHistoricalMetrics",
@@ -2903,7 +2859,7 @@
     "/api/metrics/host/stream": {
       "get": {
         "operationId": "StreamHostMetrics",
-        "summary": "Steam Metrics",
+        "summary": "Stream Host Metrics",
         "description": "Requires the Admin role.",
         "tags": [
           "Metrics (Admin)"
@@ -7480,7 +7436,7 @@
     },
     "/api/projects/{projectId}/applications/{applicationId}/volume-backup-configs": {
       "get": {
-        "operationId": "ListAppVolumeBackupConfigs",
+        "operationId": "ListBackupConfigsForApplication",
         "summary": "Get Configs for an App",
         "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
         "tags": [
@@ -7754,7 +7710,7 @@
     },
     "/api/projects/{projectId}/applications/{applicationId}/volumes/{volumeId}/backup-configs": {
       "get": {
-        "operationId": "ListVolumeBackupConfigs",
+        "operationId": "ListBackupConfigsForVolume",
         "summary": "Get Configs for a Volume",
         "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
         "tags": [
@@ -11000,7 +10956,7 @@
     },
     "/api/projects/{projectId}/orphaned-backups": {
       "get": {
-        "operationId": "ListProjectOrphanedBackups",
+        "operationId": "ListProjectOrphanedDatabaseBackups",
         "summary": "Get Orphaned Database Backups",
         "description": "Backups whose database has been deleted but which were kept, listed against the tombstone that now parents them. Database backups only — an application's volume backups are erased with the application and can never reach this state. Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
         "tags": [
@@ -11055,7 +11011,7 @@
     },
     "/api/projects/{projectId}/orphaned-backups/{backupId}": {
       "delete": {
-        "operationId": "DeleteOrphanedBackup",
+        "operationId": "DeleteOrphanedDatabaseBackup",
         "summary": "Delete Orphaned Database Backup",
         "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
         "tags": [
@@ -12249,6 +12205,50 @@
         ]
       }
     },
+    "/api/summary": {
+      "get": {
+        "operationId": "GetSummary",
+        "summary": "Get Summary",
+        "description": "Resource counts for the dashboard overview — project, application, database and deployment totals plus a container census. Not time-series data: see `/api/metrics/host` for that, and `/metrics` for the Prometheus scrape endpoint. Requires the Admin role.",
+        "tags": [
+          "Metrics (Admin)"
+        ],
+        "x-belune-order": 1,
+        "x-belune-roles": [
+          "admin"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/metricsResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "metrics": []
+          },
+          {
+            "session": []
+          }
+        ]
+      }
+    },
     "/api/templates": {
       "get": {
         "operationId": "ListTemplates",
@@ -13140,7 +13140,7 @@
       "get": {
         "operationId": "ServeMetrics",
         "summary": "Scrape Prometheus Metrics",
-        "description": "The Prometheus scrape endpoint at `GET /metrics`, a passthrough to the registry's own promhttp handler. Unrelated to `GET /api/metrics`, which returns resource counts. Requires the Admin role.",
+        "description": "The Prometheus scrape endpoint at `GET /metrics`, a passthrough to the registry's own promhttp handler. Unrelated to `GET /api/summary`, which returns resource counts. Requires the Admin role.",
         "tags": [
           "Metrics (Admin)"
         ],
