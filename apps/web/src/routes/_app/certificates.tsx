@@ -59,23 +59,25 @@ export const Route = createFileRoute("/_app/certificates")({
 // cannot turn one row into half a page.
 const SUBJECTS_SHOWN = 3;
 
-// Admin-only because of the CERTIFICATE endpoints, not the Domain TLS one.
-// /api/certificates (list/upload/delete) still carries RequireRole("admin") —
-// the store is install-wide by design, created_by is provenance rather than
-// ownership, and subjects is a hostname array, so a full listing would leak
-// other people's domain names across the instance.
+// This page has two halves with two different audiences, which is why the split
+// is by CONTENT rather than by locking the whole route.
 //
-// ⚠️ /api/domains/tls is NO LONGER admin-gated and is no longer unscoped: it
-// filters on the caller (OR p.shared), so a member reaching it sees only their
-// own projects' domains. Its data is safe for a member; only this page's
-// certificate half is not. A member-facing cross-project TLS overview is
-// therefore possible and deliberately not built — a member currently reads the
-// certificate serving one domain from that domain's TLS badge, and has no
-// at-a-glance view across projects. That is the one thing this page offers that
-// they cannot get.
+// The certificate store stays admin-only: /api/certificates (list/upload/delete)
+// carries RequireRole("admin"), the store is install-wide by design, created_by
+// is provenance rather than ownership, and `subjects` is a hostname array — so a
+// full listing would hand any member the domain names of every other
+// application on the instance.
 //
-// The guard wraps the content instead of living inside it: the hooks below fetch
-// on mount, and a hook cannot be called conditionally.
+// The Domain TLS table is not admin data and no longer behaves as if it were:
+// /api/domains/tls filters on the caller (OR p.shared), so a member sees the
+// state of their own projects' domains and nothing else. Locking them out of it
+// left them with no at-a-glance view — a member could read the certificate
+// serving ONE domain from that domain's TLS badge, and had no way to see which
+// of their domains was failing without opening each application in turn, which
+// is the very thing this view exists to prevent.
+//
+// The split wraps the content instead of living inside it: the hooks in
+// CertificatesContent fetch on mount, and a hook cannot be called conditionally.
 function CertificatesPage() {
   const isAdmin = useAuthStore((s) => s.user?.role === "admin");
 
@@ -85,11 +87,13 @@ function CertificatesPage() {
         <PageHeader
           icon={<Lock className="size-5" />}
           title="Certificates"
-          description="Certificates you upload once and select on any domain set to Custom SSL."
+          description="The TLS state of your domains, and which certificate each one serves."
         />
         <p className="text-muted-foreground text-sm">
-          Certificate management is restricted to administrators.
+          Covers domains in your own projects and any shared with you. Uploading
+          and removing certificates is an administrator action.
         </p>
+        <DomainTLSTable />
       </div>
     );
   }
