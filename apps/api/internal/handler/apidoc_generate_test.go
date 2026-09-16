@@ -100,6 +100,7 @@ import (
 	"fmt"
 	"go/ast"
 	"go/constant"
+	"go/token"
 	"go/types"
 	"io"
 	"net/http"
@@ -115,6 +116,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/tools/go/packages"
 
@@ -160,6 +162,12 @@ type apidocRoute struct {
 	// because every call site agrees (routes_test.go enforces that).
 	Roles  []string
 	Pinned bool // path contains {projectId} — RequireProjectAccess applies
+	// Query and HandlerPinned come from the handler's BODY (apidocExtractBehaviour),
+	// not the router. HandlerPinned is the pin enforced in-handler on routes with
+	// no {projectId} for RequireProjectAccess to read — a real gate the route
+	// registration shows nothing of.
+	Query         []string
+	HandlerPinned bool
 }
 
 // apidocRouteKey is "METHOD /path" — a stable, comparable identity for a
@@ -475,8 +483,26 @@ func TestGenerateAPIReference(t *testing.T) {
 	// own sanity floors give for their sets.
 	require.Equal(t, 44, sessionRoutes, "expected exactly 44 RequireSession routes")
 
-	sig, directives, reg := apidocExtractTypes(t)
+	sig, directives, behaviour, reg := apidocExtractTypes(t)
 	apidocAssertEmbedsPromoted(t, reg)
+
+	// Fold in what the handler bodies revealed. Done here rather than inside
+	// the probe loop because the probe reads the ROUTER and this reads the
+	// SOURCE — two different questions about the same route, kept separable.
+	for i, r := range routes {
+		b, ok := behaviour[r.Handler]
+		if !ok {
+			continue
+		}
+		routes[i].Query = b.Query
+		// Only interesting where RequireProjectAccess is blind: with a
+		// {projectId} in the path the middleware already enforces the pin and
+		// r.Pinned says so.
+		routes[i].HandlerPinned = b.Pinned && !r.Pinned
+	}
+
+	apidocAssertBehaviourExtracted(t, routes)
+
 	doc := apidocBuildDocument(t, routes, sig, directives, reg)
 	apidocWriteSpec(t, doc)
 	// Per-domain site pages are generated separately, by
@@ -1117,7 +1143,235 @@ func apidocParseDirective(doc *ast.CommentGroup) (apidocDirective, error) {
 // and pattern: `go test` always runs with the working directory set to the
 // package under test, so "." IS apps/api/internal/handler already; no
 // absolute path needed.
-func apidocExtractTypes(t *testing.T) (map[string]apidocOperationTypes, map[string]apidocDirective, *apidocSchemaRegistry) {
+// apidocAssertBehaviourExtracted pins what body-reading buys, so a refactor
+// that quietly breaks the extraction shows up as a failure rather than as a
+// reference that silently goes back to documenting nothing.
+//
+// Called from inside TestGenerateAPIReference rather than as its own Test
+// function, deliberately: a separate test can be skipped by a -run pattern on
+// the very run that regenerates the spec, and this must not be skippable
+// independently of the thing it guards.
+func apidocAssertBehaviourExtracted(t *testing.T, routes []apidocRoute) {
+	t.Helper()
+	byHandler := map[string]apidocRoute{}
+	for _, r := range routes {
+		byHandler[r.Handler] = r
+	}
+
+	has := func(handler, param string) bool {
+		for _, q := range byHandler[handler].Query {
+			if q == param {
+				return true
+			}
+		}
+		return false
+	}
+
+	// ⚠️ The two that decide whether data is destroyed. DELETE .../databases/{id}
+	// with and without ?delete_backups=true is the keep-or-destroy choice the
+	// tombstone work exists to offer, and it was invisible in the reference.
+	// These are the reason this extraction is worth having at all.
+	assert.True(t, has("DeleteDatabase", "delete_backups"),
+		"delete_backups decides whether a deleted database's backups survive — it must be documented")
+	assert.True(t, has("DeleteApplicationVolume", "delete_data"),
+		"delete_data decides whether a volume's contents are destroyed — it must be documented")
+
+	// Propagation across two hops: ListApplicationLogs reads no query parameter
+	// of its own. "session" comes from listContainerLogs (a *Handler method it
+	// delegates to) and "limit" from parseLogspagination (a plain package
+	// function that one calls) — a handler-bodies-only pass finds neither.
+	assert.True(t, has("ListApplicationLogs", "session"),
+		"query params must propagate from a delegated *Handler method")
+	assert.True(t, has("ListApplicationLogs", "limit"),
+		"query params must propagate through a plain helper function too")
+
+	// The indirect spelling. listContainerLogs does q := r.URL.Query() and then
+	// q.Get("level"), which a syntax match on r.URL.Query().Get(...) misses
+	// entirely — and did, before the check moved to the receiver's TYPE.
+	assert.True(t, has("ListDatabaseLogs", "level"),
+		"the q := r.URL.Query() spelling must be recognised, not just the chained one")
+
+	// A required parameter is still a parameter: this route 400s without it.
+	assert.True(t, has("ListUsableCertificates", "hostname"),
+		"a required query parameter must be named even though required-ness is not derived")
+
+	// In-handler pins: routes with no {projectId} for RequireProjectAccess to
+	// read, where the handler enforces the token's pin itself. Every one of
+	// these is a real gate the route registration shows nothing of.
+	for _, handler := range []string{
+		"GetGlobalDeployments", "ListProjects", "CreateProject",
+		"InstantiateTemplate", "ListDomainTLSStatus",
+	} {
+		r, ok := byHandler[handler]
+		if !assert.True(t, ok, "%s should be a documented route", handler) {
+			continue
+		}
+		assert.True(t, r.HandlerPinned,
+			"%s enforces the project pin in its body — the reference must say so", handler)
+		assert.False(t, r.Pinned,
+			"%s has no {projectId}; if it grew one this assertion is the wrong shape", handler)
+	}
+
+	// Floor, not an exact count: a new route with a query parameter should not
+	// have to edit this, but the extraction collapsing to nothing should fail.
+	withQuery := 0
+	for _, r := range routes {
+		if len(r.Query) > 0 {
+			withQuery++
+		}
+	}
+	assert.GreaterOrEqual(t, withQuery, 15,
+		"query-parameter extraction has collapsed — it found %d routes, and was finding 20", withQuery)
+}
+
+// apidocBehaviour is what a handler's BODY reveals that its route registration
+// cannot: the query parameters it reads, and whether it enforces the token's
+// project pin itself.
+type apidocBehaviour struct {
+	Query  []string // query parameter names, sorted
+	Pinned bool     // calls middleware.TokenProjectFromContext
+}
+
+// apidocExtractBehaviour walks every function in the package — not only route
+// handlers — and propagates what it finds up through call edges.
+//
+// Walking everything is the point. The reads are not all in handlers: limit and
+// offset live in parsePagination/parseLogspagination, and listContainerLogs
+// holds six more on behalf of four routes that delegate to it. A pass limited to
+// handler bodies would document the endpoints that happen to inline their
+// parsing and silently miss the ones factored properly.
+//
+// Both syntactic forms are caught by ONE rule, via the type checker rather than
+// the syntax: r.URL.Query().Get("x") and the q := r.URL.Query(); q.Get("x")
+// spelling both end in a .Get on a net/url.Values, so matching the RECEIVER's
+// type covers both and any third spelling someone writes later. Matching syntax
+// instead would have missed the second form — and did, on the first attempt.
+//
+// ⚠️ Only literal keys are recovered. A computed key cannot be named in a
+// document, and guessing one would be worse than the silence it replaces.
+func apidocExtractBehaviour(pkg *packages.Package, handlerMethods map[string]bool) map[string]apidocBehaviour {
+	type node struct {
+		query   map[string]bool
+		pinned  bool
+		callees []string
+	}
+	nodes := map[string]*node{}
+
+	for _, file := range pkg.Syntax {
+		for _, decl := range file.Decls {
+			fn, ok := decl.(*ast.FuncDecl)
+			if !ok || fn.Body == nil {
+				continue
+			}
+			n := &node{query: map[string]bool{}}
+			ast.Inspect(fn.Body, func(x ast.Node) bool {
+				call, ok := x.(*ast.CallExpr)
+				if !ok {
+					return true
+				}
+				sel, ok := call.Fun.(*ast.SelectorExpr)
+				if !ok {
+					// A bare call — a package-level helper such as
+					// parsePagination(r). Record the edge so its reads
+					// propagate to whoever calls it.
+					if id, ok := call.Fun.(*ast.Ident); ok {
+						n.callees = append(n.callees, id.Name)
+					}
+					return true
+				}
+				switch {
+				case sel.Sel.Name == "Get" && len(call.Args) == 1 && apidocIsURLValues(pkg.TypesInfo, sel.X):
+					if lit, ok := apidocStringLit(call.Args[0]); ok {
+						n.query[lit] = true
+					}
+				case sel.Sel.Name == "TokenProjectFromContext":
+					n.pinned = true
+				}
+				// h.someOtherHandler(...) — the delegate edge the response
+				// extractor already relies on, reused here.
+				if id, ok := sel.X.(*ast.Ident); ok && id.Name == "h" && handlerMethods[sel.Sel.Name] {
+					n.callees = append(n.callees, sel.Sel.Name)
+				}
+				return true
+			})
+			nodes[fn.Name.Name] = n
+		}
+	}
+
+	// Fixed-point propagation along call edges, same shape as the response
+	// merge below. Bounded rather than recursive so a cycle cannot hang the
+	// generator; depth 2 is all the codebase needs today (route ->
+	// listContainerLogs -> parseLogspagination).
+	for range 5 {
+		changed := false
+		for _, n := range nodes {
+			for _, callee := range n.callees {
+				c, ok := nodes[callee]
+				if !ok {
+					continue
+				}
+				for k := range c.query {
+					if !n.query[k] {
+						n.query[k] = true
+						changed = true
+					}
+				}
+				if c.pinned && !n.pinned {
+					n.pinned = true
+					changed = true
+				}
+			}
+		}
+		if !changed {
+			break
+		}
+	}
+
+	out := map[string]apidocBehaviour{}
+	for name, n := range nodes {
+		if len(n.query) == 0 && !n.pinned {
+			continue
+		}
+		keys := make([]string, 0, len(n.query))
+		for k := range n.query {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		out[name] = apidocBehaviour{Query: keys, Pinned: n.pinned}
+	}
+	return out
+}
+
+// apidocIsURLValues reports whether an expression is a net/url.Values, which is
+// what both spellings of a query lookup call .Get on.
+func apidocIsURLValues(info *types.Info, expr ast.Expr) bool {
+	tv := info.TypeOf(expr)
+	if tv == nil {
+		return false
+	}
+	named, ok := tv.(*types.Named)
+	if !ok {
+		return false
+	}
+	obj := named.Obj()
+	return obj != nil && obj.Name() == "Values" && obj.Pkg() != nil && obj.Pkg().Path() == "net/url"
+}
+
+// apidocStringLit unwraps a plain string literal, or reports false for anything
+// computed.
+func apidocStringLit(expr ast.Expr) (string, bool) {
+	lit, ok := expr.(*ast.BasicLit)
+	if !ok || lit.Kind != token.STRING {
+		return "", false
+	}
+	v, err := strconv.Unquote(lit.Value)
+	if err != nil {
+		return "", false
+	}
+	return v, true
+}
+
+func apidocExtractTypes(t *testing.T) (map[string]apidocOperationTypes, map[string]apidocDirective, map[string]apidocBehaviour, *apidocSchemaRegistry) {
 	t.Helper()
 	cfg := &packages.Config{
 		Mode: packages.NeedName | packages.NeedFiles | packages.NeedSyntax | packages.NeedTypes |
@@ -1144,6 +1398,17 @@ func apidocExtractTypes(t *testing.T) (map[string]apidocOperationTypes, map[stri
 			}
 		}
 	}
+
+	// Second pass: behavioural facts the ROUTER cannot show, read from the
+	// handler bodies this extractor already walks for types.
+	//
+	// Both are things the CODE enforces, which is the line this generator draws
+	// between deriving and declaring. A query parameter is read or it isn't; a
+	// pin is enforced or it isn't. (Prose in a Go doc comment is neither — it is
+	// written for a Go reader and nothing makes it true of the API, which is why
+	// descriptions stay an explicit //apidoc:description and are not promoted
+	// from doc comments.)
+	behaviour := apidocExtractBehaviour(pkg, handlerMethods)
 
 	reg := newApidocSchemaRegistry()
 	result := map[string]apidocOperationTypes{}
@@ -1244,7 +1509,7 @@ func apidocExtractTypes(t *testing.T) (map[string]apidocOperationTypes, map[stri
 	// request/response type worth keeping, and pruning it the same way
 	// would silently lose a real directive on a handler with no writeJSON/
 	// Decode call of its own (a pure delegate, say).
-	return result, directives, reg
+	return result, directives, behaviour, reg
 }
 
 // apidocKnownMarshalerTypes are the type strings walkType already
@@ -1281,7 +1546,7 @@ func TestAPIDocAllMarshalerTypesHandled(t *testing.T) {
 		t.Skip("set GENERATE_API_REFERENCE=1 to run — see task generate:api-docs")
 	}
 
-	_, _, reg := apidocExtractTypes(t)
+	_, _, _, reg := apidocExtractTypes(t)
 
 	cfg := &packages.Config{Mode: packages.NeedTypes | packages.NeedDeps | packages.NeedImports}
 	pkgs, err := packages.Load(cfg, "encoding/json")
@@ -1460,7 +1725,7 @@ func apidocSecurity(r apidocRoute) []map[string][]string {
 	}
 }
 
-func apidocPathParameters(path string) []oasParameter {
+func apidocParameters(path string, query []string) []oasParameter {
 	var params []oasParameter
 	for _, seg := range strings.Split(path, "/") {
 		if strings.HasPrefix(seg, "{") && strings.HasSuffix(seg, "}") {
@@ -1469,6 +1734,28 @@ func apidocPathParameters(path string) []oasParameter {
 				Schema: apidocSchema{"type": "string", "format": "uuid"},
 			})
 		}
+	}
+
+	// Query parameters, from what the handler actually reads
+	// (apidocExtractBehaviour). Every one is emitted as OPTIONAL and typed
+	// string, deliberately:
+	//
+	// Required-ness is not visible at the read. `hostname` is required because
+	// ListUsableCertificates 400s on empty, `project_id` is a filter, and
+	// `limit` belongs to a shared helper — three different contracts behind one
+	// identical Get call. Claiming any of them is required would be a guess,
+	// and this generator's whole premise is that it states only what it can
+	// show. Naming the parameters is already the large improvement over the
+	// silence it replaces; per-parameter required/typed detail is a later,
+	// separate question.
+	//
+	// The same goes for the type: a value arrives as a string and the handler
+	// decides what it means, so string is what the wire actually carries.
+	for _, name := range query {
+		params = append(params, oasParameter{
+			Name: name, In: "query", Required: false,
+			Schema: apidocSchema{"type": "string"},
+		})
 	}
 	return params
 }
@@ -1492,7 +1779,9 @@ func apidocPathParameters(path string) []oasParameter {
 //     a role rename in routes.go flows through with no literal to update.
 func apidocOperationDescription(r apidocRoute, directive apidocDirective) string {
 	var notes []string
-	if r.Pinned {
+	// Either kind of pin: the middleware's, or the handler's own for a route
+	// with no {projectId} param for that middleware to compare against.
+	if r.Pinned || r.HandlerPinned {
 		notes = append(notes, "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.")
 	}
 	if len(r.Roles) > 0 {
@@ -1651,7 +1940,7 @@ func apidocBuildDocument(t *testing.T, routes []apidocRoute, sig map[string]apid
 			Order:       directive.Order,
 			Roles:       r.Roles,
 			Description: apidocOperationDescription(r, directive),
-			Parameters:  apidocPathParameters(r.Path),
+			Parameters:  apidocParameters(r.Path, r.Query),
 			Security:    apidocSecurity(r),
 			Responses:   map[string]oasResponse{},
 		}
