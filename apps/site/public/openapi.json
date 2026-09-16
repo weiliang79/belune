@@ -10514,8 +10514,8 @@
     "/api/projects/{projectId}/orphaned-backups": {
       "get": {
         "operationId": "ListProjectOrphanedBackups",
-        "summary": "Get Orphaned Backups",
-        "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
+        "summary": "Get Orphaned Database Backups",
+        "description": "Backups whose database has been deleted but which were kept, listed against the tombstone that now parents them. Database backups only — an application's volume backups are erased with the application and can never reach this state. Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
         "tags": [
           "Database Volumes \u0026 Backups"
         ],
@@ -10569,7 +10569,7 @@
     "/api/projects/{projectId}/orphaned-backups/{backupId}": {
       "delete": {
         "operationId": "DeleteOrphanedBackup",
-        "summary": "Delete Orphaned Backup",
+        "summary": "Delete Orphaned Database Backup",
         "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
         "tags": [
           "Database Volumes \u0026 Backups"
@@ -12535,8 +12535,8 @@
     "/metrics": {
       "get": {
         "operationId": "ServeMetrics",
-        "summary": "Serve Metrics",
-        "description": "Requires the Admin role.",
+        "summary": "Scrape Prometheus Metrics",
+        "description": "The Prometheus scrape endpoint at `GET /metrics`, a passthrough to the registry's own promhttp handler. Unrelated to `GET /api/metrics`, which returns resource counts. Requires the Admin role.",
         "tags": [
           "Metrics (Admin)"
         ],

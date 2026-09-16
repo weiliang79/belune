@@ -108,7 +108,8 @@ func (h *Handler) GetMetrics(w http.ResponseWriter, r *http.Request) {
 // //apidoc:tag directive could attach to.
 //
 //apidoc:tag platform/metrics
-//apidoc:title Serve Metrics
+//apidoc:title Scrape Prometheus Metrics
+//apidoc:description The Prometheus scrape endpoint at `GET /metrics`, a passthrough to the registry's own promhttp handler. Unrelated to `GET /api/metrics`, which returns resource counts.
 //apidoc:order 4
 func (h *Handler) ServeMetrics(w http.ResponseWriter, r *http.Request) {
 	metrics.Handler().ServeHTTP(w, r)
