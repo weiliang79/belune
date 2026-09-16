@@ -59,11 +59,20 @@ export const Route = createFileRoute("/_app/certificates")({
 // cannot turn one row into half a page.
 const SUBJECTS_SHOWN = 3;
 
-// The API guards these endpoints with RequireRole("admin"), and the Domain TLS
-// query is deliberately unscoped — it returns every domain on the instance, not
-// just the caller's. That role check is the only thing standing between a
-// non-admin and every project's domains, so match it in the UI rather than
-// letting a non-admin land on a page whose every request 403s.
+// Admin-only because of the CERTIFICATE endpoints, not the Domain TLS one.
+// /api/certificates (list/upload/delete) still carries RequireRole("admin") —
+// the store is install-wide by design, created_by is provenance rather than
+// ownership, and subjects is a hostname array, so a full listing would leak
+// other people's domain names across the instance.
+//
+// ⚠️ /api/domains/tls is NO LONGER admin-gated and is no longer unscoped: it
+// filters on the caller (OR p.shared), so a member reaching it sees only their
+// own projects' domains. Its data is safe for a member; only this page's
+// certificate half is not. A member-facing cross-project TLS overview is
+// therefore possible and deliberately not built — a member currently reads the
+// certificate serving one domain from that domain's TLS badge, and has no
+// at-a-glance view across projects. That is the one thing this page offers that
+// they cannot get.
 //
 // The guard wraps the content instead of living inside it: the hooks below fetch
 // on mount, and a hook cannot be called conditionally.
