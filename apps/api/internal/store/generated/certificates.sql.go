@@ -147,6 +147,64 @@ func (q *Queries) ListCertificates(ctx context.Context) ([]ListCertificatesRow, 
 	return items, nil
 }
 
+const listCertificatesForHostname = `-- name: ListCertificatesForHostname :many
+SELECT id, name, issuer, not_after
+FROM certificates
+WHERE subjects && $1::text[]
+ORDER BY name
+`
+
+type ListCertificatesForHostnameRow struct {
+	ID       pgtype.UUID        `json:"id"`
+	Name     string             `json:"name"`
+	Issuer   pgtype.Text        `json:"issuer"`
+	NotAfter pgtype.Timestamptz `json:"not_after"`
+}
+
+// Certificates that can serve one hostname, for the non-admin picker on the
+// add-domain form. A member may attach a certificate (the domain routes are
+// project-scoped) but may not LIST them, so without this they can only attach
+// one whose uuid an admin passed to them out of band.
+//
+// ⚠️ Deliberately NOT SELECT *, and deliberately not c.subjects. A certificate
+// carries every SAN it was issued for, so returning the array would hand a
+// member the hostnames of every OTHER application it also covers — the exact
+// leak that keeps ListCertificates admin-only. The caller learns only that
+// SOMETHING covers the hostname they already supplied, plus what to call it and
+// when it expires. domain_count is omitted for the same reason: how widely a
+// certificate is used across the install is not a member's business.
+//
+// Matching is an array overlap against candidates the caller's own hostname
+// generates (see certificateHostnameCandidates): the exact name, plus its
+// one-label wildcard parent. RFC 6125 wildcards match exactly one label and
+// only the leftmost, so "*.example.com" covers "app.example.com" but neither
+// "a.b.example.com" nor "example.com" — generating the candidate rather than
+// pattern-matching in SQL keeps that rule in one tested place.
+func (q *Queries) ListCertificatesForHostname(ctx context.Context, candidates []string) ([]ListCertificatesForHostnameRow, error) {
+	rows, err := q.db.Query(ctx, listCertificatesForHostname, candidates)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListCertificatesForHostnameRow{}
+	for rows.Next() {
+		var i ListCertificatesForHostnameRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Issuer,
+			&i.NotAfter,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listCustomCertDomains = `-- name: ListCustomCertDomains :many
 SELECT DISTINCT ON (d.hostname) d.hostname, c.id AS certificate_id, c.cert_pem_encrypted, c.key_pem_encrypted
 FROM domains d

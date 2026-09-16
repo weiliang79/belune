@@ -217,6 +217,8 @@ export const queryKeys = {
   auditLogs: (params?: object) => ["audit-logs", params] as const,
   auditActions: ["audit-actions"] as const,
   certificates: ["certificates"] as const,
+  usableCertificates: (hostname: string) =>
+    ["certificates", "usable", hostname] as const,
   notificationChannels: ["notification-channels"] as const,
   notificationEvents: ["notification-events"] as const,
   smtpSettings: ["smtp-settings"] as const,

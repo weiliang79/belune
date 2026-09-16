@@ -1187,6 +1187,50 @@
         ]
       }
     },
+    "/api/certificates/usable": {
+      "get": {
+        "operationId": "ListUsableCertificates",
+        "summary": "Find Certificates for a Hostname",
+        "description": "Certificates that can serve one hostname, including a wildcard covering it. Takes a required `hostname` query parameter and returns 400 without it. Available to any authenticated caller, unlike the full certificate list: the response names only the certificate and its expiry, never the other hostnames it covers.",
+        "tags": [
+          "Application Domains \u0026 TLS"
+        ],
+        "x-belune-order": 5,
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/UsableCertificate"
+                  },
+                  "type": "array"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "read": []
+          },
+          {
+            "session": []
+          }
+        ]
+      }
+    },
     "/api/certificates/{certificateId}": {
       "delete": {
         "operationId": "DeleteCertificate",
@@ -14082,6 +14126,27 @@
           },
           "username": {
             "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "UsableCertificate": {
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "issuer": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "not_after": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
           }
         },
         "type": "object"

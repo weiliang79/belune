@@ -397,6 +397,12 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService,
 				// Global deployments
 				r.Get("/api/deployments", h.GetGlobalDeployments)
 
+				// Which certificate can serve a hostname. Member-reachable
+				// because attaching one is project-scoped and therefore theirs
+				// to do; the full certificate list stays admin-only, since it
+				// carries every SAN of every certificate on the install.
+				r.Get("/api/certificates/usable", h.ListUsableCertificates)
+
 				// Every domain's observed TLS state in one view. Role-scoped
 				// rather than admin-only: it carries the certificate NAME, and
 				// ListDomainsByApplication returns only a bare certificate_id,

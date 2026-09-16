@@ -4,10 +4,30 @@ import { queryKeys } from "./query-keys";
 import * as certificatesApi from "@/lib/api/certificates";
 import type { UploadCertificate } from "@/lib/api/certificates";
 
-export function useCertificates() {
+// The full store: every certificate with every SAN, admin-only at the API. The
+// enabled flag exists so a non-admin caller does not fire a request that can
+// only 403 — see useUsableCertificates for the member-reachable question.
+export function useCertificates(enabled = true) {
   return useQuery({
     queryKey: queryKeys.certificates,
     queryFn: certificatesApi.listCertificates,
+    enabled,
+  });
+}
+
+// Certificates that can serve one hostname. Unlike useCertificates this is
+// reachable by any signed-in user, which is the whole point: a member may attach
+// a certificate but may not list them, so the add-domain picker was empty for
+// them and the form refused to submit.
+//
+// Keyed by hostname and disabled until there is one, so typing a hostname does
+// not fire a request per keystroke before it is a plausible name.
+export function useUsableCertificates(hostname: string, enabled = true) {
+  const trimmed = hostname.trim();
+  return useQuery({
+    queryKey: queryKeys.usableCertificates(trimmed),
+    queryFn: () => certificatesApi.listUsableCertificates(trimmed),
+    enabled: enabled && trimmed.length > 0,
   });
 }
 

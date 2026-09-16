@@ -19,6 +19,31 @@ SELECT c.*, (
 FROM certificates c
 ORDER BY c.name;
 
+-- name: ListCertificatesForHostname :many
+-- Certificates that can serve one hostname, for the non-admin picker on the
+-- add-domain form. A member may attach a certificate (the domain routes are
+-- project-scoped) but may not LIST them, so without this they can only attach
+-- one whose uuid an admin passed to them out of band.
+--
+-- ⚠️ Deliberately NOT SELECT *, and deliberately not c.subjects. A certificate
+-- carries every SAN it was issued for, so returning the array would hand a
+-- member the hostnames of every OTHER application it also covers — the exact
+-- leak that keeps ListCertificates admin-only. The caller learns only that
+-- SOMETHING covers the hostname they already supplied, plus what to call it and
+-- when it expires. domain_count is omitted for the same reason: how widely a
+-- certificate is used across the install is not a member's business.
+--
+-- Matching is an array overlap against candidates the caller's own hostname
+-- generates (see certificateHostnameCandidates): the exact name, plus its
+-- one-label wildcard parent. RFC 6125 wildcards match exactly one label and
+-- only the leftmost, so "*.example.com" covers "app.example.com" but neither
+-- "a.b.example.com" nor "example.com" — generating the candidate rather than
+-- pattern-matching in SQL keeps that rule in one tested place.
+SELECT id, name, issuer, not_after
+FROM certificates
+WHERE subjects && @candidates::text[]
+ORDER BY name;
+
 -- name: ListDomainsByCertificate :many
 -- Names the domains still referencing a certificate, so a delete blocked by the
 -- FK can tell the user exactly what is in the way.

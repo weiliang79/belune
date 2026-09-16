@@ -47,6 +47,22 @@ export interface DomainTLSStatus {
   project_id: string;
 }
 
+/** The reduced shape a non-admin may see. Deliberately no `subjects`: a
+ *  certificate names every host it was issued for, and the API withholds that
+ *  from anyone who cannot already list certificates. */
+export interface UsableCertificate {
+  id: string;
+  name: string;
+  issuer: string;
+  not_after: string | null;
+}
+
+export function listUsableCertificates(hostname: string) {
+  return api.get<UsableCertificate[]>(
+    `/certificates/usable?hostname=${encodeURIComponent(hostname)}`,
+  );
+}
+
 export function listDomainTLSStatus() {
   return api.get<DomainTLSStatus[]>("/domains/tls");
 }
