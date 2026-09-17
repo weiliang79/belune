@@ -37,8 +37,9 @@ func (c *Client) SpawnUpdateHelper(ctx context.Context, cfg runtime.UpdateHelper
 			User:       "0:0",
 			WorkingDir: cfg.WorkingDir,
 			Labels: map[string]string{
-				labelManagedBy:      labelValue,
-				runtime.LabelHelper: "true",
+				labelManagedBy:            labelValue,
+				runtime.LabelHelper:       "true",
+				runtime.LabelUpdateHelper: "true",
 			},
 		},
 		&container.HostConfig{

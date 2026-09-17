@@ -71,6 +71,31 @@ func (h *Handler) TriggerSelfUpdate(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadGateway, "failed to reach the Docker host")
 		return
 	}
+
+	// ⚠️ Refuse a second concurrent run. Nothing else stops one: the helper is
+	// created with an empty name so Docker generates a fresh one every time, and
+	// every gate above passes identically on a second click — the cached target
+	// has not changed and this container has not been replaced yet.
+	//
+	// It is easy to reach rather than a tight race. The card keeps offering
+	// "Update now" after the 202 (updateAvailable is derived from the settings
+	// cache, which nothing here changes), and update.sh takes minutes — it runs
+	// a full pre-update backup between reading .env and rewriting it. Two runs
+	// inside that window compute the SAME backup filenames from the same
+	// CURRENT_VERSION (.env.backup-<v>, .infra-backup-<v>), so the second
+	// clobbers the first — and those are the files update.sh tells the operator
+	// are their way back.
+	//
+	// Same shape and status as "a backup is already in progress" (backups.go)
+	// and "a deployment is already in progress" (applications.go).
+	if running, err := updateHelperRunning(r.Context(), rt); err != nil {
+		writeError(w, http.StatusBadGateway, "failed to reach the Docker host")
+		return
+	} else if running {
+		writeError(w, http.StatusConflict, "an update is already in progress")
+		return
+	}
+
 	image := h.selfImage(r.Context())
 	if image == "" {
 		writeError(w, http.StatusInternalServerError, "could not determine this container's own image")
@@ -99,6 +124,33 @@ func (h *Handler) TriggerSelfUpdate(w http.ResponseWriter, r *http.Request) {
 		"status": "started",
 		"target": target,
 	})
+}
+
+// updateHelperRunning reports whether a self-update helper is still at work.
+//
+// Matches on LabelUpdateHelper rather than LabelHelper: backup, restore and
+// snapshot helpers all carry the latter, and none of them should block an
+// update. Status mirrors isRunningHelper's own definition in the orphan sweep
+// (cleanup_task.go) — "created" counts, because a helper that has been created
+// but not yet started is about to run, not finished.
+//
+// An exited helper never blocks: the update either finished (this container was
+// replaced, so nothing here is running anyway) or failed, and a failed update
+// must not lock the operator out of retrying from the dashboard.
+func updateHelperRunning(ctx context.Context, rt runtime.ContainerRuntime) (bool, error) {
+	all, err := rt.ListAllContainers(ctx)
+	if err != nil {
+		return false, err
+	}
+	for _, c := range all {
+		if c.Labels[runtime.LabelUpdateHelper] != "true" {
+			continue
+		}
+		if c.Status == "running" || c.Status == "created" {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 // settingValue reads one setting's trimmed value, or "" if it is unset or the

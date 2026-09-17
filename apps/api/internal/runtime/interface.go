@@ -79,6 +79,14 @@ type ContainerInfo struct {
 // that will drift.
 const LabelHelper = "belune-helper"
 
+// LabelUpdateHelper additionally marks the ONE helper kind that must never run
+// twice at once: the self-updater. LabelHelper alone cannot answer "is an
+// update already running" — backup, restore and snapshot helpers all carry it,
+// and a running volume restore must not block an update (or vice versa). It
+// lives beside LabelHelper for the same reason: SpawnUpdateHelper writes it and
+// the handler's conflict check reads it, on opposite sides of this interface.
+const LabelUpdateHelper = "belune-update"
+
 // LabelApplicationID and LabelDatabaseID tie a container back to the row that
 // owns it. They live here for the same reason as LabelHelper: the deploy and
 // provision workers write them, the event watcher and the orphan sweep read

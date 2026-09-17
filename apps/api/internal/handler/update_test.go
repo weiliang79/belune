@@ -186,3 +186,67 @@ func TestTriggerSelfUpdate_SpawnsHelperWithResolvedTarget(t *testing.T) {
 	assert.Equal(t, "/opt/belune", call.WorkingDir)
 	assert.Equal(t, "ghcr.io/weiliang79/belune:v1.2.3", call.Image)
 }
+
+// TestTriggerSelfUpdate_RefusesWhenAnUpdateIsAlreadyRunning covers the one gate
+// that is not about the target version: a helper already at work.
+//
+// Nothing else stops a second run. The helper is created with an empty name so
+// Docker never reports a conflict, and every other gate passes identically on a
+// second click — the cached target has not moved and this container has not been
+// replaced yet. Two update.sh processes inside the same window compute the same
+// CURRENT_VERSION and so the same .env.backup-<v>/.infra-backup-<v> filenames,
+// and the second clobbers the first: the files update.sh tells the operator are
+// their way back.
+//
+// The subtests are the whole point. Matching on LabelHelper would have been the
+// obvious implementation and is wrong — it would let a running volume restore
+// block an update — and an exited helper must not lock the operator out of
+// retrying after a failed update.
+func TestTriggerSelfUpdate_RefusesWhenAnUpdateIsAlreadyRunning(t *testing.T) {
+	self := runtime.ContainerInfo{
+		ID:     selfContainerIDForTest(t),
+		Image:  "ghcr.io/weiliang79/belune:v1.2.3",
+		Labels: map[string]string{"com.docker.compose.project.working_dir": "/opt/belune"},
+	}
+	helper := func(status string, labels map[string]string) runtime.ContainerInfo {
+		return runtime.ContainerInfo{ID: "helper123", Status: status, Labels: labels}
+	}
+	updateLabels := map[string]string{runtime.LabelHelper: "true", runtime.LabelUpdateHelper: "true"}
+	otherLabels := map[string]string{runtime.LabelHelper: "true"}
+
+	for _, tc := range []struct {
+		name    string
+		extra   runtime.ContainerInfo
+		want    int
+		spawned int
+	}{
+		{"a running update helper blocks", helper("running", updateLabels), http.StatusConflict, 0},
+		{"a created update helper blocks, it is about to run", helper("created", updateLabels), http.StatusConflict, 0},
+		{"an exited update helper does NOT block — a failed update must stay retryable", helper("exited", updateLabels), http.StatusAccepted, 1},
+		{"a running backup/restore helper does NOT block — different job entirely", helper("running", otherLabels), http.StatusAccepted, 1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			resetDB(t)
+			token := env.SetupAdmin(t, "admin@test.com", "password123")
+			withVersion(t, "v1.2.3")
+			setUpdateSetting(t, "update_latest_version", "1.3.0")
+			setUpdateSetting(t, "update_latest_requires_host_update", "false")
+
+			env.Runtime.ListAllContainers_ = []runtime.ContainerInfo{self, tc.extra}
+			env.Runtime.SpawnUpdateHelperCalls = nil
+			t.Cleanup(func() {
+				env.Runtime.ListAllContainers_ = nil
+				env.Runtime.SpawnUpdateHelperCalls = nil
+			})
+
+			resp := env.DoRequest(t, "POST", "/api/maintenance/update", map[string]string{
+				"password": "password123",
+			}, testutil.AuthHeader(token))
+			body := testutil.ReadJSON(t, resp)
+			require.Equal(t, tc.want, resp.StatusCode, "%v", body)
+
+			// The status alone is not the guarantee — no helper may be spawned.
+			assert.Len(t, env.Runtime.SpawnUpdateHelperCalls, tc.spawned)
+		})
+	}
+}

@@ -87,12 +87,24 @@ func (h *TaskHandler) HandleUpdateCheck(ctx context.Context) {
 		return
 	}
 
+	// ⚠️ Fail closed when latest names a release the manifest does not describe.
+	// The zero manifestRelease is all-false, and requires_host_update=false is
+	// what PERMITS the in-app updater — so caching a zero value for an unknown
+	// release would offer a one-click update to a version that may well need a
+	// host-side action, with no notes link to check it against. Refusing to
+	// cache anything leaves yesterday's known-good values in place instead.
 	var release manifestRelease
+	var found bool
 	for _, r := range manifest.Releases {
 		if r.Version == manifest.Latest {
-			release = r
+			release, found = r, true
 			break
 		}
+	}
+	if !found {
+		slog.Warn("update check: manifest's latest has no matching release entry; leaving the cache alone",
+			"latest", manifest.Latest)
+		return
 	}
 
 	previous, _ := h.Queries.GetSetting(ctx, settingUpdateLatestVersion)

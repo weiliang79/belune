@@ -178,3 +178,43 @@ func TestHandleUpdateCheck_DevBuildSkipsComparison(t *testing.T) {
 
 	assert.Equal(t, "9.9.9", getUpdateCheckSetting(t, "update_latest_version"))
 }
+
+// TestHandleUpdateCheck_UnknownLatestLeavesCacheAlone guards the fail-closed
+// path for a manifest whose "latest" names a release it does not describe.
+//
+// ⚠️ The dangerous field is requires_host_update. A zero manifestRelease is
+// all-false, and false is what PERMITS the one-click updater — so caching the
+// zero value here would offer an in-app update to a release that may need a
+// host-side action, with no notes link to check it against. Keeping yesterday's
+// known-good values is the safe answer.
+//
+// Reachable in practice: hand-editing versions.json is the documented fallback
+// when the release workflow's bump PR does not land, and that PR is itself
+// mergeable by hand.
+func TestHandleUpdateCheck_UnknownLatestLeavesCacheAlone(t *testing.T) {
+	resetUpdateCheckSettings(t)
+	setUpdateCheckSetting(t, "update_latest_version", "1.2.3")
+	setUpdateCheckSetting(t, "update_latest_requires_host_update", "true")
+	setUpdateCheckSetting(t, "update_latest_notes_url", "https://example.com/1.2.3")
+
+	old := version.Version
+	version.Version = "v1.0.0"
+	t.Cleanup(func() { version.Version = old })
+
+	// "9.9.9" is newer than the running build, so everything downstream of the
+	// lookup would happily act on it — only the missing entry stops this.
+	srv := manifestServer(t, map[string]any{
+		"latest":   "9.9.9",
+		"releases": []map[string]any{{"version": "1.2.3", "notes_url": "https://example.com/1.2.3"}},
+	})
+
+	h := newUpdateCheckHandler(srv.URL)
+	h.HandleUpdateCheck(context.Background())
+
+	assert.Equal(t, "1.2.3", getUpdateCheckSetting(t, "update_latest_version"),
+		"an undescribed latest must not become the cached target")
+	assert.Equal(t, "true", getUpdateCheckSetting(t, "update_latest_requires_host_update"),
+		"⚠️ must not be reset to the zero value's false — that is the flag that permits the in-app update")
+	assert.Equal(t, "https://example.com/1.2.3", getUpdateCheckSetting(t, "update_latest_notes_url"),
+		"must not be blanked to the zero value's empty string")
+}
