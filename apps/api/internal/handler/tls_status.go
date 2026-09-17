@@ -107,7 +107,7 @@ func (h *Handler) ListDomainTLSStatus(w http.ResponseWriter, r *http.Request) {
 //
 //apidoc:tag applications/domains
 //apidoc:title Recheck Domain TLS
-//apidoc:order 4
+//apidoc:order 5
 func (h *Handler) RecheckDomainTLS(w http.ResponseWriter, r *http.Request) {
 	domainID := chi.URLParam(r, "domainId")
 	var domainUUID pgtype.UUID

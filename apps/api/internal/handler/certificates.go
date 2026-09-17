@@ -55,7 +55,7 @@ func (h *Handler) ListCertificates(w http.ResponseWriter, r *http.Request) {
 //apidoc:tag applications/domains
 //apidoc:title Find Certificates for a Hostname
 //apidoc:description Certificates that can serve one hostname, including a wildcard covering it. Takes a required `hostname` query parameter and returns 400 without it. Available to any authenticated caller, unlike the full certificate list: the response names only the certificate and its expiry, never the other hostnames it covers.
-//apidoc:order 5
+//apidoc:order 6
 func (h *Handler) ListUsableCertificates(w http.ResponseWriter, r *http.Request) {
 	hostname := strings.TrimSpace(r.URL.Query().Get("hostname"))
 	if hostname == "" {

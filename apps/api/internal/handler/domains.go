@@ -253,7 +253,7 @@ type addDomainRequest struct {
 
 //apidoc:tag applications/domains
 //apidoc:title Create Domain
-//apidoc:order 2
+//apidoc:order 3
 func (h *Handler) AddDomain(w http.ResponseWriter, r *http.Request) {
 	applicationID := chi.URLParam(r, "applicationId")
 	var applicationUUID pgtype.UUID
@@ -410,7 +410,7 @@ type updateDomainRequest struct {
 
 //apidoc:tag applications/domains
 //apidoc:title Update Domain
-//apidoc:order 3
+//apidoc:order 4
 func (h *Handler) UpdateDomain(w http.ResponseWriter, r *http.Request) {
 	domainID := chi.URLParam(r, "domainId")
 	var domainUUID pgtype.UUID
@@ -612,7 +612,7 @@ func (h *Handler) loadRouteFeatures(r *http.Request, domainID pgtype.UUID) []pro
 
 //apidoc:tag applications/domains
 //apidoc:title Get Route Features
-//apidoc:order 5
+//apidoc:order 6
 func (h *Handler) ListRouteFeatures(w http.ResponseWriter, r *http.Request) {
 	domainID := chi.URLParam(r, "domainId")
 	var domainUUID pgtype.UUID
@@ -643,7 +643,7 @@ type upsertRouteFeatureRequest struct {
 
 //apidoc:tag applications/domains
 //apidoc:title Upsert Route Feature
-//apidoc:order 6
+//apidoc:order 7
 func (h *Handler) UpsertRouteFeature(w http.ResponseWriter, r *http.Request) {
 	domainID := chi.URLParam(r, "domainId")
 	var domainUUID pgtype.UUID
@@ -695,7 +695,7 @@ func (h *Handler) UpsertRouteFeature(w http.ResponseWriter, r *http.Request) {
 
 //apidoc:tag applications/domains
 //apidoc:title Delete Route Feature
-//apidoc:order 7
+//apidoc:order 8
 func (h *Handler) DeleteRouteFeature(w http.ResponseWriter, r *http.Request) {
 	featureID := chi.URLParam(r, "featureId")
 	var featureUUID pgtype.UUID

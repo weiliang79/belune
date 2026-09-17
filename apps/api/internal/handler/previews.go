@@ -200,7 +200,7 @@ func (h *Handler) GetPreview(w http.ResponseWriter, r *http.Request) {
 //
 //apidoc:tag applications/previews
 //apidoc:title Delete Preview
-//apidoc:order 3
+//apidoc:order 4
 func (h *Handler) DeletePreview(w http.ResponseWriter, r *http.Request) {
 	previewID := chi.URLParam(r, "previewId")
 	var previewUUID pgtype.UUID
