@@ -44,7 +44,15 @@
 /docs/troubleshoot  /docs/core/troubleshoot  301
 /docs/uninstall  /docs/core/uninstall  301
 /docs/updating  /docs/core/updating  301
-/docs/api-access  /docs/api/access  301
+/docs/api-access  /docs/api  301
+
+# The API section's own landing page moved from /docs/api/access to /docs/api
+# itself when Getting Started became that section's index. Unlike the moves
+# above, this one retargets a URL that was LIVE and indexed — /docs/api/access
+# served 200 in production and is in the published sitemap — so without this it
+# would 404 for every bookmark and search result the moment the reference
+# merges. The #what-a-token-can-never-do anchor survived the move intact.
+/docs/api/access  /docs/api  301
 
 # Features became the Core section's own landing page 2026-09-09 — its
 # content moved from /docs/core/features to /docs/core itself (Fumadocs
