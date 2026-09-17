@@ -4,15 +4,27 @@ All notable changes to Belune are documented here.
 
 Belune is pre-1.0. The versioning contract while it stays there:
 
-- **Patch releases** (`0.1.0` → `0.1.1`) are always safe to apply.
-- **Minor releases** (`0.1.x` → `0.2.0`) may contain breaking changes.
+- **Patch releases** (`0.1.0` → `0.1.1`) are always safe to apply **to your
+  install**. They never change the deployment topology, never require a host
+  action, and never ask anything of you beyond running `update.sh`. Your
+  dashboard, your applications, and your data carry over untouched.
+- **The API is the one exception, and only until it settles.** A patch release
+  may tighten what a personal access token is allowed to reach, or move an
+  endpoint that no published reference had promised yet. This reaches scripts
+  only — never the dashboard, never your data. Now that the [API
+  reference](https://belune.dev/docs/api) is published, a documented path is a
+  contract and will not move without a deprecation period; token boundaries may
+  still tighten before 1.0. Every such change is listed under **⚠️ Breaking
+  changes** at the top of that release's notes, and explained in full here.
+- **Minor releases** (`0.1.x` → `0.2.0`) may change the deployment topology
+  itself, and may require a host action.
 - **Always take a backup before upgrading.** `update.sh` does this for you;
   migrations are forward-only and cannot be undone by downgrading the image.
 
 Release notes for each version are also published on the
 [Releases page](https://github.com/weiliang79/belune/releases).
 
-## [Unreleased]
+## [0.1.7]
 
 ### Belune now has a complete API reference
 
@@ -233,6 +245,22 @@ ships with the binary and already calls the new paths.
   previously had no validation at all. This is only reachable by an admin with
   a dashboard session, so it is a correctness fix rather than a security one.
 
+### Upgrading
+
+This release adds **no migrations** and changes nothing about how Belune is
+deployed — no new containers, no compose changes, no host action. `update.sh`
+takes a backup first, as always.
+
+**The dashboard is entirely unaffected.** It authenticates with a session
+cookie, so every boundary change above is invisible to it. Nothing you do in
+the browser changes.
+
+**If you have a script using a personal access token, read the breaking
+entries above.** In short: point anything that manages the account, reads or
+writes platform configuration, or shares or transfers a project at a session
+credential instead, and update the four moved paths. Everything else keeps
+working unchanged.
+
 ## [0.1.6]
 
 ### Projects can now be shared with your team
@@ -437,5 +465,7 @@ iterations; this is what Belune _is_ at launch, not a list of what changed.
 - Registry credentials for private images, monorepo subdirectory builds, and
   custom start commands are not yet configurable.
 
-[Unreleased]: https://github.com/weiliang79/belune/compare/v0.1.0...HEAD
+[0.1.7]: https://github.com/weiliang79/belune/releases/tag/v0.1.7
+[0.1.6]: https://github.com/weiliang79/belune/releases/tag/v0.1.6
+[0.1.5]: https://github.com/weiliang79/belune/releases/tag/v0.1.5
 [0.1.0]: https://github.com/weiliang79/belune/releases/tag/v0.1.0
