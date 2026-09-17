@@ -127,9 +127,15 @@ func (s *Server) setupRouter() chi.Router {
 
 	// Catch-all: serve the embedded SPA for any unmatched path — except under
 	// /api/, where an unmatched path is a client error, not a page.
-	if spaHandler := web.Handler(); spaHandler != nil {
-		r.Handle("/*", apiAwareCatchAll(spaHandler))
-	}
+	//
+	// Registered unconditionally, including when the SPA is absent. Gating the
+	// whole catch-all on web.Handler() != nil made the API's 404 contract
+	// depend on whether the frontend happened to be built: in a binary without
+	// it — every test binary, since web/dist holds only .gitkeep — chi's default
+	// answered "404 page not found" as text/plain instead. Production always
+	// embeds the SPA, so this was invisible there, which is exactly what made it
+	// worth removing.
+	r.Handle("/*", apiAwareCatchAll(web.Handler()))
 
 	return r
 }
@@ -150,6 +156,11 @@ func (s *Server) setupRouter() chi.Router {
 // the time a request reaches here chi has already failed to match every real
 // route, so no registered API path can be shadowed by this. A second wildcard
 // pattern could shadow one, and would fail in the worst possible direction.
+//
+// spa may be nil when the frontend was not built into the binary. The /api/
+// branch still applies — that answer is the API's own contract and does not
+// depend on the frontend existing — and everything else gets the plain 404 chi
+// would have produced anyway.
 func apiAwareCatchAll(spa http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Bare "/api" as well as "/api/...": both are unambiguously an attempt
@@ -165,6 +176,10 @@ func apiAwareCatchAll(spa http.Handler) http.Handler {
 			}); err != nil {
 				slog.Debug("api 404: encode error", "error", err)
 			}
+			return
+		}
+		if spa == nil {
+			http.NotFound(w, r)
 			return
 		}
 		spa.ServeHTTP(w, r)

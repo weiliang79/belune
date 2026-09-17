@@ -69,10 +69,11 @@ func TestUnmatchedAppPath_StillServesTheSPA(t *testing.T) {
 		require.NoError(t, err)
 
 		// In a test binary the SPA may not be built (web/dist holds only
-		// .gitkeep), in which case web.Handler() is nil and there is no
-		// catch-all at all — chi's own 404 answers instead. What must never
-		// happen is this path being caught by the API branch and answered with
-		// the API's JSON error shape.
+		// .gitkeep), in which case web.Handler() is nil and the catch-all
+		// answers app paths with a plain 404 rather than index.html. Either
+		// outcome is fine here. What must never happen is this path being
+		// caught by the API branch and answered with the API's JSON error
+		// shape.
 		assert.NotContains(t, string(body), `"error":"no such endpoint"`,
 			"%s is an app route — it must never get the API's 404", path)
 	}
