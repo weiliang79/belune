@@ -14,13 +14,87 @@ Release notes for each version are also published on the
 
 ## [Unreleased]
 
+### Belune now has a complete API reference
+
+Every endpoint the API exposes is now documented at
+[belune.dev/docs/api](https://belune.dev/docs/api) — what it takes, what it
+returns, which scope reaches it, and whether it needs the Admin role. 0.1.6
+shipped personal access tokens with no reference to use them against; this is
+that gap closed.
+
+- **One page per endpoint**, grouped by what it acts on: Account,
+  Applications, Databases, Projects, and Platform.
+- **Generated from the running server, not written by hand.** Scopes, role
+  requirements, and session boundaries are read off the real router, so the
+  reference cannot drift from what the code enforces — a build fails if it
+  does.
+- **The [OpenAPI 3.1 spec](https://belune.dev/openapi.json) is served at a
+  stable public URL**, outside authentication. Point a client generator or a
+  linter at it directly. It is more complete than the pages: it carries every
+  route, session-only ones included.
+- **Two guides for the streaming endpoints** — the multiplexed [WebSocket
+  hub](https://belune.dev/docs/api/overview/websockets) behind `GET /api/ws`,
+  and the seven [Server-Sent Events
+  streams](https://belune.dev/docs/api/overview/server-sent-events) you can
+  tail with `curl`.
+
+Endpoints that no token can call are deliberately absent from the reference —
+a page for something you cannot call from a script is a page for a reader who
+cannot act on it. They are described in [What a token can never
+do](https://belune.dev/docs/api#what-a-token-can-never-do) instead.
+
+### Members can see which certificate serves their domains
+
+The TLS status table was admin-only as a whole. A Member could read the
+certificate serving one domain from that domain's own badge, but had to open
+each application in turn to find which of their domains was failing — the
+exact thing an at-a-glance table exists to prevent.
+
+- **The Certificates page is now visible to Members**, showing the Domain TLS
+  table for the domains they can already reach: their own projects and any
+  shared with them. Uploading, replacing and deleting certificates stay
+  admin-only, and the page says so.
+- **The certificate picker when adding a domain is no longer empty for a
+  Member.** It offers the certificates that can actually serve the hostname
+  being added, wildcards included, rather than nothing at all.
+- **Domains now show which certificate is serving them**, by name, instead of
+  leaving the reader to match a bare id.
+
+The certificate store itself stays admin-only. Listing every certificate
+returns every hostname on it, which would hand a Member the domain names of
+every other application on the instance — so a Member is given the
+certificates that match their own hostname, never the full list.
+
+### Sharing or transferring a project now requires a dashboard session
+
+`PUT /api/projects/{id}/sharing` and `PUT /api/projects/{id}/transfer` no
+longer accept a personal access token at any scope, joining [everything else a
+token can never do](https://belune.dev/docs/api#what-a-token-can-never-do).
+Transferring also now requires the Admin role at the route itself, which is
+where the rest of the admin-only routes already declare it.
+
+**Why this one matters more than its size suggests.** Sharing a project grants
+every Member on the install the owner's working access to it — including
+revealing environment variable values, webhook secrets, deploy-hook tokens,
+and file mount contents. A single `{"shared": true}` from a leaked token
+exposed all of it. Transfer is the targeted version: it hands one named user
+owner access, removes the previous owner, who cannot undo it without an admin,
+and moves quota accounting and alert recipients with it.
+
+Both flags can be switched back. The secrets they expose in the meantime
+cannot be un-exposed, which is why they belong behind a session rather than
+behind a scope.
+
+**Upgrading from 0.1.6: breaking.** Both were `write`-scope token-callable
+there. A script that shares or transfers projects needs a session credential.
+
 ### Personal access tokens can no longer manage the account itself
 
 A PAT manages infrastructure — deploying, editing environment variables,
 running backups — not the account it belongs to. The following now require
 a live dashboard session, joining [deleting or restoring data, reading a
 stored secret, and minting or revoking tokens, which already
-did](https://belune.dev/docs/api/access#what-a-token-can-never-do):
+did](https://belune.dev/docs/api#what-a-token-can-never-do):
 
 - Changing your password or profile, and logging out.
 - Enrolling, disabling, or checking the status of two-factor authentication,
@@ -45,35 +119,12 @@ own tokens using a personal access token, it will start getting `403`
 instead of `200` — point it at a session credential instead, or drop the
 call if it isn't essential. Notification-preference calls are unaffected.
 
-### Deleting a TLS certificate no longer requires a dashboard session
-
-This loosens a boundary that shipped in 0.1.6. `DELETE /api/certificates/{id}`
-was session-only — one of the things [a token could never
-do](https://belune.dev/docs/api/access#what-a-token-can-never-do). It now
-also accepts a personal access token that has `write` scope **and** belongs
-to an Admin, the same bar as every other write in the platform-admin route
-group.
-
-Why this is a narrow relaxation and not a hole:
-
-- `domains.certificate_id` is `ON DELETE RESTRICT`, so a certificate any
-  domain still serves cannot be deleted at all — only an unused one is
-  reachable.
-- The route still requires the Admin role, so a leaked Member token, or any
-  token without `write`, still gets `403`.
-- A deleted certificate is re-uploadable from the same certificate and key
-  that created it — unlike a dropped database, nothing is lost for good.
-
-**Upgrading from 0.1.6:** nothing breaks — this only widens what a token is
-allowed to do. If you audit the token boundary, this is the one place it has
-moved outward.
-
 ### Platform configuration now requires a dashboard session
 
 Reading or changing platform settings, restarting a service, or opening a
 host shell now requires a live dashboard session — a personal access token
 is rejected outright, joining [everything else a token can never
-do](https://belune.dev/docs/api/access#what-a-token-can-never-do). Gated:
+do](https://belune.dev/docs/api#what-a-token-can-never-do). Gated:
 listing and updating instance settings, the SMTP configuration, restarting a
 service, and starting a host shell session. `GET /api/maintenance/server-ip`
 stays token-callable — a public fact, not configuration.
@@ -104,6 +155,84 @@ opens a host shell using a personal access token, it will start getting
 the call if it isn't essential. `GET /api/maintenance/server-ip` is
 unaffected.
 
+### Deleting a TLS certificate no longer requires a dashboard session
+
+This loosens a boundary that shipped in 0.1.6. `DELETE /api/certificates/{id}`
+was session-only — one of the things [a token could never
+do](https://belune.dev/docs/api#what-a-token-can-never-do). It now
+also accepts a personal access token that has `write` scope **and** belongs
+to an Admin, the same bar as every other write in the platform-admin route
+group.
+
+Why this is a narrow relaxation and not a hole:
+
+- `domains.certificate_id` is `ON DELETE RESTRICT`, so a certificate any
+  domain still serves cannot be deleted at all — only an unused one is
+  reachable.
+- The route still requires the Admin role, so a leaked Member token, or any
+  token without `write`, still gets `403`.
+- A deleted certificate is re-uploadable from the same certificate and key
+  that created it — unlike a dropped database, nothing is lost for good.
+
+**Upgrading from 0.1.6:** nothing breaks — this only widens what a token is
+allowed to do. If you audit the token boundary, this is the one place it has
+moved outward.
+
+### Some API paths have moved
+
+Four paths changed. All four kept their scope and role requirements — the path
+is the only thing that moved.
+
+| Was                         | Is now                                  |
+| --------------------------- | --------------------------------------- |
+| `GET /api/metrics`          | `GET /api/summary`                      |
+| `POST /api/cleanup`         | `POST /api/maintenance/cleanup`         |
+| `GET /api/proxy/reconciler` | `GET /api/maintenance/proxy`            |
+| `POST /api/proxy/reconcile` | `POST /api/maintenance/proxy/reconcile` |
+
+`/api/metrics` returned resource **counts** — how many projects, applications,
+databases and deployments exist — while `/api/metrics/*` held real host
+time-series and `/metrics` was the Prometheus scrape endpoint. Three unrelated
+meanings on one prefix. `/api/metrics/*` now holds only genuine series.
+
+The other three were already described as maintenance operations while living
+outside `/api/maintenance`. Note the status endpoint is
+`/api/maintenance/proxy`, not `.../proxy/reconciler`: `GET` the noun for
+status, `POST` the noun plus a verb for the action, matching
+`/api/maintenance/queue` and `/api/maintenance/queue/clear`.
+
+**Upgrading from 0.1.6: breaking, and worth grepping for.** These are the only
+paths that have moved since 0.1.6, and they moved now rather than later
+precisely because the API reference had not been published yet — no document
+had promised them. After this release they are a published contract and will
+not move again without a deprecation period. The dashboard is unaffected; it
+ships with the binary and already calls the new paths.
+
+### Fixed
+
+- **Deleting an application destroyed its volume backups without saying so.**
+  The dialog warned only that the container would stop and the application
+  would be deleted. It also erases every volume backup the application had,
+  local files and remote objects alike, with no way to keep them — unlike
+  deleting a database, which offers that choice. The dialog now states it. The
+  behaviour is unchanged; what changes is that you are told before you confirm.
+- **An unknown `/api/` path returned `200` and an HTML page instead of a
+  `404`.** Anything the API did not recognise fell through to the dashboard's
+  own catch-all, which answers unknown paths with the app itself so that
+  in-browser navigation works. A caller that typo'd an endpoint got a success
+  status and a web page, which most clients fail to parse in some confusing
+  way rather than reporting "not found". Unmatched `/api/` paths now return
+  `404` with the same `{"error": "..."}` shape as every other API failure;
+  dashboard links and page refreshes are unchanged.
+- **The settings endpoint accepted any key you sent it.** Seven keys were
+  validated and the rest were written as-is, so `host_shel_enabled` — one
+  character off the host-shell gate — returned `200`, created a real row, read
+  back correctly afterwards, and turned nothing on. `PUT /api/settings` now
+  accepts only the 16 keys Belune actually reads, rejecting anything else with
+  a `400` that names what it will take, and type-checks the nine keys that
+  previously had no validation at all. This is only reachable by an admin with
+  a dashboard session, so it is a correctness fix rather than a security one.
+
 ## [0.1.6]
 
 ### Projects can now be shared with your team
@@ -127,7 +256,7 @@ now share a project with every Member on the install instead.
 ### Personal access tokens
 
 Belune now has API credentials that aren't your login. Create one from
-**Account → Personal Access Tokens**, [documented here](https://belune.dev/docs/api/access):
+**Account → Personal Access Tokens**, [documented here](https://belune.dev/docs/api):
 
 - **Four scopes on a ladder** — `metrics` ⊂ `read` ⊂ `deploy` ⊂ `write` —
   each including everything narrower than it, so a token only ever needs one
