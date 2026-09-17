@@ -11,6 +11,11 @@ ARG PACK_VERSION=0.35.1
 # Client only. Talks to the host daemon over the mounted socket; version need not
 # match the host's exactly (the Docker CLI is compatible across daemon versions).
 ARG DOCKER_CLI_VERSION=27.5.1
+# compose CLI plugin (pinned) — client only, same reasoning as the docker CLI
+# above. The self-update helper (worker/../runtime SpawnUpdateHelper) reuses
+# this image to run scripts/update.sh, which shells out to `docker compose`;
+# the static docker CLI tarball above does not bundle it.
+ARG COMPOSE_VERSION=5.5.1
 RUN apt-get update && apt-get install -y --no-install-recommends \
         ca-certificates git tzdata curl \
     && rm -rf /var/lib/apt/lists/*
@@ -53,6 +58,21 @@ RUN set -eux; \
     curl -fsSL "https://download.docker.com/linux/static/stable/${darch}/docker-${DOCKER_CLI_VERSION}.tgz" \
       | tar -C /usr/local/bin --no-same-owner --strip-components=1 -xz docker/docker; \
     docker --version
+# docker compose CLI plugin (pinned) — a `docker` subcommand, not a package;
+# installed as a plugin binary rather than pulled in via apt so the version is
+# pinned the same way as everything else in this stage.
+RUN set -eux; \
+    arch="$(dpkg --print-architecture)"; \
+    case "$arch" in \
+      amd64) carch="x86_64" ;; \
+      arm64) carch="aarch64" ;; \
+      *) echo "unsupported arch: $arch" >&2; exit 1 ;; \
+    esac; \
+    mkdir -p /usr/local/lib/docker/cli-plugins; \
+    curl -fsSL "https://github.com/docker/compose/releases/download/v${COMPOSE_VERSION}/docker-compose-linux-${carch}" \
+      -o /usr/local/lib/docker/cli-plugins/docker-compose; \
+    chmod +x /usr/local/lib/docker/cli-plugins/docker-compose; \
+    docker compose version
 
 # ── Stage: frontend ──────────────────────────────────────────────────────────
 # Pinned to the BUILD platform: the output is static assets, so there is nothing

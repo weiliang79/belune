@@ -220,6 +220,36 @@ type ContainerRuntime interface {
 	// Used for cold volume tar snapshot/restore against a stopped database's
 	// volume (the helper mounts the volume and runs tar). Returns the exit code.
 	RunHelper(ctx context.Context, cfg ContainerConfig, stdin io.Reader, stdout, stderr io.Writer) (int, error)
+	// SpawnUpdateHelper launches a detached container that runs
+	// `scripts/update.sh <version>` against the host install directory, then
+	// exits on its own. Unlike RunHelper it is NOT attached to or waited on —
+	// it must outlive the caller, because `docker compose up -d` inside it is
+	// what replaces the calling (belune) container. Returns the helper's
+	// container ID immediately after it starts. Labelled LabelHelper, same as
+	// RunHelper's containers, so the orphan reaper spares it while running and
+	// reaps it like any other exited helper afterward.
+	SpawnUpdateHelper(ctx context.Context, cfg UpdateHelperConfig) (string, error)
+}
+
+// UpdateHelperConfig configures the detached self-update helper started by
+// SpawnUpdateHelper.
+type UpdateHelperConfig struct {
+	// Image is Belune's own image — the helper reuses it (bash, curl, the
+	// docker CLI and compose plugin are already there), so nothing needs
+	// pulling. Same reasoning as the host-shell helper's image choice.
+	Image string
+	// WorkingDir is the host's compose project directory — where
+	// docker-compose.yml, .env and scripts/ live — read off this container's
+	// own com.docker.compose.project.working_dir label. Bind-mounted into the
+	// helper at the SAME path, so scripts/update.sh's relative paths resolve
+	// exactly as they would running directly on the host.
+	WorkingDir string
+	// Version is the target release, passed to scripts/update.sh as its sole
+	// argument. Always resolved from the cached manifest ahead of time, never
+	// re-resolved inside the helper — the operator updates to exactly the
+	// version the Server-page card showed them, not whatever happens to be
+	// latest by the time the helper runs.
+	Version string
 }
 
 // ContainerEvent represents a Docker container lifecycle event.

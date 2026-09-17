@@ -57,6 +57,13 @@ export function useRestartService() {
   });
 }
 
+export function useTriggerSelfUpdate() {
+  return useMutation({
+    mutationFn: ({ password, code }: { password: string; code?: string }) =>
+      maintenanceApi.triggerSelfUpdate(password, code),
+  });
+}
+
 export function usePlatformLogs(service: PlatformService | null) {
   return useQuery({
     queryKey: [...queryKeys.maintenancePlatformLogs, service],

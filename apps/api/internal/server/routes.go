@@ -554,6 +554,12 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService,
 					// its handler and get exactly as far as "password required".
 					r.With(middleware.RequireSession()).Post("/api/maintenance/restart", h.RestartService)
 					r.With(middleware.RequireSession()).Post("/api/maintenance/host-shell", h.CreateHostShellSession)
+					// Same triple-gate shape as host-shell above (a capability check —
+					// here, an update being available at all — admin role, step-up
+					// re-auth), and the same reason for RequireSession: this is a
+					// platform-control action, and a token should never reach even the
+					// "password required" response.
+					r.With(middleware.RequireSession()).Post("/api/maintenance/update", h.TriggerSelfUpdate)
 					r.Get("/api/quotas", h.ListQuotas)
 					r.Get("/api/quotas/{scope}/{scopeId}", h.GetQuota)
 					r.Put("/api/quotas/{scope}/{scopeId}", h.UpsertQuota)

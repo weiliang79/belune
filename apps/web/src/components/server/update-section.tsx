@@ -1,10 +1,22 @@
+import { useState } from "react";
 import { ExternalLinkIcon } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { CopyButton } from "@/lib/components/copy-button";
 import { useSettings, useUpdateSettings } from "@/lib/hooks/use-settings";
+import { useTriggerSelfUpdate } from "@/lib/hooks/use-maintenance";
+import { useTotpStatus } from "@/lib/hooks/use-totp";
 import { useVersion } from "@/lib/hooks/use-version";
 import { formatRelativeTime } from "@/lib/utils/format";
 
@@ -40,6 +52,13 @@ export function UpdateSection() {
   const currentVersion = useVersion();
   const { data: settings } = useSettings();
   const updateSettings = useUpdateSettings();
+  const { data: totpStatus } = useTotpStatus();
+  const totpEnabled = totpStatus?.enabled ?? false;
+  const triggerUpdate = useTriggerSelfUpdate();
+
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [password, setPassword] = useState("");
+  const [code, setCode] = useState("");
 
   const setting = (key: string) => settings?.find((s) => s.key === key)?.value ?? "";
 
@@ -82,6 +101,31 @@ export function UpdateSection() {
         loading: "Saving…",
         success: `v${latestVersion} will not be flagged again`,
         error: (err) => err.message,
+      },
+    );
+  };
+
+  const closeConfirm = () => {
+    setConfirmOpen(false);
+    setPassword("");
+    setCode("");
+  };
+
+  const applyUpdate = () => {
+    if (!password) return;
+    triggerUpdate.mutate(
+      { password, code: code || undefined },
+      {
+        onSuccess: (res) => {
+          closeConfirm();
+          toast.success(
+            `Update to v${res.target} started — the dashboard will disconnect briefly while it restarts.`,
+            { duration: 10_000 },
+          );
+        },
+        onError: (err) => {
+          toast.error(err instanceof Error ? err.message : "Failed to start the update");
+        },
       },
     );
   };
@@ -149,14 +193,26 @@ export function UpdateSection() {
             backup first, then applies the update.
           </p>
 
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={skipThisVersion}
-            disabled={updateSettings.isPending}
-          >
-            Skip this version
-          </Button>
+          {requiresHostUpdate ? (
+            <p className="text-status-building text-xs">
+              This release changes host-level configuration — the dashboard
+              can't apply it. Use the command above instead.
+            </p>
+          ) : (
+            <div className="flex items-center gap-2">
+              <Button size="sm" onClick={() => setConfirmOpen(true)}>
+                Update now
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={skipThisVersion}
+                disabled={updateSettings.isPending}
+              >
+                Skip this version
+              </Button>
+            </div>
+          )}
         </div>
       )}
 
@@ -165,6 +221,64 @@ export function UpdateSection() {
           Checked {formatRelativeTime(lastCheckedAt)}
         </p>
       )}
+
+      {/* Step-up password prompt — same shape as the host-shell gate. */}
+      <Dialog
+        open={confirmOpen}
+        onOpenChange={(open) => !open && closeConfirm()}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Update to v{latestVersion}?</DialogTitle>
+            <DialogDescription>
+              Re-enter your Belune password to apply this update.
+              {totpEnabled &&
+                " Your authenticator code is required too."} A pre-update
+              backup runs first. The dashboard will be briefly unreachable
+              while it restarts.
+              {breaking &&
+                " This release includes breaking changes — read the release notes before continuing."}
+            </DialogDescription>
+          </DialogHeader>
+          <Input
+            type="password"
+            autoFocus
+            value={password}
+            placeholder="Password"
+            onChange={(e) => setPassword(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") applyUpdate();
+            }}
+          />
+          {totpEnabled && (
+            <Input
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              value={code}
+              placeholder="Verification code"
+              onChange={(e) => setCode(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") applyUpdate();
+              }}
+            />
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={closeConfirm}>
+              Cancel
+            </Button>
+            <Button
+              onClick={applyUpdate}
+              disabled={
+                triggerUpdate.isPending ||
+                !password ||
+                (totpEnabled && !code)
+              }
+            >
+              {triggerUpdate.isPending ? "Starting…" : "Update now"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -473,15 +473,19 @@ func TestGenerateAPIReference(t *testing.T) {
 	// were gated (see routes.go and grant_boundary_test.go): both hand out
 	// project-owner-equivalent access — sharing extends it to every Member
 	// with no membership check, transfer moves it outright — the same
-	// administering-who-can-reach-what class as POST /api/users. This
-	// constant is deliberately edited only after watching the test fail at
-	// the old value first (confirmed each time: 38 -> 36, 36 -> 35,
-	// 35 -> 42, then 42 -> 44, before this constant did), the same way a
-	// floor assertion is meant to be moved. If this moves again, a route was
-	// added, removed, or re-gated — worth an explicit look either way, the
-	// same reasoning destroy_boundary_test.go and reveal_boundary_test.go's
-	// own sanity floors give for their sets.
-	require.Equal(t, 44, sessionRoutes, "expected exactly 44 RequireSession routes")
+	// administering-who-can-reach-what class as POST /api/users. Then
+	// 44 -> 45 when POST /api/maintenance/update was added (v0.1.8
+	// self-update, Phase 2): triple-gated the same way as the host shell it
+	// sits beside — a token should never reach even the "password required"
+	// response for a route that ends with the control-plane container being
+	// replaced. This constant is deliberately edited only after watching the
+	// test fail at the old value first (confirmed each time: 38 -> 36, 36 ->
+	// 35, 35 -> 42, 42 -> 44, then 44 -> 45, before this constant did), the
+	// same way a floor assertion is meant to be moved. If this moves again, a
+	// route was added, removed, or re-gated — worth an explicit look either
+	// way, the same reasoning destroy_boundary_test.go and
+	// reveal_boundary_test.go's own sanity floors give for their sets.
+	require.Equal(t, 45, sessionRoutes, "expected exactly 45 RequireSession routes")
 
 	sig, directives, behaviour, reg := apidocExtractTypes(t)
 	apidocAssertEmbedsPromoted(t, reg)

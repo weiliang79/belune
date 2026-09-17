@@ -74,3 +74,15 @@ export function restartService(service: RestartableService) {
     `/maintenance/restart?service=${encodeURIComponent(service)}`,
   );
 }
+
+/** Step-up re-auth to apply the update the Server-page card is showing — same
+ *  shape as the host-shell gate: a code is required of anyone with a second
+ *  factor enabled. Triggers a detached helper that replaces this container, so
+ *  a successful call is normally followed by the dashboard's connection
+ *  dropping briefly. */
+export function triggerSelfUpdate(password: string, code?: string) {
+  return api.post<{ status: string; target: string }>("/maintenance/update", {
+    password,
+    ...(code ? { method: "totp", code } : {}),
+  });
+}
