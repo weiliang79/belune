@@ -3,6 +3,7 @@ package handler_test
 import (
 	"fmt"
 	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -73,6 +74,30 @@ func TestUpdateSettings_RejectsUnknownKeys(t *testing.T) {
 	assert.NotEqual(t, "Should Not Persist", got, "a rejected request must write nothing")
 }
 
+// TestUpdateSettings_RejectsUpdateCheckCacheKeys guards a security property,
+// not just a typo: update_latest_* and update_last_checked_at are the
+// update-check worker's own cache (worker/update_check_task.go), written
+// directly via UpsertSetting, never through this endpoint. If one leaked into
+// the allowlist, a write-scoped admin token could spoof "you are already
+// current" by overwriting what the last manifest fetch actually found.
+func TestUpdateSettings_RejectsUpdateCheckCacheKeys(t *testing.T) {
+	resetDB(t)
+	adminToken := env.SetupAdmin(t, "admin@test.com", "password123")
+
+	cacheKeys := []string{
+		"update_latest_version",
+		"update_latest_breaking",
+		"update_latest_requires_host_update",
+		"update_latest_notes_url",
+		"update_last_checked_at",
+	}
+	for _, key := range cacheKeys {
+		resp := putSettings(t, adminToken, [2]string{key, "9.9.9"})
+		assert.Equal(t, http.StatusBadRequest, resp.StatusCode, "%s must not be writable via PUT /api/settings", key)
+		resp.Body.Close()
+	}
+}
+
 // TestUpdateSettings_AcceptsEveryAllowlistedKey is the other half, and the one
 // that matters for not shipping a regression: an allowlist that is too NARROW
 // silently breaks a working feature. Every key here is read somewhere in the
@@ -95,6 +120,8 @@ func TestUpdateSettings_AcceptsEveryAllowlistedKey(t *testing.T) {
 		{"audit_log_retention_days", "365"},
 		{"orphaned_backup_retention_days", "90"},
 		{"host_metrics_retention_hours", "48"},
+		{"update_check_enabled", "false"},
+		{"update_skip_version", "0.1.8"},
 	}
 
 	resp := putSettings(t, adminToken, cases...)
@@ -125,6 +152,8 @@ func TestUpdateSettings_ValidatesValueTypes(t *testing.T) {
 		{"host_metrics_retention_hours", "abc"},
 		{"public_ip", "not-an-ip"},
 		{"control_plane_backup_schedule", "every tuesday"},
+		{"update_check_enabled", "yes"},
+		{"update_skip_version", strings.Repeat("x", 51)},
 	}
 	for _, c := range rejected {
 		resp := putSettings(t, adminToken, c)
@@ -150,7 +179,7 @@ func TestUpdateSettings_BooleanDefaultsAreNotNormalised(t *testing.T) {
 	resetDB(t)
 	adminToken := env.SetupAdmin(t, "admin@test.com", "password123")
 
-	for _, key := range []string{"host_shell_enabled", "daily_cleanup_enabled", "control_plane_backup_enabled"} {
+	for _, key := range []string{"host_shell_enabled", "daily_cleanup_enabled", "control_plane_backup_enabled", "update_check_enabled"} {
 		resp := putSettings(t, adminToken, [2]string{key, ""})
 		require.Equal(t, http.StatusOK, resp.StatusCode)
 		resp.Body.Close()

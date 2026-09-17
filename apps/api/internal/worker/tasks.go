@@ -25,4 +25,5 @@ const (
 	TypeTLSProbe            = "tls:probe"
 	TypeTemplateFinalize    = "template:finalize"
 	TypeNotifyDeliver       = "notify:deliver"
+	TypeUpdateCheck         = "update:check"
 )
