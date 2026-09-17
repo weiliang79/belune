@@ -15,7 +15,7 @@
 // audience is people scripting with a personal access token — an operation
 // no token can ever call, at any scope (RequireSession; see
 // middleware.RequireSession and the "What a Token Can Never Do" section of
-// access.mdx, which already documents the boundary in prose), is a dead end
+// getting-started.mdx, which already documents the boundary in prose), is a dead end
 // in that reference, not useful content. public/openapi.json itself is NOT
 // filtered: it's the complete, published-at-a-stable-URL machine artifact
 // third-party tooling depends on, its security block already states
@@ -25,7 +25,7 @@
 // (and the meta.json files describing it) is filtered, by cloning the
 // already-generated spec in memory and feeding fumadocs-openapi that clone
 // instead of the file on disk — decided by the user 2026-09-09, after
-// rejecting a redundant "dashboard-only endpoints" table (access.mdx's
+// rejecting a redundant "dashboard-only endpoints" table (getting-started.mdx's
 // prose already covers exactly this set).
 //
 // PREVIEW: the two Git domains nest under a shared "Git" separator — see
@@ -210,10 +210,10 @@ for (const methods of Object.values(pagesSpec.paths)) {
 // directory under OUT_DIR — deliberately, not for convenience: "every
 // directory here is generator output" is the same allowlist-shaped
 // assumption that already bit the Go side once (a hardcoded written :=
-// {"index.mdx", "access.mdx", "meta.json"} would have silently deleted
-// access.mdx on the directory rename; the fix there was marker-based, not a
+// {"index.mdx", "getting-started.mdx", "meta.json"} would have silently deleted
+// getting-started.mdx on the directory rename; the fix there was marker-based, not a
 // widened allowlist, specifically so the class wouldn't come back). A
-// hand-written subfolder under content/docs/api/ is plausible — access.mdx
+// hand-written subfolder under content/docs/api/ is plausible — getting-started.mdx
 // already proves hand-written content lives in this tab — and nothing marks
 // one as safe to keep, so sweeping "everything" would silently delete it on
 // the next regeneration with no warning and no trace beyond the deletion.
@@ -353,7 +353,7 @@ writeFileSync(
       title: 'API',
       description: "Authenticate and script against Belune's HTTP API.",
       root: true,
-      pages: ['index', 'access', 'websockets', ...domainSlugs],
+      pages: ['index', 'getting-started', 'websockets', ...domainSlugs],
     },
     null,
     2,

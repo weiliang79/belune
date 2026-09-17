@@ -1,6 +1,6 @@
 ---
-title: API Access
-description: Authenticate and script against the API with a personal access token.
+title: Getting Started
+description: Authenticate, understand the scope ladder, and script against the API with a personal access token.
 ---
 
 Belune has an API behind every screen in the dashboard. A **personal access token** authenticates as you, scoped to whatever you chose when you created it — for CI, monitoring, and anything else that isn't a person clicking around.
@@ -58,6 +58,18 @@ One boundary has moved the other way since v0.1.6: deleting an unused TLS certif
 
 - **100 requests a minute per token, not per user.** A token minted for one integration has its own budget, separate from your login session and from any other token on the account. Going over returns `429` as plain text (not the JSON shape below), with `X-RateLimit-Limit`, `X-RateLimit-Remaining`, and `X-RateLimit-Reset` headers so a client can back off before hitting it rather than after.
 - Every other error is `{"error": "<message>"}`, with a status code that means what it says: `401` for a missing, invalid, or expired token, `403` for a scope or session boundary (see above), `404` for something that doesn't exist or isn't yours to see.
+
+## The Endpoint Reference
+
+Every token-callable endpoint is in the sidebar, grouped by resource. Routes that always require a live dashboard session aren't listed there — see [What a Token Can Never Do](#what-a-token-can-never-do) for that boundary.
+
+The reference is **generated, not written**: produced by probing the real running router with a token and statically resolving every request and response Go type, rather than by reading the source and describing what it should do. A hand-written version of it had its scope-lattice legend go wrong within a week, caught only because an unrelated review checked it against the code.
+
+<Callout type="info">
+The underlying [OpenAPI 3.1 spec](/openapi.json) is served at a stable public URL, outside auth. Point a codegen tool, client, or linter at it directly rather than scraping these pages — and note it is **more complete** than they are: it carries every registered route, session-only ones included, each with an accurate `security` block.
+</Callout>
+
+Two things are deliberately absent rather than guessed at. **`required` is omitted** from every request schema: field optionality here is enforced imperatively, not encoded in the types, and inferring it from validation code would be far fuzzier than the static resolution the rest of the spec rests on. **Project-pinning** — a token pinned to one project being rejected outside it — has no OpenAPI representation at all, so it is called out in the description of each affected operation instead.
 
 ## Common Tasks
 
