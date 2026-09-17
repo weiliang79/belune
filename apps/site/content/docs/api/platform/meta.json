@@ -4,6 +4,7 @@
     "get-stats",
     "get-global-deployments",
     "list-domain-tls-status",
+    "handle-web-socket",
     "requests",
     "git",
     "certificates",

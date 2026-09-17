@@ -13,9 +13,6 @@
   ],
   "tags": [
     {
-      "name": "Live Updates (WebSocket Hub)"
-    },
-    {
       "name": "Profile"
     },
     {
@@ -13205,8 +13202,9 @@
         "summary": "Open the Live Updates Socket",
         "description": "Subscribe to live metrics, logs, request traces and container status over one socket. OpenAPI cannot describe a WebSocket protocol, so the frames, the channel list and the connection limits are documented in the [WebSockets guide](/docs/api/websockets).",
         "tags": [
-          "Live Updates (WebSocket Hub)"
+          "Platform"
         ],
+        "x-belune-order": 4,
         "responses": {
           "403": {
             "description": "Forbidden",
