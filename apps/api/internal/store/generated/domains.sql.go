@@ -237,6 +237,80 @@ func (q *Queries) GetDomainOwnerUserID(ctx context.Context, id pgtype.UUID) (Get
 	return i, err
 }
 
+const getDomainWithFeatures = `-- name: GetDomainWithFeatures :one
+SELECT d.id, d.application_id, d.hostname, d.ssl_enabled, d.caddy_config_id, d.container_port, d.force_https, d.ssl_mode, d.ssl_provider, d.ssl_credentials_encrypted, d.advanced_config, d.verified_at, d.created_at, d.certificate_id, d.tls_status, d.tls_issuer, d.tls_not_after, d.tls_last_checked_at, d.tls_error, d.tls_advisory, d.path, d.strip_path, d.internal_path, COALESCE(
+    (SELECT json_agg(json_build_object(
+        'id', f.id, 'feature_type', f.feature_type,
+        'config', f.config, 'enabled', f.enabled
+    )) FROM domain_route_features f WHERE f.domain_id = d.id),
+    '[]'::json
+) AS route_features
+FROM domains d
+WHERE d.id = $1
+`
+
+type GetDomainWithFeaturesRow struct {
+	ID                      pgtype.UUID        `json:"id"`
+	ApplicationID           pgtype.UUID        `json:"application_id"`
+	Hostname                string             `json:"hostname"`
+	SslEnabled              bool               `json:"ssl_enabled"`
+	CaddyConfigID           pgtype.Text        `json:"caddy_config_id"`
+	ContainerPort           pgtype.Int4        `json:"container_port"`
+	ForceHttps              bool               `json:"force_https"`
+	SslMode                 string             `json:"ssl_mode"`
+	SslProvider             pgtype.Text        `json:"ssl_provider"`
+	SslCredentialsEncrypted []byte             `json:"ssl_credentials_encrypted"`
+	AdvancedConfig          []byte             `json:"advanced_config"`
+	VerifiedAt              pgtype.Timestamptz `json:"verified_at"`
+	CreatedAt               pgtype.Timestamptz `json:"created_at"`
+	CertificateID           pgtype.UUID        `json:"certificate_id"`
+	TlsStatus               string             `json:"tls_status"`
+	TlsIssuer               pgtype.Text        `json:"tls_issuer"`
+	TlsNotAfter             pgtype.Timestamptz `json:"tls_not_after"`
+	TlsLastCheckedAt        pgtype.Timestamptz `json:"tls_last_checked_at"`
+	TlsError                pgtype.Text        `json:"tls_error"`
+	TlsAdvisory             pgtype.Text        `json:"tls_advisory"`
+	Path                    string             `json:"path"`
+	StripPath               bool               `json:"strip_path"`
+	InternalPath            string             `json:"internal_path"`
+	RouteFeatures           interface{}        `json:"route_features"`
+}
+
+// One domain in the same shape ListDomainsByApplicationWithFeatures returns, so
+// a caller polling a single domain's tls_status gets the row it already knows
+// rather than a subtly different one missing route_features.
+func (q *Queries) GetDomainWithFeatures(ctx context.Context, id pgtype.UUID) (GetDomainWithFeaturesRow, error) {
+	row := q.db.QueryRow(ctx, getDomainWithFeatures, id)
+	var i GetDomainWithFeaturesRow
+	err := row.Scan(
+		&i.ID,
+		&i.ApplicationID,
+		&i.Hostname,
+		&i.SslEnabled,
+		&i.CaddyConfigID,
+		&i.ContainerPort,
+		&i.ForceHttps,
+		&i.SslMode,
+		&i.SslProvider,
+		&i.SslCredentialsEncrypted,
+		&i.AdvancedConfig,
+		&i.VerifiedAt,
+		&i.CreatedAt,
+		&i.CertificateID,
+		&i.TlsStatus,
+		&i.TlsIssuer,
+		&i.TlsNotAfter,
+		&i.TlsLastCheckedAt,
+		&i.TlsError,
+		&i.TlsAdvisory,
+		&i.Path,
+		&i.StripPath,
+		&i.InternalPath,
+		&i.RouteFeatures,
+	)
+	return i, err
+}
+
 const listDomainsByApplication = `-- name: ListDomainsByApplication :many
 SELECT id, application_id, hostname, ssl_enabled, caddy_config_id, container_port, force_https, ssl_mode, ssl_provider, ssl_credentials_encrypted, advanced_config, verified_at, created_at, certificate_id, tls_status, tls_issuer, tls_not_after, tls_last_checked_at, tls_error, tls_advisory, path, strip_path, internal_path FROM domains WHERE application_id = $1 ORDER BY created_at DESC
 `

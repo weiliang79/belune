@@ -46,7 +46,7 @@ type domainTLSStatus struct {
 //apidoc:tag platform
 //apidoc:title Get Domain TLS Status
 //apidoc:description Every domain's observed TLS state, with the name of the certificate it serves. An admin sees every domain on the install; a member sees only domains in their own projects and any shared with them.
-//apidoc:order 2
+//apidoc:order 3
 func (h *Handler) ListDomainTLSStatus(w http.ResponseWriter, r *http.Request) {
 	// A NULL user_id asks for every domain. Admins get that; everyone else is
 	// narrowed to what they can already reach, which is what lets this route

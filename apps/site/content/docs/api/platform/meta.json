@@ -1,6 +1,7 @@
 {
   "title": "Platform",
   "pages": [
+    "get-stats",
     "get-global-deployments",
     "list-domain-tls-status",
     "requests",

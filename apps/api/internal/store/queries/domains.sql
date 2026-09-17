@@ -54,6 +54,20 @@ UPDATE domains SET
 WHERE id = $1
 RETURNING *;
 
+-- name: GetDomainWithFeatures :one
+-- One domain in the same shape ListDomainsByApplicationWithFeatures returns, so
+-- a caller polling a single domain's tls_status gets the row it already knows
+-- rather than a subtly different one missing route_features.
+SELECT d.*, COALESCE(
+    (SELECT json_agg(json_build_object(
+        'id', f.id, 'feature_type', f.feature_type,
+        'config', f.config, 'enabled', f.enabled
+    )) FROM domain_route_features f WHERE f.domain_id = d.id),
+    '[]'::json
+) AS route_features
+FROM domains d
+WHERE d.id = $1;
+
 -- name: ListDomainsByApplicationWithFeatures :many
 SELECT d.*, COALESCE(
     (SELECT json_agg(json_build_object(

@@ -1490,7 +1490,7 @@
         "tags": [
           "Platform"
         ],
-        "x-belune-order": 1,
+        "x-belune-order": 2,
         "parameters": [
           {
             "name": "application_id",
@@ -1832,7 +1832,7 @@
         "tags": [
           "Platform"
         ],
-        "x-belune-order": 2,
+        "x-belune-order": 3,
         "responses": {
           "200": {
             "description": "OK",
@@ -5100,6 +5100,74 @@
           }
         ]
       },
+      "get": {
+        "operationId": "GetDomain",
+        "summary": "Get Domain",
+        "description": "One domain, in the shape the list returns. Useful for polling `tls_status`, which moves from `pending` to `active` on its own once a certificate issues. Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
+        "tags": [
+          "Application Domains \u0026 TLS"
+        ],
+        "x-belune-order": 2,
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "applicationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "domainId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetDomainWithFeaturesRow"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "read": []
+          },
+          {
+            "session": []
+          }
+        ]
+      },
       "put": {
         "operationId": "UpdateDomain",
         "summary": "Update Domain",
@@ -5253,7 +5321,7 @@
       },
       "put": {
         "operationId": "UpsertRouteFeature",
-        "summary": "Update Route Features",
+        "summary": "Upsert Route Feature",
         "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
         "tags": [
           "Application Domains \u0026 TLS"
@@ -5333,7 +5401,7 @@
     "/api/projects/{projectId}/applications/{applicationId}/domains/{domainId}/features/{featureId}": {
       "delete": {
         "operationId": "DeleteRouteFeature",
-        "summary": "Get Route Features",
+        "summary": "Delete Route Feature",
         "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
         "tags": [
           "Application Domains \u0026 TLS"
@@ -6692,6 +6760,74 @@
         "security": [
           {
             "write": []
+          },
+          {
+            "session": []
+          }
+        ]
+      },
+      "get": {
+        "operationId": "GetPreview",
+        "summary": "Get Preview",
+        "description": "One preview environment. Useful for polling `status` while a preview builds. Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
+        "tags": [
+          "Application Preview Environments"
+        ],
+        "x-belune-order": 3,
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "applicationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "previewId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/previewView"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "read": []
           },
           {
             "session": []
@@ -12170,9 +12306,9 @@
         "summary": "Get Stats",
         "description": "Operator-health summary in one call. An admin sees every project plus host resources and failed backups; a member sees only their own projects and any shared with them, without the host and backup signals.",
         "tags": [
-          "Notifications"
+          "Platform"
         ],
-        "x-belune-order": 6,
+        "x-belune-order": 1,
         "responses": {
           "200": {
             "description": "OK",
@@ -13837,6 +13973,129 @@
           },
           "type": {
             "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "GetDomainWithFeaturesRow": {
+        "properties": {
+          "advanced_config": {
+            "format": "byte",
+            "type": "string"
+          },
+          "application_id": {
+            "format": "uuid",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "caddy_config_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "certificate_id": {
+            "format": "uuid",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "container_port": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "created_at": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "force_https": {
+            "type": "boolean"
+          },
+          "hostname": {
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "internal_path": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "route_features": {},
+          "ssl_credentials_encrypted": {
+            "format": "byte",
+            "type": "string"
+          },
+          "ssl_enabled": {
+            "type": "boolean"
+          },
+          "ssl_mode": {
+            "type": "string"
+          },
+          "ssl_provider": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "strip_path": {
+            "type": "boolean"
+          },
+          "tls_advisory": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "tls_error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "tls_issuer": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "tls_last_checked_at": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "tls_not_after": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "tls_status": {
+            "type": "string"
+          },
+          "verified_at": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
           }
         },
         "type": "object"

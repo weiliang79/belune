@@ -3,6 +3,7 @@
   "pages": [
     "list-domains",
     "add-domain",
+    "get-domain",
     "update-domain",
     "recheck-domain-tls",
     "list-usable-certificates",

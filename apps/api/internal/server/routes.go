@@ -338,6 +338,7 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService,
 				// Preview environments: parent config + child list + child delete
 				r.Put("/api/projects/{projectId}/applications/{applicationId}/previews/config", h.UpdatePreviewConfig)
 				r.Get("/api/projects/{projectId}/applications/{applicationId}/previews", h.ListPreviews)
+				r.Get("/api/projects/{projectId}/applications/{applicationId}/previews/{previewId}", h.GetPreview)
 				r.Delete("/api/projects/{projectId}/applications/{applicationId}/previews/{previewId}", h.DeletePreview)
 
 				// Deployments
@@ -361,6 +362,7 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService,
 
 				// Domains
 				r.Get("/api/projects/{projectId}/applications/{applicationId}/domains", h.ListDomains)
+				r.Get("/api/projects/{projectId}/applications/{applicationId}/domains/{domainId}", h.GetDomain)
 				r.Post("/api/projects/{projectId}/applications/{applicationId}/domains", h.AddDomain)
 				r.Put("/api/projects/{projectId}/applications/{applicationId}/domains/{domainId}", h.UpdateDomain)
 				r.With(middleware.RequireSession()).Delete("/api/projects/{projectId}/applications/{applicationId}/domains/{domainId}", h.RemoveDomain)
