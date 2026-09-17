@@ -1,9 +1,9 @@
 ---
-title: Server-Sent Events
+title: Server-Sent Events (SSE)
 description: One-way streams you can tail with curl — logs, metrics, request traces and notifications.
 ---
 
-Seven endpoints stream with [Server-Sent Events](https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events) rather than returning a body and closing. Each is a plain `GET` that stays open, so `curl` is a complete client — no library, no handshake.
+Belune has seven endpoints that stream with [Server-Sent Events](https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events) rather than returning a body and closing. Each is a plain `GET` that stays open, so `curl` is a complete client — no library, no handshake.
 
 ```bash
 curl -N -H "Authorization: Bearer $BELUNE_TOKEN" \
@@ -11,10 +11,6 @@ curl -N -H "Authorization: Bearer $BELUNE_TOKEN" \
 ```
 
 `-N` disables curl's output buffering, so lines print as they arrive rather than in blocks.
-
-<Callout type="info">
-These are **not** deprecated. An older response header said they were, which was written when the dashboard was the only client; it was removed once personal access tokens made scripting a first-class use. See [Choosing Between the Two](#choosing-between-the-two) for when the [WebSocket hub](/docs/api/overview/websockets) is the better fit.
-</Callout>
 
 ## The Streams
 

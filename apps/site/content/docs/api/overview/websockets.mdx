@@ -3,7 +3,7 @@ title: WebSockets
 description: Subscribe to live metrics, logs, request traces and status changes over one socket.
 ---
 
-Every live view in the dashboard — a build scrolling, a metrics chart moving, a container flipping to `running` — is fed by one WebSocket at `/api/ws`. You open a single connection and subscribe to the channels you care about; the server pushes messages until you unsubscribe or disconnect.
+Every live view in the dashboard — a build scrolling, a metrics chart moving, a container flipping to `running` — is fed by one WebSocket at `/api/ws`. You open a single connection and subscribe to the channels you care about, and the server pushes messages until you unsubscribe or disconnect.
 
 <Callout type="info">
 OpenAPI describes request/response endpoints, so the reference entry for `GET /api/ws` can only say that the route exists. The protocol itself lives here.
@@ -18,7 +18,9 @@ npx wscat -c wss://belune.example.com/api/ws \
   -H "Authorization: Bearer $BELUNE_TOKEN"
 ```
 
-Use `wss://` on any real install; `ws://` only against a local dev server.
+<Callout type="info">
+Use `wss://` on production environment, `ws://` only against a local dev server.
+</Callout>
 
 Two things reject a connection before the upgrade completes:
 
