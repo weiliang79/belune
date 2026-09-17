@@ -14,7 +14,7 @@ export function getServerServices() {
 }
 
 export function triggerCleanup(retainCount?: number) {
-  return api.post<{ status: string }>("/cleanup", {
+  return api.post<{ status: string }>("/maintenance/cleanup", {
     retain_count: retainCount ?? 3,
   });
 }

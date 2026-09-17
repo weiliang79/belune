@@ -1423,65 +1423,6 @@
         ]
       }
     },
-    "/api/cleanup": {
-      "post": {
-        "operationId": "TriggerCleanup",
-        "summary": "Trigger Cleanup",
-        "description": "Requires the Admin role.",
-        "tags": [
-          "Maintenance (Admin)"
-        ],
-        "x-belune-order": 5,
-        "x-belune-roles": [
-          "admin"
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/cleanupRequest"
-              }
-            }
-          }
-        },
-        "responses": {
-          "202": {
-            "description": "Accepted",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "status": {
-                      "type": "string"
-                    }
-                  },
-                  "type": "object"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Forbidden",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "write": []
-          },
-          {
-            "session": []
-          }
-        ]
-      }
-    },
     "/api/deployments": {
       "get": {
         "operationId": "GetGlobalDeployments",
@@ -2419,6 +2360,65 @@
         ]
       }
     },
+    "/api/maintenance/cleanup": {
+      "post": {
+        "operationId": "TriggerCleanup",
+        "summary": "Trigger Cleanup",
+        "description": "Requires the Admin role.",
+        "tags": [
+          "Maintenance (Admin)"
+        ],
+        "x-belune-order": 5,
+        "x-belune-roles": [
+          "admin"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/cleanupRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Accepted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "write": []
+          },
+          {
+            "session": []
+          }
+        ]
+      }
+    },
     "/api/maintenance/host-shell": {
       "post": {
         "operationId": "CreateHostShellSession",
@@ -2532,6 +2532,94 @@
         "security": [
           {
             "read": []
+          },
+          {
+            "session": []
+          }
+        ]
+      }
+    },
+    "/api/maintenance/proxy": {
+      "get": {
+        "operationId": "GetProxyReconcilerStatus",
+        "summary": "Get Proxy Status",
+        "description": "Requires the Admin role.",
+        "tags": [
+          "Maintenance (Admin)"
+        ],
+        "x-belune-order": 6,
+        "x-belune-roles": [
+          "admin"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReconcilerStatus"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "read": []
+          },
+          {
+            "session": []
+          }
+        ]
+      }
+    },
+    "/api/maintenance/proxy/reconcile": {
+      "post": {
+        "operationId": "ReconcileProxy",
+        "summary": "Reconcile Proxy",
+        "description": "Requires the Admin role.",
+        "tags": [
+          "Maintenance (Admin)"
+        ],
+        "x-belune-order": 7,
+        "x-belune-roles": [
+          "admin"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReconcilerStatus"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "write": []
           },
           {
             "session": []
@@ -11377,94 +11465,6 @@
           }
         },
         "security": [
-          {
-            "session": []
-          }
-        ]
-      }
-    },
-    "/api/proxy/reconcile": {
-      "post": {
-        "operationId": "ReconcileProxy",
-        "summary": "Reconcile Proxy",
-        "description": "Requires the Admin role.",
-        "tags": [
-          "Maintenance (Admin)"
-        ],
-        "x-belune-order": 7,
-        "x-belune-roles": [
-          "admin"
-        ],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ReconcilerStatus"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Forbidden",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "write": []
-          },
-          {
-            "session": []
-          }
-        ]
-      }
-    },
-    "/api/proxy/reconciler": {
-      "get": {
-        "operationId": "GetProxyReconcilerStatus",
-        "summary": "Get Proxy Status",
-        "description": "Requires the Admin role.",
-        "tags": [
-          "Maintenance (Admin)"
-        ],
-        "x-belune-order": 6,
-        "x-belune-roles": [
-          "admin"
-        ],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ReconcilerStatus"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Forbidden",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "read": []
-          },
           {
             "session": []
           }

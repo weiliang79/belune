@@ -489,7 +489,7 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService,
 				r.Group(func(r chi.Router) {
 					r.Use(middleware.RequireScopeByMethod())
 
-					r.Post("/api/cleanup", h.TriggerCleanup)
+					r.Post("/api/maintenance/cleanup", h.TriggerCleanup)
 					// Platform configuration, session-only. UpdateSettings is the one
 					// that actually matters: it writes ANY key by name (a handful are
 					// validated in a switch, everything else passes straight to
@@ -529,8 +529,13 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService,
 					r.Get("/api/audit-logs", h.ListAuditLogs)
 					r.Get("/api/audit-logs/actions", h.ListAuditActions)
 					r.Get("/api/audit-logs/export", h.ExportAuditLogs)
-					r.Get("/api/proxy/reconciler", h.GetProxyReconcilerStatus)
-					r.Post("/api/proxy/reconcile", h.ReconcileProxy)
+					// GET the noun for status, POST noun+verb for the action —
+					// the same shape as the queue pair below. Not
+					// .../proxy/reconciler beside .../proxy/reconcile: two
+					// sibling paths one letter apart is the trap /api/metrics
+					// and /metrics already were.
+					r.Get("/api/maintenance/proxy", h.GetProxyReconcilerStatus)
+					r.Post("/api/maintenance/proxy/reconcile", h.ReconcileProxy)
 					r.Get("/api/maintenance/queue", h.GetQueueStatus)
 					r.Post("/api/maintenance/queue/clear", h.ClearQueue)
 					r.Post("/api/maintenance/queue/clear-pending", h.ClearPendingQueue)

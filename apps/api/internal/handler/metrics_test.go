@@ -41,7 +41,7 @@ func TestTriggerCleanup(t *testing.T) {
 	resetDB(t)
 	adminToken := env.SetupAdmin(t, "admin@test.com", "password123")
 
-	resp := env.DoRequest(t, "POST", "/api/cleanup", nil, testutil.AuthHeader(adminToken))
+	resp := env.DoRequest(t, "POST", "/api/maintenance/cleanup", nil, testutil.AuthHeader(adminToken))
 	assert.Equal(t, http.StatusAccepted, resp.StatusCode)
 	resp.Body.Close()
 

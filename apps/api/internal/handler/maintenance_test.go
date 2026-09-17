@@ -18,7 +18,7 @@ func TestTriggerCleanup_ForwardsActions(t *testing.T) {
 	adminToken := env.SetupAdmin(t, "admin@test.com", "password123")
 
 	env.Asynq.Tasks = nil
-	resp := env.DoRequest(t, "POST", "/api/cleanup",
+	resp := env.DoRequest(t, "POST", "/api/maintenance/cleanup",
 		map[string]any{"actions": []string{"images", "volumes"}},
 		testutil.AuthHeader(adminToken))
 	require.Equal(t, http.StatusAccepted, resp.StatusCode)
@@ -32,7 +32,7 @@ func TestTriggerCleanup_ForwardsActions(t *testing.T) {
 	assert.ElementsMatch(t, []any{"images", "volumes"}, actions)
 
 	// Invalid action → 400.
-	resp = env.DoRequest(t, "POST", "/api/cleanup",
+	resp = env.DoRequest(t, "POST", "/api/maintenance/cleanup",
 		map[string]any{"actions": []string{"nuke_everything"}},
 		testutil.AuthHeader(adminToken))
 	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
@@ -46,7 +46,7 @@ func TestReconcileProxy(t *testing.T) {
 	env.Reconciler.ReconcileNowCalls = 0
 	env.Reconciler.Status_ = proxy.ReconcilerStatus{LastAdded: 2, LastRemoved: 1, RunCount: 5}
 
-	resp := env.DoRequest(t, "POST", "/api/proxy/reconcile", nil, testutil.AuthHeader(adminToken))
+	resp := env.DoRequest(t, "POST", "/api/maintenance/proxy/reconcile", nil, testutil.AuthHeader(adminToken))
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 	body := testutil.ReadJSON(t, resp)
 
@@ -128,7 +128,7 @@ func TestMaintenance_NonAdminForbidden(t *testing.T) {
 	memberToken := env.LoginAs(t, "member@test.com", "password123")
 
 	for _, tc := range []struct{ method, path string }{
-		{"POST", "/api/proxy/reconcile"},
+		{"POST", "/api/maintenance/proxy/reconcile"},
 		{"GET", "/api/maintenance/queue"},
 		{"POST", "/api/maintenance/queue/clear"},
 		{"POST", "/api/maintenance/queue/clear-pending"},

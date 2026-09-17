@@ -11,17 +11,17 @@ export type CleanupAction =
 // Empty/omitted actions = full cleanup (all steps).
 export function runCleanup(actions?: CleanupAction[]) {
   return api.post<{ status: string }>(
-    "/cleanup",
+    "/maintenance/cleanup",
     actions && actions.length ? { actions } : {},
   );
 }
 
 export function getReconcilerStatus() {
-  return api.get<ReconcilerStatus>("/proxy/reconciler");
+  return api.get<ReconcilerStatus>("/maintenance/proxy");
 }
 
 export function reconcileProxy() {
-  return api.post<ReconcilerStatus>("/proxy/reconcile");
+  return api.post<ReconcilerStatus>("/maintenance/proxy/reconcile");
 }
 
 export function getQueueStatus() {

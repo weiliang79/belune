@@ -24,7 +24,7 @@ export default function Layout(props) {
   return (
     <>
       {props.children}
-      <Comp document="./public/openapi.json" operations={[{"path":"/api/proxy/reconcile","method":"post"}]} />
+      <Comp document="./public/openapi.json" operations={[{"path":"/api/maintenance/proxy/reconcile","method":"post"}]} />
     </>
   );
 }
