@@ -33,9 +33,14 @@ func TestCreateAPIToken_ReturnsPlaintextOnceAndAuthenticates(t *testing.T) {
 	assert.True(t, service.HasTokenPrefix(plain))
 	assert.Equal(t, "ci token", body["name"])
 
-	listResp := env.DoRequest(t, "GET", "/api/tokens", nil, testutil.AuthHeader(plain))
-	require.Equal(t, http.StatusOK, listResp.StatusCode)
-	assert.Len(t, testutil.ReadJSONArray(t, listResp), 1, "the newly minted token must authenticate on its own")
+	// GET /api/auth/me, not /api/tokens — the latter now requires a live
+	// session (account-management routes were gated behind
+	// middleware.RequireSession after this test was written; see routes.go).
+	// /api/auth/me stays PAT-callable specifically so a script can confirm
+	// what it authenticated as, which is exactly the "works as a Bearer
+	// credential immediately" property this test pins.
+	meResp := env.DoRequest(t, "GET", "/api/auth/me", nil, testutil.AuthHeader(plain))
+	require.Equal(t, http.StatusOK, meResp.StatusCode, "the newly minted token must authenticate on its own")
 }
 
 // TestCreateAPIToken_ListNeverCarriesSecret pins that no endpoint past
@@ -397,10 +402,17 @@ func TestCreateAPIToken_RequiresSession(t *testing.T) {
 	resp.Body.Close()
 }
 
-// TestListAPITokens_AllowsPATAuth pins that the session requirement is
-// deliberately narrow: listing is read-only, so a PAT may still call it —
-// only minting and revoking are gated.
-func TestListAPITokens_AllowsPATAuth(t *testing.T) {
+// TestListAPITokens_RequiresSession pins that listing joined minting and
+// revoking behind a live session: it returns every token's id, name,
+// scopes, role_at_issue, and last-used/expiry timestamps, which — even with
+// values correctly masked — is a credential inventory a leaked low-scope
+// token could use to map out which other tokens exist, which one holds
+// write, and which id DeleteAPIToken takes. Was PAT-accessible originally
+// (as read-only); the user decided a PAT should manage infrastructure, not
+// enumerate credentials, so this now matches TestCreateAPIToken_RequiresSession
+// and TestDeleteAPIToken_PATCannotRevokeItself's shape rather than standing
+// apart from them.
+func TestListAPITokens_RequiresSession(t *testing.T) {
 	resetDB(t)
 	adminToken := env.SetupAdmin(t, "admin@test.com", "password123")
 
@@ -412,7 +424,7 @@ func TestListAPITokens_AllowsPATAuth(t *testing.T) {
 	plain := testutil.ReadJSON(t, createResp)["token"].(string)
 
 	resp := env.DoRequest(t, "GET", "/api/tokens", nil, testutil.AuthHeader(plain))
-	assert.Equal(t, http.StatusOK, resp.StatusCode)
-	assert.Len(t, testutil.ReadJSONArray(t, resp), 1)
-	resp.Body.Close()
+	body := testutil.ReadJSON(t, resp)
+	assert.Equal(t, http.StatusForbidden, resp.StatusCode)
+	assert.Equal(t, "this action requires a session, not a personal access token", body["error"])
 }

@@ -1,0 +1,15 @@
+{
+  "title": "Volumes & Backups",
+  "pages": [
+    "list-application-volumes",
+    "create-application-volume",
+    "list-backup-configs-for-application",
+    "list-backup-configs-for-volume",
+    "create-volume-backup-config",
+    "update-volume-backup-config",
+    "delete-volume-backup-config",
+    "run-volume-backup-config",
+    "list-volume-backups",
+    "list-volume-restores"
+  ]
+}

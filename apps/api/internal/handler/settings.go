@@ -7,12 +7,13 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/robfig/cron/v3"
-	"strings"
 
 	"github.com/weiliang79/belune/internal/config"
 	"github.com/weiliang79/belune/internal/proxy"
@@ -39,6 +40,7 @@ func (h *Handler) instanceName(ctx context.Context) string {
 	return strings.TrimSpace(s.Value)
 }
 
+//apidoc:tag platform/maintenance
 func (h *Handler) ListSettings(w http.ResponseWriter, r *http.Request) {
 	settings, err := h.queries.ListSettings(r.Context())
 	if err != nil {
@@ -62,6 +64,7 @@ func (h *Handler) ListSettings(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, result)
 }
 
+//apidoc:tag platform/maintenance
 func (h *Handler) UpdateSettings(w http.ResponseWriter, r *http.Request) {
 	var req []settingResponse
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -74,6 +77,15 @@ func (h *Handler) UpdateSettings(w http.ResponseWriter, r *http.Request) {
 	// apply to the proxy — a bad value here takes HTTPS down on the panel itself.
 	changingDashboard := false
 	for i, s := range req {
+		// Reject before validating, so an unknown key is never silently dropped
+		// and never reaches UpsertSetting. An empty key was previously skipped
+		// by the write loop, which is the same silence in a different place.
+		if !updatableSettings[s.Key] {
+			writeError(w, http.StatusBadRequest,
+				fmt.Sprintf("unknown setting %q — accepted keys are: %s", s.Key, knownSettingKeys()))
+			return
+		}
+
 		switch s.Key {
 		case proxy.SettingDashboardDomain:
 			host := strings.TrimSpace(s.Value)
@@ -150,6 +162,44 @@ func (h *Handler) UpdateSettings(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			req[i].Value = v
+
+		case settingHostShellEnabled, "daily_cleanup_enabled", config.SettingControlPlaneBackupEnabled:
+			v, errMsg := validateBooleanSetting(s.Value)
+			if errMsg != "" {
+				writeError(w, http.StatusBadRequest, fmt.Sprintf("invalid %s: %s", s.Key, errMsg))
+				return
+			}
+			req[i].Value = v
+
+		case "instance_name":
+			v, errMsg := validateInstanceNameSetting(s.Value)
+			if errMsg != "" {
+				writeError(w, http.StatusBadRequest, "invalid instance name: "+errMsg)
+				return
+			}
+			req[i].Value = v
+
+		// Day-based retention knobs. Their readers accept the value only when it
+		// parses above zero and quietly fall back to a default otherwise, so an
+		// unvalidated typo here reads as "unset" everywhere downstream.
+		case "app_log_retention_days", "request_log_retention_days",
+			"audit_log_retention_days", "orphaned_backup_retention_days":
+			v, errMsg := validateRetentionSetting(s.Value, 1, 3650)
+			if errMsg != "" {
+				writeError(w, http.StatusBadRequest, fmt.Sprintf("invalid %s: %s", s.Key, errMsg))
+				return
+			}
+			req[i].Value = v
+
+		// Hours, not days — the only knob measured that way. The ceiling is ten
+		// years, generous enough that no existing value can be rejected by it.
+		case "host_metrics_retention_hours":
+			v, errMsg := validateRetentionSetting(s.Value, 1, 87600)
+			if errMsg != "" {
+				writeError(w, http.StatusBadRequest, "invalid host metrics retention: "+errMsg)
+				return
+			}
+			req[i].Value = v
 		}
 	}
 
@@ -162,10 +212,9 @@ func (h *Handler) UpdateSettings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// No empty-key guard here any more: "" is not in updatableSettings, so the
+	// allowlist above rejects it with a 400 rather than skipping it silently.
 	for _, s := range req {
-		if s.Key == "" {
-			continue
-		}
 		if _, err := h.queries.UpsertSetting(r.Context(), generated.UpsertSettingParams{
 			Key:   s.Key,
 			Value: s.Value,
@@ -202,6 +251,94 @@ func (h *Handler) UpdateSettings(w http.ResponseWriter, r *http.Request) {
 	h.audit(r, "update_settings", "settings", "", nil)
 
 	writeJSON(w, http.StatusOK, map[string]string{"status": "updated"})
+}
+
+// updatableSettings is every key PUT /api/settings will write. Anything else is
+// a 400 naming what IS accepted, never a silent upsert.
+//
+// The loop below used to write whatever it was handed behind an empty-key check
+// alone, so a typo ("host_shel_enabled") returned 200, created a real row that
+// read back correctly from ListSettings, and left the operator debugging a
+// feature that never turned on. The readers compound it: HostMetricsCleanup
+// takes the value only `if hours > 0` and silently falls back to 24 otherwise,
+// so a malformed number is indistinguishable from an unset one at every layer.
+//
+// ⚠️ host_shell_enabled belongs HERE, as a member rather than an exception.
+// PUT /api/settings is its only write path — hostshell.go merely reads it, and
+// the dashboard's own toggle posts this exact key — so excluding it to "protect"
+// the host shell would just break the toggle. Gating the host shell behind a
+// dedicated endpoint is a different change; this allowlist is not it.
+//
+// ⚠️ The smtp_* keys are deliberately absent. They have their own endpoints so
+// the password stays keyring-encrypted and masked; routing them through here
+// would write a plaintext password into settings.
+//
+// ⚠️ audit_log_retention_days and orphaned_backup_retention_days have no UI
+// control but ARE read (service/metrics.go, worker/cleanup_task.go). They are
+// listed because an operator may have set them out of band, and omitting them
+// would turn this fix into a regression for exactly those installs.
+//
+// ⚠️ Conversely, a real install can hold rows that are NOT here —
+// deploy_history_retention_days and metrics_retention_days exist in installs
+// created before those knobs were dropped, and nothing in the codebase reads
+// either any more. That is the accumulation this allowlist exists to stop, and
+// their absence is deliberate: the rows stay readable through ListSettings, but
+// writing one again is a 400. A key being present in settings is not evidence
+// it belongs here — check for a reader first.
+var updatableSettings = map[string]bool{
+	proxy.SettingDashboardDomain:                true,
+	proxy.SettingDashboardSSLMode:               true,
+	proxy.SettingDashboardCertificateID:         true,
+	config.SettingPublicIP:                      true,
+	config.SettingControlPlaneBackupEnabled:     true,
+	config.SettingControlPlaneBackupSchedule:    true,
+	config.SettingControlPlaneBackupRetainDays:  true,
+	config.SettingControlPlaneBackupRetainCount: true,
+	settingHostShellEnabled:                     true,
+	"daily_cleanup_enabled":                     true,
+	"instance_name":                             true,
+	"app_log_retention_days":                    true,
+	"request_log_retention_days":                true,
+	"audit_log_retention_days":                  true,
+	"orphaned_backup_retention_days":            true,
+	"host_metrics_retention_hours":              true,
+}
+
+// knownSettingKeys renders the allowlist for an error message, sorted so the
+// response is stable rather than map-order.
+func knownSettingKeys() string {
+	keys := make([]string, 0, len(updatableSettings))
+	for k := range updatableSettings {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return strings.Join(keys, ", ")
+}
+
+// validateBooleanSetting accepts "true", "false", or empty (clear to default).
+//
+// ⚠️ It does NOT normalise, because the two flags using it read OPPOSITE
+// defaults from the same absent value: daily_cleanup_enabled and
+// control_plane_backup_enabled are on unless the value is exactly "false",
+// while host_shell_enabled is off unless it is exactly "true". Rewriting ""
+// to either literal would flip one of them.
+func validateBooleanSetting(raw string) (value, errMsg string) {
+	trimmed := strings.TrimSpace(raw)
+	switch trimmed {
+	case "", "true", "false":
+		return trimmed, ""
+	}
+	return "", `must be "true" or "false"`
+}
+
+// validateInstanceNameSetting trims and bounds the display name. Unbounded it
+// reaches notification subjects and the dashboard header.
+func validateInstanceNameSetting(raw string) (value, errMsg string) {
+	trimmed := strings.TrimSpace(raw)
+	if len(trimmed) > 200 {
+		return "", "must be 200 characters or fewer"
+	}
+	return trimmed, ""
 }
 
 // validateRetentionSetting trims and validates a retention-knob value. Blank

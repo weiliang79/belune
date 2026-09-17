@@ -111,6 +111,9 @@ type updateWebhookRequest struct {
 	AutoDeployBranch *string `json:"auto_deploy_branch"`
 }
 
+//apidoc:tag applications/deployments
+//apidoc:title Update Webhook
+//apidoc:order 9
 func (h *Handler) UpdateApplicationWebhook(w http.ResponseWriter, r *http.Request) {
 	applicationID := chi.URLParam(r, "applicationId")
 	var applicationUUID pgtype.UUID
@@ -408,6 +411,8 @@ func deriveBaseSlug(fullSlug, projectSlug, appID string) string {
 // The secret used to ride along in every application fetch, so the UI could
 // render it for free. It no longer does — this endpoint is the only way to see
 // it, and each call is audited, matching how the deploy-hook token is handled.
+//
+//apidoc:tag applications/deployments
 func (h *Handler) RevealWebhookSecret(w http.ResponseWriter, r *http.Request) {
 	applicationID := chi.URLParam(r, "applicationId")
 	var applicationUUID pgtype.UUID

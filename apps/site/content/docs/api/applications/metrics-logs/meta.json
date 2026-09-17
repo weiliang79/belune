@@ -1,0 +1,11 @@
+{
+  "title": "Metrics & Logs",
+  "pages": [
+    "stream-application-metrics",
+    "list-application-log-sessions",
+    "list-application-logs",
+    "stream-logs",
+    "list-request-logs",
+    "stream-request-logs"
+  ]
+}

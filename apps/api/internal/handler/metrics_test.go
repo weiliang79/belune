@@ -26,13 +26,13 @@ func TestGetMetrics_AdminOnly(t *testing.T) {
 	env.CreateProject(t, adminToken, "Project 2", "project-2")
 
 	// Admin can get metrics
-	resp := env.DoRequest(t, "GET", "/api/metrics", nil, testutil.AuthHeader(adminToken))
+	resp := env.DoRequest(t, "GET", "/api/summary", nil, testutil.AuthHeader(adminToken))
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 	result := testutil.ReadJSON(t, resp)
 	assert.Equal(t, float64(2), result["projects"])
 
 	// Member gets 403
-	resp = env.DoRequest(t, "GET", "/api/metrics", nil, testutil.AuthHeader(memberToken))
+	resp = env.DoRequest(t, "GET", "/api/summary", nil, testutil.AuthHeader(memberToken))
 	assert.Equal(t, http.StatusForbidden, resp.StatusCode)
 	resp.Body.Close()
 }
@@ -41,7 +41,7 @@ func TestTriggerCleanup(t *testing.T) {
 	resetDB(t)
 	adminToken := env.SetupAdmin(t, "admin@test.com", "password123")
 
-	resp := env.DoRequest(t, "POST", "/api/cleanup", nil, testutil.AuthHeader(adminToken))
+	resp := env.DoRequest(t, "POST", "/api/maintenance/cleanup", nil, testutil.AuthHeader(adminToken))
 	assert.Equal(t, http.StatusAccepted, resp.StatusCode)
 	resp.Body.Close()
 

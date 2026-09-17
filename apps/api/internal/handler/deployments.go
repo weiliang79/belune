@@ -18,6 +18,9 @@ import (
 	"github.com/weiliang79/belune/internal/store/generated"
 )
 
+//apidoc:tag applications/deployments
+//apidoc:title Get Deployments
+//apidoc:order 2
 func (h *Handler) ListDeployments(w http.ResponseWriter, r *http.Request) {
 	applicationID := chi.URLParam(r, "applicationId")
 	var applicationUUID pgtype.UUID
@@ -40,6 +43,9 @@ func (h *Handler) ListDeployments(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, deployments)
 }
 
+//apidoc:tag applications/deployments
+//apidoc:title Get Deployment
+//apidoc:order 3
 func (h *Handler) GetDeployment(w http.ResponseWriter, r *http.Request) {
 	applicationID := chi.URLParam(r, "applicationId")
 	var applicationUUID pgtype.UUID
@@ -72,6 +78,11 @@ func (h *Handler) GetDeployment(w http.ResponseWriter, r *http.Request) {
 // GetGlobalDeployments returns deployments across all applications.
 // Admins see all; members see only their own projects' deployments.
 // GET /api/deployments
+//
+//apidoc:tag platform
+//apidoc:title Get All Deployments
+//apidoc:description Deployments across every application. An admin sees all of them; a member sees only their own projects and any shared with them.
+//apidoc:order 2
 func (h *Handler) GetGlobalDeployments(w http.ResponseWriter, r *http.Request) {
 	limit, offset := parsePagination(r)
 	role := middleware.RoleFromContext(r.Context())
@@ -166,6 +177,10 @@ type rollbackRequest struct {
 // RollbackDeployment creates a new deployment using the image stored from a previous
 // successful deployment, skipping the build step entirely.
 // POST /api/projects/{projectId}/applications/{applicationId}/rollback
+//
+//apidoc:tag applications/deployments
+//apidoc:title Rollback Deployment
+//apidoc:order 4
 func (h *Handler) RollbackDeployment(w http.ResponseWriter, r *http.Request) {
 	applicationID := chi.URLParam(r, "applicationId")
 	var appUUID pgtype.UUID

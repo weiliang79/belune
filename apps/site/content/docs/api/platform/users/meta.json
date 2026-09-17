@@ -1,0 +1,8 @@
+{
+  "title": "Users",
+  "pages": [
+    "list-users",
+    "list-pending-invitations",
+    "revoke-invitation"
+  ]
+}

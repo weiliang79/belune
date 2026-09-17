@@ -1,7 +1,10 @@
 package server
 
 import (
+	"encoding/json"
+	"log/slog"
 	"net/http"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	chiMiddleware "github.com/go-chi/chi/v5/middleware"
@@ -122,10 +125,63 @@ func (s *Server) setupRouter() chi.Router {
 	// Register API + health routes
 	registerRoutes(r, s.handler, s.auth, s.tokens, s.cfg.DisableRateLimiting)
 
-	// Catch-all: serve the embedded SPA for any unmatched path
-	if spaHandler := web.Handler(); spaHandler != nil {
-		r.Handle("/*", spaHandler)
-	}
+	// Catch-all: serve the embedded SPA for any unmatched path — except under
+	// /api/, where an unmatched path is a client error, not a page.
+	//
+	// Registered unconditionally, including when the SPA is absent. Gating the
+	// whole catch-all on web.Handler() != nil made the API's 404 contract
+	// depend on whether the frontend happened to be built: in a binary without
+	// it — every test binary, since web/dist holds only .gitkeep — chi's default
+	// answered "404 page not found" as text/plain instead. Production always
+	// embeds the SPA, so this was invisible there, which is exactly what made it
+	// worth removing.
+	r.Handle("/*", apiAwareCatchAll(web.Handler()))
 
 	return r
+}
+
+// apiAwareCatchAll serves the SPA for unmatched paths, but answers an unmatched
+// /api/ path with the same JSON 404 the rest of the API returns.
+//
+// The SPA handler is deliberately a catch-all: any path that does not resolve to
+// a built asset gets index.html, which is what makes client-side routing work.
+// The side effect was that it also swallowed every unmatched /api/ path, so a
+// caller of a typo'd or renamed endpoint got 200 text/html — a SUCCESS status
+// and an HTML page, which most clients fail to parse in some confusing way
+// rather than reporting "not found". It also quietly undercut the API
+// reference: the spec says which paths exist, and probing a wrong one did not
+// disagree.
+//
+// Wrapping the existing catch-all rather than registering an /api/* route: by
+// the time a request reaches here chi has already failed to match every real
+// route, so no registered API path can be shadowed by this. A second wildcard
+// pattern could shadow one, and would fail in the worst possible direction.
+//
+// spa may be nil when the frontend was not built into the binary. The /api/
+// branch still applies — that answer is the API's own contract and does not
+// depend on the frontend existing — and everything else gets the plain 404 chi
+// would have produced anyway.
+func apiAwareCatchAll(spa http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Bare "/api" as well as "/api/...": both are unambiguously an attempt
+		// to reach the API, and neither is a page.
+		if r.URL.Path == "/api" || strings.HasPrefix(r.URL.Path, "/api/") {
+			// Same shape as handler.writeError, which is package-private —
+			// duplicated rather than exported, since exporting it would widen
+			// that package's surface for one caller.
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusNotFound)
+			if err := json.NewEncoder(w).Encode(map[string]string{
+				"error": "no such endpoint",
+			}); err != nil {
+				slog.Debug("api 404: encode error", "error", err)
+			}
+			return
+		}
+		if spa == nil {
+			http.NotFound(w, r)
+			return
+		}
+		spa.ServeHTTP(w, r)
+	})
 }

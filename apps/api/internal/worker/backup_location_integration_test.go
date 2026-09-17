@@ -25,7 +25,9 @@ import (
 func minioEndpoint(t *testing.T) string {
 	t.Helper()
 	ctx := context.Background()
-	container, err := tcminio.Run(ctx, "minio/minio:latest",
+	// quay.io: minio/minio was removed from Docker Hub. Pinned, not :latest —
+	// the moving tag is why that removal reached CI as a surprise.
+	container, err := tcminio.Run(ctx, "quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z",
 		tcminio.WithUsername("minioadmin"), tcminio.WithPassword("minioadmin"))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = container.Terminate(context.Background()) })

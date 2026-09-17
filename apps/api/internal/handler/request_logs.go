@@ -16,6 +16,9 @@ import (
 
 // ListRequestLogs returns paginated HTTP request logs for an application.
 // GET /api/projects/{projectId}/applications/{applicationId}/requests
+//
+//apidoc:tag applications/metrics-logs
+//apidoc:title Get Request Logs
 func (h *Handler) ListRequestLogs(w http.ResponseWriter, r *http.Request) {
 	applicationID := chi.URLParam(r, "applicationId")
 	var appUUID pgtype.UUID
@@ -45,6 +48,9 @@ func (h *Handler) ListRequestLogs(w http.ResponseWriter, r *http.Request) {
 
 // StreamRequestLogs streams live HTTP request logs for an application via SSE.
 // GET /api/projects/{projectId}/applications/{applicationId}/requests/stream
+//
+//apidoc:tag applications/metrics-logs
+//apidoc:title Stream Request Logs
 func (h *Handler) StreamRequestLogs(w http.ResponseWriter, r *http.Request) {
 	applicationID := chi.URLParam(r, "applicationId")
 	var appUUID pgtype.UUID
@@ -149,6 +155,10 @@ func parseRequestLogFilter(r *http.Request) requestLogFilter {
 
 // ListAllRequestLogs returns paginated, filterable HTTP request logs across all applications (admin only).
 // GET /api/requests?application_id=&status_min=&status_max=&from=&to=&search=
+//
+//apidoc:tag platform/requests
+//apidoc:title Get Logs
+//apidoc:order 2
 func (h *Handler) ListAllRequestLogs(w http.ResponseWriter, r *http.Request) {
 	limit, offset := parsePagination(r)
 	f := parseRequestLogFilter(r)
@@ -197,6 +207,10 @@ type requestSummaryResponse struct {
 // rate, and a per-minute series for the requests dashboard (admin only). It
 // honors the same filters as ListAllRequestLogs.
 // GET /api/requests/summary
+//
+//apidoc:tag platform/requests
+//apidoc:title Get Summary
+//apidoc:order 1
 func (h *Handler) GetAllRequestsSummary(w http.ResponseWriter, r *http.Request) {
 	f := parseRequestLogFilter(r)
 	ctx := r.Context()
@@ -260,6 +274,10 @@ func (h *Handler) GetAllRequestsSummary(w http.ResponseWriter, r *http.Request) 
 
 // StreamAllRequestLogs streams live request logs across all apps via SSE (admin only).
 // GET /api/requests/stream
+//
+//apidoc:tag platform/requests
+//apidoc:title Stream Logs
+//apidoc:order 3
 func (h *Handler) StreamAllRequestLogs(w http.ResponseWriter, r *http.Request) {
 	writer, err := sse.NewWriter(w)
 	if err != nil {

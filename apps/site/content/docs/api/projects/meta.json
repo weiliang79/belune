@@ -1,0 +1,13 @@
+{
+  "title": "Projects",
+  "pages": [
+    "list-projects",
+    "get-project",
+    "create-project",
+    "update-project",
+    "get-project-metrics",
+    "env",
+    "backup-destinations",
+    "templates"
+  ]
+}

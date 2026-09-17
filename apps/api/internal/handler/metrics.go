@@ -7,6 +7,7 @@ import (
 
 	"github.com/hibiken/asynq"
 
+	"github.com/weiliang79/belune/internal/pkg/metrics"
 	"github.com/weiliang79/belune/internal/runtime"
 	"github.com/weiliang79/belune/internal/status"
 )
@@ -35,7 +36,16 @@ type containerStats struct {
 	ByType map[string]containerTypeCount `json:"by_type"`
 }
 
-func (h *Handler) GetMetrics(w http.ResponseWriter, r *http.Request) {
+// GetSummary returns the dashboard's overview tile: resource COUNTS, not
+// metrics. Named for what it returns — the old GetMetrics collided with
+// GetHostHistoricalMetrics and StreamHostMetrics, which are genuine host
+// time-series, and its route collided with the Prometheus scrape at /metrics.
+//
+//apidoc:tag platform/metrics
+//apidoc:title Get Summary
+//apidoc:description Resource counts for the dashboard overview — project, application, database and deployment totals plus a container census. Not time-series data: see `/api/metrics/host` for that, and `/metrics` for the Prometheus scrape endpoint.
+//apidoc:order 1
+func (h *Handler) GetSummary(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	projects, err := h.queries.CountProjects(ctx)
@@ -95,6 +105,25 @@ func (h *Handler) GetMetrics(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// ServeMetrics wraps metrics.Handler() (the Prometheus registry's own
+// promhttp handler) as a named *Handler method instead of registering that
+// third-party http.Handler directly. It's otherwise a pure passthrough —
+// the wrapping exists only so this route has a real FuncDecl: an inline
+// third-party handler value has no name reflection can recover (it showed
+// up as the meaningless operationId "func1") and no doc comment a
+// //apidoc:tag directive could attach to.
+//
+//apidoc:tag platform/metrics
+//apidoc:title Scrape Prometheus Metrics
+//apidoc:description The Prometheus scrape endpoint at `GET /metrics`, a passthrough to the registry's own promhttp handler. Unrelated to `GET /api/summary`, which returns resource counts.
+//apidoc:order 4
+func (h *Handler) ServeMetrics(w http.ResponseWriter, r *http.Request) {
+	metrics.Handler().ServeHTTP(w, r)
+}
+
+//apidoc:tag platform/maintenance
+//apidoc:title Trigger Cleanup
+//apidoc:order 5
 func (h *Handler) TriggerCleanup(w http.ResponseWriter, r *http.Request) {
 	type cleanupRequest struct {
 		RetainCount int      `json:"retain_count,omitempty"`

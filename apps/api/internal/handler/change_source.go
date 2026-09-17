@@ -43,6 +43,7 @@ type changeSourceRequest struct {
 	GitToken         string `json:"git_token"`
 }
 
+//apidoc:tag applications
 func (h *Handler) ChangeApplicationSource(w http.ResponseWriter, r *http.Request) {
 	applicationID := chi.URLParam(r, "applicationId")
 	var applicationUUID pgtype.UUID

@@ -1,0 +1,11 @@
+{
+  "title": "Actions",
+  "pages": [
+    "build-application",
+    "rebuild-application",
+    "start-application",
+    "stop-application",
+    "restart-application",
+    "reload-application"
+  ]
+}

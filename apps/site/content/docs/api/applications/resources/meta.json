@@ -1,0 +1,11 @@
+{
+  "title": "Resources",
+  "pages": [
+    "set-resources",
+    "get-application-health",
+    "set-health-check",
+    "update-application-runtime",
+    "get-build-cache",
+    "clear-build-cache"
+  ]
+}

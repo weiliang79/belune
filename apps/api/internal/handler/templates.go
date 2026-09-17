@@ -87,6 +87,10 @@ type dbSpec struct {
 }
 
 // ListTemplates returns the embedded catalog metadata.
+//
+//apidoc:tag projects/templates
+//apidoc:title Get Templates
+//apidoc:order 1
 func (h *Handler) ListTemplates(w http.ResponseWriter, r *http.Request) {
 	cat, err := template.Default()
 	if err != nil {
@@ -102,6 +106,10 @@ func (h *Handler) ListTemplates(w http.ResponseWriter, r *http.Request) {
 }
 
 // GetTemplate returns a single template's full detail.
+//
+//apidoc:tag projects/templates
+//apidoc:title Get Template
+//apidoc:order 2
 func (h *Handler) GetTemplate(w http.ResponseWriter, r *http.Request) {
 	cat, err := template.Default()
 	if err != nil {
@@ -145,6 +153,10 @@ type instantiateTemplateResponse struct {
 // a template's native objects — managed databases, prebuilt-image applications
 // with resolved env/volumes, and an optional domain — then enqueues a finalize
 // task that deploys the apps once the databases are running.
+//
+//apidoc:tag projects/templates
+//apidoc:title Init Template
+//apidoc:order 2
 func (h *Handler) InstantiateTemplate(w http.ResponseWriter, r *http.Request) {
 	cat, err := template.Default()
 	if err != nil {
@@ -390,6 +402,10 @@ type updateRuntimeRequest struct {
 // UpdateApplicationRuntime sets an application's container runtime profile
 // (read-only rootfs + capability set). Untrusted apps default to hardened;
 // template apps default to standard; this lets an operator override per app.
+//
+//apidoc:tag applications/resources
+//apidoc:title Update Runtime
+//apidoc:order 4
 func (h *Handler) UpdateApplicationRuntime(w http.ResponseWriter, r *http.Request) {
 	applicationID := chi.URLParam(r, "applicationId")
 	var applicationUUID pgtype.UUID

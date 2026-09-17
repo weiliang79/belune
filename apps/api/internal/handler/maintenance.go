@@ -24,6 +24,10 @@ type queueStatusResponse struct {
 
 // GetQueueStatus reports per-queue depth for the admin Maintenance section.
 // GET /api/maintenance/queue (admin only)
+//
+//apidoc:tag platform/maintenance
+//apidoc:title Get Queue Status
+//apidoc:order 8
 func (h *Handler) GetQueueStatus(w http.ResponseWriter, r *http.Request) {
 	if h.inspector == nil {
 		writeError(w, http.StatusServiceUnavailable, "queue inspector unavailable")
@@ -51,6 +55,10 @@ func (h *Handler) GetQueueStatus(w http.ResponseWriter, r *http.Request) {
 // ClearQueue deletes stuck tasks — archived (dead-letter) + retry — across all
 // queues. It never touches pending or active tasks, so an in-flight deploy is
 // never killed. POST /api/maintenance/queue/clear (admin only)
+//
+//apidoc:tag platform/maintenance
+//apidoc:title Clear Queue
+//apidoc:order 10
 func (h *Handler) ClearQueue(w http.ResponseWriter, r *http.Request) {
 	if h.inspector == nil {
 		writeError(w, http.StatusServiceUnavailable, "queue inspector unavailable")
@@ -77,6 +85,10 @@ func (h *Handler) ClearQueue(w http.ResponseWriter, r *http.Request) {
 // queues. Active (in-flight) tasks are never touched, so a running deploy
 // survives. This is the "cancel the backlog" action, distinct from ClearQueue's
 // "remove stuck jobs". POST /api/maintenance/queue/clear-pending (admin only)
+//
+//apidoc:tag platform/maintenance
+//apidoc:title Clear Pending Queue
+//apidoc:order 9
 func (h *Handler) ClearPendingQueue(w http.ResponseWriter, r *http.Request) {
 	if h.inspector == nil {
 		writeError(w, http.StatusServiceUnavailable, "queue inspector unavailable")

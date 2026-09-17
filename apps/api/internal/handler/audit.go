@@ -106,6 +106,10 @@ func (f auditFilter) countParams() generated.CountAuditLogsFilteredParams {
 
 // ListAuditLogs returns paginated, optionally filtered audit logs (admin-only).
 // Query params: limit, offset, user_id, action, resource_type, resource_id, from, to.
+//
+//apidoc:tag platform/audit-logs
+//apidoc:title Get Logs
+//apidoc:order 1
 func (h *Handler) ListAuditLogs(w http.ResponseWriter, r *http.Request) {
 	limit, offset := parsePagination(r)
 
@@ -135,6 +139,10 @@ func (h *Handler) ListAuditLogs(w http.ResponseWriter, r *http.Request) {
 
 // ListAuditActions returns the distinct set of audit actions, for filter UIs.
 // GET /api/audit-logs/actions
+//
+//apidoc:tag platform/audit-logs
+//apidoc:title Get Actions
+//apidoc:order 2
 func (h *Handler) ListAuditActions(w http.ResponseWriter, r *http.Request) {
 	actions, err := h.queries.ListDistinctAuditActions(r.Context())
 	if err != nil {
@@ -146,6 +154,10 @@ func (h *Handler) ListAuditActions(w http.ResponseWriter, r *http.Request) {
 
 // ExportAuditLogs streams the filtered audit logs as CSV (admin-only). Honors the
 // same filters as ListAuditLogs. GET /api/audit-logs/export
+//
+//apidoc:tag platform/audit-logs
+//apidoc:title Export Logs
+//apidoc:order 3
 func (h *Handler) ExportAuditLogs(w http.ResponseWriter, r *http.Request) {
 	f, errMsg := parseAuditFilter(r)
 	if errMsg != "" {

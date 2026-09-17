@@ -1,6 +1,7 @@
 import { defineConfig, defineDocs } from 'fumadocs-mdx/config';
 import { metaSchema, pageSchema } from 'fumadocs-core/source/schema';
 import { rehypeCodeDefaultOptions } from 'fumadocs-core/mdx-plugins';
+import { z } from 'zod';
 import { caddyfile } from './lib/caddyfile';
 
 // You can customize Zod schemas for frontmatter and `meta.json` here
@@ -8,7 +9,15 @@ import { caddyfile } from './lib/caddyfile';
 export const docs = defineDocs({
   dir: 'content/docs',
   docs: {
-    schema: pageSchema,
+    // pageSchema is z.object({...}), which strips unknown keys by default
+    // (Zod 4's z.core.$strip) rather than erroring or passing them through
+    // — checked by reading fumadocs-core/source/schema.js, not assumed. A
+    // `roles: ["admin"]` frontmatter key (written by
+    // apps/site/scripts/generate-api-pages.mjs's markAdminOperations, read
+    // by src/lib/source.tsx's sidebar-badge logic) would otherwise parse to
+    // `undefined` silently, with no error to point at why the badge never
+    // showed up.
+    schema: pageSchema.extend({ roles: z.array(z.string()).optional() }),
     postprocess: {
       includeProcessedMarkdown: true,
     },

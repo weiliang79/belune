@@ -1,0 +1,15 @@
+{
+  "title": "Maintenance",
+  "pages": [
+    "get-server-ip",
+    "get-dashboard-tls",
+    "get-server-services",
+    "get-platform-logs",
+    "trigger-cleanup",
+    "get-proxy-reconciler-status",
+    "reconcile-proxy",
+    "get-queue-status",
+    "clear-pending-queue",
+    "clear-queue"
+  ]
+}

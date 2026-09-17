@@ -39,6 +39,10 @@ type platformLogsResponse struct {
 
 // GetPlatformLogs returns the tail of a platform container's logs as a text blob.
 // GET /api/maintenance/logs?service=… (admin only)
+//
+//apidoc:tag platform/maintenance
+//apidoc:title Get Logs
+//apidoc:order 4
 func (h *Handler) GetPlatformLogs(w http.ResponseWriter, r *http.Request) {
 	service := r.URL.Query().Get("service")
 	svcLabel, ok := platformServices[service]
@@ -110,6 +114,10 @@ func (h *Handler) effectiveServerIP(ctx context.Context) (ip, source string) {
 // Server IP panel can show the actual auto-detected address instead of a bare
 // "auto-detected".
 // GET /api/maintenance/server-ip (admin only)
+//
+//apidoc:tag platform/maintenance
+//apidoc:title Get Server IP
+//apidoc:order 1
 func (h *Handler) GetServerIP(w http.ResponseWriter, r *http.Request) {
 	ip, source := h.effectiveServerIP(r.Context())
 	writeJSON(w, http.StatusOK, serverIPResponse{Effective: ip, Source: source})
@@ -152,6 +160,8 @@ const restartTimeout = 15
 
 // RestartService restarts an allowlisted platform container in place.
 // POST /api/maintenance/restart?service=… (admin only)
+//
+//apidoc:tag platform/maintenance
 func (h *Handler) RestartService(w http.ResponseWriter, r *http.Request) {
 	service := r.URL.Query().Get("service")
 	svcLabel, ok := restartableServices[service]

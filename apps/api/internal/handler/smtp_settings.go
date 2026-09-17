@@ -24,6 +24,8 @@ type smtpSettingsRequest struct {
 
 // GetSMTPSettings returns the effective SMTP config with the password masked to
 // a presence flag.
+//
+//apidoc:tag platform/maintenance
 func (h *Handler) GetSMTPSettings(w http.ResponseWriter, r *http.Request) {
 	view, err := h.smtpSettingsSvc.Get(r.Context())
 	if err != nil {
@@ -35,6 +37,8 @@ func (h *Handler) GetSMTPSettings(w http.ResponseWriter, r *http.Request) {
 
 // UpdateSMTPSettings validates and persists the SMTP config. Changes take effect
 // on the next send — no restart.
+//
+//apidoc:tag platform/maintenance
 func (h *Handler) UpdateSMTPSettings(w http.ResponseWriter, r *http.Request) {
 	var req smtpSettingsRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -75,6 +79,8 @@ type testSMTPRequest struct {
 // A blank password falls back to the stored one, so an operator can test an
 // existing setup without re-entering the secret. Delivery errors come back as
 // 200 with ok=false, mirroring the other test endpoints.
+//
+//apidoc:tag platform/maintenance
 func (h *Handler) TestSMTPSettings(w http.ResponseWriter, r *http.Request) {
 	var req testSMTPRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {

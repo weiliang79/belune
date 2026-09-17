@@ -32,6 +32,10 @@ func defaultAlertPreferences() alertPreferencesResponse {
 
 // GetAlertPreferences returns the current user's alert preferences,
 // falling back to defaults when no row exists.
+//
+//apidoc:tag account/profile
+//apidoc:title Get Alert Preferences
+//apidoc:order 2
 func (h *Handler) GetAlertPreferences(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.UserIDFromContext(r.Context())
 	var uid pgtype.UUID
@@ -68,6 +72,10 @@ type updateAlertPreferencesRequest struct {
 }
 
 // UpdateAlertPreferences upserts the current user's alert preferences.
+//
+//apidoc:tag account/profile
+//apidoc:title Update Alert Preferences
+//apidoc:order 3
 func (h *Handler) UpdateAlertPreferences(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.UserIDFromContext(r.Context())
 	var uid pgtype.UUID

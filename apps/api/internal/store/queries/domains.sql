@@ -54,6 +54,20 @@ UPDATE domains SET
 WHERE id = $1
 RETURNING *;
 
+-- name: GetDomainWithFeatures :one
+-- One domain in the same shape ListDomainsByApplicationWithFeatures returns, so
+-- a caller polling a single domain's tls_status gets the row it already knows
+-- rather than a subtly different one missing route_features.
+SELECT d.*, COALESCE(
+    (SELECT json_agg(json_build_object(
+        'id', f.id, 'feature_type', f.feature_type,
+        'config', f.config, 'enabled', f.enabled
+    )) FROM domain_route_features f WHERE f.domain_id = d.id),
+    '[]'::json
+) AS route_features
+FROM domains d
+WHERE d.id = $1;
+
 -- name: ListDomainsByApplicationWithFeatures :many
 SELECT d.*, COALESCE(
     (SELECT json_agg(json_build_object(
@@ -126,6 +140,16 @@ WHERE hostname = $1;
 -- name: ListDomainsWithTLSStatus :many
 -- The central "Domain TLS" table on the certificates page: every domain with the
 -- certificate it serves and what the server last observed for it.
+--
+-- user_id NULL means "every domain on the install" and is what an admin passes;
+-- a member passes their own id and gets the same rows narrowed to projects they
+-- can reach. Same OR p.shared idiom as ListGlobalDeploymentsFiltered and
+-- ListProjectsByUser, and for the same reason: sharing grants operational access,
+-- so a shared project's domains are as visible as an owned one's.
+--
+-- The certificate join is why this matters to a member at all. ListDomainsByApplication
+-- is SELECT * FROM domains, so it returns certificate_id as a bare UUID with nothing
+-- to resolve it against — this is the only query that turns that into a name.
 SELECT d.id, d.hostname, d.ssl_mode, d.tls_status, d.tls_issuer, d.tls_not_after,
        d.tls_last_checked_at, d.tls_error, d.tls_advisory, c.name AS certificate_name,
        a.name AS application_name, a.id AS application_id, p.id AS project_id
@@ -133,6 +157,14 @@ FROM domains d
 JOIN applications a ON a.id = d.application_id
 JOIN projects p ON p.id = a.project_id
 LEFT JOIN certificates c ON c.id = d.certificate_id
+WHERE (sqlc.narg('user_id')::uuid IS NULL
+       OR p.user_id = sqlc.narg('user_id')
+       OR p.shared)
+  -- project_id is the PAT pin, not a user-facing filter. This route has no
+  -- {projectId} param, so middleware.RequireProjectAccess never fires on it and
+  -- a pinned token would otherwise read every domain its owner can reach —
+  -- the same hole GetGlobalDeployments closes in its own handler.
+  AND (sqlc.narg('project_id')::uuid IS NULL OR p.id = sqlc.narg('project_id'))
 ORDER BY d.hostname;
 
 -- name: ListDomainsByHostname :many

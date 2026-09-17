@@ -1,0 +1,14 @@
+{
+  "title": "Domains & TLS",
+  "pages": [
+    "list-domains",
+    "get-domain",
+    "add-domain",
+    "update-domain",
+    "recheck-domain-tls",
+    "list-usable-certificates",
+    "list-route-features",
+    "upsert-route-feature",
+    "delete-route-feature"
+  ]
+}

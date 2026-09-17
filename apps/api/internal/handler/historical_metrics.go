@@ -49,6 +49,10 @@ func parseRangeDuration(rangeParam string) time.Time {
 // GetHostHistoricalMetrics returns host metrics stored at 1-second granularity.
 // GET /api/metrics/host?range=1h|6h|24h|7d|14d
 // GET /api/metrics/host?from=<RFC3339>&to=<RFC3339>  (explicit window; takes precedence)
+//
+//apidoc:tag platform/metrics
+//apidoc:title Get Metrics
+//apidoc:order 2
 func (h *Handler) GetHostHistoricalMetrics(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 

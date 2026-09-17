@@ -1,0 +1,19 @@
+{
+  "title": "Applications",
+  "pages": [
+    "list-applications",
+    "get-application",
+    "create-application",
+    "update-application",
+    "change-application-source",
+    "env",
+    "domains",
+    "actions",
+    "deployments",
+    "previews",
+    "metrics-logs",
+    "volumes-backups",
+    "file-mounts",
+    "resources"
+  ]
+}

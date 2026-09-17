@@ -1,0 +1,10 @@
+{
+  "title": "Backups",
+  "pages": [
+    "list-backup-runs",
+    "get-backup-status",
+    "trigger-backup-run",
+    "test-backup-remote",
+    "update-backup-remote"
+  ]
+}

@@ -60,10 +60,15 @@ export function DomainTLSBadge({
   domain,
   projectId,
   applicationId,
+  certificateName,
 }: {
   domain: DomainExpanded;
   projectId: string;
   applicationId: string;
+  /** Resolved by the caller from /domains/tls — the domain row itself carries
+   *  only certificate_id, which names nothing on its own. Undefined whenever
+   *  the domain is not serving an uploaded certificate. */
+  certificateName?: string;
 }) {
   const recheck = useRecheckDomainTLS(projectId, applicationId);
   const status: TLSStatus = domain.tls_status ?? "unknown";
@@ -112,6 +117,12 @@ export function DomainTLSBadge({
         )}
 
         <dl className="text-muted-foreground grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
+          {certificateName && (
+            <>
+              <dt>Certificate</dt>
+              <dd className="text-foreground break-words">{certificateName}</dd>
+            </>
+          )}
           {domain.tls_issuer && (
             <>
               <dt>Issuer</dt>

@@ -48,6 +48,8 @@ func tokenDTOFromRow(row generated.ListAPITokensByUserRow) apiTokenDTO {
 // ListAPITokens returns the current user's own tokens — never another user's.
 // There is no cross-user token oversight view in v1, admin or not.
 // GET /api/tokens
+//
+//apidoc:tag tokens
 func (h *Handler) ListAPITokens(w http.ResponseWriter, r *http.Request) {
 	userUUID, ok := currentUserUUID(r)
 	if !ok {
@@ -109,6 +111,8 @@ func normalizeScopes(requested []string) ([]string, bool) {
 // (every project the owner can reach, evaluated at use time); narrowing by
 // project has no UI yet.
 // POST /api/tokens
+//
+//apidoc:tag tokens
 func (h *Handler) CreateAPIToken(w http.ResponseWriter, r *http.Request) {
 	userUUID, ok := currentUserUUID(r)
 	if !ok {
@@ -178,6 +182,8 @@ func (h *Handler) CreateAPIToken(w http.ResponseWriter, r *http.Request) {
 // itself is scoped by user_id (not just an authz check beforehand), so it can
 // never delete another user's token even given that token's id.
 // DELETE /api/tokens/{tokenId}
+//
+//apidoc:tag tokens
 func (h *Handler) DeleteAPIToken(w http.ResponseWriter, r *http.Request) {
 	userUUID, ok := currentUserUUID(r)
 	if !ok {

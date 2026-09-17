@@ -8,7 +8,6 @@ import (
 	"github.com/go-chi/httprate"
 
 	"github.com/weiliang79/belune/internal/handler"
-	"github.com/weiliang79/belune/internal/pkg/metrics"
 	"github.com/weiliang79/belune/internal/server/middleware"
 	"github.com/weiliang79/belune/internal/service"
 )
@@ -216,33 +215,57 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService,
 				r.Use(middleware.RequireScopeByMethod())
 				r.Use(middleware.RequireProjectAccess())
 
-				r.Post("/api/auth/logout", h.Logout)
+				// A PAT manages infrastructure, not the account itself: every
+				// route below through the TOTP block now requires a live
+				// session, except Me — reporting the token's OWN identity and
+				// role is how a script confirms what it authenticated as, not
+				// account management. None of this closes an account-takeover
+				// path that existed — ChangeOwnPassword bcrypt-verifies
+				// current_password, DisableTOTP/RegenerateRecoveryCodes each
+				// already required the password AND a current second factor,
+				// EnrollTOTP already required the password, and UpdateProfile
+				// only ever wrote username/first/last name, never email. This
+				// is defense in depth plus removing a recon surface, not a
+				// vulnerability fix.
+				r.With(middleware.RequireSession()).Post("/api/auth/logout", h.Logout)
 				r.Get("/api/auth/me", h.Me)
-				r.Put("/api/auth/password", h.ChangeOwnPassword)
-				r.Put("/api/auth/profile", h.UpdateProfile)
+				r.With(middleware.RequireSession()).Put("/api/auth/password", h.ChangeOwnPassword)
+				r.With(middleware.RequireSession()).Put("/api/auth/profile", h.UpdateProfile)
 
-				// Two-factor: the mutations re-check your password before taking
-				// effect (see totp.go). That is NOT a session gate — a PAT that
-				// also somehow holds the account password could still call these.
-				// Deliberately left that way for this PR (project_v016_plan's PR4
-				// notes record it as an explicit deferral, not an oversight); worth
-				// another look if PATs are trusted with more in a future release.
-				r.Get("/api/auth/totp", h.GetTOTPStatus)
-				r.Post("/api/auth/totp/enroll", h.EnrollTOTP)
-				r.Post("/api/auth/totp/enroll/verify", h.VerifyTOTPEnrollment)
-				r.Post("/api/auth/totp/disable", h.DisableTOTP)
-				r.Post("/api/auth/totp/recovery-codes", h.RegenerateRecoveryCodes)
+				// GetTOTPStatus is read-only but reports whether MFA is enabled
+				// — security posture is recon value on its own, so it's gated
+				// with the mutations rather than carved out as PAT-safe.
+				r.With(middleware.RequireSession()).Get("/api/auth/totp", h.GetTOTPStatus)
+				r.With(middleware.RequireSession()).Post("/api/auth/totp/enroll", h.EnrollTOTP)
+				r.With(middleware.RequireSession()).Post("/api/auth/totp/enroll/verify", h.VerifyTOTPEnrollment)
+				r.With(middleware.RequireSession()).Post("/api/auth/totp/disable", h.DisableTOTP)
+				r.With(middleware.RequireSession()).Post("/api/auth/totp/recovery-codes", h.RegenerateRecoveryCodes)
 
+				// Alert preferences are infrastructure config (deployment
+				// failures, resource thresholds — the things a token already
+				// manages), not account security, so they were briefly gated
+				// above alongside the account-security block and then moved
+				// back here: a provisioning script configuring its own alert
+				// thresholds is legitimate, gating bought no credential
+				// exposure or takeover-path protection, and the only "recon"
+				// given up is "this account receives email." Deliberately on
+				// the other side of the "PAT manages infrastructure, not the
+				// account" line from everything above it.
 				r.Get("/api/account/alert-preferences", h.GetAlertPreferences)
 				r.Put("/api/account/alert-preferences", h.UpdateAlertPreferences)
 
 				// Personal access tokens: self-service, scoped to the caller. No
 				// admin oversight view exists in v1 — see project_v016_plan.
-				// Minting and revoking require a live session — a PAT calling
-				// these would be a self-propagation path (mint a longer-lived
-				// replacement, revoke the original) that scope enforcement alone
-				// cannot close. Listing stays PAT-accessible: it is read-only.
-				r.Get("/api/tokens", h.ListAPITokens)
+				// Minting and revoking already required a live session — a PAT
+				// calling them would be a self-propagation path (mint a longer-
+				// lived replacement, revoke the original) scope enforcement
+				// alone can't close. Listing now joins them: it returns every
+				// token's id, name, scopes, role_at_issue, and last-used/expiry
+				// timestamps — masked correctly, but still a credential
+				// inventory a leaked low-scope token could use to map out which
+				// other tokens exist, which holds write, which hasn't been used
+				// in months, and the id DeleteAPIToken takes.
+				r.With(middleware.RequireSession()).Get("/api/tokens", h.ListAPITokens)
 				r.With(middleware.RequireSession()).Post("/api/tokens", h.CreateAPIToken)
 				r.With(middleware.RequireSession()).Delete("/api/tokens/{tokenId}", h.DeleteAPIToken)
 
@@ -269,8 +292,21 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService,
 				// other one below carrying RequireSession) mechanically rather
 				// than off a hand-maintained list.
 				r.With(middleware.RequireSession()).Delete("/api/projects/{projectId}", h.DeleteProject)
-				r.Put("/api/projects/{projectId}/transfer", h.TransferProject)
-				r.Put("/api/projects/{projectId}/sharing", h.UpdateProjectSharing)
+				// Both hand out project-owner-equivalent access rather than operate a
+				// workload — sharing extends it to every Member (canAccessOwned's
+				// `if shared { return true }` has no membership check, so this is
+				// what hands every Member RevealEnvVar access on the project), and
+				// transfer moves it outright to a named user. Same class as
+				// POST /api/users and POST /api/users/invite above: administering
+				// who can reach what, not operating what's already reachable.
+				// TransferProject's admin-only requirement moves here from the
+				// handler body too — enforcing it in routes.go, not a
+				// //apidoc:roles declaration, is what lets the generator DERIVE
+				// x-belune-roles instead of adding a second, driftable source of
+				// truth (see apidocRequireRoleSet in apidoc_generate_test.go).
+				r.With(middleware.RequireSession(), middleware.RequireRole("admin")).
+					Put("/api/projects/{projectId}/transfer", h.TransferProject)
+				r.With(middleware.RequireSession()).Put("/api/projects/{projectId}/sharing", h.UpdateProjectSharing)
 
 				// Applications
 				r.Get("/api/projects/{projectId}/applications", h.ListApplications)
@@ -302,6 +338,7 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService,
 				// Preview environments: parent config + child list + child delete
 				r.Put("/api/projects/{projectId}/applications/{applicationId}/previews/config", h.UpdatePreviewConfig)
 				r.Get("/api/projects/{projectId}/applications/{applicationId}/previews", h.ListPreviews)
+				r.Get("/api/projects/{projectId}/applications/{applicationId}/previews/{previewId}", h.GetPreview)
 				r.Delete("/api/projects/{projectId}/applications/{applicationId}/previews/{previewId}", h.DeletePreview)
 
 				// Deployments
@@ -325,6 +362,7 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService,
 
 				// Domains
 				r.Get("/api/projects/{projectId}/applications/{applicationId}/domains", h.ListDomains)
+				r.Get("/api/projects/{projectId}/applications/{applicationId}/domains/{domainId}", h.GetDomain)
 				r.Post("/api/projects/{projectId}/applications/{applicationId}/domains", h.AddDomain)
 				r.Put("/api/projects/{projectId}/applications/{applicationId}/domains/{domainId}", h.UpdateDomain)
 				r.With(middleware.RequireSession()).Delete("/api/projects/{projectId}/applications/{applicationId}/domains/{domainId}", h.RemoveDomain)
@@ -341,7 +379,7 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService,
 				r.With(middleware.RequireSession()).Delete("/api/projects/{projectId}/applications/{applicationId}/volumes/{volumeId}", h.DeleteApplicationVolume)
 
 				// Application volume backups
-				r.Get("/api/projects/{projectId}/applications/{applicationId}/volumes/{volumeId}/backup-configs", h.ListVolumeBackupConfigs)
+				r.Get("/api/projects/{projectId}/applications/{applicationId}/volumes/{volumeId}/backup-configs", h.ListBackupConfigsForVolume)
 				r.Post("/api/projects/{projectId}/applications/{applicationId}/volumes/{volumeId}/backup-configs", h.CreateVolumeBackupConfig)
 				r.Put("/api/projects/{projectId}/applications/{applicationId}/volumes/{volumeId}/backup-configs/{configId}", h.UpdateVolumeBackupConfig)
 				r.Delete("/api/projects/{projectId}/applications/{applicationId}/volumes/{volumeId}/backup-configs/{configId}", h.DeleteVolumeBackupConfig)
@@ -349,7 +387,7 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService,
 				r.Get("/api/projects/{projectId}/applications/{applicationId}/volumes/{volumeId}/backups", h.ListVolumeBackups)
 				r.With(middleware.RequireSession()).Post("/api/projects/{projectId}/applications/{applicationId}/volumes/{volumeId}/backups/{backupId}/restore", h.RestoreVolumeBackup)
 				r.Get("/api/projects/{projectId}/applications/{applicationId}/volumes/{volumeId}/restores", h.ListVolumeRestores)
-				r.Get("/api/projects/{projectId}/applications/{applicationId}/volume-backup-configs", h.ListAppVolumeBackupConfigs)
+				r.Get("/api/projects/{projectId}/applications/{applicationId}/volume-backup-configs", h.ListBackupConfigsForApplication)
 
 				// Application file/config mounts
 				r.Get("/api/projects/{projectId}/applications/{applicationId}/file-mounts", h.ListFileMounts)
@@ -360,6 +398,19 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService,
 
 				// Global deployments
 				r.Get("/api/deployments", h.GetGlobalDeployments)
+
+				// Which certificate can serve a hostname. Member-reachable
+				// because attaching one is project-scoped and therefore theirs
+				// to do; the full certificate list stays admin-only, since it
+				// carries every SAN of every certificate on the install.
+				r.Get("/api/certificates/usable", h.ListUsableCertificates)
+
+				// Every domain's observed TLS state in one view. Role-scoped
+				// rather than admin-only: it carries the certificate NAME, and
+				// ListDomainsByApplication returns only a bare certificate_id,
+				// so this is the one place a member can find out which
+				// certificate their own domain is serving.
+				r.Get("/api/domains/tls", h.ListDomainTLSStatus)
 
 				// Operator-health stat strip (member-scoped; admins see host + backups)
 				r.Get("/api/stats", h.GetStats)
@@ -414,7 +465,12 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService,
 				// everything else in this block defaults to read/write by method.
 				r.Group(func(r chi.Router) {
 					r.Use(middleware.RequireScope("metrics"))
-					r.Get("/api/metrics", h.GetMetrics)
+					// Resource counts, not metrics — hence /api/summary rather than
+					// /api/metrics, which left it one character from the Prometheus
+					// scrape at /metrics and adjacent to the real host time-series
+					// below. The scope stays "metrics": it is the most permissive
+					// requirement in the lattice, so no existing token loses access.
+					r.Get("/api/summary", h.GetSummary)
 					r.Get("/api/metrics/host", h.GetHostHistoricalMetrics)
 					// Prometheus scrape endpoint. When METRICS_BIND is configured
 					// the metrics are also exposed anonymously on that listener;
@@ -422,21 +478,43 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService,
 					// Scoped to "metrics", not RequireScopeByMethod's "read" — a
 					// metrics-only token is explicitly sold as a scraper token
 					// (see api-tokens-card.tsx) and must be able to reach the one
-					// route that description promises.
-					r.Method("GET", "/metrics", metrics.Handler())
+					// route that description promises. h.ServeMetrics, not
+					// metrics.Handler() registered directly — a bare third-party
+					// http.Handler has no name reflection can recover (this
+					// generated the meaningless operationId "func1") and no doc
+					// comment a //apidoc:tag directive could attach to.
+					r.Get("/metrics", h.ServeMetrics)
 				})
 
 				r.Group(func(r chi.Router) {
 					r.Use(middleware.RequireScopeByMethod())
 
-					r.Post("/api/cleanup", h.TriggerCleanup)
-					r.Get("/api/settings", h.ListSettings)
-					r.Put("/api/settings", h.UpdateSettings)
+					r.Post("/api/maintenance/cleanup", h.TriggerCleanup)
+					// Platform configuration, session-only. UpdateSettings is the one
+					// that actually matters: it writes ANY key by name (a handful are
+					// validated in a switch, everything else passes straight to
+					// UpsertSetting with only an empty-key check) — and
+					// host_shell_enabled, the flag that turns on the in-UI host shell,
+					// is itself a setting (see hostshell.go's settingHostShellEnabled).
+					// Without this gate, a write-scoped admin PAT could flip the most
+					// security-critical flag in the product with no human at a
+					// keyboard; opening a session from there still needs the password
+					// and a second factor, but a token should never reach the switch at
+					// all. The same endpoint also sets the dashboard's own domain and
+					// TLS mode — where Caddy gets its certificate from. ListSettings and
+					// the SMTP endpoints are gated alongside it for consistency, not
+					// because they leak a credential: GetSMTPSettings already masks the
+					// password to a presence flag, and ListSettings already skips it —
+					// but ListSettings still dumps every other key (host shell flag,
+					// dashboard domain/TLS, public IP, backup schedule), which is
+					// config disclosure and posture recon a leaked token shouldn't get.
+					r.With(middleware.RequireSession()).Get("/api/settings", h.ListSettings)
+					r.With(middleware.RequireSession()).Put("/api/settings", h.UpdateSettings)
 					// SMTP config: dedicated endpoints so the password stays
 					// keyring-encrypted and masked (never in the generic settings list).
-					r.Get("/api/settings/smtp", h.GetSMTPSettings)
-					r.Put("/api/settings/smtp", h.UpdateSMTPSettings)
-					r.Post("/api/settings/smtp/test", h.TestSMTPSettings)
+					r.With(middleware.RequireSession()).Get("/api/settings/smtp", h.GetSMTPSettings)
+					r.With(middleware.RequireSession()).Put("/api/settings/smtp", h.UpdateSMTPSettings)
+					r.With(middleware.RequireSession()).Post("/api/settings/smtp/test", h.TestSMTPSettings)
 					r.Get("/api/requests", h.ListAllRequestLogs)
 					r.Get("/api/requests/summary", h.GetAllRequestsSummary)
 					r.Get("/api/server/services", h.GetServerServices)
@@ -451,28 +529,46 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService,
 					r.Get("/api/audit-logs", h.ListAuditLogs)
 					r.Get("/api/audit-logs/actions", h.ListAuditActions)
 					r.Get("/api/audit-logs/export", h.ExportAuditLogs)
-					r.Get("/api/proxy/reconciler", h.GetProxyReconcilerStatus)
-					r.Post("/api/proxy/reconcile", h.ReconcileProxy)
+					// GET the noun for status, POST noun+verb for the action —
+					// the same shape as the queue pair below. Not
+					// .../proxy/reconciler beside .../proxy/reconcile: two
+					// sibling paths one letter apart is the trap /api/metrics
+					// and /metrics already were.
+					r.Get("/api/maintenance/proxy", h.GetProxyReconcilerStatus)
+					r.Post("/api/maintenance/proxy/reconcile", h.ReconcileProxy)
 					r.Get("/api/maintenance/queue", h.GetQueueStatus)
 					r.Post("/api/maintenance/queue/clear", h.ClearQueue)
 					r.Post("/api/maintenance/queue/clear-pending", h.ClearPendingQueue)
 					r.Get("/api/maintenance/logs", h.GetPlatformLogs)
+					// A public fact (the address the box is reachable at), legitimately
+					// useful to a provisioning script — stays PAT-callable, unlike its
+					// neighbors below.
 					r.Get("/api/maintenance/server-ip", h.GetServerIP)
-					r.Post("/api/maintenance/restart", h.RestartService)
-					r.Post("/api/maintenance/host-shell", h.CreateHostShellSession)
+					// Session-only: restarting a service and opening a host shell are
+					// both maintenance actions on the box itself, not application
+					// deploys — see the settings block above for the fuller reasoning
+					// (this pair sits in the same "platform configuration and control,
+					// not app management" category). CreateHostShellSession was already
+					// triple-gated (host_shell_enabled, admin role, step-up re-auth) —
+					// RequireSession closes the remaining gap: a PAT could still reach
+					// its handler and get exactly as far as "password required".
+					r.With(middleware.RequireSession()).Post("/api/maintenance/restart", h.RestartService)
+					r.With(middleware.RequireSession()).Post("/api/maintenance/host-shell", h.CreateHostShellSession)
 					r.Get("/api/quotas", h.ListQuotas)
 					r.Get("/api/quotas/{scope}/{scopeId}", h.GetQuota)
 					r.Put("/api/quotas/{scope}/{scopeId}", h.UpsertQuota)
 					r.Delete("/api/quotas/{scope}/{scopeId}", h.DeleteQuota)
 					// Centralised TLS certificate store (upload once, use per-domain)
 					r.Get("/api/certificates", h.ListCertificates)
-					// Every domain's observed TLS state in one view.
-					r.Get("/api/domains/tls", h.ListDomainTLSStatus)
 					r.Post("/api/certificates", h.UploadCertificate)
-					// An uploaded cert+key is unrecoverable once deleted — the
-					// same "destroys real stored data" category as the
-					// project/app/db/volume/domain/backup set below.
-					r.With(middleware.RequireSession()).Delete("/api/certificates/{certificateId}", h.DeleteCertificate)
+					// Deletable with an admin, write-scoped token — not
+					// session-only like the project/app/db/volume/domain/backup
+					// set below. domains.certificate_id is ON DELETE RESTRICT
+					// (migration 000035), so a cert any domain still serves
+					// can't be deleted at all; only an unused cert is reachable
+					// here, and it is re-uploadable from the same PEM material
+					// that created it, unlike a dropped database.
+					r.Delete("/api/certificates/{certificateId}", h.DeleteCertificate)
 					// Notification channels: route existing events out to providers.
 					r.Get("/api/notification-events", h.ListNotificationEvents)
 					r.Get("/api/notification-channels", h.ListNotificationChannels)
@@ -535,9 +631,9 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService,
 			// Backups whose database is gone. Project-scoped because the
 			// tombstone they hang off is — the project is the access boundary,
 			// so an orphaned backup has no owner above it.
-			r.Get("/api/projects/{projectId}/orphaned-backups", h.ListProjectOrphanedBackups)
+			r.Get("/api/projects/{projectId}/orphaned-backups", h.ListProjectOrphanedDatabaseBackups)
 			r.With(middleware.RequireSession()).Post("/api/projects/{projectId}/orphaned-backups/{backupId}/restore", h.RestoreDatabaseFromTombstone)
-			r.With(middleware.RequireSession()).Delete("/api/projects/{projectId}/orphaned-backups/{backupId}", h.DeleteOrphanedBackup)
+			r.With(middleware.RequireSession()).Delete("/api/projects/{projectId}/orphaned-backups/{backupId}", h.DeleteOrphanedDatabaseBackup)
 			r.With(middleware.RequireSession()).Delete("/api/projects/{projectId}/databases/{databaseId}", h.DeleteDatabase)
 
 			// Scheduled backup configurations per database

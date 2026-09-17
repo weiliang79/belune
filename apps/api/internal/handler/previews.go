@@ -22,6 +22,10 @@ type previewConfigRequest struct {
 // field leaves the stored value untouched; an empty string disables that side.
 // Disabling both effectively turns previews off for this parent (future pushes
 // that don't match auto_deploy_branch are ignored).
+//
+//apidoc:tag applications/previews
+//apidoc:title Update Config
+//apidoc:order 1
 func (h *Handler) UpdatePreviewConfig(w http.ResponseWriter, r *http.Request) {
 	applicationID := chi.URLParam(r, "applicationId")
 	var applicationUUID pgtype.UUID
@@ -93,6 +97,10 @@ type previewView struct {
 }
 
 // ListPreviews returns all preview children of the given parent application.
+//
+//apidoc:tag applications/previews
+//apidoc:title Get Previews
+//apidoc:order 2
 func (h *Handler) ListPreviews(w http.ResponseWriter, r *http.Request) {
 	applicationID := chi.URLParam(r, "applicationId")
 	var applicationUUID pgtype.UUID
@@ -131,8 +139,68 @@ func (h *Handler) ListPreviews(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"previews": out})
 }
 
+// GetPreview returns one preview child, in the shape ListPreviews returns them.
+//
+// Same reason as GetDomain: a preview is an application row whose status moves
+// while a build runs, so a script that triggers one and waits has to re-read
+// that row. Without this it fetches every preview of the parent and filters.
+//
+// Mirrors DeletePreview's checks exactly — canAccessApplication on the preview's
+// own id (which resolves ITS owner, not the path's), then a parent check so this
+// path cannot be used to read a non-preview application by id.
+//
+//apidoc:tag applications/previews
+//apidoc:title Get Preview
+//apidoc:description One preview environment. Useful for polling `status` while a preview builds.
+//apidoc:order 3
+func (h *Handler) GetPreview(w http.ResponseWriter, r *http.Request) {
+	previewID := chi.URLParam(r, "previewId")
+	var previewUUID pgtype.UUID
+	if err := previewUUID.Scan(previewID); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid preview id")
+		return
+	}
+	if !h.canAccessApplication(r, previewUUID) {
+		writeError(w, http.StatusForbidden, "access denied")
+		return
+	}
+
+	row, err := h.queries.GetApplication(r.Context(), previewUUID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			writeError(w, http.StatusNotFound, "preview not found")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "failed to fetch preview")
+		return
+	}
+	if !row.ParentApplicationID.Valid {
+		writeError(w, http.StatusBadRequest, "not a preview application")
+		return
+	}
+
+	view := previewView{
+		ID:     uuidToString(row.ID),
+		Name:   row.Name,
+		Slug:   row.Slug,
+		Branch: row.Branch.String,
+		Status: row.Status,
+	}
+	if row.LastActivityAt.Valid {
+		view.LastActivityAt = row.LastActivityAt.Time.UTC().Format("2006-01-02T15:04:05Z")
+	}
+	if domains, derr := h.queries.ListDomainsByApplication(r.Context(), row.ID); derr == nil && len(domains) > 0 {
+		view.Hostname = domains[0].Hostname
+	}
+	writeJSON(w, http.StatusOK, view)
+}
+
 // DeletePreview removes a single preview child. Same semantics as
 // DeleteApplication except callers cannot use this path on a non-preview.
+//
+//apidoc:tag applications/previews
+//apidoc:title Delete Preview
+//apidoc:order 4
 func (h *Handler) DeletePreview(w http.ResponseWriter, r *http.Request) {
 	previewID := chi.URLParam(r, "previewId")
 	var previewUUID pgtype.UUID

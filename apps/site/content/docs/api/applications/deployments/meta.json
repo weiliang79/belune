@@ -1,0 +1,14 @@
+{
+  "title": "Deployments",
+  "pages": [
+    "deploy-application",
+    "list-deployments",
+    "get-deployment",
+    "rollback-deployment",
+    "stream-build-logs",
+    "get-deploy-hook",
+    "generate-deploy-hook",
+    "delete-deploy-hook",
+    "update-application-webhook"
+  ]
+}

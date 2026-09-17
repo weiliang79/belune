@@ -48,7 +48,10 @@ const SETTINGS_NAV: NavItem[] = [
   { to: "/server", label: "Server", Icon: Server, admin: true },
   { to: "/docker", label: "Docker", Icon: SiDocker, admin: true },
   { to: "/git", label: "Git", Icon: GitBranch },
-  { to: "/certificates", label: "Certificates", Icon: Lock, admin: true },
+  // Not admin-gated: the page shows a member the TLS state of their own
+  // domains (see certificates.tsx, which splits by content). Certificate
+  // management within it stays admin-only at the API.
+  { to: "/certificates", label: "Certificates", Icon: Lock },
   { to: "/notifications", label: "Notifications", Icon: BellRing, admin: true },
   { to: "/account", label: "Account", Icon: User, exact: true },
   { to: "/team", label: "Team", Icon: Users, admin: true },
@@ -114,7 +117,9 @@ export function Sidebar({ mobileOpen, onMobileClose }: SidebarProps) {
           aria-hidden={true}
           className={cn(
             "h-[18px] w-[18px] shrink-0 transition-colors",
-            active ? "text-primary" : "text-muted-foreground group-hover:text-foreground",
+            active
+              ? "text-primary"
+              : "text-muted-foreground group-hover:text-foreground",
           )}
         />
         {expanded ? label : <span className="sr-only">{label}</span>}
@@ -128,7 +133,7 @@ export function Sidebar({ mobileOpen, onMobileClose }: SidebarProps) {
     return (
       <div>
         {expanded && (
-          <p className="text-text-faint mb-1 px-3 text-[10.5px] font-semibold uppercase tracking-wider">
+          <p className="text-text-faint mb-1 px-3 text-[10.5px] font-semibold tracking-wider uppercase">
             {heading}
           </p>
         )}
@@ -163,14 +168,17 @@ export function Sidebar({ mobileOpen, onMobileClose }: SidebarProps) {
           aria-label="About Belune"
           className="grid size-8 shrink-0 place-items-center rounded-lg text-white shadow-sm transition-opacity hover:opacity-90"
           style={{
-            background: "linear-gradient(140deg, var(--brand), var(--brand-press))",
+            background:
+              "linear-gradient(140deg, var(--brand), var(--brand-press))",
           }}
         >
           <BeluneLogo className="size-6" aria-hidden="true" />
         </Link>
         {expanded && (
           <div className="flex min-w-0 flex-col leading-tight">
-            <span className="truncate text-sm font-semibold">{instanceName}</span>
+            <span className="truncate text-sm font-semibold">
+              {instanceName}
+            </span>
             <span className="text-text-faint font-mono text-[11px]">
               {BRAND.name}
               {version && ` • ${version}`}

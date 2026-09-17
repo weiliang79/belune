@@ -175,6 +175,9 @@ func (h *Handler) checkHostTLSAgreement(ctx context.Context, hostname, sslMode s
 	return ""
 }
 
+//apidoc:tag applications/domains
+//apidoc:title Get Domains
+//apidoc:order 1
 func (h *Handler) ListDomains(w http.ResponseWriter, r *http.Request) {
 	applicationID := chi.URLParam(r, "applicationId")
 	var applicationUUID pgtype.UUID
@@ -197,6 +200,43 @@ func (h *Handler) ListDomains(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, domains)
 }
 
+// GetDomain returns one domain in the same shape ListDomains returns it.
+//
+// Exists for the polling case a list does not serve well: tls_status moves
+// unknown -> pending -> active on its own schedule, so a script that adds a
+// domain and waits for TLS has to re-read that one row. Without this it must
+// fetch every domain on the application and filter, on every poll.
+//
+// Access is canAccessDomain, which resolves the DOMAIN's own owner rather than
+// trusting the {applicationId} in the path — the same check UpdateDomain and
+// RemoveDomain use.
+//
+//apidoc:tag applications/domains
+//apidoc:title Get Domain
+//apidoc:description One domain, in the shape the list returns. Useful for polling `tls_status`, which moves from `pending` to `active` on its own once a certificate issues.
+//apidoc:order 2
+func (h *Handler) GetDomain(w http.ResponseWriter, r *http.Request) {
+	domainID := chi.URLParam(r, "domainId")
+	var domainUUID pgtype.UUID
+	if err := domainUUID.Scan(domainID); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid domain id")
+		return
+	}
+
+	if !h.canAccessDomain(r, domainUUID) {
+		writeError(w, http.StatusForbidden, "access denied")
+		return
+	}
+
+	domain, err := h.queries.GetDomainWithFeatures(r.Context(), domainUUID)
+	if err != nil {
+		writeError(w, http.StatusNotFound, "domain not found")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, domain)
+}
+
 type addDomainRequest struct {
 	Hostname       string          `json:"hostname"`
 	Path           string          `json:"path,omitempty"`
@@ -211,6 +251,9 @@ type addDomainRequest struct {
 	AdvancedConfig json.RawMessage `json:"advanced_config,omitempty"`
 }
 
+//apidoc:tag applications/domains
+//apidoc:title Create Domain
+//apidoc:order 3
 func (h *Handler) AddDomain(w http.ResponseWriter, r *http.Request) {
 	applicationID := chi.URLParam(r, "applicationId")
 	var applicationUUID pgtype.UUID
@@ -365,6 +408,9 @@ type updateDomainRequest struct {
 	AdvancedConfig json.RawMessage `json:"advanced_config,omitempty"`
 }
 
+//apidoc:tag applications/domains
+//apidoc:title Update Domain
+//apidoc:order 4
 func (h *Handler) UpdateDomain(w http.ResponseWriter, r *http.Request) {
 	domainID := chi.URLParam(r, "domainId")
 	var domainUUID pgtype.UUID
@@ -564,6 +610,9 @@ func (h *Handler) loadRouteFeatures(r *http.Request, domainID pgtype.UUID) []pro
 
 // --- Route Feature CRUD ---
 
+//apidoc:tag applications/domains
+//apidoc:title Get Route Features
+//apidoc:order 6
 func (h *Handler) ListRouteFeatures(w http.ResponseWriter, r *http.Request) {
 	domainID := chi.URLParam(r, "domainId")
 	var domainUUID pgtype.UUID
@@ -592,6 +641,9 @@ type upsertRouteFeatureRequest struct {
 	Enabled     bool            `json:"enabled"`
 }
 
+//apidoc:tag applications/domains
+//apidoc:title Upsert Route Feature
+//apidoc:order 7
 func (h *Handler) UpsertRouteFeature(w http.ResponseWriter, r *http.Request) {
 	domainID := chi.URLParam(r, "domainId")
 	var domainUUID pgtype.UUID
@@ -641,6 +693,9 @@ func (h *Handler) UpsertRouteFeature(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, feature)
 }
 
+//apidoc:tag applications/domains
+//apidoc:title Delete Route Feature
+//apidoc:order 8
 func (h *Handler) DeleteRouteFeature(w http.ResponseWriter, r *http.Request) {
 	featureID := chi.URLParam(r, "featureId")
 	var featureUUID pgtype.UUID
@@ -715,6 +770,7 @@ func (h *Handler) rebuildDomainRoute(r *http.Request, domainID pgtype.UUID) {
 	}
 }
 
+//apidoc:tag applications/domains
 func (h *Handler) RemoveDomain(w http.ResponseWriter, r *http.Request) {
 	domainID := chi.URLParam(r, "domainId")
 	var domainUUID pgtype.UUID

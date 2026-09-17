@@ -1,4 +1,4 @@
-import { useForm } from "@tanstack/react-form";
+import { useForm, useStore } from "@tanstack/react-form";
 import { z } from "zod";
 import { toast } from "sonner";
 import {
@@ -33,14 +33,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from "@/components/ui/tabs";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAddDomain, useUpdateDomain } from "@/lib/hooks/use-domains";
-import { useCertificates } from "@/lib/hooks/use-certificates";
+import {
+  useCertificates,
+  useUsableCertificates,
+} from "@/lib/hooks/use-certificates";
+import { useAuthStore } from "@/lib/stores/auth";
 import type { DomainExpanded } from "@/lib/types";
 
 const HOSTNAME_REGEX =
@@ -129,11 +128,13 @@ function DomainForm({
   const updateDomain = useUpdateDomain(projectId, applicationId);
   const pending = addDomain.isPending || updateDomain.isPending;
 
-  // Only admins can manage certificates, so a non-admin editing a domain sees an
-  // empty picker rather than an error; the form explains where they come from.
-  const { data: certificateList, isLoading: certificatesLoading } =
-    useCertificates();
-  const certificates = certificateList ?? [];
+  // Two different questions, because the API answers two different ones. An
+  // admin lists the whole store (with every SAN, which the dropdown shows).
+  // A member cannot list it at all and instead asks "what can serve THIS
+  // hostname" — enough to attach one, without learning the other hosts each
+  // certificate covers. Both hooks are called unconditionally and gated by
+  // `enabled`, since a hook cannot be called conditionally.
+  const isAdmin = useAuthStore((s) => s.user?.role === "admin");
   const legacyMode = legacyModeFor(domain?.ssl_mode);
 
   const form = useForm({
@@ -191,13 +192,34 @@ function DomainForm({
               certificate_id: value.certificate_id || undefined,
             });
 
-      toast.promise(action.then(() => onClose()), {
-        loading: isEdit ? "Saving..." : "Adding...",
-        success: isEdit ? "Domain updated" : "Domain added",
-        error: (err) => err.message,
-      });
+      toast.promise(
+        action.then(() => onClose()),
+        {
+          loading: isEdit ? "Saving..." : "Adding...",
+          success: isEdit ? "Domain updated" : "Domain added",
+          error: (err) => err.message,
+        },
+      );
     },
   });
+
+  // Read from the form store rather than a Subscribe, because these feed hooks
+  // and a hook cannot live inside a render prop. The hostname lives on the
+  // Routing tab and the picker on the TLS tab, so by the time the picker is
+  // visible this value is settled — no debounce needed.
+  const hostnameValue = useStore(form.store, (s) => s.values.hostname);
+
+  const { data: adminCertificates, isLoading: adminCertsLoading } =
+    useCertificates(isAdmin);
+  const { data: usableCertificates, isLoading: usableCertsLoading } =
+    useUsableCertificates(hostnameValue, !isAdmin);
+
+  // One shape for the dropdown. subjects is undefined for a member: the API
+  // withholds it, so the dropdown simply omits the SAN line for them rather
+  // than inventing one.
+  const certificates: { id: string; name: string; subjects?: string[] }[] =
+    isAdmin ? (adminCertificates ?? []) : (usableCertificates ?? []);
+  const certificatesLoading = isAdmin ? adminCertsLoading : usableCertsLoading;
 
   return (
     <form
@@ -416,16 +438,11 @@ function DomainForm({
           <form.Field
             name="container_port"
             validators={{
-              onChange: z
-                .string()
-                .refine(
-                  (v) => {
-                    if (!v) return true;
-                    const n = Number(v);
-                    return Number.isInteger(n) && n >= 1 && n <= 65535;
-                  },
-                  "Port must be between 1 and 65535",
-                ),
+              onChange: z.string().refine((v) => {
+                if (!v) return true;
+                const n = Number(v);
+                return Number.isInteger(n) && n >= 1 && n <= 65535;
+              }, "Port must be between 1 and 65535"),
             }}
             children={(field) => {
               const error = fieldError(field.state.meta.errors);
@@ -446,8 +463,8 @@ function DomainForm({
                     <p className="text-destructive text-xs">{error}</p>
                   ) : (
                     <p className="text-muted-foreground text-xs">
-                      The port this domain routes to inside the container.
-                      Leave blank to use the app's default port (8080).
+                      The port this domain routes to inside the container. Leave
+                      blank to use the app's default port (8080).
                     </p>
                   )}
                 </div>
@@ -475,19 +492,18 @@ function DomainForm({
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {[
-                      ...SSL_MODES,
-                      ...(legacyMode ? [legacyMode] : []),
-                    ].map((m) => (
-                      <SelectItem
-                        key={m.value}
-                        value={m.value}
-                        icon={<m.Icon />}
-                        className="capitalize"
-                      >
-                        {m.label}
-                      </SelectItem>
-                    ))}
+                    {[...SSL_MODES, ...(legacyMode ? [legacyMode] : [])].map(
+                      (m) => (
+                        <SelectItem
+                          key={m.value}
+                          value={m.value}
+                          icon={<m.Icon />}
+                          className="capitalize"
+                        >
+                          {m.label}
+                        </SelectItem>
+                      ),
+                    )}
                   </SelectContent>
                 </Select>
               </div>
@@ -549,19 +565,37 @@ function DomainForm({
                             {certificates.map((cert) => (
                               <SelectItem key={cert.id} value={cert.id}>
                                 {cert.name}
-                                <span className="text-muted-foreground ml-2 font-mono text-xs">
-                                  {cert.subjects.join(", ")}
-                                </span>
+                                {cert.subjects && (
+                                  <span className="text-muted-foreground ml-2 font-mono text-xs">
+                                    {cert.subjects.join(", ")}
+                                  </span>
+                                )}
                               </SelectItem>
                             ))}
                           </SelectContent>
                         </Select>
-                        {!certificatesLoading && certificates.length === 0 && (
-                          <p className="text-muted-foreground text-xs">
-                            No certificates uploaded yet. An admin can add one
-                            under Settings → Certificates.
-                          </p>
-                        )}
+                        {/* Two empty states, because "nothing here" means two
+                            different things. An admin is looking at the whole
+                            store, so empty really is empty. A member is looking
+                            at what covers ONE hostname, so empty means nothing
+                            covers it — the store may be full. Saying "no
+                            certificates uploaded yet" to a member was simply
+                            false, and it pointed them at a page that shows them
+                            a lock screen. */}
+                        {!certificatesLoading &&
+                          certificates.length === 0 &&
+                          (isAdmin ? (
+                            <p className="text-muted-foreground text-xs">
+                              No certificates uploaded yet. Add one under
+                              Settings → Certificates.
+                            </p>
+                          ) : (
+                            <p className="text-muted-foreground text-xs">
+                              No certificate covers{" "}
+                              {hostnameValue.trim() || "this hostname"} yet. Ask
+                              an admin to upload one that does.
+                            </p>
+                          ))}
                         {error && (
                           <p className="text-destructive text-xs">{error}</p>
                         )}
@@ -591,7 +625,9 @@ function DomainForm({
                       />
                       <span
                         className={
-                          sslMode === "off" ? "text-muted-foreground" : undefined
+                          sslMode === "off"
+                            ? "text-muted-foreground"
+                            : undefined
                         }
                       >
                         Force HTTPS

@@ -1,0 +1,15 @@
+{
+  "title": "Databases",
+  "pages": [
+    "list-databases",
+    "get-database",
+    "create-database",
+    "update-database",
+    "get-database-deletion-impact",
+    "upgrade-database",
+    "set-database-external-access",
+    "actions",
+    "logs",
+    "volumes-backups"
+  ]
+}

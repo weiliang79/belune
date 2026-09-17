@@ -1,0 +1,9 @@
+{
+  "title": "Providers",
+  "pages": [
+    "list-git-provider-configs",
+    "save-git-provider-config",
+    "delete-git-provider-config",
+    "get-git-hub-app-manifest"
+  ]
+}

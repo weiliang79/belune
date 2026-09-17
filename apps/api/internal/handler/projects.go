@@ -18,6 +18,9 @@ type createProjectRequest struct {
 	Slug string `json:"slug"`
 }
 
+//apidoc:tag projects
+//apidoc:title Create Project
+//apidoc:order 3
 func (h *Handler) CreateProject(w http.ResponseWriter, r *http.Request) {
 	// middleware.RequireProjectAccess only ever compares against a
 	// {projectId} URL param, so it has nothing to check here — creating a
@@ -92,6 +95,9 @@ func (h *Handler) isProjectOwner(r *http.Request, projectID pgtype.UUID) bool {
 	return h.isOwnerOnly(r, h.projectOwner(projectID))
 }
 
+//apidoc:tag projects
+//apidoc:title Get Project
+//apidoc:order 2
 func (h *Handler) GetProject(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "projectId")
 	var uuid pgtype.UUID
@@ -114,6 +120,10 @@ func (h *Handler) GetProject(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, project)
 }
 
+//apidoc:tag projects
+//apidoc:title Get Projects
+//apidoc:description An admin sees every project on the install; a member sees only their own projects and any shared with them.
+//apidoc:order 1
 func (h *Handler) ListProjects(w http.ResponseWriter, r *http.Request) {
 	role := middleware.RoleFromContext(r.Context())
 	// This list has no {projectId} URL param for middleware.RequireProjectAccess
@@ -167,6 +177,9 @@ type updateProjectRequest struct {
 	Name string `json:"name"`
 }
 
+//apidoc:tag projects
+//apidoc:title Update Project
+//apidoc:order 4
 func (h *Handler) UpdateProject(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "projectId")
 	var uuid pgtype.UUID
@@ -205,6 +218,7 @@ func (h *Handler) UpdateProject(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, project)
 }
 
+//apidoc:tag projects
 func (h *Handler) DeleteProject(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "projectId")
 	var uuid pgtype.UUID
@@ -232,14 +246,14 @@ type transferProjectRequest struct {
 	UserID string `json:"user_id"`
 }
 
+// TransferProject moves ownership to a named user. Admin-only and
+// session-only, both enforced in routes.go (middleware.RequireRole("admin")
+// and middleware.RequireSession()) rather than here — a role check in the
+// handler body would be invisible to the generator's x-belune-roles
+// derivation, which reads RequireRole structurally off the middleware chain.
+//
+//apidoc:tag projects
 func (h *Handler) TransferProject(w http.ResponseWriter, r *http.Request) {
-	// Admin-only operation
-	role := middleware.RoleFromContext(r.Context())
-	if role != "admin" {
-		writeError(w, http.StatusForbidden, "only admins can transfer projects")
-		return
-	}
-
 	id := chi.URLParam(r, "projectId")
 	var projectUUID pgtype.UUID
 	if err := projectUUID.Scan(id); err != nil {
@@ -289,6 +303,8 @@ type updateProjectSharingRequest struct {
 // UpdateProjectSharing turns project sharing on or off. Owner or admin only —
 // a Member who only has shared access must not be able to unshare or reshare
 // a project they do not own.
+//
+//apidoc:tag projects
 func (h *Handler) UpdateProjectSharing(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "projectId")
 	var uuid pgtype.UUID

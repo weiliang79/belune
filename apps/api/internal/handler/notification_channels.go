@@ -114,11 +114,19 @@ func (req notificationChannelRequest) toSaveParams() service.SaveChannelParams {
 
 // ListNotificationEvents returns the canonical event registry so the UI's
 // subscription checkboxes stay in lockstep with the Go constants.
+//
+//apidoc:tag platform/notification-channels
+//apidoc:title Get Events
+//apidoc:order 9
 func (h *Handler) ListNotificationEvents(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, notify.Events())
 }
 
 // ListNotificationChannels returns all channels (no provider config).
+//
+//apidoc:tag platform/notification-channels
+//apidoc:title Get Channels
+//apidoc:order 1
 func (h *Handler) ListNotificationChannels(w http.ResponseWriter, r *http.Request) {
 	rows, err := h.notifyChannelSvc.List(r.Context())
 	if err != nil {
@@ -135,6 +143,10 @@ func (h *Handler) ListNotificationChannels(w http.ResponseWriter, r *http.Reques
 }
 
 // CreateNotificationChannel validates and stores a new channel.
+//
+//apidoc:tag platform/notification-channels
+//apidoc:title Create Channel
+//apidoc:order 2
 func (h *Handler) CreateNotificationChannel(w http.ResponseWriter, r *http.Request) {
 	var req notificationChannelRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -159,6 +171,10 @@ func (h *Handler) CreateNotificationChannel(w http.ResponseWriter, r *http.Reque
 
 // UpdateNotificationChannel replaces name/events/enabled and, when config is
 // supplied, the provider config (type is immutable).
+//
+//apidoc:tag platform/notification-channels
+//apidoc:title Update Channel
+//apidoc:order 3
 func (h *Handler) UpdateNotificationChannel(w http.ResponseWriter, r *http.Request) {
 	id, ok := h.channelIDFromPath(w, r)
 	if !ok {
@@ -191,6 +207,10 @@ type setChannelEnabledRequest struct {
 
 // SetNotificationChannelEnabled toggles a channel without touching its config,
 // backing the immediate-effect enable/disable Switch.
+//
+//apidoc:tag platform/notification-channels
+//apidoc:title Toggle Channel
+//apidoc:order 4
 func (h *Handler) SetNotificationChannelEnabled(w http.ResponseWriter, r *http.Request) {
 	id, ok := h.channelIDFromPath(w, r)
 	if !ok {
@@ -217,6 +237,10 @@ func (h *Handler) SetNotificationChannelEnabled(w http.ResponseWriter, r *http.R
 }
 
 // DeleteNotificationChannel removes a channel.
+//
+//apidoc:tag platform/notification-channels
+//apidoc:title Delete Channel
+//apidoc:order 5
 func (h *Handler) DeleteNotificationChannel(w http.ResponseWriter, r *http.Request) {
 	id, ok := h.channelIDFromPath(w, r)
 	if !ok {
@@ -233,6 +257,10 @@ func (h *Handler) DeleteNotificationChannel(w http.ResponseWriter, r *http.Reque
 // TestNotificationChannel sends a sample event through the channel and returns
 // the provider result verbatim (never fails the request — a delivery error is a
 // 200 with ok=false so the UI can display the exact reason).
+//
+//apidoc:tag platform/notification-channels
+//apidoc:title Test Channel
+//apidoc:order 6
 func (h *Handler) TestNotificationChannel(w http.ResponseWriter, r *http.Request) {
 	id, ok := h.channelIDFromPath(w, r)
 	if !ok {
@@ -257,6 +285,10 @@ type testChannelParamsRequest struct {
 // TestNotificationChannelParams sends a sample event using ad-hoc config from the
 // create/edit dialog, before the channel is saved. Like the saved-channel test,
 // a delivery error comes back as 200 with ok=false so the UI shows the reason.
+//
+//apidoc:tag platform/notification-channels
+//apidoc:title Test Configs
+//apidoc:order 8
 func (h *Handler) TestNotificationChannelParams(w http.ResponseWriter, r *http.Request) {
 	var req testChannelParamsRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {

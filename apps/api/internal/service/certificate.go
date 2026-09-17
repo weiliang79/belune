@@ -159,6 +159,68 @@ func (s *CertificateService) CreateCertificate(ctx context.Context, name, certPE
 	}, nil
 }
 
+// UsableCertificate is the reduced shape a non-admin may see: enough to pick a
+// certificate and judge whether it is current, and nothing more. It is
+// deliberately NOT CertificateMetadata — that carries Subjects, every SAN the
+// certificate was issued for, which would tell a member the hostnames of other
+// people's applications.
+type UsableCertificate struct {
+	ID       string     `json:"id"`
+	Name     string     `json:"name"`
+	Issuer   string     `json:"issuer"`
+	NotAfter *time.Time `json:"not_after"`
+}
+
+// certificateHostnameCandidates turns a hostname into the subject strings that
+// would cover it: the name itself, plus its one-label wildcard parent.
+//
+// RFC 6125 wildcards match exactly one label and only in the leftmost position,
+// so "*.example.com" covers "app.example.com" but NOT "a.b.example.com" (two
+// labels) and NOT "example.com" (zero). Generating the candidates and comparing
+// for equality keeps that rule here, in one place with a test, rather than in a
+// SQL LIKE pattern where "*" would have to be translated and the label count
+// silently stops being enforced.
+//
+// Comparison is case-insensitive and ignores a trailing root dot, because DNS
+// is — subjects come from the certificate's own DNSNames, whose case is
+// whatever the issuer emitted.
+func certificateHostnameCandidates(hostname string) []string {
+	h := strings.ToLower(strings.TrimSuffix(strings.TrimSpace(hostname), "."))
+	if h == "" {
+		return nil
+	}
+	candidates := []string{h}
+	// A single-label host ("localhost") has no parent to wildcard.
+	if i := strings.Index(h, "."); i > 0 {
+		candidates = append(candidates, "*"+h[i:])
+	}
+	return candidates
+}
+
+// CertificatesForHostname returns the certificates that can serve one hostname.
+// Empty (never an error) for a hostname that resolves to no candidates, so a
+// caller can offer an empty picker rather than special-casing blank input.
+func (s *CertificateService) CertificatesForHostname(ctx context.Context, hostname string) ([]UsableCertificate, error) {
+	candidates := certificateHostnameCandidates(hostname)
+	if len(candidates) == 0 {
+		return []UsableCertificate{}, nil
+	}
+	rows, err := s.queries.ListCertificatesForHostname(ctx, candidates)
+	if err != nil {
+		return nil, fmt.Errorf("list certificates for hostname: %w", err)
+	}
+	out := make([]UsableCertificate, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, UsableCertificate{
+			ID:       uuidString(row.ID),
+			Name:     row.Name,
+			Issuer:   row.Issuer.String,
+			NotAfter: timePtr(row.NotAfter),
+		})
+	}
+	return out, nil
+}
+
 // ListCertificates returns metadata for every stored certificate, with the
 // number of domains referencing each. Key material is never included.
 func (s *CertificateService) ListCertificates(ctx context.Context) ([]CertificateMetadata, error) {

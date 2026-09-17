@@ -2,5 +2,13 @@
   "title": "API",
   "description": "Authenticate and script against Belune's HTTP API.",
   "root": true,
-  "pages": ["access"]
+  "pages": [
+    "index",
+    "overview",
+    "account",
+    "projects",
+    "applications",
+    "databases",
+    "platform"
+  ]
 }

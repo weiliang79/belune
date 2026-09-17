@@ -1,0 +1,8 @@
+{
+  "title": "Profile",
+  "pages": [
+    "me",
+    "get-alert-preferences",
+    "update-alert-preferences"
+  ]
+}

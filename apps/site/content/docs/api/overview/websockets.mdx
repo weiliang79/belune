@@ -1,0 +1,95 @@
+---
+title: WebSockets
+description: Subscribe to live metrics, logs, request traces and status changes over one socket.
+---
+
+Every live view in the dashboard — a build scrolling, a metrics chart moving, a container flipping to `running` — is fed by one WebSocket at `/api/ws`. You open a single connection and subscribe to the channels you care about, and the server pushes messages until you unsubscribe or disconnect.
+
+<Callout type="info">
+OpenAPI describes request/response endpoints, so the reference entry for `GET /api/ws` can only say that the route exists. The protocol itself lives here.
+</Callout>
+
+## Connecting
+
+The socket authenticates exactly like the rest of the API — a personal access token with `read` scope is enough, since `read` is the lowest rung that reaches it:
+
+```bash
+npx wscat -c wss://belune.example.com/api/ws \
+  -H "Authorization: Bearer $BELUNE_TOKEN"
+```
+
+<Callout type="info">
+Use `wss://` on production environment, `ws://` only against a local dev server.
+</Callout>
+
+Two things reject a connection before the upgrade completes:
+
+- **No valid credential** — a `401`, same as any other route.
+- **A disallowed `Origin` header.** Same-origin is always accepted, and anything in `CORS_ORIGINS` is too. Browsers send `Origin` automatically; a script that omits it entirely is unaffected, so this only bites a browser client served from somewhere unexpected.
+
+Browsers cannot set headers on a `WebSocket`, which is why the dashboard authenticates this socket with its session cookie instead. A token is for scripts.
+
+## The Protocol
+
+Every frame is JSON. You send:
+
+```json
+{ "action": "subscribe", "channel": "metrics:host" }
+```
+
+`action` is `subscribe` or `unsubscribe`; anything else is ignored silently, as is an empty `channel`. There is no acknowledgement — a successful subscribe is indistinguishable from an ignored one until a message arrives on that channel.
+
+The server sends:
+
+```json
+{ "channel": "metrics:host", "event": "metrics", "data": { } }
+```
+
+`data` is passed through verbatim from whatever produced it, so its shape depends on the channel. Dispatch on `channel` first, then `event`.
+
+## Channels
+
+| Channel | Event | Carries |
+| --- | --- | --- |
+| `metrics:host` | `metrics` | Host CPU, memory and disk, once per second |
+| `metrics:app:{applicationId}` | `metrics` | One application's container stats, every two seconds |
+| `build-logs:{deploymentId}` | `log`, `done` | Build output, then `done` with `null` data when the build ends |
+| `container-logs:{sourceId}` | `log` | Runtime log lines; `sourceId` is the application or database id |
+| `requests:{applicationId}` | `request` | Proxy request traces for one application |
+| `requests:all` | `request` | Every application's request traces |
+| `container-status:{applicationId}` | `status` | `{ application_id, status }` when an app's container changes state |
+| `database-status:{databaseId}` | `status` | `{ database_id, status }`, the database equivalent |
+
+`build-logs` is the only channel that terminates: it emits `done` with `data: null` when the build finishes. Everything else runs until you unsubscribe.
+
+`metrics:app:{applicationId}` is collected **on demand** — the poller only samples applications that currently have a subscriber, so the first message can take up to two seconds to arrive. Nothing is buffered from before you subscribed, on any channel.
+
+## Example
+
+Tailing a deployment's build output:
+
+```js
+const ws = new WebSocket("wss://belune.example.com/api/ws");
+
+ws.onopen = () =>
+  ws.send(JSON.stringify({ action: "subscribe", channel: `build-logs:${deploymentId}` }));
+
+ws.onmessage = (e) => {
+  const { channel, event, data } = JSON.parse(e.data);
+  if (event === "done") return ws.close();
+  if (event === "log") console.log(data);
+};
+```
+
+## Limits
+
+- **20 concurrent connections per user** by default (`MAX_WEBSOCKET_CONNS_PER_USER`). Past that the socket is accepted and then immediately closed with `1013 Try Again Later` — so handle a close arriving straight after `open`.
+- **Subscribe on one connection, not many.** Channels are cheap; connections are the thing that is capped.
+- **Slow consumers are disconnected.** Each connection has a 64-message buffer, and a client that overflows it ten times in a row is dropped. Reading in a tight loop and processing elsewhere is safer than doing real work inside the message handler, especially on `requests:all` on a busy install.
+- **The server pings every 30 seconds.** Browser and library clients answer automatically; a hand-rolled client must reply to pings or it will be closed as dead.
+
+## What This Socket Cannot Do
+
+It is read-only. `subscribe` and `unsubscribe` are the only actions — nothing here deploys, restarts or writes anything, so a `read`-scoped token is all it ever needs.
+
+The host shell at `/api/ws/terminal/{sessionId}` is a **different** socket with a different protocol, and it requires a live dashboard session — no token reaches it, so it is not part of this reference.

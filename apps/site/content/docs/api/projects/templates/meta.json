@@ -1,0 +1,8 @@
+{
+  "title": "App Templates",
+  "pages": [
+    "list-templates",
+    "get-template",
+    "instantiate-template"
+  ]
+}
