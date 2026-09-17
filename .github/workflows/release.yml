@@ -117,14 +117,37 @@ jobs:
           {
             echo "## What's changed"
             echo
+
+            # Conventional Commits marks a breaking change with `!` before the
+            # colon. Surface those FIRST and on their own, because the type they
+            # carry actively misleads otherwise: a path move is a `refactor!`,
+            # which files under "Internal" — a heading that tells the reader to
+            # skip the entry that renames their endpoints.
+            breaking=$(git log --no-merges --pretty=format:'- %s' "$RANGE" \
+                         | grep -E "^- [a-z]+(\(.+\))?!: " || true)
+            if [ -n "$breaking" ]; then
+              echo "### ⚠️ Breaking changes"
+              echo
+              echo "$breaking" | sed -E "s/^- [a-z]+(\((.+)\))?!: /- \2: /; s/^- : /- /"
+              echo
+              echo "Read [the changelog](https://github.com/${GITHUB_REPOSITORY}/blob/${TAG}/CHANGELOG.md)"
+              echo "before upgrading — it says what breaks and what to change."
+              echo
+            fi
+
             emit() { # $1 = conventional prefix, $2 = heading
               body=$(git log --no-merges --pretty=format:'- %s' "$RANGE" \
                        | grep -E "^- $1(\(.+\))?!?: " || true)
               if [ -n "$body" ]; then
                 echo "### $2"
                 echo
-                # Strip the type prefix; keep any scope for context.
-                echo "$body" | sed -E "s/^- $1(\((.+)\))?!?: /- \2: /; s/^- : /- /"
+                # Strip the type prefix; keep any scope for context. Breaking
+                # entries stay in their own type section too, so each list is
+                # complete — but they keep a marker, since `!` is consumed here.
+                echo "$body" \
+                  | sed -E "s/^- $1(\((.+)\))?!: /- **Breaking** \2: /" \
+                  | sed -E "s/^- $1(\((.+)\))?: /- \2: /" \
+                  | sed -E "s/^- (\*\*Breaking\*\* )?: /- \1/"
                 echo
               fi
             }
