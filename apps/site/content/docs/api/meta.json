@@ -4,7 +4,7 @@
   "root": true,
   "pages": [
     "index",
-    "websockets",
+    "overview",
     "account",
     "projects",
     "applications",

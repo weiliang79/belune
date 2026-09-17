@@ -214,7 +214,7 @@ for (const methods of Object.values(pagesSpec.paths)) {
 // access.mdx on the directory rename; the fix there was marker-based, not a
 // widened allowlist, specifically so the class wouldn't come back). A
 // hand-written subfolder under content/docs/api/ is plausible — index.mdx and
-// websockets.mdx already prove hand-written content lives in this tab — and nothing marks
+// overview/ already prove hand-written content lives in this tab — and nothing marks
 // one as safe to keep, so sweeping "everything" would silently delete it on
 // the next regeneration with no warning and no trace beyond the deletion.
 // Restricting to OWNED still empties a domain that shrinks to nothing
@@ -353,7 +353,7 @@ writeFileSync(
       title: 'API',
       description: "Authenticate and script against Belune's HTTP API.",
       root: true,
-      pages: ['index', 'websockets', ...domainSlugs],
+      pages: ['index', 'overview', ...domainSlugs],
     },
     null,
     2,

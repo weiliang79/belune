@@ -26,7 +26,7 @@ import (
 //apidoc:tag platform
 //apidoc:title Open the Live Updates Socket
 //apidoc:order 4
-//apidoc:description Subscribe to live metrics, logs, request traces and container status over one socket. OpenAPI cannot describe a WebSocket protocol, so the frames, the channel list and the connection limits are documented in the [WebSockets guide](/docs/api/websockets).
+//apidoc:description Subscribe to live metrics, logs, request traces and container status over one socket. OpenAPI cannot describe a WebSocket protocol, so the frames, the channel list and the connection limits are documented in the [WebSockets guide](/docs/api/overview/websockets).
 func (h *Handler) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 	if h.hub == nil {
 		writeError(w, http.StatusServiceUnavailable, "websocket not available")

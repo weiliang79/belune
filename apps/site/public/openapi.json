@@ -13200,7 +13200,7 @@
       "get": {
         "operationId": "HandleWebSocket",
         "summary": "Open the Live Updates Socket",
-        "description": "Subscribe to live metrics, logs, request traces and container status over one socket. OpenAPI cannot describe a WebSocket protocol, so the frames, the channel list and the connection limits are documented in the [WebSockets guide](/docs/api/websockets).",
+        "description": "Subscribe to live metrics, logs, request traces and container status over one socket. OpenAPI cannot describe a WebSocket protocol, so the frames, the channel list and the connection limits are documented in the [WebSockets guide](/docs/api/overview/websockets).",
         "tags": [
           "Platform"
         ],

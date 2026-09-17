@@ -1,0 +1,77 @@
+---
+title: Server-Sent Events
+description: One-way streams you can tail with curl — logs, metrics, request traces and notifications.
+---
+
+Seven endpoints stream with [Server-Sent Events](https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events) rather than returning a body and closing. Each is a plain `GET` that stays open, so `curl` is a complete client — no library, no handshake.
+
+```bash
+curl -N -H "Authorization: Bearer $BELUNE_TOKEN" \
+  "https://belune.example.com/api/projects/$PROJECT_ID/applications/$APP_ID/logs?follow=true"
+```
+
+`-N` disables curl's output buffering, so lines print as they arrive rather than in blocks.
+
+<Callout type="info">
+These are **not** deprecated. An older response header said they were, which was written when the dashboard was the only client; it was removed once personal access tokens made scripting a first-class use. See [Choosing Between the Two](#choosing-between-the-two) for when the [WebSocket hub](/docs/api/overview/websockets) is the better fit.
+</Callout>
+
+## The Streams
+
+| Endpoint | Scope | Carries |
+| --- | --- | --- |
+| `/projects/{p}/applications/{a}/logs` | `read` | Container output — **history, then optionally live** |
+| `/projects/{p}/applications/{a}/deployments/{d}/build-logs` | `read` | Build output for one deployment |
+| `/projects/{p}/applications/{a}/requests/stream` | `read` | Proxy request traces for one application |
+| `/requests/stream` | `read`, Admin | Request traces across every application |
+| `/projects/{p}/applications/{a}/metrics/stream` | `metrics` | One application's container stats |
+| `/metrics/host/stream` | `metrics`, Admin | Host CPU, memory and disk |
+| `/notifications/stream` | `read` | Your notifications as they arrive |
+
+## Frame Format
+
+Every response is `Content-Type: text/event-stream`. Three kinds of frame appear:
+
+```
+data: {"level":"info","message":"listening on :3000"}
+
+event: done
+data: log stream ended
+
+: ping
+```
+
+- **`data:` alone** — the payload, and the common case. Its shape depends on the stream: a raw log line for logs, a JSON object for metrics, request traces and notifications.
+- **`event:` with a name** — a control frame. Only `error` and `done` are used, and only by the two log streams.
+- **`:` comment** — a keep-alive, sent as `: ping` every 30 seconds on the long-lived streams. Ignore it; it exists to hold the connection open through proxies and to force headers to flush.
+
+The two log streams close on their own: `event: done` means the source ended (the build finished, or the container's log ended). The other five run until you disconnect.
+
+## Reading History
+
+`/applications/{id}/logs` is the one stream that is not live-only:
+
+| Request | Behaviour |
+| --- | --- |
+| `GET .../logs` | The container's whole log buffer, then closes |
+| `GET .../logs?follow=true` | The whole buffer, then stays open and tails |
+
+It reads the **container's own** logs, so "history" means whatever Docker still holds for that container — not what Belune has stored. For a bounded, queryable page of retained history instead, use [`.../logs/history`](/docs/api/applications/metrics-logs/list-application-logs), which reads the collector's database and takes filters.
+
+## Choosing Between the Two
+
+Both transports carry live data, but they answer different questions.
+
+**Server-Sent Events** is one stream per thing, over ordinary HTTP. Reach for it when you are scripting: one `curl`, an `Authorization` header, and a pipe. It is also the only way to read a container's log history over the API.
+
+**The [WebSocket hub](/docs/api/overview/websockets)** is one connection carrying many channels, subscribed to and unsubscribed from at will. Reach for it when you want several feeds at once — a dashboard watching metrics, logs and status together — and can afford a WebSocket client.
+
+<Callout type="warn">
+The hub is **live-only**. Nothing is buffered from before you subscribe, on any channel, so it cannot replace `?follow=false` on the log stream.
+</Callout>
+
+One practical difference for browsers: `EventSource` cannot send an `Authorization` header, so in-browser callers authenticate these streams with the dashboard session cookie. A script sending a bearer token has no such limit.
+
+## Limits
+
+The [rate limit](/docs/api#limits-and-errors) applies at connection time, not per frame — an open stream costs one request no matter how much it carries. Each connection holds a server-side reader for as long as it is open, so close streams you are no longer reading.
