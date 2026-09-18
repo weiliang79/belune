@@ -14,36 +14,16 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { CopyButton } from "@/lib/components/copy-button";
-import { useSettings, useUpdateSettings } from "@/lib/hooks/use-settings";
+import { useUpdateSettings } from "@/lib/hooks/use-settings";
+import { useUpdateAvailable } from "@/lib/hooks/use-update-available";
 import {
   useSelfUpdateStatus,
   useTriggerSelfUpdate,
+  useTriggerUpdateCheck,
 } from "@/lib/hooks/use-maintenance";
 import { useTotpStatus } from "@/lib/hooks/use-totp";
 import { useVersion } from "@/lib/hooks/use-version";
 import { formatRelativeTime } from "@/lib/utils/format";
-
-/** "v0.1.7" / "0.1.7" both compare the same — the manifest omits the prefix,
- * the binary's own version (ldflags-stamped) carries it. */
-function stripV(v: string) {
-  return v.startsWith("v") ? v.slice(1) : v;
-}
-
-/** Numeric MAJOR.MINOR.PATCH compare — every published version is this shape,
- * so nothing fancier (pre-release ordering, build metadata) is needed here. */
-function compareVersions(a: string, b: string): number {
-  const pa = stripV(a)
-    .split(".")
-    .map((n) => parseInt(n, 10) || 0);
-  const pb = stripV(b)
-    .split(".")
-    .map((n) => parseInt(n, 10) || 0);
-  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
-    const diff = (pa[i] ?? 0) - (pb[i] ?? 0);
-    if (diff !== 0) return diff;
-  }
-  return 0;
-}
 
 /**
  * Current vs latest published version, sourced from the daily update-check
@@ -57,27 +37,29 @@ function compareVersions(a: string, b: string): number {
  */
 export function UpdateSection() {
   const currentVersion = useVersion();
-  const { data: settings } = useSettings();
+  const update = useUpdateAvailable(true);
   const updateSettings = useUpdateSettings();
   const { data: totpStatus } = useTotpStatus();
   const totpEnabled = totpStatus?.enabled ?? false;
   const triggerUpdate = useTriggerSelfUpdate();
+  const checkNow = useTriggerUpdateCheck();
 
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [password, setPassword] = useState("");
   const [code, setCode] = useState("");
 
-  const setting = (key: string) =>
-    settings?.find((s) => s.key === key)?.value ?? "";
-
-  const latestVersion = setting("update_latest_version");
-  const breaking = setting("update_latest_breaking") === "true";
-  const requiresHostUpdate =
-    setting("update_latest_requires_host_update") === "true";
-  const notesUrl = setting("update_latest_notes_url");
-  const lastCheckedAt = setting("update_last_checked_at");
-  const skipVersion = setting("update_skip_version");
-  const checkEnabled = setting("update_check_enabled") !== "false";
+  // Shared with the sidebar's dot — see useUpdateAvailable for why the
+  // comparison must not be duplicated.
+  const {
+    available: updateAvailable,
+    validCurrent,
+    latestVersion,
+    breaking,
+    requiresHostUpdate,
+    notesUrl,
+    lastCheckedAt,
+    checkEnabled,
+  } = update;
 
   // What became of the last update this dashboard started. POST
   // /maintenance/update answers as soon as the helper container is CREATED,
@@ -85,14 +67,16 @@ export function UpdateSection() {
   // claiming an update is under way forever — which is exactly what it did.
   const { data: attempt } = useSelfUpdateStatus(Boolean(latestVersion));
 
-  // An unstamped local build ("dev") or a page still loading /api/version has
-  // nothing meaningful to compare against.
-  const validCurrent = Boolean(currentVersion) && currentVersion !== "dev";
-  const updateAvailable =
-    validCurrent &&
-    Boolean(latestVersion) &&
-    compareVersions(latestVersion, currentVersion) > 0 &&
-    latestVersion !== skipVersion;
+  const runCheck = () => {
+    toast.promise(checkNow.mutateAsync(), {
+      loading: "Checking for updates…",
+      // The worker fetches after the 202, so the settings refetch this queues
+      // is what actually updates the card — the toast only reports that the
+      // check was accepted, never what it found.
+      success: "Checked for updates",
+      error: (err) => err.message,
+    });
+  };
 
   const toggleCheck = (next: boolean) => {
     toast.promise(
@@ -165,6 +149,17 @@ export function UpdateSection() {
           )}
         </div>
         <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={runCheck}
+            // Off means the toggle promised no outbound request; the API
+            // enforces it too, but a live button that always 400s is worse
+            // than one that is visibly unavailable.
+            disabled={!checkEnabled || checkNow.isPending}
+          >
+            {checkNow.isPending ? "Checking…" : "Check now"}
+          </Button>
           <span className="text-muted-foreground text-xs">
             Check automatically
           </span>

@@ -420,3 +420,36 @@ func TestGetSelfUpdateStatus(t *testing.T) {
 		assert.Equal(t, "failed", body["state"])
 	})
 }
+
+// TestTriggerUpdateCheck covers the on-demand manifest check.
+//
+// ⚠️ It exists because "@every 24h" first activates after a FULL interval, so
+// without it a fresh install reports nothing about updates for its first day,
+// and flipping update_check_enabled on appears to do nothing for just as long —
+// neither distinguishable from the feature being broken.
+func TestTriggerUpdateCheck(t *testing.T) {
+	const path = "/api/maintenance/update/check"
+
+	t.Run("queues the check", func(t *testing.T) {
+		resetDB(t)
+		token := env.SetupAdmin(t, "admin@test.com", "password123")
+
+		resp := env.DoRequest(t, "POST", path, nil, testutil.AuthHeader(token))
+		body := testutil.ReadJSON(t, resp)
+		require.Equal(t, http.StatusAccepted, resp.StatusCode, "%v", body)
+		assert.Equal(t, "queued", body["status"])
+	})
+
+	// The toggle promises no outbound request when off. A manual button that
+	// ignored it would make that promise false, so the API refuses rather than
+	// relying on the UI to disable the control.
+	t.Run("refuses when checks are turned off", func(t *testing.T) {
+		resetDB(t)
+		token := env.SetupAdmin(t, "admin@test.com", "password123")
+		setUpdateSetting(t, "update_check_enabled", "false")
+
+		resp := env.DoRequest(t, "POST", path, nil, testutil.AuthHeader(token))
+		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+		resp.Body.Close()
+	})
+}

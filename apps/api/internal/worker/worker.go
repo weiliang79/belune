@@ -3,6 +3,7 @@ package worker
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"time"
 
@@ -240,6 +241,28 @@ func (w *Worker) StartScheduler() (*asynq.Scheduler, error) {
 	updateCheckTask := asynq.NewTask(TypeUpdateCheck, nil)
 	if _, err := scheduler.Register("@every 24h", updateCheckTask, asynq.Queue("low")); err != nil {
 		return nil, err
+	}
+	// ⚠️ …plus one shortly after boot. "@every 24h" first activates after a FULL
+	// interval, so on its own a fresh install reports nothing about updates for
+	// its first day — indistinguishable, from the dashboard, from the feature
+	// being broken.
+	//
+	// Delayed rather than immediate so a crash-looping control plane does not
+	// hammer belune.dev, and so it lands after the first scheduler tick rather
+	// than racing startup. The task itself re-reads update_check_enabled when it
+	// runs, so an operator who has turned checks off is still not contacted.
+	if w.handler.Enqueuer == nil {
+		slog.Debug("no enqueuer; skipping the boot-time update check")
+	} else if _, err := w.handler.Enqueuer.Enqueue(updateCheckTask,
+		asynq.Queue("low"), asynq.ProcessIn(2*time.Minute), asynq.TaskID("update-check-boot"),
+	); err != nil {
+		// Never fatal: a missed boot check costs at most a day's delay, and the
+		// daily sweep still runs. ⚠️ TaskID makes this idempotent, so a restart
+		// loop enqueues one task, not one per restart — a duplicate is reported
+		// here as asynq.ErrTaskIDConflict and is the EXPECTED case, not a fault.
+		if !errors.Is(err, asynq.ErrTaskIDConflict) {
+			slog.Warn("could not schedule the boot-time update check", "error", err)
+		}
 	}
 
 	slog.Info("starting scheduler (cleanup: 24h, retention: 24h, host-metrics-cleanup: 1h, auth-token-cleanup: 1h, quota-sweep: 6h, backup-rotate: 24h, backup-sched-sweep: 1m, tls-status-sweep: 1m, update-check: 24h)")
