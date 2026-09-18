@@ -565,6 +565,10 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService,
 					// quotes the helper's own output on failure, which is operational
 					// detail about the host, not something a script needs.
 					r.With(middleware.RequireSession()).Get("/api/maintenance/update/status", h.GetSelfUpdateStatus)
+					// On-demand manifest check. Session-gated like its siblings: it
+					// makes this install reach out to belune.dev, which is the
+					// operator's call, not a script's.
+					r.With(middleware.RequireSession()).Post("/api/maintenance/update/check", h.TriggerUpdateCheck)
 					r.Get("/api/quotas", h.ListQuotas)
 					r.Get("/api/quotas/{scope}/{scopeId}", h.GetQuota)
 					r.Put("/api/quotas/{scope}/{scopeId}", h.UpsertQuota)

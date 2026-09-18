@@ -2937,6 +2937,51 @@
         ]
       }
     },
+    "/api/maintenance/update/check": {
+      "post": {
+        "operationId": "TriggerUpdateCheck",
+        "summary": "Check For Updates",
+        "description": "Requires the Admin role.",
+        "tags": [
+          "Maintenance (Admin)"
+        ],
+        "x-belune-roles": [
+          "admin"
+        ],
+        "responses": {
+          "202": {
+            "description": "Accepted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    },
     "/api/maintenance/update/status": {
       "get": {
         "operationId": "GetSelfUpdateStatus",

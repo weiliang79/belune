@@ -485,7 +485,7 @@ func TestGenerateAPIReference(t *testing.T) {
 	// route was added, removed, or re-gated — worth an explicit look either
 	// way, the same reasoning destroy_boundary_test.go and
 	// reveal_boundary_test.go's own sanity floors give for their sets.
-	require.Equal(t, 46, sessionRoutes, "expected exactly 46 RequireSession routes")
+	require.Equal(t, 47, sessionRoutes, "expected exactly 47 RequireSession routes")
 
 	sig, directives, behaviour, reg := apidocExtractTypes(t)
 	apidocAssertEmbedsPromoted(t, reg)

@@ -101,3 +101,10 @@ export type SelfUpdateStatus = {
 export function getSelfUpdateStatus() {
   return api.get<SelfUpdateStatus>("/maintenance/update/status");
 }
+
+/** Run the manifest check now instead of waiting for the daily sweep. 202 —
+ *  the worker fetches after this returns, so poll update_last_checked_at to
+ *  know when the cached values actually moved. */
+export function triggerUpdateCheck() {
+  return api.post<{ status: string }>("/maintenance/update/check", {});
+}

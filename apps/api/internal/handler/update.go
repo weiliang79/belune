@@ -12,11 +12,13 @@ import (
 	"time"
 
 	"github.com/docker/docker/pkg/stdcopy"
+	"github.com/hibiken/asynq"
 	"golang.org/x/mod/semver"
 
 	"github.com/weiliang79/belune/internal/runtime"
 	"github.com/weiliang79/belune/internal/store/generated"
 	"github.com/weiliang79/belune/internal/version"
+	"github.com/weiliang79/belune/internal/worker"
 )
 
 // TriggerSelfUpdate applies the update the Server-page card is currently
@@ -145,6 +147,44 @@ func (h *Handler) TriggerSelfUpdate(w http.ResponseWriter, r *http.Request) {
 		"target": target,
 	})
 }
+
+// TriggerUpdateCheck runs the manifest check on demand instead of waiting for
+// the daily sweep.
+//
+// ⚠️ Without this the check is reachable ONLY via `@every 24h`, whose first
+// activation is after a full interval — so a fresh install reports nothing
+// about updates for its first day, and flipping update_check_enabled on appears
+// to do nothing for just as long. Neither is distinguishable from the feature
+// being broken.
+//
+// Honours update_check_enabled: the toggle promises no outbound request when
+// off, and a manual button that ignored it would make that promise false.
+//
+// POST /api/maintenance/update/check (admin, session-only)
+//
+//apidoc:tag platform/maintenance
+//apidoc:title Check For Updates
+func (h *Handler) TriggerUpdateCheck(w http.ResponseWriter, r *http.Request) {
+	if h.settingValue(r.Context(), settingUpdateCheckEnabled) == "false" {
+		writeError(w, http.StatusBadRequest,
+			"update checks are turned off — enable them first")
+		return
+	}
+	if _, err := h.asynq.Enqueue(asynq.NewTask(worker.TypeUpdateCheck, nil), asynq.Queue("low")); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to queue the update check")
+		return
+	}
+	// 202, not 200: the worker fetches the manifest after this returns, so the
+	// cached values the caller reads back are the PREVIOUS check's until it
+	// lands. The UI polls update_last_checked_at to know when that happened.
+	writeJSON(w, http.StatusAccepted, map[string]string{"status": "queued"})
+}
+
+// settingUpdateCheckEnabled mirrors the worker's constant of the same name.
+// Duplicated rather than exported across the package boundary: the worker owns
+// the key's meaning, and a handler importing worker constants for settings keys
+// would invert that ownership.
+const settingUpdateCheckEnabled = "update_check_enabled"
 
 // The last update attempt, written by TriggerSelfUpdate and read by
 // GetSelfUpdateStatus. Cache keys owned by this package, never writable through

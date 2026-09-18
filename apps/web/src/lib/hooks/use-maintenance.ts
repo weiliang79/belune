@@ -113,3 +113,20 @@ export function useSelfUpdateStatus(enabled: boolean) {
       query.state.data?.state === "running" ? 5_000 : false,
   });
 }
+
+/** Queues an immediate manifest check, then refreshes settings so the card
+ *  picks up the new cached values once the worker has written them. */
+export function useTriggerUpdateCheck() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: maintenanceApi.triggerUpdateCheck,
+    onSuccess: () => {
+      // The worker writes the cache asynchronously; give it a moment before
+      // re-reading, or the card refetches the PREVIOUS check's values and
+      // looks like nothing happened.
+      setTimeout(() => {
+        void qc.invalidateQueries({ queryKey: queryKeys.settings });
+      }, 1500);
+    },
+  });
+}

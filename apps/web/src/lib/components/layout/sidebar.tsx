@@ -26,6 +26,7 @@ import { BRAND } from "@/lib/brand";
 import { BeluneLogo } from "@/lib/components/belune-logo";
 import { useInstanceName } from "@/lib/hooks/use-features";
 import { useVersion } from "@/lib/hooks/use-version";
+import { useUpdateAvailable } from "@/lib/hooks/use-update-available";
 import { initialsOf } from "@/lib/utils/initials";
 import { cn } from "@/lib/utils";
 
@@ -75,6 +76,9 @@ export function Sidebar({ mobileOpen, onMobileClose }: SidebarProps) {
   const isAdmin = user?.role === "admin";
   const instanceName = useInstanceName();
   const version = useVersion();
+  // ⚠️ enabled: isAdmin — the update cache comes from GET /api/settings, which
+  // is admin-only, and this sidebar mounts on every page.
+  const { available: updateAvailable } = useUpdateAvailable(isAdmin);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
 
   // On mobile the drawer is always full-width with labels; on desktop the
@@ -180,8 +184,45 @@ export function Sidebar({ mobileOpen, onMobileClose }: SidebarProps) {
               {instanceName}
             </span>
             <span className="text-text-faint font-mono text-[11px]">
-              {BRAND.name}
-              {version && ` • ${version}`}
+              <a
+                href={BRAND.repoUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="hover:text-foreground transition-colors"
+              >
+                {BRAND.name}
+              </a>
+              {version && (
+                <>
+                  {" • "}
+                  {/* ⚠️ Only a link for an admin: /server is admin-only (see the
+                      nav items above), so for a Member this would point at a
+                      page they cannot open. */}
+                  {isAdmin ? (
+                    <Link
+                      to="/server"
+                      search={{ tab: "configuration" }}
+                      className="hover:text-foreground transition-colors"
+                    >
+                      {version}
+                    </Link>
+                  ) : (
+                    version
+                  )}
+                  {updateAvailable && (
+                    <span
+                      // Steady, not pulsing: this sits in peripheral vision on
+                      // every page until the operator updates, which on a
+                      // self-hosted box can be a long and deliberate wait.
+                      className="bg-status-building ml-1.5 inline-block h-1.5 w-1.5 rounded-full align-middle"
+                      // The dot is the only signal here, so it needs a name of
+                      // its own — the version text beside it does not change.
+                      role="status"
+                      aria-label="A Belune update is available"
+                    />
+                  )}
+                </>
+              )}
             </span>
           </div>
         )}
