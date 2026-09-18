@@ -36,11 +36,7 @@ func (c *Client) SpawnUpdateHelper(ctx context.Context, cfg runtime.UpdateHelper
 			Env:        []string{"BELUNE_DIR=" + cfg.WorkingDir},
 			User:       "0:0",
 			WorkingDir: cfg.WorkingDir,
-			Labels: map[string]string{
-				labelManagedBy:            labelValue,
-				runtime.LabelHelper:       "true",
-				runtime.LabelUpdateHelper: "true",
-			},
+			Labels:     updateHelperLabels(),
 		},
 		&container.HostConfig{
 			Binds: []string{
@@ -58,4 +54,43 @@ func (c *Client) SpawnUpdateHelper(ctx context.Context, cfg runtime.UpdateHelper
 		return "", fmt.Errorf("start update helper: %w", err)
 	}
 	return created.ID, nil
+}
+
+// composeProjectLabel and composeServiceLabel are what Compose uses to decide
+// which containers belong to a service. Named here rather than inlined because
+// the whole point below is that they must NOT be inherited.
+const (
+	composeProjectLabel = "com.docker.compose.project"
+	composeServiceLabel = "com.docker.compose.service"
+)
+
+// updateHelperLabels marks the helper as Belune's, and — the load-bearing half —
+// explicitly clears the Compose labels it would otherwise inherit.
+//
+// ⚠️ A container inherits its IMAGE's labels, and an image built by
+// `docker compose build` carries com.docker.compose.project/service. The helper
+// reuses Belune's own image, so on any install whose image was built that way
+// the helper looks to Compose like a stray container of the belune service —
+// and update.sh runs `docker compose up -d`, which is entitled to remove the
+// excess containers of a service it is recreating. The updater would kill
+// itself, mid-update, right after rewriting .env.
+//
+// The images Belune publishes do not carry these (the Dockerfile sets no LABEL
+// and the release workflow stamps only org.opencontainers.image.*), so today
+// this holds by ABSENCE — nothing enforces it, and a self-hoster who rebuilds
+// locally with `docker compose build` reintroduces exactly the dangerous case.
+// Observed for real in this repo's own devcontainer image, which carries
+// project=infra, service=api.
+//
+// Setting a label to "" overrides the inherited value rather than leaving it
+// (verified against a real image that carries them), which is enough: Compose
+// matches a service by project AND service name, and neither can match now.
+func updateHelperLabels() map[string]string {
+	return map[string]string{
+		labelManagedBy:            labelValue,
+		runtime.LabelHelper:       "true",
+		runtime.LabelUpdateHelper: "true",
+		composeProjectLabel:       "",
+		composeServiceLabel:       "",
+	}
 }
