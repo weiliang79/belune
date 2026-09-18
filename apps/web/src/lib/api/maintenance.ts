@@ -74,3 +74,30 @@ export function restartService(service: RestartableService) {
     `/maintenance/restart?service=${encodeURIComponent(service)}`,
   );
 }
+
+/** Step-up re-auth to apply the update the Server-page card is showing — same
+ *  shape as the host-shell gate: a code is required of anyone with a second
+ *  factor enabled. Triggers a detached helper that replaces this container, so
+ *  a successful call is normally followed by the dashboard's connection
+ *  dropping briefly. */
+export function triggerSelfUpdate(password: string, code?: string) {
+  return api.post<{ status: string; target: string }>("/maintenance/update", {
+    password,
+    ...(code ? { method: "totp", code } : {}),
+  });
+}
+
+/** What became of the last update this dashboard started. Polled while one is
+ *  in flight, because POST /maintenance/update answers as soon as the helper
+ *  container is CREATED — a helper that dies on its first line would otherwise
+ *  leave the UI claiming an update had started, forever. */
+export type SelfUpdateStatus = {
+  state: "idle" | "running" | "failed";
+  target?: string;
+  started_at?: string;
+  reason?: string;
+};
+
+export function getSelfUpdateStatus() {
+  return api.get<SelfUpdateStatus>("/maintenance/update/status");
+}

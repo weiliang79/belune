@@ -57,8 +57,9 @@ jobs:
     runs-on: ubuntu-latest
     needs: verify
     permissions:
-      contents: write # create the GitHub Release
+      contents: write # create the GitHub Release, push the versions.json bump branch
       packages: write # push to GHCR
+      pull-requests: write # open the versions.json PR
 
     steps:
       - uses: actions/checkout@v4
@@ -193,3 +194,109 @@ jobs:
             $PRERELEASE \
             scripts/install.sh \
             scripts/update.sh
+
+      # apps/site/public/versions.json used to be edited by hand at changelog-cut
+      # time — harmless while nothing read it, but the update-check worker
+      # (v0.1.8) reads it daily, and a forgotten bump silently tells every
+      # install it is current forever: no error, just no notification, ever.
+      # Runs from the TAG push (this job), not a merge to main, because the
+      # manifest names a release whose notes_url must already resolve — hence
+      # this step comes after "Create GitHub Release", not before it.
+      #
+      # main requires a PR (protect-main-quality): a plain `git push` here would
+      # just be rejected, and the default GITHUB_TOKEN doesn't get the ruleset's
+      # role-based bypass (that's for the repo owner's own account). So this
+      # opens a PR instead of pushing directly — same door a human edit would use
+      # — and stops there; auto-merge is off for this repo, so it waits for a
+      # human to merge once the required checks pass. continue-on-error: a
+      # failure here (a transient API hiccup, a merge conflict from two tags
+      # landing close together) must not mark an otherwise-successful release
+      # red — the pre-existing fallback (edit versions.json by hand) still
+      # works exactly as it always has.
+      - name: Open a PR bumping versions.json
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+
+          # versions.json only ever names STABLE releases — a prerelease is not
+          # something a self-hoster should be nagged to update to, the same
+          # reasoning the :latest docker tag above is gated on.
+          case "$TAG" in
+            *-*)
+              echo "Prerelease tag — skipping the versions.json bump."
+              exit 0
+              ;;
+          esac
+
+          VERSION="${TAG#v}"
+          PREV=$(git describe --tags --abbrev=0 "${TAG}^" 2>/dev/null || true)
+          RANGE="${TAG}"
+          [ -n "${PREV}" ] && RANGE="${PREV}..${TAG}"
+
+          # Same signal "Build release notes" above already keys its own
+          # "Breaking changes" section off: a Conventional Commits `!` before
+          # the colon. Verified against every released version.json entry to
+          # date (v0.1.0 through v0.1.7) — matches the hand-set flag every time.
+          BREAKING=false
+          if git log --no-merges --pretty=format:'%s' "${RANGE}" \
+               | grep -qE '^[a-z]+(\(.+\))?!: '; then
+            BREAKING=true
+          fi
+
+          # requires_host_update means an in-place `docker compose up -d` is not
+          # enough — the compose file or a systemd unit itself moved. Verified
+          # the same way: matches every past release's hand-set flag exactly.
+          REQUIRES_HOST_UPDATE=false
+          if ! git diff --quiet "${RANGE}" -- infra/docker-compose.prod.yml infra/systemd/ 2>/dev/null; then
+            REQUIRES_HOST_UPDATE=true
+          fi
+
+          NOTES_URL="https://github.com/${GITHUB_REPOSITORY}/releases/tag/${TAG}"
+
+          git fetch origin main
+          BRANCH="bump-versions-json-${TAG}"
+          git checkout -b "${BRANCH}" origin/main
+
+          jq --arg version "${VERSION}" \
+             --argjson breaking "${BREAKING}" \
+             --argjson requires_host_update "${REQUIRES_HOST_UPDATE}" \
+             --arg notes_url "${NOTES_URL}" \
+             '.latest = $version
+              | .releases = [{
+                  version: $version,
+                  breaking: $breaking,
+                  requires_host_update: $requires_host_update,
+                  notes_url: $notes_url
+                }] + .releases' \
+             apps/site/public/versions.json > /tmp/versions.json.next
+          mv /tmp/versions.json.next apps/site/public/versions.json
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add apps/site/public/versions.json
+          git commit -s -m "chore(site): add ${TAG} to versions.json"
+          git push origin "${BRANCH}"
+
+          {
+            echo "Automated — registers ${TAG} in the update-check manifest."
+            echo
+            echo "- \`breaking\`: ${BREAKING}"
+            echo "- \`requires_host_update\`: ${REQUIRES_HOST_UPDATE}"
+            echo
+            echo "Both derived from the same signals the release notes above already"
+            echo "use (a Conventional Commits \`!\` marker, and whether"
+            echo "\`infra/docker-compose.prod.yml\`/\`infra/systemd/\` changed in this"
+            echo "release) — double-check them against the actual release before"
+            echo "merging, the way you would any other hand-set flag."
+            echo
+            echo "Release: https://github.com/${GITHUB_REPOSITORY}/releases/tag/${TAG}"
+          } > pr-body.md
+
+          gh pr create \
+            --base main \
+            --head "${BRANCH}" \
+            --title "chore(site): add ${TAG} to versions.json" \
+            --body-file pr-body.md

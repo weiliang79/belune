@@ -14,6 +14,7 @@ import (
 
 	"github.com/weiliang79/belune/internal/config"
 	"github.com/weiliang79/belune/internal/pkg/netutil"
+	"github.com/weiliang79/belune/internal/runtime"
 )
 
 // platformServices is the allowlist of infrastructure containers whose logs the
@@ -144,6 +145,49 @@ func selfContainerID() string {
 		return host
 	}
 	return ""
+}
+
+// selfContainer resolves this container's own record from the Docker daemon.
+// Shared by selfImage and selfWorkingDir so there is exactly one "find myself"
+// loop rather than one per caller.
+func (h *Handler) selfContainer(ctx context.Context) (runtime.ContainerInfo, bool) {
+	id := selfContainerID()
+	if id == "" {
+		return runtime.ContainerInfo{}, false
+	}
+	rt, err := h.runtimes.Local(ctx)
+	if err != nil {
+		return runtime.ContainerInfo{}, false
+	}
+	all, err := rt.ListAllContainers(ctx)
+	if err != nil {
+		return runtime.ContainerInfo{}, false
+	}
+	for _, c := range all {
+		// selfContainerID may be the full ID (from mountinfo) or the short ID
+		// (hostname fallback); either is a prefix of the daemon's full ID.
+		if strings.HasPrefix(c.ID, id) {
+			return c, true
+		}
+	}
+	return runtime.ContainerInfo{}, false
+}
+
+// selfWorkingDir returns the host path scripts/update.sh must run from —
+// docker-compose.yml, .env and scripts/ all live there — read off this
+// container's own compose project label. Errors when it can't be determined:
+// an update helper with nowhere to mount would silently do nothing, which is
+// worse than refusing up front.
+func (h *Handler) selfWorkingDir(ctx context.Context) (string, error) {
+	c, ok := h.selfContainer(ctx)
+	if !ok {
+		return "", fmt.Errorf("could not find this container's own record")
+	}
+	wd := c.Labels["com.docker.compose.project.working_dir"]
+	if wd == "" {
+		return "", fmt.Errorf("this container has no compose project directory — the in-app updater only works on a docker-compose install")
+	}
+	return wd, nil
 }
 
 // restartableServices is the allowlist for RestartService. Deliberately smaller

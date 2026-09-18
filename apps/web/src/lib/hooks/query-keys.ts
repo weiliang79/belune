@@ -263,6 +263,7 @@ export const queryKeys = {
   maintenanceQueue: ["maintenance", "queue"] as const,
   maintenancePlatformLogs: ["maintenance", "platform-logs"] as const,
   maintenanceServerIP: ["maintenance", "server-ip"] as const,
+  maintenanceUpdateStatus: ["maintenance", "update-status"] as const,
   docker: {
     overview: ["docker", "overview"] as const,
     containers: ["docker", "containers"] as const,

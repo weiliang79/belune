@@ -63,6 +63,10 @@ type TaskHandler struct {
 	AuditLog              auditLogger
 	Notifier              notifier
 	Enqueuer              TaskEnqueuer
+	// UpdateManifestURL overrides defaultUpdateManifestURL. Empty means the
+	// real belune.dev manifest; tests point it at an httptest.Server so the
+	// daily check never makes a real outbound request.
+	UpdateManifestURL string
 }
 
 // runtimeForDatabase and runtimeForApplication resolve the host a resource runs
@@ -155,6 +159,10 @@ func (w *Worker) Start() error {
 	mux.HandleFunc(TypeTLSProbe, func(ctx context.Context, t *asynq.Task) error {
 		return w.handler.HandleTLSProbeTask(ctx, t.Payload())
 	})
+	mux.HandleFunc(TypeUpdateCheck, func(ctx context.Context, t *asynq.Task) error {
+		w.handler.HandleUpdateCheck(ctx)
+		return nil
+	})
 
 	// Reconcile any database left mid-upgrade by a previous crash/restart before
 	// accepting new work — upgrades never auto-retry, so these would otherwise sit
@@ -227,7 +235,14 @@ func (w *Worker) StartScheduler() (*asynq.Scheduler, error) {
 		return nil, err
 	}
 
-	slog.Info("starting scheduler (cleanup: 24h, retention: 24h, host-metrics-cleanup: 1h, auth-token-cleanup: 1h, quota-sweep: 6h, backup-rotate: 24h, backup-sched-sweep: 1m, tls-status-sweep: 1m)")
+	// Daily update-check — fetches belune.dev/versions.json and notifies admins
+	// the first time it finds a version newer than the one running.
+	updateCheckTask := asynq.NewTask(TypeUpdateCheck, nil)
+	if _, err := scheduler.Register("@every 24h", updateCheckTask, asynq.Queue("low")); err != nil {
+		return nil, err
+	}
+
+	slog.Info("starting scheduler (cleanup: 24h, retention: 24h, host-metrics-cleanup: 1h, auth-token-cleanup: 1h, quota-sweep: 6h, backup-rotate: 24h, backup-sched-sweep: 1m, tls-status-sweep: 1m, update-check: 24h)")
 	if err := scheduler.Start(); err != nil {
 		return nil, err
 	}

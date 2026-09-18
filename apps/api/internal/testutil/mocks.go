@@ -30,6 +30,7 @@ type MockContainerRuntime struct {
 
 	// Read-only admin Docker inspect fixtures (nil → empty result).
 	ListAllContainers_    []runtime.ContainerInfo
+	ContainerLogsTail_    string
 	ListSystemContainers_ []runtime.ContainerInfo
 	ListImages_           []runtime.ImageInfo
 	ListVolumes_          []runtime.VolumeInfo
@@ -48,6 +49,13 @@ type MockContainerRuntime struct {
 	// RunHelperFunc, when set, backs RunHelper (volume tar snapshot/restore).
 	// When nil, RunHelper is a no-op returning exit 0.
 	RunHelperFunc func(ctx context.Context, cfg runtime.ContainerConfig, stdin io.Reader, stdout, stderr io.Writer) (int, error)
+	// SpawnUpdateHelperCalls records every SpawnUpdateHelper invocation, so a
+	// test can assert an update was (or was not) triggered without a real
+	// container ever starting.
+	SpawnUpdateHelperCalls []runtime.UpdateHelperConfig
+	// SpawnUpdateHelperErr, when set, is returned by SpawnUpdateHelper instead
+	// of a fake container id.
+	SpawnUpdateHelperErr error
 }
 
 func (m *MockContainerRuntime) CreateContainer(_ context.Context, cfg runtime.ContainerConfig) (string, error) {
@@ -97,8 +105,14 @@ func (m *MockContainerRuntime) ContainerLogsSince(_ context.Context, _ string, _
 	return io.NopCloser(strings.NewReader("")), nil
 }
 
+// ContainerLogsTail_ is the canned tail returned by ContainerLogsTail. Empty
+// keeps the previous behaviour (no output); the update-status handler quotes
+// this to explain WHY an update helper failed, so a test asserting that message
+// needs to seed it.
 func (m *MockContainerRuntime) ContainerLogsTail(_ context.Context, _ string, _ int) (io.ReadCloser, error) {
-	return io.NopCloser(strings.NewReader("")), nil
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return io.NopCloser(strings.NewReader(m.ContainerLogsTail_)), nil
 }
 
 func (m *MockContainerRuntime) ListContainers(_ context.Context) ([]runtime.ContainerInfo, error) {
@@ -271,6 +285,16 @@ func (m *MockContainerRuntime) RunHelper(ctx context.Context, cfg runtime.Contai
 		return m.RunHelperFunc(ctx, cfg, stdin, stdout, stderr)
 	}
 	return 0, nil
+}
+
+func (m *MockContainerRuntime) SpawnUpdateHelper(_ context.Context, cfg runtime.UpdateHelperConfig) (string, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.SpawnUpdateHelperCalls = append(m.SpawnUpdateHelperCalls, cfg)
+	if m.SpawnUpdateHelperErr != nil {
+		return "", m.SpawnUpdateHelperErr
+	}
+	return "mock-update-helper-id", nil
 }
 
 // MockProxyManager implements proxy.ProxyManager for testing.

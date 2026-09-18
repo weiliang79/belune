@@ -163,7 +163,7 @@ func (h *Handler) UpdateSettings(w http.ResponseWriter, r *http.Request) {
 			}
 			req[i].Value = v
 
-		case settingHostShellEnabled, "daily_cleanup_enabled", config.SettingControlPlaneBackupEnabled:
+		case settingHostShellEnabled, "daily_cleanup_enabled", config.SettingControlPlaneBackupEnabled, "update_check_enabled":
 			v, errMsg := validateBooleanSetting(s.Value)
 			if errMsg != "" {
 				writeError(w, http.StatusBadRequest, fmt.Sprintf("invalid %s: %s", s.Key, errMsg))
@@ -175,6 +175,17 @@ func (h *Handler) UpdateSettings(w http.ResponseWriter, r *http.Request) {
 			v, errMsg := validateInstanceNameSetting(s.Value)
 			if errMsg != "" {
 				writeError(w, http.StatusBadRequest, "invalid instance name: "+errMsg)
+				return
+			}
+			req[i].Value = v
+
+		// The version the operator dismissed via "skip this version" on the
+		// Server-page update card. Blank clears the dismissal — same "blank
+		// means unset" convention as every other knob here.
+		case "update_skip_version":
+			v, errMsg := validateSkipVersionSetting(s.Value)
+			if errMsg != "" {
+				writeError(w, http.StatusBadRequest, "invalid update_skip_version: "+errMsg)
 				return
 			}
 			req[i].Value = v
@@ -302,6 +313,13 @@ var updatableSettings = map[string]bool{
 	"audit_log_retention_days":                  true,
 	"orphaned_backup_retention_days":            true,
 	"host_metrics_retention_hours":              true,
+	// ⚠️ update_latest_* and update_last_checked_at are deliberately absent:
+	// they are the update-check worker's own cache (worker/update_check_task.go)
+	// and must never be writable through this endpoint — an admin PAT with
+	// write scope must not be able to spoof "you are already current" by
+	// overwriting what the last manifest fetch found.
+	"update_check_enabled": true,
+	"update_skip_version":  true,
 }
 
 // knownSettingKeys renders the allowlist for an error message, sorted so the
@@ -337,6 +355,18 @@ func validateInstanceNameSetting(raw string) (value, errMsg string) {
 	trimmed := strings.TrimSpace(raw)
 	if len(trimmed) > 200 {
 		return "", "must be 200 characters or fewer"
+	}
+	return trimmed, ""
+}
+
+// validateSkipVersionSetting trims and bounds the dismissed-version string. It
+// does not require a valid semver shape — the worker only ever writes one
+// (from the manifest), and rejecting an operator's hand-typed value here would
+// strand them with no way to silence a card they've already read.
+func validateSkipVersionSetting(raw string) (value, errMsg string) {
+	trimmed := strings.TrimSpace(raw)
+	if len(trimmed) > 50 {
+		return "", "must be 50 characters or fewer"
 	}
 	return trimmed, ""
 }

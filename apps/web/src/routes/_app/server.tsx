@@ -6,6 +6,7 @@ import {
   ClockIcon,
   ContainerIcon,
   CpuIcon,
+  DownloadIcon,
   HardDriveIcon,
   LayoutDashboard,
   MailIcon,
@@ -16,6 +17,7 @@ import {
   WrenchIcon,
 } from "lucide-react";
 import { RouteError } from "@/lib/components/route-error";
+import { UpdateSection } from "@/components/server/update-section";
 import { PageTabs, type PageTab } from "@/components/ui/page-tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -322,6 +324,18 @@ function ServerSettingsPage() {
         <SystemBackupsPanel />
       ) : activeTab === "configuration" ? (
         <div className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <DownloadIcon aria-hidden="true" className="size-4" />
+                Updates
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <UpdateSection />
+            </CardContent>
+          </Card>
+
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">

@@ -32,8 +32,9 @@ const (
 	EventVolumeRestored      = "application.volume_restored"
 	EventVolumeRestoreFailed = "application.volume_restore_failed"
 
-	// EventUpdateAvailable is reserved for the future update mechanism. Nothing
-	// fires it yet, so it is intentionally absent from the served registry.
+	// EventUpdateAvailable fires from the daily update-check worker
+	// (worker/update_check_task.go) the first time a manifest fetch finds a
+	// version newer than the one running — a transition, not every tick.
 	EventUpdateAvailable = "update.available"
 )
 
@@ -53,6 +54,8 @@ var eventRegistry = []EventDef{
 	{Type: EventVolumeBackupFailed, Label: "Volume backup failed", Description: "An application volume backup failed.", Severity: SeverityError, Group: "Volumes"},
 	{Type: EventVolumeRestored, Label: "Volume restored", Description: "An application volume was restored from a backup.", Severity: SeverityOK, Group: "Volumes"},
 	{Type: EventVolumeRestoreFailed, Label: "Volume restore failed", Description: "An application volume restore failed.", Severity: SeverityError, Group: "Volumes"},
+
+	{Type: EventUpdateAvailable, Label: "Update available", Description: "A newer Belune release is available.", Severity: SeverityWarn, Group: "Platform"},
 }
 
 // Events returns the canonical registry (a copy is unnecessary; callers must not

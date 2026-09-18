@@ -13,6 +13,7 @@ import (
 	"github.com/weiliang79/belune/internal/pkg/metrics"
 	"github.com/weiliang79/belune/internal/server/middleware"
 	"github.com/weiliang79/belune/internal/service"
+	"github.com/weiliang79/belune/internal/store/generated"
 )
 
 // settingHostShellEnabled gates the in-UI host shell. Absent or anything other
@@ -58,33 +59,8 @@ func (h *Handler) CreateHostShellSession(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	userID := middleware.UserIDFromContext(r.Context())
-	var uid pgtype.UUID
-	if err := uid.Scan(userID); err != nil {
-		writeError(w, http.StatusUnauthorized, "invalid session")
+	if _, ok := h.stepUpReauth(w, r, req.Password, req.Method, req.Code); !ok {
 		return
-	}
-	user, err := h.queries.GetUserByID(r.Context(), uid)
-	if err != nil {
-		writeError(w, http.StatusUnauthorized, "invalid session")
-		return
-	}
-	if bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.Password)) != nil {
-		writeError(w, http.StatusUnauthorized, "incorrect password")
-		return
-	}
-	if service.HasMFA(user) {
-		if strings.TrimSpace(req.Code) == "" {
-			writeError(w, http.StatusUnauthorized, "verification code required")
-			return
-		}
-		method := req.Method
-		if method == "" {
-			method = service.MethodTOTP
-		}
-		if err := h.totpSvc.Verify(r.Context(), user, method, req.Code); err != nil {
-			writeSecondFactorError(w, err)
-			return
-		}
 	}
 
 	// Run the helper from Belune's own image — it ships nsenter (Debian base) and
@@ -125,24 +101,50 @@ func (h *Handler) CreateHostShellSession(w http.ResponseWriter, r *http.Request)
 // selfImage returns the image reference of Belune's own container, used to run
 // the host-shell helper. Empty when it can't be resolved.
 func (h *Handler) selfImage(ctx context.Context) string {
-	id := selfContainerID()
-	if id == "" {
+	c, ok := h.selfContainer(ctx)
+	if !ok {
 		return ""
 	}
-	rt, err := h.runtimes.Local(ctx)
+	return c.Image
+}
+
+// stepUpReauth re-verifies the caller's password — and, if their account has a
+// second factor enrolled, a verification code too — even though they already
+// hold a valid session. This defends against a hijacked session for the
+// product's highest-privilege actions (host shell, self-update): a stolen
+// password alone should not be enough for either, so anyone with a second
+// factor enrolled must present that as well.
+//
+// On failure it writes the appropriate error response itself and returns
+// ok=false, so callers can just `if _, ok := h.stepUpReauth(...); !ok { return }`.
+func (h *Handler) stepUpReauth(w http.ResponseWriter, r *http.Request, password, method, code string) (user generated.User, ok bool) {
+	userID := middleware.UserIDFromContext(r.Context())
+	var uid pgtype.UUID
+	if err := uid.Scan(userID); err != nil {
+		writeError(w, http.StatusUnauthorized, "invalid session")
+		return generated.User{}, false
+	}
+	user, err := h.queries.GetUserByID(r.Context(), uid)
 	if err != nil {
-		return ""
+		writeError(w, http.StatusUnauthorized, "invalid session")
+		return generated.User{}, false
 	}
-	all, err := rt.ListAllContainers(ctx)
-	if err != nil {
-		return ""
+	if bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password)) != nil {
+		writeError(w, http.StatusUnauthorized, "incorrect password")
+		return generated.User{}, false
 	}
-	for _, c := range all {
-		// selfContainerID may be the full ID (from mountinfo) or the short ID
-		// (hostname fallback); either is a prefix of the daemon's full ID.
-		if strings.HasPrefix(c.ID, id) {
-			return c.Image
+	if service.HasMFA(user) {
+		if strings.TrimSpace(code) == "" {
+			writeError(w, http.StatusUnauthorized, "verification code required")
+			return generated.User{}, false
+		}
+		if method == "" {
+			method = service.MethodTOTP
+		}
+		if err := h.totpSvc.Verify(r.Context(), user, method, code); err != nil {
+			writeSecondFactorError(w, err)
+			return generated.User{}, false
 		}
 	}
-	return ""
+	return user, true
 }
