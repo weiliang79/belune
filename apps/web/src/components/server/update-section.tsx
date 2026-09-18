@@ -15,7 +15,10 @@ import {
 } from "@/components/ui/dialog";
 import { CopyButton } from "@/lib/components/copy-button";
 import { useSettings, useUpdateSettings } from "@/lib/hooks/use-settings";
-import { useTriggerSelfUpdate } from "@/lib/hooks/use-maintenance";
+import {
+  useSelfUpdateStatus,
+  useTriggerSelfUpdate,
+} from "@/lib/hooks/use-maintenance";
 import { useTotpStatus } from "@/lib/hooks/use-totp";
 import { useVersion } from "@/lib/hooks/use-version";
 import { formatRelativeTime } from "@/lib/utils/format";
@@ -29,8 +32,12 @@ function stripV(v: string) {
 /** Numeric MAJOR.MINOR.PATCH compare — every published version is this shape,
  * so nothing fancier (pre-release ordering, build metadata) is needed here. */
 function compareVersions(a: string, b: string): number {
-  const pa = stripV(a).split(".").map((n) => parseInt(n, 10) || 0);
-  const pb = stripV(b).split(".").map((n) => parseInt(n, 10) || 0);
+  const pa = stripV(a)
+    .split(".")
+    .map((n) => parseInt(n, 10) || 0);
+  const pb = stripV(b)
+    .split(".")
+    .map((n) => parseInt(n, 10) || 0);
   for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
     const diff = (pa[i] ?? 0) - (pb[i] ?? 0);
     if (diff !== 0) return diff;
@@ -60,15 +67,23 @@ export function UpdateSection() {
   const [password, setPassword] = useState("");
   const [code, setCode] = useState("");
 
-  const setting = (key: string) => settings?.find((s) => s.key === key)?.value ?? "";
+  const setting = (key: string) =>
+    settings?.find((s) => s.key === key)?.value ?? "";
 
   const latestVersion = setting("update_latest_version");
   const breaking = setting("update_latest_breaking") === "true";
-  const requiresHostUpdate = setting("update_latest_requires_host_update") === "true";
+  const requiresHostUpdate =
+    setting("update_latest_requires_host_update") === "true";
   const notesUrl = setting("update_latest_notes_url");
   const lastCheckedAt = setting("update_last_checked_at");
   const skipVersion = setting("update_skip_version");
   const checkEnabled = setting("update_check_enabled") !== "false";
+
+  // What became of the last update this dashboard started. POST
+  // /maintenance/update answers as soon as the helper container is CREATED,
+  // so without this a helper that dies on its first line leaves the card
+  // claiming an update is under way forever — which is exactly what it did.
+  const { data: attempt } = useSelfUpdateStatus(Boolean(latestVersion));
 
   // An unstamped local build ("dev") or a page still loading /api/version has
   // nothing meaningful to compare against.
@@ -124,7 +139,9 @@ export function UpdateSection() {
           );
         },
         onError: (err) => {
-          toast.error(err instanceof Error ? err.message : "Failed to start the update");
+          toast.error(
+            err instanceof Error ? err.message : "Failed to start the update",
+          );
         },
       },
     );
@@ -135,11 +152,12 @@ export function UpdateSection() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2 text-sm">
           <span className="text-muted-foreground">Running</span>
-          <span className="font-mono font-medium">
-            {currentVersion || "…"}
-          </span>
+          <span className="font-mono font-medium">{currentVersion || "…"}</span>
           {updateAvailable ? (
-            <Badge variant="outline" className="border-status-building-line bg-status-building-soft text-status-building">
+            <Badge
+              variant="outline"
+              className="border-status-building-line bg-status-building-soft text-status-building"
+            >
               Update available
             </Badge>
           ) : (
@@ -162,9 +180,7 @@ export function UpdateSection() {
       {updateAvailable && (
         <div className="space-y-3 rounded-md border p-3">
           <div className="flex flex-wrap items-center gap-2">
-            <p className="text-sm font-medium">
-              v{latestVersion} is available
-            </p>
+            <p className="text-sm font-medium">v{latestVersion} is available</p>
             {breaking && <Badge variant="destructive">Breaking changes</Badge>}
             {requiresHostUpdate && (
               <Badge variant="outline">Requires host update</Badge>
@@ -189,9 +205,33 @@ export function UpdateSection() {
             <CopyButton value="sudo bash scripts/update.sh" />
           </div>
           <p className="text-muted-foreground text-xs">
-            Run from your install directory (e.g. <span className="font-mono">/opt/belune</span>). Takes a
-            backup first, then applies the update.
+            Run from your install directory (e.g.{" "}
+            <span className="font-mono">/opt/belune</span>). Takes a backup
+            first, then applies the update.
           </p>
+
+          {attempt?.state === "failed" && (
+            <div className="bg-status-error-soft ring-status-error-line rounded-md px-3 py-2 ring-1">
+              <p className="text-status-error text-xs font-medium">
+                The last update to v{attempt.target} did not complete.
+              </p>
+              {attempt.reason && (
+                <p className="text-muted-foreground mt-1 font-mono text-xs break-words">
+                  {attempt.reason}
+                </p>
+              )}
+              <p className="text-muted-foreground mt-1 text-xs">
+                This install is still on {currentVersion}. Run the command above
+                on the host to apply it manually.
+              </p>
+            </div>
+          )}
+          {attempt?.state === "running" && (
+            <p className="text-status-building text-xs">
+              An update to v{attempt.target} is running. The dashboard will
+              disconnect briefly when it restarts.
+            </p>
+          )}
 
           {requiresHostUpdate ? (
             <p className="text-status-building text-xs">
@@ -232,10 +272,9 @@ export function UpdateSection() {
             <DialogTitle>Update to v{latestVersion}?</DialogTitle>
             <DialogDescription>
               Re-enter your Belune password to apply this update.
-              {totpEnabled &&
-                " Your authenticator code is required too."} A pre-update
-              backup runs first. The dashboard will be briefly unreachable
-              while it restarts.
+              {totpEnabled && " Your authenticator code is required too."} A
+              pre-update backup runs first. The dashboard will be briefly
+              unreachable while it restarts.
               {breaking &&
                 " This release includes breaking changes — read the release notes before continuing."}
             </DialogDescription>
@@ -269,9 +308,7 @@ export function UpdateSection() {
             <Button
               onClick={applyUpdate}
               disabled={
-                triggerUpdate.isPending ||
-                !password ||
-                (totpEnabled && !code)
+                triggerUpdate.isPending || !password || (totpEnabled && !code)
               }
             >
               {triggerUpdate.isPending ? "Starting…" : "Update now"}

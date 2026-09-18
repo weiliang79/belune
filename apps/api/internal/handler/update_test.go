@@ -30,6 +30,25 @@ func setUpdateSetting(t *testing.T, key, value string) {
 	})
 }
 
+// clearUpdateAttemptSettings removes the update-attempt record TriggerSelfUpdate
+// writes whenever it actually spawns a helper.
+//
+// ⚠️ Any test that reaches the spawn path needs this. resetDB's TruncateAll does
+// not clear the settings table (see setUpdateSetting), so the stored helper id
+// survives into the next test, which then sees a stale attempt and reports
+// "failed" where it expected "idle". Two tests reach that path and neither is
+// obviously about settings — the conflict test's own "does NOT block" subtests
+// succeed on purpose.
+func clearUpdateAttemptSettings(t *testing.T) {
+	t.Helper()
+	t.Cleanup(func() {
+		for _, k := range []string{"update_helper_id", "update_helper_target", "update_helper_started_at"} {
+			_, _ = env.Queries.UpsertSetting(context.Background(),
+				generated.UpsertSettingParams{Key: k, Value: ""})
+		}
+	})
+}
+
 // withVersion overrides the running build's reported version for the duration
 // of the test — go test never sets the ldflags-stamped version.Version, so it
 // is "dev" (an invalid semver) by default, and the "already up to date" /
@@ -161,6 +180,7 @@ func TestTriggerSelfUpdate_SpawnsHelperWithResolvedTarget(t *testing.T) {
 	withVersion(t, "v1.2.3")
 	setUpdateSetting(t, "update_latest_version", "1.3.0")
 	setUpdateSetting(t, "update_latest_requires_host_update", "false")
+	clearUpdateAttemptSettings(t)
 
 	env.Runtime.ListAllContainers_ = []runtime.ContainerInfo{
 		{
@@ -185,6 +205,21 @@ func TestTriggerSelfUpdate_SpawnsHelperWithResolvedTarget(t *testing.T) {
 	assert.Equal(t, "1.3.0", call.Version)
 	assert.Equal(t, "/opt/belune", call.WorkingDir)
 	assert.Equal(t, "ghcr.io/weiliang79/belune:v1.2.3", call.Image)
+
+	// The attempt is recorded, which is what lets GetSelfUpdateStatus report on
+	// a helper that dies immediately instead of the dashboard claiming forever
+	// that an update is under way.
+	//
+	// ⚠️ Cleaned up here because resetDB's TruncateAll does not clear settings
+	// (see setUpdateSetting): without this the stored helper id leaks into the
+	// next test, which then sees a stale attempt and reports "failed" where it
+	// expected "idle". Found by running the suite, not this test alone.
+	ctx := context.Background()
+	for _, k := range []string{"update_helper_id", "update_helper_target", "update_helper_started_at"} {
+		got, err := env.Queries.GetSetting(ctx, k)
+		require.NoError(t, err, "%s must be recorded", k)
+		assert.NotEmpty(t, got.Value, "%s must be recorded", k)
+	}
 }
 
 // TestTriggerSelfUpdate_RefusesWhenAnUpdateIsAlreadyRunning covers the one gate
@@ -231,6 +266,7 @@ func TestTriggerSelfUpdate_RefusesWhenAnUpdateIsAlreadyRunning(t *testing.T) {
 			withVersion(t, "v1.2.3")
 			setUpdateSetting(t, "update_latest_version", "1.3.0")
 			setUpdateSetting(t, "update_latest_requires_host_update", "false")
+			clearUpdateAttemptSettings(t)
 
 			env.Runtime.ListAllContainers_ = []runtime.ContainerInfo{self, tc.extra}
 			env.Runtime.SpawnUpdateHelperCalls = nil
@@ -249,4 +285,101 @@ func TestTriggerSelfUpdate_RefusesWhenAnUpdateIsAlreadyRunning(t *testing.T) {
 			assert.Len(t, env.Runtime.SpawnUpdateHelperCalls, tc.spawned)
 		})
 	}
+}
+
+// TestGetSelfUpdateStatus covers the gap that made a failed update invisible:
+// TriggerSelfUpdate answers 202 the moment the helper container is CREATED and
+// never waits to see whether the script survived, so a helper dying on its
+// first line left the dashboard saying "started" and then showing nothing.
+//
+// ⚠️ The "landed" case is the one that makes this non-trivial. A SUCCESSFUL
+// update also leaves an exited helper behind, so "exited" cannot mean failure
+// on its own — the version has to decide. A successful update replaces this
+// container, so the process answering is the new build, and its version being
+// at or past the target is what proves the update worked.
+func TestGetSelfUpdateStatus(t *testing.T) {
+	const path = "/api/maintenance/update/status"
+
+	t.Run("idle when nothing has been attempted", func(t *testing.T) {
+		resetDB(t)
+		token := env.SetupAdmin(t, "admin@test.com", "password123")
+		resp := env.DoRequest(t, "GET", path, nil, testutil.AuthHeader(token))
+		require.Equal(t, http.StatusOK, resp.StatusCode)
+		assert.Equal(t, "idle", testutil.ReadJSON(t, resp)["state"])
+	})
+
+	t.Run("running while the helper is alive", func(t *testing.T) {
+		resetDB(t)
+		token := env.SetupAdmin(t, "admin@test.com", "password123")
+		withVersion(t, "v1.2.3")
+		setUpdateSetting(t, "update_helper_id", "helper123")
+		setUpdateSetting(t, "update_helper_target", "1.3.0")
+
+		env.Runtime.ListAllContainers_ = []runtime.ContainerInfo{
+			{ID: "helper123", Status: "running"},
+		}
+		t.Cleanup(func() { env.Runtime.ListAllContainers_ = nil })
+
+		body := testutil.ReadJSON(t, env.DoRequest(t, "GET", path, nil, testutil.AuthHeader(token)))
+		assert.Equal(t, "running", body["state"])
+		assert.Equal(t, "1.3.0", body["target"])
+	})
+
+	t.Run("failed when the helper exited and the version never moved", func(t *testing.T) {
+		resetDB(t)
+		token := env.SetupAdmin(t, "admin@test.com", "password123")
+		withVersion(t, "v1.2.3") // still the OLD version — the update did not land
+		setUpdateSetting(t, "update_helper_id", "helper123")
+		setUpdateSetting(t, "update_helper_target", "1.3.0")
+
+		env.Runtime.ListAllContainers_ = []runtime.ContainerInfo{
+			{ID: "helper123", Status: "exited"},
+		}
+		env.Runtime.ContainerLogsTail_ = "bash: scripts/update.sh: No such file or directory\n"
+		t.Cleanup(func() {
+			env.Runtime.ListAllContainers_ = nil
+			env.Runtime.ContainerLogsTail_ = ""
+		})
+
+		body := testutil.ReadJSON(t, env.DoRequest(t, "GET", path, nil, testutil.AuthHeader(token)))
+		assert.Equal(t, "failed", body["state"])
+		// The helper's own output is the only place the cause appears — quoting
+		// it is the whole point, so a generic "it failed" is not enough here.
+		assert.Contains(t, body["reason"], "No such file or directory")
+	})
+
+	t.Run("⚠️ NOT failed when the update landed, though the helper also exited", func(t *testing.T) {
+		resetDB(t)
+		token := env.SetupAdmin(t, "admin@test.com", "password123")
+		withVersion(t, "v1.3.0") // the new build IS the target — it worked
+		setUpdateSetting(t, "update_helper_id", "helper123")
+		setUpdateSetting(t, "update_helper_target", "1.3.0")
+
+		env.Runtime.ListAllContainers_ = []runtime.ContainerInfo{
+			{ID: "helper123", Status: "exited"},
+		}
+		t.Cleanup(func() { env.Runtime.ListAllContainers_ = nil })
+
+		body := testutil.ReadJSON(t, env.DoRequest(t, "GET", path, nil, testutil.AuthHeader(token)))
+		assert.Equal(t, "idle", body["state"],
+			"an exited helper after a SUCCESSFUL update must not be reported as a failure")
+
+		// The record is cleared, so a later unrelated failure cannot inherit it.
+		body = testutil.ReadJSON(t, env.DoRequest(t, "GET", path, nil, testutil.AuthHeader(token)))
+		assert.Equal(t, "idle", body["state"])
+	})
+
+	t.Run("failed when the helper is gone entirely", func(t *testing.T) {
+		resetDB(t)
+		token := env.SetupAdmin(t, "admin@test.com", "password123")
+		withVersion(t, "v1.2.3")
+		setUpdateSetting(t, "update_helper_id", "reaped-long-ago")
+		setUpdateSetting(t, "update_helper_target", "1.3.0")
+
+		env.Runtime.ListAllContainers_ = []runtime.ContainerInfo{}
+		t.Cleanup(func() { env.Runtime.ListAllContainers_ = nil })
+
+		body := testutil.ReadJSON(t, env.DoRequest(t, "GET", path, nil, testutil.AuthHeader(token)))
+		assert.Equal(t, "failed", body["state"])
+	})
 }

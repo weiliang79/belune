@@ -96,3 +96,20 @@ export function useRunCleanup() {
     },
   });
 }
+
+/** Polls the last update attempt while one is in flight.
+ *
+ *  `enabled` is driven by the caller rather than always-on: this is admin-only
+ *  and session-gated, so polling it on every Server-page render would 403 for a
+ *  member and add a request nobody asked for. The 5s interval stops once the
+ *  server reports anything other than "running" — a finished update replaces
+ *  this container anyway, at which point the query refetches on reconnect. */
+export function useSelfUpdateStatus(enabled: boolean) {
+  return useQuery({
+    queryKey: queryKeys.maintenanceUpdateStatus,
+    queryFn: maintenanceApi.getSelfUpdateStatus,
+    enabled,
+    refetchInterval: (query) =>
+      query.state.data?.state === "running" ? 5_000 : false,
+  });
+}

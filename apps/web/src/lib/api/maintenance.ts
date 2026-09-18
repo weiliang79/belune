@@ -86,3 +86,18 @@ export function triggerSelfUpdate(password: string, code?: string) {
     ...(code ? { method: "totp", code } : {}),
   });
 }
+
+/** What became of the last update this dashboard started. Polled while one is
+ *  in flight, because POST /maintenance/update answers as soon as the helper
+ *  container is CREATED — a helper that dies on its first line would otherwise
+ *  leave the UI claiming an update had started, forever. */
+export type SelfUpdateStatus = {
+  state: "idle" | "running" | "failed";
+  target?: string;
+  started_at?: string;
+  reason?: string;
+};
+
+export function getSelfUpdateStatus() {
+  return api.get<SelfUpdateStatus>("/maintenance/update/status");
+}

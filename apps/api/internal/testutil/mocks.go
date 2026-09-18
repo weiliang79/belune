@@ -30,6 +30,7 @@ type MockContainerRuntime struct {
 
 	// Read-only admin Docker inspect fixtures (nil → empty result).
 	ListAllContainers_    []runtime.ContainerInfo
+	ContainerLogsTail_    string
 	ListSystemContainers_ []runtime.ContainerInfo
 	ListImages_           []runtime.ImageInfo
 	ListVolumes_          []runtime.VolumeInfo
@@ -104,8 +105,14 @@ func (m *MockContainerRuntime) ContainerLogsSince(_ context.Context, _ string, _
 	return io.NopCloser(strings.NewReader("")), nil
 }
 
+// ContainerLogsTail_ is the canned tail returned by ContainerLogsTail. Empty
+// keeps the previous behaviour (no output); the update-status handler quotes
+// this to explain WHY an update helper failed, so a test asserting that message
+// needs to seed it.
 func (m *MockContainerRuntime) ContainerLogsTail(_ context.Context, _ string, _ int) (io.ReadCloser, error) {
-	return io.NopCloser(strings.NewReader("")), nil
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return io.NopCloser(strings.NewReader(m.ContainerLogsTail_)), nil
 }
 
 func (m *MockContainerRuntime) ListContainers(_ context.Context) ([]runtime.ContainerInfo, error) {

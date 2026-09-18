@@ -560,6 +560,11 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService,
 					// platform-control action, and a token should never reach even the
 					// "password required" response.
 					r.With(middleware.RequireSession()).Post("/api/maintenance/update", h.TriggerSelfUpdate)
+					// Session-gated like the trigger above rather than left open to a
+					// read-scoped token: it reports whether an update is in flight and
+					// quotes the helper's own output on failure, which is operational
+					// detail about the host, not something a script needs.
+					r.With(middleware.RequireSession()).Get("/api/maintenance/update/status", h.GetSelfUpdateStatus)
 					r.Get("/api/quotas", h.ListQuotas)
 					r.Get("/api/quotas/{scope}/{scopeId}", h.GetQuota)
 					r.Put("/api/quotas/{scope}/{scopeId}", h.UpsertQuota)
