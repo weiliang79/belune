@@ -1,7 +1,9 @@
 package handler_test
 
 import (
+	"bytes"
 	"context"
+	"encoding/binary"
 	"net/http"
 	"os"
 	"regexp"
@@ -28,6 +30,26 @@ func setUpdateSetting(t *testing.T, key, value string) {
 	t.Cleanup(func() {
 		_, _ = env.Queries.UpsertSetting(context.Background(), generated.UpsertSettingParams{Key: key, Value: ""})
 	})
+}
+
+// dockerLogFrames builds a stdcopy-multiplexed stream the way Docker does for a
+// non-TTY container: an 8-byte header per frame (stream id, three zero bytes,
+// then a big-endian length) in front of each line.
+//
+// ⚠️ The length bytes are routinely PRINTABLE ASCII — a 67-byte line puts a
+// literal "C" in the stream — which is why "strip the control characters" looks
+// like it works and does not.
+func dockerLogFrames(lines ...string) string {
+	var buf bytes.Buffer
+	for _, l := range lines {
+		payload := l + "\n"
+		hdr := make([]byte, 8)
+		hdr[0] = 1 // stdout
+		binary.BigEndian.PutUint32(hdr[4:], uint32(len(payload)))
+		buf.Write(hdr)
+		buf.WriteString(payload)
+	}
+	return buf.String()
 }
 
 // clearUpdateAttemptSettings removes the update-attempt record TriggerSelfUpdate
@@ -335,7 +357,15 @@ func TestGetSelfUpdateStatus(t *testing.T) {
 		env.Runtime.ListAllContainers_ = []runtime.ContainerInfo{
 			{ID: "helper123", Status: "exited"},
 		}
-		env.Runtime.ContainerLogsTail_ = "bash: scripts/update.sh: No such file or directory\n"
+		// ⚠️ Framed the way the real daemon frames it, not as a clean string.
+		// A plain string passes whatever parsing you write; the live stream has
+		// TWO layers on top, and an earlier version of this handler mangled
+		// both — the reason reached the UI as
+		// "C2026-…Z   [info]  Updating · R2026-…Z bash: scripts/…".
+		env.Runtime.ContainerLogsTail_ = dockerLogFrames(
+			"2026-09-18T03:56:18.926926951Z   [info]  Updating v1.2.3 -> v1.3.0",
+			"2026-09-18T03:56:18.928660353Z bash: scripts/update.sh: No such file or directory",
+		)
 		t.Cleanup(func() {
 			env.Runtime.ListAllContainers_ = nil
 			env.Runtime.ContainerLogsTail_ = ""
@@ -345,7 +375,14 @@ func TestGetSelfUpdateStatus(t *testing.T) {
 		assert.Equal(t, "failed", body["state"])
 		// The helper's own output is the only place the cause appears — quoting
 		// it is the whole point, so a generic "it failed" is not enough here.
-		assert.Contains(t, body["reason"], "No such file or directory")
+		reason, _ := body["reason"].(string)
+		assert.Contains(t, reason, "bash: scripts/update.sh: No such file or directory")
+		// ...and it must be READABLE. Both framing layers stripped: no stdcopy
+		// length byte surviving as a stray letter, no timestamp prefix left in.
+		assert.NotContains(t, reason, "2026-09-18T03:56",
+			"the RFC3339Nano prefix ContainerLogsTail asks for must be stripped")
+		assert.Regexp(t, `^\[info\]`, reason,
+			"must start at the message, with no stdcopy header residue in front")
 	})
 
 	t.Run("⚠️ NOT failed when the update landed, though the helper also exited", func(t *testing.T) {

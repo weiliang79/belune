@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -10,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/docker/docker/pkg/stdcopy"
 	"golang.org/x/mod/semver"
 
 	"github.com/weiliang79/belune/internal/runtime"
@@ -241,21 +243,29 @@ func updateHelperFailureReason(ctx context.Context, rt runtime.ContainerRuntime,
 	}
 	defer rc.Close()
 
-	out, err := io.ReadAll(io.LimitReader(rc, 8<<10))
-	if err != nil {
+	// ⚠️ Two layers of framing to undo, and getting either wrong puts garbage in
+	// front of the operator rather than an explanation. Verified against a real
+	// failing helper, not a stubbed string — a mocked reader has neither.
+	//
+	// 1. The helper is not a TTY, so the stream is stdcopy-multiplexed: an
+	//    8-byte header per frame whose LENGTH bytes are frequently printable
+	//    ASCII, so they survive any "strip control characters" approach and
+	//    appear as stray letters. Demuxed the same way GetPlatformLogs does.
+	// 2. ContainerLogsTail asks for timestamps on purpose (it is the only thing
+	//    that reads uniformly across platform services), so every line carries
+	//    an RFC3339Nano prefix that its callers strip. Same job here.
+	var buf bytes.Buffer
+	if _, err := stdcopy.StdCopy(&buf, &buf, io.LimitReader(rc, 8<<10)); err != nil && buf.Len() == 0 {
 		return fallback
 	}
 	lines := make([]string, 0, 3)
-	for l := range strings.SplitSeq(string(out), "\n") {
-		// Docker multiplexes logs with an 8-byte stream header per frame; strip
-		// any leading non-printables so the message reads cleanly in a toast.
-		l = strings.TrimSpace(strings.Map(func(r rune) rune {
-			if r < 32 && r != '\t' {
-				return -1
+	for l := range strings.SplitSeq(buf.String(), "\n") {
+		if idx := strings.IndexByte(l, ' '); idx > 0 && idx <= 36 {
+			if _, err := time.Parse(time.RFC3339Nano, l[:idx]); err == nil {
+				l = l[idx+1:]
 			}
-			return r
-		}, l))
-		if l != "" {
+		}
+		if l = strings.TrimSpace(l); l != "" {
 			lines = append(lines, l)
 		}
 	}
