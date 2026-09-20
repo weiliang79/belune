@@ -107,9 +107,7 @@ function DeleteApplicationDialogBody({
       <div className="space-y-2">
         <Label htmlFor={inputId} className="font-normal">
           Type{" "}
-          <span className="text-foreground font-medium">
-            {applicationName}
-          </span>{" "}
+          <span className="text-foreground font-medium">{applicationName}</span>{" "}
           to confirm.
         </Label>
         <Input

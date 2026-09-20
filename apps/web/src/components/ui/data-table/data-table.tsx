@@ -42,7 +42,9 @@ export interface DetailPanelProps<TData> {
   row: Row<TData>;
   table: TableInstance<TData>;
 }
-export type DetailPanelFn<TData> = (props: DetailPanelProps<TData>) => ReactNode;
+export type DetailPanelFn<TData> = (
+  props: DetailPanelProps<TData>,
+) => ReactNode;
 
 export interface CustomViewItemProps<TData> {
   row: Row<TData>;
@@ -152,8 +154,14 @@ export function DataTable<TData, TValue = unknown>({
     return [expander, ...columns];
   }, [columns, renderDetailPanel]);
 
-  const filterControlled = globalFilter !== undefined || columnFilters !== undefined;
+  const filterControlled =
+    globalFilter !== undefined || columnFilters !== undefined;
 
+  // react-hooks/incompatible-library: TanStack Table's returned `table` object
+  // carries methods the compiler can't prove are stable across renders, so it
+  // skips memoizing this hook. That's a correct, permanent call on the
+  // compiler's part, not a bug here — there's no alternative table API that
+  // avoids it without dropping @tanstack/react-table.
   const table = useReactTable<TData>({
     data,
     columns: cols,
@@ -184,7 +192,10 @@ export function DataTable<TData, TValue = unknown>({
       ? { getPaginationRowModel: getPaginationRowModel() }
       : {}),
     ...(renderDetailPanel
-      ? { getExpandedRowModel: getExpandedRowModel(), getRowCanExpand: () => true }
+      ? {
+          getExpandedRowModel: getExpandedRowModel(),
+          getRowCanExpand: () => true,
+        }
       : {}),
     ...(pagination?.mode === "client" && pagination.pageSize
       ? { initialState: { pagination: { pageSize: pagination.pageSize } } }
@@ -196,26 +207,30 @@ export function DataTable<TData, TValue = unknown>({
 
   const footer =
     pagination && (rows.length > 0 || isLoading) ? (
-      <DataTablePagination table={table} pagination={pagination} rowCount={rows.length} />
+      <DataTablePagination
+        table={table}
+        pagination={pagination}
+        rowCount={rows.length}
+      />
     ) : null;
 
   // ---- Card / list view -------------------------------------------------
   if (customView) {
     return (
       <div className={cn("space-y-3", className)}>
-        {isLoading && rows.length === 0
-          ? (customView.loading ?? <DefaultCardSkeleton />)
-          : rows.length === 0
-            ? (customView.empty ?? <EmptyState>{emptyMessage}</EmptyState>)
-            : (
-                <div {...customView.wrapperProps}>
-                  {rows.map((row) => (
-                    <Fragment key={row.id}>
-                      {customView.item({ row, table })}
-                    </Fragment>
-                  ))}
-                </div>
-              )}
+        {isLoading && rows.length === 0 ? (
+          (customView.loading ?? <DefaultCardSkeleton />)
+        ) : rows.length === 0 ? (
+          (customView.empty ?? <EmptyState>{emptyMessage}</EmptyState>)
+        ) : (
+          <div {...customView.wrapperProps}>
+            {rows.map((row) => (
+              <Fragment key={row.id}>
+                {customView.item({ row, table })}
+              </Fragment>
+            ))}
+          </div>
+        )}
         {footer}
       </div>
     );
@@ -249,7 +264,10 @@ export function DataTable<TData, TValue = unknown>({
                         {sorted === "asc" ? (
                           <ChevronUp aria-hidden="true" className="size-3.5" />
                         ) : sorted === "desc" ? (
-                          <ChevronDown aria-hidden="true" className="size-3.5" />
+                          <ChevronDown
+                            aria-hidden="true"
+                            className="size-3.5"
+                          />
                         ) : (
                           <ChevronsUpDown
                             aria-hidden="true"
@@ -294,7 +312,9 @@ export function DataTable<TData, TValue = unknown>({
               <Fragment key={row.id}>
                 <TableRow
                   data-state={row.getIsExpanded() ? "expanded" : undefined}
-                  onClick={onRowClick ? () => onRowClick(row.original) : undefined}
+                  onClick={
+                    onRowClick ? () => onRowClick(row.original) : undefined
+                  }
                   className={cn(
                     onRowClick && "cursor-pointer",
                     rowClassName?.(row.original),
@@ -305,7 +325,10 @@ export function DataTable<TData, TValue = unknown>({
                       key={cell.id}
                       className={cell.column.columnDef.meta?.className}
                     >
-                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                      {flexRender(
+                        cell.column.columnDef.cell,
+                        cell.getContext(),
+                      )}
                     </TableCell>
                   ))}
                 </TableRow>

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 /**
  * Manages an EventSource connection with exponential-backoff reconnection.
@@ -13,7 +13,13 @@ export function useSSEWithReconnect(
 ) {
   const [connected, setConnected] = useState(false);
   const onMessageRef = useRef(onMessage);
-  onMessageRef.current = onMessage;
+  // Layout effect, not a plain assignment: mutating a ref during render is
+  // disallowed (can desync from a discarded render). This still updates
+  // before any EventSource message could fire — synchronously after commit,
+  // before paint — so onMessageRef is never stale when source.onmessage runs.
+  useLayoutEffect(() => {
+    onMessageRef.current = onMessage;
+  });
   const retryCount = useRef(0);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 

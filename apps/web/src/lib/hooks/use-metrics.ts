@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { queryKeys } from "./query-keys";
 import { useChannel } from "./use-websocket";
 import * as metricsApi from "@/lib/api/metrics";
@@ -26,7 +26,8 @@ export function useServerServices() {
 export function useTriggerCleanup() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (retainCount?: number) => metricsApi.triggerCleanup(retainCount),
+    mutationFn: (retainCount?: number) =>
+      metricsApi.triggerCleanup(retainCount),
     onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.metrics }),
   });
 }
@@ -58,7 +59,9 @@ export function useHostMetricsStream(enabled: boolean) {
 
   const handleMessage = useCallback((_event: string, raw: unknown) => {
     try {
-      const point = (typeof raw === "string" ? JSON.parse(raw) : raw) as HostMetricPoint;
+      const point = (
+        typeof raw === "string" ? JSON.parse(raw) : raw
+      ) as HostMetricPoint;
       setData((prev) => {
         const cutoff = new Date(Date.now() - STREAM_WINDOW_MS).toISOString();
         return [...prev, point].filter((p) => p.recorded_at >= cutoff);
@@ -72,9 +75,14 @@ export function useHostMetricsStream(enabled: boolean) {
   const channel = enabled ? "metrics:host" : null;
   const { connected } = useChannel(channel, handleMessage);
 
-  useEffect(() => {
+  // Clears the buffer the moment streaming turns off, applied during render
+  // (React's documented pattern for resetting state from a prop) so it
+  // never shows a stale 30-minute buffer for a frame if re-enabled quickly.
+  const [wasEnabled, setWasEnabled] = useState(enabled);
+  if (enabled !== wasEnabled) {
+    setWasEnabled(enabled);
     if (!enabled) setData([]);
-  }, [enabled]);
+  }
 
   return { data, connected };
 }
@@ -88,7 +96,9 @@ export function useAppMetricsStream(
 
   const handleMessage = useCallback((_event: string, raw: unknown) => {
     try {
-      const point = (typeof raw === "string" ? JSON.parse(raw) : raw) as AppMetricPoint;
+      const point = (
+        typeof raw === "string" ? JSON.parse(raw) : raw
+      ) as AppMetricPoint;
       setData((prev) => {
         const cutoff = new Date(Date.now() - STREAM_WINDOW_MS).toISOString();
         return [...prev, point].filter((p) => p.recorded_at >= cutoff);
@@ -102,9 +112,14 @@ export function useAppMetricsStream(
   const channel = enabled ? `metrics:app:${applicationId}` : null;
   const { connected } = useChannel(channel, handleMessage);
 
-  useEffect(() => {
+  // Clears the buffer the moment streaming turns off, applied during render
+  // (React's documented pattern for resetting state from a prop) so it
+  // never shows a stale 30-minute buffer for a frame if re-enabled quickly.
+  const [wasEnabled, setWasEnabled] = useState(enabled);
+  if (enabled !== wasEnabled) {
+    setWasEnabled(enabled);
     if (!enabled) setData([]);
-  }, [enabled]);
+  }
 
   return { data, connected };
 }

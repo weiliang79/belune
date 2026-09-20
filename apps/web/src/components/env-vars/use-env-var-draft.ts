@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import type { EnvVar, EnvVarInput } from "@/lib/types";
 
 export interface DraftEnvRow {
@@ -42,9 +42,15 @@ function fromServer(v: EnvVar): DraftEnvRow {
 export function useEnvVarDraft(serverVars: EnvVar[] | undefined) {
   const [rows, setRows] = useState<DraftEnvRow[]>([]);
 
-  useEffect(() => {
-    if (serverVars) setRows(serverVars.map(fromServer));
-  }, [serverVars]);
+  // Syncs the draft to a new server snapshot (initial load, or after a
+  // refetch actually changes the list). Applied during render rather than in
+  // an effect — React's documented pattern for resetting state from a prop —
+  // so the draft never briefly shows a stale row after commit.
+  const [syncedServerVars, setSyncedServerVars] = useState(serverVars);
+  if (serverVars && serverVars !== syncedServerVars) {
+    setSyncedServerVars(serverVars);
+    setRows(serverVars.map(fromServer));
+  }
 
   const addRow = useCallback(() => {
     const clientId = crypto.randomUUID();

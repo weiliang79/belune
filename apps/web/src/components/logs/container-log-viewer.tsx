@@ -1,6 +1,9 @@
 import { ClockIcon, LayersIcon, ListIcon } from "lucide-react";
 import { useCallback, useMemo, useRef, useState } from "react";
-import { LevelFilter, type LevelFilterValue } from "@/components/logs/level-filter";
+import {
+  LevelFilter,
+  type LevelFilterValue,
+} from "@/components/logs/level-filter";
 import { LogView } from "@/components/logs/log-view";
 import { stripAnsi, type LogEntry } from "@/components/logs/parse";
 import { Button } from "@/components/ui/button";
@@ -45,7 +48,9 @@ function sessionLabel(s: ContainerLogSession): string {
     if (when) parts.push(formatRelativeTime(when));
     return parts.join(" · ");
   }
-  return when ? `Run · ${formatRelativeTime(when)}` : `Run · ${s.container_id.slice(0, 12)}`;
+  return when
+    ? `Run · ${formatRelativeTime(when)}`
+    : `Run · ${s.container_id.slice(0, 12)}`;
 }
 
 const MAX_LIVE = 5000;
@@ -96,7 +101,11 @@ export function ContainerLogViewer({
   const liveIdRef = useRef(0);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const { data: sessions } = useContainerLogSessions(source, projectId, sourceId);
+  const { data: sessions } = useContainerLogSessions(
+    source,
+    projectId,
+    sourceId,
+  );
 
   // Server-side session filter: one container generation, the "none" bucket, or
   // (for SESSION_ALL) nothing.
@@ -109,11 +118,10 @@ export function ContainerLogViewer({
   }
 
   // Snapshot the lower bound when the range changes (kept stable so the query
-  // key doesn't churn every render).
-  const since = useMemo(() => {
-    const ms = RANGE_MS[timeRange];
-    return ms ? new Date(Date.now() - ms).toISOString() : undefined;
-  }, [timeRange]);
+  // key doesn't churn every render). Computed in the Select's onValueChange
+  // below, not from `timeRange` via useMemo — reading the wall clock during
+  // render is impure; an event handler has no such restriction.
+  const [since, setSince] = useState<string | undefined>(undefined);
 
   const {
     data: history,
@@ -238,7 +246,10 @@ export function ContainerLogViewer({
             value={String(limit)}
             onValueChange={(v) => v && setLimit(Number(v))}
           >
-            <SelectTrigger className="h-8 w-40 capitalize" aria-label="Line limit">
+            <SelectTrigger
+              className="h-8 w-40 capitalize"
+              aria-label="Line limit"
+            >
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -257,9 +268,19 @@ export function ContainerLogViewer({
 
           <Select
             value={timeRange}
-            onValueChange={(v) => v && setTimeRange(v)}
+            onValueChange={(v) => {
+              if (!v) return;
+              setTimeRange(v);
+              const ms = RANGE_MS[v];
+              setSince(
+                ms ? new Date(Date.now() - ms).toISOString() : undefined,
+              );
+            }}
           >
-            <SelectTrigger className="h-8 w-44 capitalize" aria-label="Time range">
+            <SelectTrigger
+              className="h-8 w-44 capitalize"
+              aria-label="Time range"
+            >
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -345,7 +366,9 @@ export function ContainerLogViewer({
             showTimestamp
             showLevel
             isLoading={isLoading}
-            error={error ? `Failed to load log history: ${error.message}` : null}
+            error={
+              error ? `Failed to load log history: ${error.message}` : null
+            }
             emptyMessage={
               filtered
                 ? "No logs match the current filter."

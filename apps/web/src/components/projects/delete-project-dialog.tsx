@@ -77,9 +77,9 @@ function DeleteProjectDialogBody({
       <AlertDialogHeader>
         <AlertDialogTitle>Delete {projectName}?</AlertDialogTitle>
         <AlertDialogDescription>
-          This will permanently delete the project and everything in it —
-          every application and database, their containers and volumes, and
-          all configuration including environment variables, domains, backup
+          This will permanently delete the project and everything in it — every
+          application and database, their containers and volumes, and all
+          configuration including environment variables, domains, backup
           destinations and schedules. This action cannot be undone.
         </AlertDialogDescription>
         {/* Backups are called out separately because they are the one thing
@@ -105,8 +105,8 @@ function DeleteProjectDialogBody({
       <div className="space-y-2">
         <Label htmlFor={inputId} className="font-normal">
           Type{" "}
-          <span className="text-foreground font-medium">{projectName}</span>{" "}
-          to confirm.
+          <span className="text-foreground font-medium">{projectName}</span> to
+          confirm.
         </Label>
         <Input
           id={inputId}
