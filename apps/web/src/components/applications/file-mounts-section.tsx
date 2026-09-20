@@ -1,5 +1,7 @@
 import { useState } from "react";
+import { useForm } from "@tanstack/react-form";
 import { toast } from "sonner";
+import { z } from "zod";
 import { EyeIcon, FileTextIcon, PencilIcon, Trash2Icon } from "lucide-react";
 import {
   useFileMounts,
@@ -42,95 +44,38 @@ interface Props {
   applicationId: string;
 }
 
+function fieldError(errors: unknown[]): string | undefined {
+  const first = errors[0];
+  if (!first) return undefined;
+  return typeof first === "string"
+    ? first
+    : (first as { message?: string }).message;
+}
+
 export function FileMountsSection({ projectId, applicationId }: Props) {
   const { data: mounts, isLoading } = useFileMounts(projectId, applicationId);
-  const createMount = useCreateFileMount(projectId, applicationId);
-  const updateMount = useUpdateFileMount(projectId, applicationId);
   const deleteMount = useDeleteFileMount(projectId, applicationId);
-  const revealMount = useRevealFileMount(projectId, applicationId);
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<FileMount | null>(null);
-  const [mountPath, setMountPath] = useState("");
-  const [content, setContent] = useState("");
-  const [isSecret, setIsSecret] = useState(false);
-  const [fileMode, setFileMode] = useState("");
-  // For a secret mount, content starts hidden; the user reveals it to edit in
-  // place. `revealed` also disambiguates "empty because hidden" (keep stored)
-  // from "explicitly cleared to empty" (replace) on save.
-  const [revealed, setRevealed] = useState(false);
-
   const [removeTarget, setRemoveTarget] = useState<FileMount | null>(null);
 
   const openAdd = () => {
     setEditing(null);
-    setMountPath("");
-    setContent("");
-    setIsSecret(false);
-    setFileMode("");
-    setRevealed(true); // new mount: content is directly editable
     setDialogOpen(true);
   };
 
   const openEdit = (fm: FileMount) => {
     setEditing(fm);
-    setMountPath(fm.mount_path);
-    setContent(fm.content ?? ""); // empty for secrets (masked)
-    setIsSecret(fm.is_secret);
-    setFileMode(fm.file_mode);
-    // Non-secret content is already loaded and editable; secret content stays
-    // hidden until the user reveals it.
-    setRevealed(!fm.is_secret);
     setDialogOpen(true);
-  };
-
-  const reveal = () => {
-    if (!editing) return;
-    toast.promise(
-      revealMount.mutateAsync(editing.id).then((res) => {
-        setContent(res.content);
-        setRevealed(true);
-      }),
-      { loading: "Revealing...", success: "Content revealed", error: (err) => err.message },
-    );
-  };
-
-  const submit = () => {
-    // A hidden (not-yet-revealed) secret means "keep the stored value" — omit
-    // content so the backend preserves it. Once revealed, always send content
-    // (even if the user cleared it to make an empty file).
-    const keepSecret = !!editing && editing.is_secret && !revealed && content === "";
-
-    const promise = editing
-      ? updateMount.mutateAsync({
-          fileMountId: editing.id,
-          is_secret: isSecret,
-          file_mode: fileMode || undefined,
-          ...(keepSecret ? {} : { content }),
-        })
-      : createMount.mutateAsync({
-          mount_path: mountPath,
-          content,
-          is_secret: isSecret,
-          file_mode: fileMode || undefined,
-        });
-
-    toast.promise(
-      promise.then(() => setDialogOpen(false)),
-      {
-        loading: editing ? "Saving..." : "Creating file mount...",
-        success: editing
-          ? "File mount saved — reload the application to apply it"
-          : "File mount created — reload the application to mount it",
-        error: (err) => err.message,
-      },
-    );
   };
 
   const submitRemove = () => {
     if (!removeTarget) return;
     toast.promise(
-      deleteMount.mutateAsync(removeTarget.id).then(() => setRemoveTarget(null)),
+      deleteMount
+        .mutateAsync(removeTarget.id)
+        .then(() => setRemoveTarget(null)),
       {
         loading: "Removing...",
         success: "File mount removed",
@@ -138,8 +83,6 @@ export function FileMountsSection({ projectId, applicationId }: Props) {
       },
     );
   };
-
-  const pending = createMount.isPending || updateMount.isPending;
 
   return (
     <Card>
@@ -170,7 +113,9 @@ export function FileMountsSection({ projectId, applicationId }: Props) {
         ) : !mounts || mounts.length === 0 ? (
           <div className="text-muted-foreground flex flex-col items-center gap-2 rounded-lg border border-dashed p-8 text-center text-sm">
             <FileTextIcon aria-hidden="true" className="size-6" />
-            <p>No file mounts. Add one to inject a config file into this app.</p>
+            <p>
+              No file mounts. Add one to inject a config file into this app.
+            </p>
           </div>
         ) : (
           <div className="space-y-3">
@@ -220,102 +165,15 @@ export function FileMountsSection({ projectId, applicationId }: Props) {
       {/* Add / edit dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent>
-          <DialogHeader>
-            <DialogTitle>
-              {editing ? "Edit File Mount" : "Add File Mount"}
-            </DialogTitle>
-            <DialogDescription>
-              The file is written into the container read-only on the next
-              deploy.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-2">
-            <div className="space-y-1.5">
-              <Label htmlFor="fm-path">Mount path</Label>
-              <Input
-                id="fm-path"
-                placeholder="/etc/app/config.yaml"
-                className="font-mono"
-                value={mountPath}
-                disabled={!!editing}
-                onChange={(e) => setMountPath(e.target.value)}
-              />
-              <p className="text-text-faint text-xs">
-                Absolute file path inside the container, e.g.{" "}
-                <code>/etc/nginx/nginx.conf</code>. The parent directory must
-                exist in the image.
-              </p>
-            </div>
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-between">
-                <Label htmlFor="fm-content">Content</Label>
-                {editing && editing.is_secret && !revealed && (
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="ghost"
-                    className="h-7 gap-1.5 text-xs"
-                    onClick={reveal}
-                    disabled={revealMount.isPending}
-                  >
-                    <EyeIcon aria-hidden="true" className="size-3.5" />
-                    {revealMount.isPending
-                      ? "Revealing..."
-                      : "Reveal current content"}
-                  </Button>
-                )}
-              </div>
-              <Textarea
-                id="fm-content"
-                className="min-h-40 font-mono text-sm"
-                placeholder={
-                  editing && editing.is_secret && !revealed
-                    ? "•••••••• hidden — reveal to edit, or type to replace"
-                    : "file contents..."
-                }
-                value={content}
-                onChange={(e) => setContent(e.target.value)}
-              />
-            </div>
-            <div className="flex items-center justify-between gap-4">
-              <Label className="flex items-center gap-2 text-sm font-normal">
-                <Checkbox
-                  checked={isSecret}
-                  onCheckedChange={setIsSecret}
-                />
-                Secret (mask content in the UI)
-              </Label>
-              <div className="flex items-center gap-2">
-                <Label htmlFor="fm-mode" className="text-sm">
-                  Mode
-                </Label>
-                <Input
-                  id="fm-mode"
-                  className="w-20 font-mono"
-                  placeholder="0644"
-                  value={fileMode}
-                  onChange={(e) => setFileMode(e.target.value)}
-                />
-              </div>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDialogOpen(false)}>
-              Cancel
-            </Button>
-            <Button
-              onClick={submit}
-              disabled={pending || (!editing && !mountPath.trim())}
-            >
-              {pending
-                ? editing
-                  ? "Saving..."
-                  : "Creating..."
-                : editing
-                  ? "Save"
-                  : "Add File"}
-            </Button>
-          </DialogFooter>
+          {/* Keyed so the form re-initializes from the current mount each open,
+              rather than fighting useForm's own defaultValues-sync effect. */}
+          <FileMountForm
+            key={`${editing?.id ?? "new"}-${dialogOpen}`}
+            projectId={projectId}
+            applicationId={applicationId}
+            editing={editing}
+            onClose={() => setDialogOpen(false)}
+          />
         </DialogContent>
       </Dialog>
 
@@ -346,5 +204,243 @@ export function FileMountsSection({ projectId, applicationId }: Props) {
         </AlertDialogContent>
       </AlertDialog>
     </Card>
+  );
+}
+
+function FileMountForm({
+  projectId,
+  applicationId,
+  editing,
+  onClose,
+}: {
+  projectId: string;
+  applicationId: string;
+  editing: FileMount | null;
+  onClose: () => void;
+}) {
+  const createMount = useCreateFileMount(projectId, applicationId);
+  const updateMount = useUpdateFileMount(projectId, applicationId);
+  const revealMount = useRevealFileMount(projectId, applicationId);
+  const pending = createMount.isPending || updateMount.isPending;
+
+  // For a secret mount, content starts hidden; the user reveals it to edit in
+  // place. `revealed` also disambiguates "empty because hidden" (keep stored)
+  // from "explicitly cleared to empty" (replace) on save.
+  const [revealed, setRevealed] = useState(!editing || !editing.is_secret);
+
+  const form = useForm({
+    defaultValues: {
+      mountPath: editing?.mount_path ?? "",
+      content: editing?.content ?? "", // empty for secrets (masked)
+      isSecret: editing?.is_secret ?? false,
+      fileMode: editing?.file_mode ?? "",
+    },
+    onSubmit: ({ value }) => {
+      // A hidden (not-yet-revealed) secret means "keep the stored value" —
+      // omit content so the backend preserves it. Once revealed, always send
+      // content (even if the user cleared it to make an empty file).
+      const keepSecret =
+        !!editing && editing.is_secret && !revealed && value.content === "";
+
+      const promise = editing
+        ? updateMount.mutateAsync({
+            fileMountId: editing.id,
+            is_secret: value.isSecret,
+            file_mode: value.fileMode || undefined,
+            ...(keepSecret ? {} : { content: value.content }),
+          })
+        : createMount.mutateAsync({
+            mount_path: value.mountPath,
+            content: value.content,
+            is_secret: value.isSecret,
+            file_mode: value.fileMode || undefined,
+          });
+
+      toast.promise(promise.then(() => onClose()), {
+        loading: editing ? "Saving..." : "Creating file mount...",
+        success: editing
+          ? "File mount saved — reload the application to apply it"
+          : "File mount created — reload the application to mount it",
+        error: (err) => err.message,
+      });
+    },
+  });
+
+  const reveal = () => {
+    if (!editing) return;
+    toast.promise(
+      revealMount.mutateAsync(editing.id).then((res) => {
+        form.setFieldValue("content", res.content);
+        setRevealed(true);
+      }),
+      {
+        loading: "Revealing...",
+        success: "Content revealed",
+        error: (err) => err.message,
+      },
+    );
+  };
+
+  return (
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        form.handleSubmit();
+      }}
+      className="space-y-4"
+    >
+      <DialogHeader>
+        <DialogTitle>{editing ? "Edit File Mount" : "Add File Mount"}</DialogTitle>
+        <DialogDescription>
+          The file is written into the container read-only on the next
+          deploy.
+        </DialogDescription>
+      </DialogHeader>
+      <div className="space-y-4 py-2">
+        <form.Field
+          name="mountPath"
+          validators={{
+            onChange: z
+              .string()
+              .min(1, "Mount path is required")
+              .refine((v) => v.startsWith("/"), "Must be an absolute path"),
+          }}
+          children={(field) => {
+            const error = fieldError(field.state.meta.errors);
+            return (
+              <div className="space-y-1.5">
+                <Label htmlFor="fm-path">Mount path</Label>
+                <Input
+                  id="fm-path"
+                  placeholder="/etc/app/config.yaml"
+                  className="font-mono"
+                  value={field.state.value}
+                  disabled={!!editing}
+                  onBlur={field.handleBlur}
+                  onChange={(e) => field.handleChange(e.target.value)}
+                />
+                {error ? (
+                  <p className="text-destructive text-xs">{error}</p>
+                ) : (
+                  <p className="text-text-faint text-xs">
+                    Absolute file path inside the container, e.g.{" "}
+                    <code>/etc/nginx/nginx.conf</code>. The parent directory
+                    must exist in the image.
+                  </p>
+                )}
+              </div>
+            );
+          }}
+        />
+        <form.Field
+          name="content"
+          children={(field) => (
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <Label htmlFor="fm-content">Content</Label>
+                {editing && editing.is_secret && !revealed && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    className="h-7 gap-1.5 text-xs"
+                    onClick={reveal}
+                    disabled={revealMount.isPending}
+                  >
+                    <EyeIcon aria-hidden="true" className="size-3.5" />
+                    {revealMount.isPending
+                      ? "Revealing..."
+                      : "Reveal current content"}
+                  </Button>
+                )}
+              </div>
+              <Textarea
+                id="fm-content"
+                className="min-h-40 font-mono text-sm"
+                placeholder={
+                  editing && editing.is_secret && !revealed
+                    ? "•••••••• hidden — reveal to edit, or type to replace"
+                    : "file contents..."
+                }
+                value={field.state.value}
+                onBlur={field.handleBlur}
+                onChange={(e) => field.handleChange(e.target.value)}
+              />
+            </div>
+          )}
+        />
+        <div className="flex items-center justify-between gap-4">
+          <form.Field
+            name="isSecret"
+            children={(field) => (
+              <Label className="flex items-center gap-2 text-sm font-normal">
+                <Checkbox
+                  checked={field.state.value}
+                  onCheckedChange={(v) => field.handleChange(v === true)}
+                />
+                Secret (mask content in the UI)
+              </Label>
+            )}
+          />
+          <form.Field
+            name="fileMode"
+            validators={{
+              onChange: z
+                .string()
+                .refine(
+                  (v) => !v || /^[0-7]{3,4}$/.test(v),
+                  "3-4 octal digits, e.g. 0644",
+                ),
+            }}
+            children={(field) => {
+              const error = fieldError(field.state.meta.errors);
+              return (
+                <div className="flex items-center gap-2">
+                  <Label htmlFor="fm-mode" className="text-sm">
+                    Mode
+                  </Label>
+                  <div>
+                    <Input
+                      id="fm-mode"
+                      className="w-20 font-mono"
+                      placeholder="0644"
+                      value={field.state.value}
+                      onBlur={field.handleBlur}
+                      onChange={(e) => field.handleChange(e.target.value)}
+                    />
+                    {error && (
+                      <p className="text-destructive mt-1 text-xs">{error}</p>
+                    )}
+                  </div>
+                </div>
+              );
+            }}
+          />
+        </div>
+      </div>
+      <DialogFooter>
+        <Button type="button" variant="outline" onClick={onClose}>
+          Cancel
+        </Button>
+        <form.Subscribe
+          selector={(s) => [s.values.mountPath] as const}
+          children={([mountPath]) => (
+            <Button
+              type="submit"
+              disabled={pending || (!editing && !mountPath.trim())}
+            >
+              {pending
+                ? editing
+                  ? "Saving..."
+                  : "Creating..."
+                : editing
+                  ? "Save"
+                  : "Add File"}
+            </Button>
+          )}
+        />
+      </DialogFooter>
+    </form>
   );
 }

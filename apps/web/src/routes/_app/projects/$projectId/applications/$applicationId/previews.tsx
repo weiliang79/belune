@@ -55,6 +55,10 @@ function PreviewsPage() {
   return (
     <div className="space-y-6">
       <ConfigCard
+        // Remounts once the save/disable mutation's invalidation lands, so the
+        // form's defaultValues re-derive from the fresh application record
+        // instead of racing useForm's own defaultValues-sync effect.
+        key={`${application?.preview_branch_pattern ?? ""}-${application?.preview_domain_template ?? ""}`}
         application={application}
         onSave={async (pattern, template) => {
           await toast.promise(
@@ -300,7 +304,6 @@ function ConfigCard({
                     setSaving(true);
                     try {
                       await onSave("", "");
-                      form.reset({ pattern: "", template: "" });
                     } finally {
                       setSaving(false);
                     }
