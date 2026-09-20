@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { useForm } from "@tanstack/react-form";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -41,6 +42,14 @@ interface Props {
   channel?: NotificationChannel | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+}
+
+function fieldError(errors: unknown[]): string | undefined {
+  const first = errors[0];
+  if (!first) return undefined;
+  return typeof first === "string"
+    ? first
+    : (first as { message?: string }).message;
 }
 
 interface FieldDef {
@@ -198,7 +207,6 @@ function ChannelForm({
   const test = useTestNotificationChannelParams();
   const { data: events } = useNotificationEvents();
 
-  const [name, setName] = useState(channel?.name ?? "");
   const [type, setType] = useState<ChannelType>(channel?.type ?? "discord");
   const [selectedEvents, setSelectedEvents] = useState<string[]>(
     channel?.events ?? [],
@@ -306,38 +314,36 @@ function ChannelForm({
     return { config: out };
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!name.trim()) {
-      toast.error("Name is required");
-      return;
-    }
-    const built = buildConfig();
-    if (built.error) {
-      toast.error(built.error);
-      return;
-    }
-    const data: SaveNotificationChannel = {
-      name: name.trim(),
-      type,
-      events: selectedEvents,
-      enabled: channel?.enabled ?? true,
-      ...(built.omit ? {} : { config: built.config }),
-    };
+  const form = useForm({
+    defaultValues: { name: channel?.name ?? "" },
+    onSubmit: ({ value }) => {
+      const built = buildConfig();
+      if (built.error) {
+        toast.error(built.error);
+        return;
+      }
+      const data: SaveNotificationChannel = {
+        name: value.name.trim(),
+        type,
+        events: selectedEvents,
+        enabled: channel?.enabled ?? true,
+        ...(built.omit ? {} : { config: built.config }),
+      };
 
-    const action =
-      editing && channel
-        ? update.mutateAsync({ id: channel.id, data })
-        : create.mutateAsync(data);
-    toast.promise(action, {
-      loading: editing ? "Saving channel…" : "Creating channel…",
-      success: () => {
-        onDone();
-        return editing ? "Channel saved" : "Channel created";
-      },
-      error: (err) => err.message,
-    });
-  };
+      const action =
+        editing && channel
+          ? update.mutateAsync({ id: channel.id, data })
+          : create.mutateAsync(data);
+      toast.promise(action, {
+        loading: editing ? "Saving channel…" : "Creating channel…",
+        success: () => {
+          onDone();
+          return editing ? "Channel saved" : "Channel created";
+        },
+        error: (err) => err.message,
+      });
+    },
+  });
 
   // handleTest delivers a sample event through the current form values. On edit
   // with the config left blank, the backend falls back to the stored config.
@@ -377,20 +383,39 @@ function ChannelForm({
       </DialogHeader>
 
       <form
-        onSubmit={handleSubmit}
+        onSubmit={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          form.handleSubmit();
+        }}
         className="flex min-h-0 flex-1 flex-col gap-4"
       >
         <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pr-1">
-          <div className="space-y-1.5">
-            <Label htmlFor="channel-name">Name</Label>
-            <Input
-              id="channel-name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Ops Discord"
-              required
-            />
-          </div>
+          <form.Field
+            name="name"
+            validators={{
+              onChange: ({ value }) =>
+                value.trim() === "" ? "Name is required" : undefined,
+            }}
+            children={(field) => {
+              const error = fieldError(field.state.meta.errors);
+              return (
+                <div className="space-y-1.5">
+                  <Label htmlFor="channel-name">Name</Label>
+                  <Input
+                    id="channel-name"
+                    value={field.state.value}
+                    onBlur={field.handleBlur}
+                    onChange={(e) => field.handleChange(e.target.value)}
+                    placeholder="Ops Discord"
+                  />
+                  {error && (
+                    <p className="text-destructive text-xs">{error}</p>
+                  )}
+                </div>
+              );
+            }}
+          />
 
           <div className="space-y-1.5">
             <Label>Type</Label>
