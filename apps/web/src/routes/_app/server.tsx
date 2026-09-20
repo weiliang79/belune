@@ -20,6 +20,7 @@ import { RouteError } from "@/lib/components/route-error";
 import { UpdateSection } from "@/components/server/update-section";
 import { PageTabs, type PageTab } from "@/components/ui/page-tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { LiveIndicator } from "@/components/ui/live-indicator";
 import { Button } from "@/components/ui/button";
@@ -139,8 +140,8 @@ function InstanceNameField({
             </Button>
           </div>
           <p className="text-muted-foreground text-xs">
-            Shown in the sidebar and used as the default GitHub App name
-            when connecting a provider.
+            Shown in the sidebar and used as the default GitHub App name when
+            connecting a provider.
           </p>
         </>
       )}
@@ -381,7 +382,7 @@ function ServerSettingsPage() {
     [liveMetrics],
   );
 
-  const { data: settings } = useSettings();
+  const { data: settings, isLoading: settingsLoading } = useSettings();
   const updateSettings = useUpdateSettings();
 
   const handleSaveRetention = (key: string, value: string) => {
@@ -432,105 +433,131 @@ function ServerSettingsPage() {
       {activeTab === "backups" ? (
         <SystemBackupsPanel />
       ) : activeTab === "configuration" ? (
-        <div className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <DownloadIcon aria-hidden="true" className="size-4" />
-                Updates
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <UpdateSection />
-            </CardContent>
-          </Card>
+        <div className="space-y-8">
+          <div className="space-y-4">
+            <p className="text-text-faint text-[10.5px] font-semibold tracking-wider uppercase">
+              Platform
+            </p>
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <ServerIcon aria-hidden="true" className="size-4" />
-                Instance
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              <InstanceNameField
-                key={currentInstanceName}
-                currentValue={currentInstanceName}
-                updateSettings={updateSettings}
-              />
-              <ServerIpField
-                key={currentServerIp}
-                currentValue={currentServerIp}
-                placeholder={serverIP?.effective || "Auto-detect"}
-                updateSettings={updateSettings}
-              />
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <DownloadIcon aria-hidden="true" className="size-4" />
+                  Updates
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <UpdateSection />
+              </CardContent>
+            </Card>
 
-              <div className="border-t pt-4">
-                <DashboardDomainSection />
-              </div>
-            </CardContent>
-          </Card>
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <ServerIcon aria-hidden="true" className="size-4" />
+                  Instance
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                {settingsLoading ? (
+                  <div className="max-w-md space-y-3">
+                    <Skeleton className="h-9 w-full" />
+                    <Skeleton className="h-9 w-full" />
+                  </div>
+                ) : (
+                  // Keyed on the loaded value, not a pre-load placeholder —
+                  // mounting before settings resolves would key on "" first,
+                  // then remount when the real value arrives.
+                  <>
+                    <InstanceNameField
+                      key={currentInstanceName}
+                      currentValue={currentInstanceName}
+                      updateSettings={updateSettings}
+                    />
+                    <ServerIpField
+                      key={currentServerIp}
+                      currentValue={currentServerIp}
+                      placeholder={serverIP?.effective || "Auto-detect"}
+                      updateSettings={updateSettings}
+                    />
+                  </>
+                )}
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <ClockIcon aria-hidden="true" className="size-4" />
-                Metrics Retention
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <RetentionRow
-                field={{
-                  key: "host_metrics_retention_hours",
-                  label: "Host metrics (1-second)",
-                  desc: "CPU / memory / disk time-series",
-                  fallback: "24",
-                }}
-                presets={HOST_METRICS_PRESETS}
-                settings={settings}
-                disabled={updateSettings.isPending}
-                onSave={handleSaveRetention}
-              />
-              {RETENTION_FIELDS.map((field) => (
-                <RetentionRow
-                  key={field.key}
-                  field={field}
-                  presets={RETENTION_PRESETS}
-                  settings={settings}
-                  disabled={updateSettings.isPending}
-                  onSave={handleSaveRetention}
-                />
-              ))}
-              <p className="text-muted-foreground border-t pt-3 text-xs">
-                Host metrics are stored at 1-second granularity and pruned
-                hourly to the selected window. Logs are pruned daily.
-              </p>
-            </CardContent>
-          </Card>
+                <div className="border-t pt-4">
+                  <DashboardDomainSection />
+                </div>
+              </CardContent>
+            </Card>
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <MailIcon aria-hidden="true" className="size-4" />
-                Email (SMTP)
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <SmtpSection />
-            </CardContent>
-          </Card>
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <ClockIcon aria-hidden="true" className="size-4" />
+                  Metrics Retention
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <RetentionRow
+                    field={{
+                      key: "host_metrics_retention_hours",
+                      label: "Host metrics (1-second)",
+                      desc: "CPU / memory / disk time-series",
+                      fallback: "24",
+                    }}
+                    presets={HOST_METRICS_PRESETS}
+                    settings={settings}
+                    disabled={updateSettings.isPending}
+                    onSave={handleSaveRetention}
+                  />
+                  {RETENTION_FIELDS.map((field) => (
+                    <RetentionRow
+                      key={field.key}
+                      field={field}
+                      presets={RETENTION_PRESETS}
+                      settings={settings}
+                      disabled={updateSettings.isPending}
+                      onSave={handleSaveRetention}
+                    />
+                  ))}
+                </div>
+                <p className="text-muted-foreground border-t pt-3 text-xs">
+                  Host metrics are stored at 1-second granularity and pruned
+                  hourly to the selected window. Logs are pruned daily.
+                </p>
+              </CardContent>
+            </Card>
+          </div>
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <WrenchIcon aria-hidden="true" className="size-4" />
-                Maintenance
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <MaintenanceSection />
-            </CardContent>
-          </Card>
+          <div className="space-y-4">
+            <p className="text-text-faint text-[10.5px] font-semibold tracking-wider uppercase">
+              Operations
+            </p>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <MailIcon aria-hidden="true" className="size-4" />
+                  Email (SMTP)
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <SmtpSection />
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <WrenchIcon aria-hidden="true" className="size-4" />
+                  Maintenance
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <MaintenanceSection />
+              </CardContent>
+            </Card>
+          </div>
         </div>
       ) : isLoading ? (
         <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
