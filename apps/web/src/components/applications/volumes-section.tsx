@@ -200,6 +200,7 @@ export function VolumesSection({ projectId, applicationId, canDelete }: Props) {
               e.stopPropagation();
               addForm.handleSubmit();
             }}
+            className="space-y-4"
           >
             <DialogHeader>
               <DialogTitle>Add Volume</DialogTitle>
