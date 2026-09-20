@@ -56,6 +56,8 @@ Frontend mirrors it: `src/lib/api/<resource>.ts` (fetch) → `src/lib/hooks/use-
 
 **Adding a UI component** → reuse `src/components/ui/` (41 shadcn/base-ui primitives, `style: base-nova`, lucide icons). Add via the shadcn skill/CLI rather than pasting; use `Switch` for toggles and `PageTabs` for tabbed pages. **Never hand-roll a `<label>`** — use the `Label` primitive; a raw one silently loses the disabled-state and `select-none` handling `Label` already carries.
 
+**Text on the accent colour** → `text-brand-fg`, never `text-white`. `--brand-fg` is per-accent *and* per-theme — it is near-black on emerald in dark mode, where white fails contrast — so a hardcoded white is wrong in exactly that combination and looks fine in every other. `text-white` is only correct on a fixed surface such as the destructive button's red.
+
 **Building a form** → `@tanstack/react-form` with field validators, never one `useState` per field. The hand-rolled pattern still present in some dialogs is legacy being migrated out — do not copy it into new code, and note those forms have no client-side validation at all, which is the actual cost.
 
 **Committing** → Conventional Commits with a scope (`feat(api,web):`, `fix(deploy):`) and **DCO sign-off**: `git commit -s`. One logical change per commit.
