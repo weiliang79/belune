@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useForm } from "@tanstack/react-form";
 import { toast } from "sonner";
+import { z } from "zod";
 import { Cpu } from "lucide-react";
 import {
   Card,
@@ -14,6 +15,18 @@ import { Label } from "@/components/ui/label";
 import { PendingChangeBadge } from "@/lib/components/pending-change-badge";
 import { useSetResources } from "@/lib/hooks/use-applications";
 import type { Application } from "@/lib/types";
+
+function fieldError(errors: unknown[]): string | undefined {
+  const first = errors[0];
+  if (!first) return undefined;
+  return typeof first === "string"
+    ? first
+    : (first as { message?: string }).message;
+}
+
+const nonNegative = z
+  .string()
+  .refine((v) => v === "" || Number(v) >= 0, "Cannot be negative");
 
 /**
  * CPU and memory limits, split out of the general settings form. Limits are
@@ -32,30 +45,29 @@ export function ResourcesSection({
 }) {
   const setResources = useSetResources(projectId, applicationId);
 
-  const [cpu, setCpu] = useState(application.cpu_limit?.toString() ?? "0");
-  const [memoryMb, setMemoryMb] = useState(
-    Math.round(application.memory_limit / (1024 * 1024)).toString(),
-  );
-
-  const save = () => {
-    const cpuLimit = parseFloat(cpu) || 0;
-    const memMb = parseInt(memoryMb, 10) || 0;
-    if (cpuLimit < 0 || memMb < 0) {
-      toast.error("Limits cannot be negative");
-      return;
-    }
-    toast.promise(
-      setResources.mutateAsync({
-        cpu_limit: cpuLimit,
-        memory_limit: memMb > 0 ? memMb * 1024 * 1024 : 0,
-      }),
-      {
-        loading: "Saving...",
-        success: "Resource limits saved",
-        error: (err) => err.message,
-      },
-    );
-  };
+  const form = useForm({
+    defaultValues: {
+      cpu: application.cpu_limit?.toString() ?? "0",
+      memoryMb: Math.round(
+        application.memory_limit / (1024 * 1024),
+      ).toString(),
+    },
+    onSubmit: ({ value }) => {
+      const cpuLimit = parseFloat(value.cpu) || 0;
+      const memMb = parseInt(value.memoryMb, 10) || 0;
+      toast.promise(
+        setResources.mutateAsync({
+          cpu_limit: cpuLimit,
+          memory_limit: memMb > 0 ? memMb * 1024 * 1024 : 0,
+        }),
+        {
+          loading: "Saving...",
+          success: "Resource limits saved",
+          error: (err) => err.message,
+        },
+      );
+    },
+  });
 
   return (
     <Card>
@@ -69,44 +81,82 @@ export function ResourcesSection({
           limit. Applied when the container is next recreated.
         </CardDescription>
       </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="grid grid-cols-2 gap-4">
-          <div className="space-y-2">
-            <Label>CPU Limit (cores)</Label>
-            <Input
-              type="number"
-              min="0"
-              step="0.1"
-              value={cpu}
-              onChange={(e) => setCpu(e.target.value)}
-              placeholder="0 = unlimited"
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          form.handleSubmit();
+        }}
+      >
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <form.Field
+              name="cpu"
+              validators={{ onChange: nonNegative }}
+              children={(field) => {
+                const error = fieldError(field.state.meta.errors);
+                return (
+                  <div className="space-y-2">
+                    <Label htmlFor="cpu-limit">CPU Limit (cores)</Label>
+                    <Input
+                      id="cpu-limit"
+                      type="number"
+                      min="0"
+                      step="0.1"
+                      value={field.state.value}
+                      onBlur={field.handleBlur}
+                      onChange={(e) => field.handleChange(e.target.value)}
+                      placeholder="0 = unlimited"
+                    />
+                    {error ? (
+                      <p className="text-destructive text-xs">{error}</p>
+                    ) : (
+                      <p className="text-muted-foreground text-xs">
+                        e.g. 0.5 = half a core, 0 = unlimited
+                      </p>
+                    )}
+                  </div>
+                );
+              }}
             />
-            <p className="text-muted-foreground text-xs">
-              e.g. 0.5 = half a core, 0 = unlimited
-            </p>
-          </div>
-          <div className="space-y-2">
-            <Label>Memory Limit (MB)</Label>
-            <Input
-              type="number"
-              min="0"
-              step="64"
-              value={memoryMb}
-              onChange={(e) => setMemoryMb(e.target.value)}
-              placeholder="0 = unlimited"
+            <form.Field
+              name="memoryMb"
+              validators={{ onChange: nonNegative }}
+              children={(field) => {
+                const error = fieldError(field.state.meta.errors);
+                return (
+                  <div className="space-y-2">
+                    <Label htmlFor="memory-limit">Memory Limit (MB)</Label>
+                    <Input
+                      id="memory-limit"
+                      type="number"
+                      min="0"
+                      step="64"
+                      value={field.state.value}
+                      onBlur={field.handleBlur}
+                      onChange={(e) => field.handleChange(e.target.value)}
+                      placeholder="0 = unlimited"
+                    />
+                    {error ? (
+                      <p className="text-destructive text-xs">{error}</p>
+                    ) : (
+                      <p className="text-muted-foreground text-xs">
+                        e.g. 512 = 512 MB, 0 = unlimited
+                      </p>
+                    )}
+                  </div>
+                );
+              }}
             />
-            <p className="text-muted-foreground text-xs">
-              e.g. 512 = 512 MB, 0 = unlimited
-            </p>
           </div>
-        </div>
-        <div className="flex items-center justify-end gap-3">
-          <PendingChangeBadge app={application} className="mr-auto" />
-          <Button onClick={save} disabled={setResources.isPending}>
-            {setResources.isPending ? "Saving..." : "Save"}
-          </Button>
-        </div>
-      </CardContent>
+          <div className="flex items-center justify-end gap-3">
+            <PendingChangeBadge app={application} className="mr-auto" />
+            <Button type="submit" disabled={setResources.isPending}>
+              {setResources.isPending ? "Saving..." : "Save"}
+            </Button>
+          </div>
+        </CardContent>
+      </form>
     </Card>
   );
 }
