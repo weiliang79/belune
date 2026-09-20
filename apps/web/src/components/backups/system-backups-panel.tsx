@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useForm } from "@tanstack/react-form";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
@@ -72,6 +73,14 @@ const RUNS_PAGE_SIZE = 10;
 // handler/settings.go) — client-side just gives immediate feedback.
 const RETAIN_DAYS_MAX = 3650;
 const RETAIN_COUNT_MAX = 1000;
+
+function fieldError(errors: unknown[]): string | undefined {
+  const first = errors[0];
+  if (!first) return undefined;
+  return typeof first === "string"
+    ? first
+    : (first as { message?: string }).message;
+}
 
 /** "YYYY-MM-DD HH:mm:ss" for table cells (null-safe). */
 function fmtTableDate(iso: string | null) {
@@ -678,57 +687,47 @@ function RetentionSection({
   const updateSettings = useUpdateSettings();
   const qc = useQueryClient();
 
-  const [days, setDays] = useState(String(retention?.days ?? 30));
-  const [count, setCount] = useState(String(retention?.count ?? 14));
+  const form = useForm({
+    defaultValues: {
+      days: String(retention?.days ?? 30),
+      count: String(retention?.count ?? 14),
+    },
+    onSubmit: ({ value }) => {
+      toast.promise(
+        updateSettings
+          .mutateAsync([
+            {
+              key: "control_plane_backup_retain_days",
+              value: String(Number(value.days)),
+            },
+            {
+              key: "control_plane_backup_retain_count",
+              value: String(Number(value.count)),
+            },
+          ])
+          // Retention's effective value is surfaced via /backups/status (the
+          // summary card), a different query than the generic settings list —
+          // useUpdateSettings only invalidates the latter, so nudge this one too.
+          .then(() =>
+            qc.invalidateQueries({ queryKey: queryKeys.backups.status }),
+          ),
+        {
+          loading: "Saving…",
+          success: "Retention updated",
+          error: (err) => err.message ?? "Failed to save",
+        },
+      );
+    },
+  });
 
-  const handleSave = () => {
-    const daysNum = Number(days);
-    const countNum = Number(count);
-    if (
-      !Number.isInteger(daysNum) ||
-      daysNum < 1 ||
-      daysNum > RETAIN_DAYS_MAX
-    ) {
-      toast.error(
-        `Days must be a whole number between 1 and ${RETAIN_DAYS_MAX}`,
-      );
-      return;
-    }
-    if (
-      !Number.isInteger(countNum) ||
-      countNum < 1 ||
-      countNum > RETAIN_COUNT_MAX
-    ) {
-      toast.error(
-        `Count must be a whole number between 1 and ${RETAIN_COUNT_MAX}`,
-      );
-      return;
-    }
-    toast.promise(
-      updateSettings
-        .mutateAsync([
-          {
-            key: "control_plane_backup_retain_days",
-            value: String(daysNum),
-          },
-          {
-            key: "control_plane_backup_retain_count",
-            value: String(countNum),
-          },
-        ])
-        // Retention's effective value is surfaced via /backups/status (the
-        // summary card), a different query than the generic settings list —
-        // useUpdateSettings only invalidates the latter, so nudge this one too.
-        .then(() =>
-          qc.invalidateQueries({ queryKey: queryKeys.backups.status }),
-        ),
-      {
-        loading: "Saving…",
-        success: "Retention updated",
-        error: (err) => err.message ?? "Failed to save",
-      },
-    );
-  };
+  const validateRange =
+    (max: number, label: string) =>
+    ({ value }: { value: string }) => {
+      const n = Number(value);
+      return Number.isInteger(n) && n >= 1 && n <= max
+        ? undefined
+        : `${label} must be a whole number between 1 and ${max}`;
+    };
 
   return (
     <div className="space-y-3">
@@ -740,34 +739,60 @@ function RetentionSection({
         How long control-plane backups are kept, locally and off-host.
       </p>
       <div className="grid grid-cols-2 gap-3">
-        <div className="space-y-1.5">
-          <Label htmlFor="retain-days">Keep for (days)</Label>
-          <Input
-            id="retain-days"
-            type="number"
-            min={1}
-            max={RETAIN_DAYS_MAX}
-            value={days}
-            onChange={(e) => setDays(e.target.value)}
-          />
-        </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="retain-count">Keep at least (count)</Label>
-          <Input
-            id="retain-count"
-            type="number"
-            min={1}
-            max={RETAIN_COUNT_MAX}
-            value={count}
-            onChange={(e) => setCount(e.target.value)}
-          />
-        </div>
+        <form.Field
+          name="days"
+          validators={{ onChange: validateRange(RETAIN_DAYS_MAX, "Days") }}
+          children={(field) => {
+            const error = fieldError(field.state.meta.errors);
+            return (
+              <div className="space-y-1.5">
+                <Label htmlFor="retain-days">Keep for (days)</Label>
+                <Input
+                  id="retain-days"
+                  type="number"
+                  min={1}
+                  max={RETAIN_DAYS_MAX}
+                  value={field.state.value}
+                  onBlur={field.handleBlur}
+                  onChange={(e) => field.handleChange(e.target.value)}
+                />
+                {error && (
+                  <p className="text-destructive text-xs">{error}</p>
+                )}
+              </div>
+            );
+          }}
+        />
+        <form.Field
+          name="count"
+          validators={{ onChange: validateRange(RETAIN_COUNT_MAX, "Count") }}
+          children={(field) => {
+            const error = fieldError(field.state.meta.errors);
+            return (
+              <div className="space-y-1.5">
+                <Label htmlFor="retain-count">Keep at least (count)</Label>
+                <Input
+                  id="retain-count"
+                  type="number"
+                  min={1}
+                  max={RETAIN_COUNT_MAX}
+                  value={field.state.value}
+                  onBlur={field.handleBlur}
+                  onChange={(e) => field.handleChange(e.target.value)}
+                />
+                {error && (
+                  <p className="text-destructive text-xs">{error}</p>
+                )}
+              </div>
+            );
+          }}
+        />
       </div>
       <div className="flex justify-end">
         <Button
           size="sm"
           variant="outline"
-          onClick={handleSave}
+          onClick={() => form.handleSubmit()}
           disabled={updateSettings.isPending}
         >
           {updateSettings.isPending ? "Saving…" : "Save"}
@@ -792,43 +817,46 @@ function RemoteStorageSection({ remote }: { remote: BackupRemoteConfig | null })
   const test = useTestBackupRemote();
 
   const [enabled, setEnabled] = useState(!!remote);
-  const [endpoint, setEndpoint] = useState(remote?.endpoint ?? "");
-  const [region, setRegion] = useState(remote?.region ?? "us-east-1");
-  const [bucket, setBucket] = useState(remote?.bucket ?? "");
-  const [prefix, setPrefix] = useState(remote?.prefix ?? "belune/");
-  const [useSSL, setUseSSL] = useState(remote?.use_ssl ?? true);
-  const [accessKey, setAccessKey] = useState("");
-  const [secretKey, setSecretKey] = useState("");
 
-  const buildData = (enabledOverride: boolean = enabled) => ({
-    enabled: enabledOverride,
-    endpoint: endpoint.trim(),
-    region: region.trim() || "us-east-1",
-    bucket: bucket.trim(),
-    prefix: prefix.trim(),
-    use_ssl: useSSL,
-    // Blank preserves the stored secret — never redisplayed once saved.
-    access_key: accessKey || undefined,
-    secret_key: secretKey || undefined,
+  const form = useForm({
+    defaultValues: {
+      endpoint: remote?.endpoint ?? "",
+      region: remote?.region ?? "us-east-1",
+      bucket: remote?.bucket ?? "",
+      prefix: remote?.prefix ?? "belune/",
+      useSSL: remote?.use_ssl ?? true,
+      accessKey: "",
+      secretKey: "",
+    },
+    onSubmit: ({ value }) => {
+      toast.promise(
+        update.mutateAsync(buildData(true, value)).then(() => {
+          form.setFieldValue("accessKey", "");
+          form.setFieldValue("secretKey", "");
+        }),
+        {
+          loading: "Saving…",
+          success: "Remote storage saved",
+          error: (err) => err.message ?? "Failed to save",
+        },
+      );
+    },
   });
 
-  const handleSave = () => {
-    if (!bucket.trim()) {
-      toast.error("Bucket is required to enable remote storage");
-      return;
-    }
-    toast.promise(
-      update.mutateAsync(buildData()).then(() => {
-        setAccessKey("");
-        setSecretKey("");
-      }),
-      {
-        loading: "Saving…",
-        success: "Remote storage saved",
-        error: (err) => err.message ?? "Failed to save",
-      },
-    );
-  };
+  const buildData = (
+    enabledOverride: boolean,
+    value: typeof form.state.values,
+  ) => ({
+    enabled: enabledOverride,
+    endpoint: value.endpoint.trim(),
+    region: value.region.trim() || "us-east-1",
+    bucket: value.bucket.trim(),
+    prefix: value.prefix.trim(),
+    use_ssl: value.useSSL,
+    // Blank preserves the stored secret — never redisplayed once saved.
+    access_key: value.accessKey || undefined,
+    secret_key: value.secretKey || undefined,
+  });
 
   const handleTest = () => {
     toast.promise(test.mutateAsync(), {
@@ -845,9 +873,9 @@ function RemoteStorageSection({ remote }: { remote: BackupRemoteConfig | null })
     setEnabled(next);
     if (next) return;
     toast.promise(
-      update.mutateAsync(buildData(false)).then(() => {
-        setAccessKey("");
-        setSecretKey("");
+      update.mutateAsync(buildData(false, form.state.values)).then(() => {
+        form.setFieldValue("accessKey", "");
+        form.setFieldValue("secretKey", "");
       }),
       {
         loading: "Disabling…",
@@ -872,76 +900,127 @@ function RemoteStorageSection({ remote }: { remote: BackupRemoteConfig | null })
       {enabled && (
         <>
           <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <Label htmlFor="remote-bucket">Bucket</Label>
-              <Input
-                id="remote-bucket"
-                value={bucket}
-                onChange={(e) => setBucket(e.target.value)}
-                placeholder="my-belune-backups"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="remote-region">Region</Label>
-              <Input
-                id="remote-region"
-                value={region}
-                onChange={(e) => setRegion(e.target.value)}
-                placeholder="us-east-1"
-              />
-            </div>
-          </div>
-
-          <div className="space-y-1.5">
-            <Label htmlFor="remote-endpoint">Endpoint</Label>
-            <Input
-              id="remote-endpoint"
-              value={endpoint}
-              onChange={(e) => setEndpoint(e.target.value)}
-              placeholder="Empty = AWS S3. Set for MinIO/R2/B2/Wasabi (host:port, no scheme)"
+            <form.Field
+              name="bucket"
+              validators={{
+                onChange: ({ value }) =>
+                  value.trim() === ""
+                    ? "Bucket is required to enable remote storage"
+                    : undefined,
+              }}
+              children={(field) => {
+                const error = fieldError(field.state.meta.errors);
+                return (
+                  <div className="space-y-1.5">
+                    <Label htmlFor="remote-bucket">Bucket</Label>
+                    <Input
+                      id="remote-bucket"
+                      value={field.state.value}
+                      onBlur={field.handleBlur}
+                      onChange={(e) => field.handleChange(e.target.value)}
+                      placeholder="my-belune-backups"
+                    />
+                    {error && (
+                      <p className="text-destructive text-xs">{error}</p>
+                    )}
+                  </div>
+                );
+              }}
+            />
+            <form.Field
+              name="region"
+              children={(field) => (
+                <div className="space-y-1.5">
+                  <Label htmlFor="remote-region">Region</Label>
+                  <Input
+                    id="remote-region"
+                    value={field.state.value}
+                    onChange={(e) => field.handleChange(e.target.value)}
+                    placeholder="us-east-1"
+                  />
+                </div>
+              )}
             />
           </div>
 
-          <div className="space-y-1.5">
-            <Label htmlFor="remote-prefix">Prefix</Label>
-            <Input
-              id="remote-prefix"
-              value={prefix}
-              onChange={(e) => setPrefix(e.target.value)}
-              placeholder="belune/"
-            />
-          </div>
+          <form.Field
+            name="endpoint"
+            children={(field) => (
+              <div className="space-y-1.5">
+                <Label htmlFor="remote-endpoint">Endpoint</Label>
+                <Input
+                  id="remote-endpoint"
+                  value={field.state.value}
+                  onChange={(e) => field.handleChange(e.target.value)}
+                  placeholder="Empty = AWS S3. Set for MinIO/R2/B2/Wasabi (host:port, no scheme)"
+                />
+              </div>
+            )}
+          />
+
+          <form.Field
+            name="prefix"
+            children={(field) => (
+              <div className="space-y-1.5">
+                <Label htmlFor="remote-prefix">Prefix</Label>
+                <Input
+                  id="remote-prefix"
+                  value={field.state.value}
+                  onChange={(e) => field.handleChange(e.target.value)}
+                  placeholder="belune/"
+                />
+              </div>
+            )}
+          />
 
           <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <Label htmlFor="remote-access-key">Access key</Label>
-              <Input
-                id="remote-access-key"
-                value={accessKey}
-                onChange={(e) => setAccessKey(e.target.value)}
-                placeholder={remote ? "•••• (unchanged)" : ""}
-                className="font-mono"
-                autoComplete="off"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="remote-secret-key">Secret key</Label>
-              <Input
-                id="remote-secret-key"
-                type="password"
-                value={secretKey}
-                onChange={(e) => setSecretKey(e.target.value)}
-                placeholder={remote ? "•••• (unchanged)" : ""}
-                className="font-mono"
-                autoComplete="off"
-              />
-            </div>
+            <form.Field
+              name="accessKey"
+              children={(field) => (
+                <div className="space-y-1.5">
+                  <Label htmlFor="remote-access-key">Access key</Label>
+                  <Input
+                    id="remote-access-key"
+                    value={field.state.value}
+                    onChange={(e) => field.handleChange(e.target.value)}
+                    placeholder={remote ? "•••• (unchanged)" : ""}
+                    className="font-mono"
+                    autoComplete="off"
+                  />
+                </div>
+              )}
+            />
+            <form.Field
+              name="secretKey"
+              children={(field) => (
+                <div className="space-y-1.5">
+                  <Label htmlFor="remote-secret-key">Secret key</Label>
+                  <Input
+                    id="remote-secret-key"
+                    type="password"
+                    value={field.state.value}
+                    onChange={(e) => field.handleChange(e.target.value)}
+                    placeholder={remote ? "•••• (unchanged)" : ""}
+                    className="font-mono"
+                    autoComplete="off"
+                  />
+                </div>
+              )}
+            />
           </div>
 
-          <Label className="flex items-center gap-2 text-sm font-normal">
-            <Checkbox checked={useSSL} onCheckedChange={setUseSSL} />
-            Use SSL (HTTPS)
-          </Label>
+          <form.Field
+            name="useSSL"
+            children={(field) => (
+              <Label className="flex items-center gap-2 text-sm font-normal">
+                <Checkbox
+                  checked={field.state.value}
+                  onCheckedChange={(v) => field.handleChange(v === true)}
+                />
+                Use SSL (HTTPS)
+              </Label>
+            )}
+          />
 
           <div className="flex items-center justify-between gap-2 pt-1">
             <Button
@@ -953,7 +1032,11 @@ function RemoteStorageSection({ remote }: { remote: BackupRemoteConfig | null })
             >
               {test.isPending ? "Testing…" : "Test connection"}
             </Button>
-            <Button size="sm" onClick={handleSave} disabled={update.isPending}>
+            <Button
+              size="sm"
+              onClick={() => form.handleSubmit()}
+              disabled={update.isPending}
+            >
               {update.isPending ? "Saving…" : "Save"}
             </Button>
           </div>
