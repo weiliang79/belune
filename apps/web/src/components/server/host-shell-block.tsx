@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
+import { useForm } from "@tanstack/react-form";
 import { toast } from "sonner";
+import { z } from "zod";
 import { TerminalIcon } from "lucide-react";
 import { Terminal } from "xterm";
 import { FitAddon } from "@xterm/addon-fit";
@@ -44,9 +46,6 @@ export function HostShellBlock() {
 
   const [confirmEnable, setConfirmEnable] = useState(false);
   const [passwordOpen, setPasswordOpen] = useState(false);
-  const [password, setPassword] = useState("");
-  const [code, setCode] = useState("");
-  const [opening, setOpening] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
 
   const setEnabled = (next: boolean) => {
@@ -67,23 +66,25 @@ export function HostShellBlock() {
     else setConfirmEnable(true);
   };
 
-  const openShell = async () => {
-    if (!password) return;
-    setOpening(true);
-    try {
-      const res = await createHostShellSession(password, code);
-      setSessionId(res.session_id);
-      setPasswordOpen(false);
-      setPassword("");
-      setCode("");
-    } catch (err) {
-      toast.error(
-        err instanceof Error ? err.message : "Failed to open host shell",
-      );
-    } finally {
-      setOpening(false);
-    }
+  const closePasswordDialog = () => {
+    setPasswordOpen(false);
+    form.reset();
   };
+
+  const form = useForm({
+    defaultValues: { password: "", code: "" },
+    onSubmit: async ({ value }) => {
+      try {
+        const res = await createHostShellSession(value.password, value.code);
+        setSessionId(res.session_id);
+        closePasswordDialog();
+      } catch (err) {
+        toast.error(
+          err instanceof Error ? err.message : "Failed to open host shell",
+        );
+      }
+    },
+  });
 
   return (
     <>
@@ -146,63 +147,86 @@ export function HostShellBlock() {
       {/* Step-up password prompt. */}
       <Dialog
         open={passwordOpen}
-        onOpenChange={(open) => {
-          if (!open) {
-            setPasswordOpen(false);
-            setPassword("");
-            setCode("");
-          }
-        }}
+        onOpenChange={(open) => !open && closePasswordDialog()}
       >
         <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Confirm it's you</DialogTitle>
-            <DialogDescription>
-              Re-enter your Belune password to open a root shell on the host.
-              {totpEnabled &&
-                " Your authenticator code is required too — this is the most privileged action here."}
-            </DialogDescription>
-          </DialogHeader>
-          <Input
-            type="password"
-            autoFocus
-            value={password}
-            placeholder="Password"
-            onChange={(e) => setPassword(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") openShell();
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              form.handleSubmit();
             }}
-          />
-          {totpEnabled && (
-            <Input
-              inputMode="numeric"
-              autoComplete="one-time-code"
-              value={code}
-              placeholder="Verification code"
-              onChange={(e) => setCode(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") openShell();
+            className="space-y-4"
+          >
+            <DialogHeader>
+              <DialogTitle>Confirm it's you</DialogTitle>
+              <DialogDescription>
+                Re-enter your Belune password to open a root shell on the
+                host.
+                {totpEnabled &&
+                  " Your authenticator code is required too — this is the most privileged action here."}
+              </DialogDescription>
+            </DialogHeader>
+            <form.Field
+              name="password"
+              validators={{
+                onChange: z.string().min(1, "Password is required"),
               }}
+              children={(field) => (
+                <Input
+                  type="password"
+                  autoFocus
+                  value={field.state.value}
+                  placeholder="Password"
+                  onBlur={field.handleBlur}
+                  onChange={(e) => field.handleChange(e.target.value)}
+                />
+              )}
             />
-          )}
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => {
-                setPasswordOpen(false);
-                setPassword("");
-                setCode("");
-              }}
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={openShell}
-              disabled={opening || !password || (totpEnabled && !code)}
-            >
-              {opening ? "Opening…" : "Open shell"}
-            </Button>
-          </DialogFooter>
+            {totpEnabled && (
+              <form.Field
+                name="code"
+                validators={{
+                  onChange: ({ value }) =>
+                    value ? undefined : "Verification code is required",
+                }}
+                children={(field) => (
+                  <Input
+                    inputMode="numeric"
+                    autoComplete="one-time-code"
+                    value={field.state.value}
+                    placeholder="Verification code"
+                    onBlur={field.handleBlur}
+                    onChange={(e) => field.handleChange(e.target.value)}
+                  />
+                )}
+              />
+            )}
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={closePasswordDialog}
+              >
+                Cancel
+              </Button>
+              <form.Subscribe
+                selector={(s) =>
+                  [s.values.password, s.values.code, s.isSubmitting] as const
+                }
+                children={([password, code, isSubmitting]) => (
+                  <Button
+                    type="submit"
+                    disabled={
+                      isSubmitting || !password || (totpEnabled && !code)
+                    }
+                  >
+                    {isSubmitting ? "Opening…" : "Open shell"}
+                  </Button>
+                )}
+              />
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
 
