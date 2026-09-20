@@ -1,5 +1,7 @@
 import { useState } from "react";
+import { useForm } from "@tanstack/react-form";
 import { toast } from "sonner";
+import { z } from "zod";
 import { HardDriveIcon, InfoIcon, Trash2Icon } from "lucide-react";
 import {
   useVolumes,
@@ -40,38 +42,46 @@ interface Props {
   canDelete: boolean;
 }
 
+function fieldError(errors: unknown[]): string | undefined {
+  const first = errors[0];
+  if (!first) return undefined;
+  return typeof first === "string"
+    ? first
+    : (first as { message?: string }).message;
+}
+
+const SYSTEM_PATHS = new Set(["/", "/tmp", "/etc"]);
+
 export function VolumesSection({ projectId, applicationId, canDelete }: Props) {
   const { data: volumes, isLoading } = useVolumes(projectId, applicationId);
   const createVolume = useCreateVolume(projectId, applicationId);
   const deleteVolume = useDeleteVolume(projectId, applicationId);
 
   const [addOpen, setAddOpen] = useState(false);
-  const [name, setName] = useState("");
-  const [mountPath, setMountPath] = useState("");
 
   const [removeTarget, setRemoveTarget] = useState<ApplicationVolume | null>(
     null,
   );
   const [deleteData, setDeleteData] = useState(false);
 
-  const resetAdd = () => {
-    setName("");
-    setMountPath("");
-  };
-
-  const submitAdd = () => {
-    toast.promise(
-      createVolume.mutateAsync({ name, mount_path: mountPath }).then(() => {
-        setAddOpen(false);
-        resetAdd();
-      }),
-      {
-        loading: "Creating volume...",
-        success: "Volume created — reload the application to mount it",
-        error: (err) => err.message,
-      },
-    );
-  };
+  const addForm = useForm({
+    defaultValues: { name: "", mountPath: "" },
+    onSubmit: ({ value }) => {
+      toast.promise(
+        createVolume
+          .mutateAsync({ name: value.name, mount_path: value.mountPath })
+          .then(() => {
+            setAddOpen(false);
+            addForm.reset();
+          }),
+        {
+          loading: "Creating volume...",
+          success: "Volume created — reload the application to mount it",
+          error: (err) => err.message,
+        },
+      );
+    },
+  });
 
   const submitRemove = () => {
     if (!removeTarget) return;
@@ -109,7 +119,7 @@ export function VolumesSection({ projectId, applicationId, canDelete }: Props) {
             size="sm"
             className="shrink-0"
             onClick={() => {
-              resetAdd();
+              addForm.reset();
               setAddOpen(true);
             }}
           >
@@ -184,56 +194,109 @@ export function VolumesSection({ projectId, applicationId, canDelete }: Props) {
       {/* Add volume dialog */}
       <Dialog open={addOpen} onOpenChange={setAddOpen}>
         <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Add Volume</DialogTitle>
-            <DialogDescription>
-              Give the volume a name and the absolute path where it should be
-              mounted inside the container.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-2">
-            <div className="space-y-1.5">
-              <Label htmlFor="volume-name">Name</Label>
-              <Input
-                id="volume-name"
-                placeholder="data"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              addForm.handleSubmit();
+            }}
+          >
+            <DialogHeader>
+              <DialogTitle>Add Volume</DialogTitle>
+              <DialogDescription>
+                Give the volume a name and the absolute path where it should
+                be mounted inside the container.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-2">
+              <addForm.Field
+                name="name"
+                validators={{
+                  onChange: z
+                    .string()
+                    .min(1, "Name is required")
+                    .regex(
+                      /^[a-z0-9-]+$/,
+                      "Lowercase letters, numbers and hyphens only",
+                    ),
+                }}
+                children={(field) => {
+                  const error = fieldError(field.state.meta.errors);
+                  return (
+                    <div className="space-y-1.5">
+                      <Label htmlFor="volume-name">Name</Label>
+                      <Input
+                        id="volume-name"
+                        placeholder="data"
+                        value={field.state.value}
+                        onBlur={field.handleBlur}
+                        onChange={(e) => field.handleChange(e.target.value)}
+                      />
+                      {error ? (
+                        <p className="text-destructive text-xs">{error}</p>
+                      ) : (
+                        <p className="text-text-faint text-xs">
+                          Lowercase letters, numbers and hyphens. Used to
+                          identify the stored volume.
+                        </p>
+                      )}
+                    </div>
+                  );
+                }}
               />
-              <p className="text-text-faint text-xs">
-                Lowercase letters, numbers and hyphens. Used to identify the
-                stored volume.
-              </p>
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="volume-mount-path">Mount path</Label>
-              <Input
-                id="volume-mount-path"
-                placeholder="/data"
-                className="font-mono"
-                value={mountPath}
-                onChange={(e) => setMountPath(e.target.value)}
+              <addForm.Field
+                name="mountPath"
+                validators={{
+                  onChange: z
+                    .string()
+                    .min(1, "Mount path is required")
+                    .refine((v) => v.startsWith("/"), "Must be an absolute path")
+                    .refine(
+                      (v) => !SYSTEM_PATHS.has(v),
+                      "Cannot be a system path",
+                    ),
+                }}
+                children={(field) => {
+                  const error = fieldError(field.state.meta.errors);
+                  return (
+                    <div className="space-y-1.5">
+                      <Label htmlFor="volume-mount-path">Mount path</Label>
+                      <Input
+                        id="volume-mount-path"
+                        placeholder="/data"
+                        className="font-mono"
+                        value={field.state.value}
+                        onBlur={field.handleBlur}
+                        onChange={(e) => field.handleChange(e.target.value)}
+                      />
+                      {error ? (
+                        <p className="text-destructive text-xs">{error}</p>
+                      ) : (
+                        <p className="text-text-faint text-xs">
+                          Absolute path inside the container, e.g.{" "}
+                          <code>/data</code>. Cannot be a system path like{" "}
+                          <code>/</code>, <code>/tmp</code> or <code>/etc</code>
+                          .
+                        </p>
+                      )}
+                    </div>
+                  );
+                }}
               />
-              <p className="text-text-faint text-xs">
-                Absolute path inside the container, e.g. <code>/data</code>.
-                Cannot be a system path like <code>/</code>, <code>/tmp</code>{" "}
-                or <code>/etc</code>.
-              </p>
             </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setAddOpen(false)}>
-              Cancel
-            </Button>
-            <Button
-              onClick={submitAdd}
-              disabled={
-                !name.trim() || !mountPath.trim() || createVolume.isPending
-              }
-            >
-              {createVolume.isPending ? "Creating..." : "Add Volume"}
-            </Button>
-          </DialogFooter>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setAddOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" disabled={createVolume.isPending}>
+                {createVolume.isPending ? "Creating..." : "Add Volume"}
+              </Button>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
 
