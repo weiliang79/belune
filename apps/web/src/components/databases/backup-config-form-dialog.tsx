@@ -1,5 +1,7 @@
 import { useState } from "react";
+import { useForm, useStore } from "@tanstack/react-form";
 import { toast } from "sonner";
+import { z } from "zod";
 import { ClockIcon, CloudIcon, X } from "lucide-react";
 import {
   Dialog,
@@ -43,6 +45,14 @@ const SCHEDULE_PRESETS: { value: string; label: string }[] = [
   { value: "0 0 1 * *", label: "Every month (1st, midnight)" },
 ];
 
+function fieldError(errors: unknown[]): string | undefined {
+  const first = errors[0];
+  if (!first) return undefined;
+  return typeof first === "string"
+    ? first
+    : (first as { message?: string }).message;
+}
+
 export function BackupConfigFormDialog({
   projectId,
   databaseId,
@@ -84,21 +94,56 @@ function BackupConfigForm({
   const create = useCreateBackupConfig(projectId, databaseId);
   const update = useUpdateBackupConfig(projectId, databaseId);
 
-  const [destinationId, setDestinationId] = useState(
-    config?.destination_id ?? "",
-  );
-  const [schedule, setSchedule] = useState(config?.schedule ?? "0 0 * * *");
-  const [prefix, setPrefix] = useState(config?.prefix ?? "");
-  const [keepLatest, setKeepLatest] = useState(
-    config?.keep_latest != null ? String(config.keep_latest) : "",
-  );
-  const [enabled, setEnabled] = useState(config?.enabled ?? true);
-  const [databases, setDatabases] = useState<string[]>(config?.databases ?? []);
   const [dbInput, setDbInput] = useState("");
+
+  const form = useForm({
+    defaultValues: {
+      destinationId: config?.destination_id ?? "",
+      schedule: config?.schedule ?? "0 0 * * *",
+      prefix: config?.prefix ?? "",
+      keepLatest:
+        config?.keep_latest != null ? String(config.keep_latest) : "",
+      enabled: config?.enabled ?? true,
+      databases: config?.databases ?? ([] as string[]),
+    },
+    onSubmit: ({ value }) => {
+      const keep = value.keepLatest.trim() === "" ? null : Number(value.keepLatest);
+      // Include a pending typed-but-not-committed value so it isn't lost on submit.
+      const pendingDb = dbInput.trim();
+      const finalDatabases =
+        pendingDb && !value.databases.includes(pendingDb)
+          ? [...value.databases, pendingDb]
+          : value.databases;
+      const data = {
+        destination_id: value.destinationId,
+        schedule: value.schedule.trim(),
+        prefix: value.prefix.trim(),
+        keep_latest: keep,
+        enabled: value.enabled,
+        databases: finalDatabases,
+      };
+      const action =
+        editing && config
+          ? update.mutateAsync({ configId: config.id, data })
+          : create.mutateAsync(data);
+      toast.promise(action, {
+        loading: editing ? "Saving backup…" : "Creating backup…",
+        success: () => {
+          onDone();
+          return editing ? "Backup saved" : "Backup created";
+        },
+        error: (err) => err.message,
+      });
+    },
+  });
+
+  const databases = useStore(form.store, (s) => s.values.databases);
 
   const commitDbInput = () => {
     const v = dbInput.trim();
-    if (v && !databases.includes(v)) setDatabases([...databases, v]);
+    if (v && !databases.includes(v)) {
+      form.setFieldValue("databases", [...databases, v]);
+    }
     setDbInput("");
   };
   const handleDbKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -106,50 +151,8 @@ function BackupConfigForm({
       e.preventDefault();
       commitDbInput();
     } else if (e.key === "Backspace" && dbInput === "" && databases.length) {
-      setDatabases(databases.slice(0, -1));
+      form.setFieldValue("databases", databases.slice(0, -1));
     }
-  };
-
-  const presetValue =
-    SCHEDULE_PRESETS.find((p) => p.value === schedule)?.value ?? "custom";
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!destinationId) {
-      toast.error("Select a destination");
-      return;
-    }
-    const keep = keepLatest.trim() === "" ? null : Number(keepLatest);
-    if (keep != null && (!Number.isInteger(keep) || keep < 1)) {
-      toast.error("Keep latest must be a whole number ≥ 1");
-      return;
-    }
-    // Include a pending typed-but-not-committed value so it isn't lost on submit.
-    const pendingDb = dbInput.trim();
-    const finalDatabases =
-      pendingDb && !databases.includes(pendingDb)
-        ? [...databases, pendingDb]
-        : databases;
-    const data = {
-      destination_id: destinationId,
-      schedule: schedule.trim(),
-      prefix: prefix.trim(),
-      keep_latest: keep,
-      enabled,
-      databases: finalDatabases,
-    };
-    const action =
-      editing && config
-        ? update.mutateAsync({ configId: config.id, data })
-        : create.mutateAsync(data);
-    toast.promise(action, {
-      loading: editing ? "Saving backup…" : "Creating backup…",
-      success: () => {
-        onDone();
-        return editing ? "Backup saved" : "Backup created";
-      },
-      error: (err) => err.message,
-    });
   };
 
   const pending = create.isPending || update.isPending;
@@ -161,141 +164,236 @@ function BackupConfigForm({
         <DialogDescription>
           Schedule recurring backups to a project destination.
         </DialogDescription>
-        </DialogHeader>
+      </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-3">
-          <div className="space-y-1.5">
-            <Label>Destination</Label>
-            <Select
-              value={destinationId}
-              onValueChange={(v) => setDestinationId(v ?? "")}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Select destination" />
-              </SelectTrigger>
-              <SelectContent>
-                {(destinations ?? []).map((d) => (
-                  <SelectItem key={d.id} value={d.id} icon={<CloudIcon />}>
-                    {d.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {destinations && destinations.length === 0 && (
-              <p className="text-muted-foreground text-xs">
-                No destinations yet — add one on the project Backups tab first.
-              </p>
-            )}
-          </div>
-
-          <div className="space-y-1.5">
-            <Label>Schedule</Label>
-            <Select
-              value={presetValue}
-              onValueChange={(v) => {
-                if (v && v !== "custom") setSchedule(v);
-              }}
-            >
-              <SelectTrigger className="capitalize">
-                <SelectValue placeholder="Select a predefined schedule" />
-              </SelectTrigger>
-              <SelectContent>
-                {SCHEDULE_PRESETS.map((p) => (
-                  <SelectItem
-                    key={p.value}
-                    value={p.value}
-                    icon={<ClockIcon />}
-                    className="capitalize"
-                  >
-                    {p.label}
-                  </SelectItem>
-                ))}
-                <SelectItem value="custom" icon={<ClockIcon />} className="capitalize">
-                  Custom…
-                </SelectItem>
-              </SelectContent>
-            </Select>
-            <Input
-              value={schedule}
-              onChange={(e) => setSchedule(e.target.value)}
-              placeholder="Custom cron (e.g. 0 0 * * *)"
-              required
-            />
-            <p className="text-muted-foreground text-xs">
-              Standard 5-field cron expression.
-            </p>
-          </div>
-
-          <div className="space-y-1.5">
-            <Label htmlFor="cfg-database">Databases</Label>
-            <div className="border-input focus-within:ring-ring flex flex-wrap items-center gap-1 rounded-md border px-2 py-1.5 focus-within:ring-1">
-              {databases.map((d, i) => (
-                <span
-                  key={d}
-                  className="bg-muted inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs"
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          form.handleSubmit();
+        }}
+        className="space-y-3"
+      >
+        <form.Field
+          name="destinationId"
+          validators={{
+            onChange: z.string().min(1, "Select a destination"),
+          }}
+          children={(field) => {
+            const error = fieldError(field.state.meta.errors);
+            return (
+              <div className="space-y-1.5">
+                <Label>Destination</Label>
+                <Select
+                  value={field.state.value}
+                  onValueChange={(v) => field.handleChange(v ?? "")}
                 >
-                  <code className="font-mono">{d}</code>
-                  <button
-                    type="button"
-                    aria-label={`Remove ${d}`}
-                    className="text-muted-foreground hover:text-foreground"
-                    onClick={() =>
-                      setDatabases(databases.filter((_, idx) => idx !== i))
-                    }
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
-                </span>
-              ))}
-              <input
-                id="cfg-database"
-                value={dbInput}
-                onChange={(e) => setDbInput(e.target.value)}
-                onKeyDown={handleDbKeyDown}
-                onBlur={commitDbInput}
-                placeholder={databases.length ? "" : "All databases"}
-                className="placeholder:text-muted-foreground min-w-24 flex-1 bg-transparent text-sm outline-none"
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select destination" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(destinations ?? []).map((d) => (
+                      <SelectItem key={d.id} value={d.id} icon={<CloudIcon />}>
+                        {d.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {error ? (
+                  <p className="text-destructive text-xs">{error}</p>
+                ) : (
+                  destinations &&
+                  destinations.length === 0 && (
+                    <p className="text-muted-foreground text-xs">
+                      No destinations yet — add one on the project Backups tab
+                      first.
+                    </p>
+                  )
+                )}
+              </div>
+            );
+          }}
+        />
+
+        <form.Field
+          name="schedule"
+          validators={{
+            onChange: z
+              .string()
+              .min(1, "Schedule is required")
+              .regex(
+                /^\S+\s+\S+\s+\S+\s+\S+\s+\S+$/,
+                "Must be a 5-field cron expression",
+              ),
+          }}
+          children={(field) => {
+            const error = fieldError(field.state.meta.errors);
+            const presetValue =
+              SCHEDULE_PRESETS.find((p) => p.value === field.state.value)
+                ?.value ?? "custom";
+            return (
+              <div className="space-y-1.5">
+                <Label>Schedule</Label>
+                <Select
+                  value={presetValue}
+                  onValueChange={(v) => {
+                    if (v && v !== "custom") field.handleChange(v);
+                  }}
+                >
+                  <SelectTrigger className="capitalize">
+                    <SelectValue placeholder="Select a predefined schedule" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {SCHEDULE_PRESETS.map((p) => (
+                      <SelectItem
+                        key={p.value}
+                        value={p.value}
+                        icon={<ClockIcon />}
+                        className="capitalize"
+                      >
+                        {p.label}
+                      </SelectItem>
+                    ))}
+                    <SelectItem
+                      value="custom"
+                      icon={<ClockIcon />}
+                      className="capitalize"
+                    >
+                      Custom…
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+                <Input
+                  value={field.state.value}
+                  onBlur={field.handleBlur}
+                  onChange={(e) => field.handleChange(e.target.value)}
+                  placeholder="Custom cron (e.g. 0 0 * * *)"
+                />
+                {error ? (
+                  <p className="text-destructive text-xs">{error}</p>
+                ) : (
+                  <p className="text-muted-foreground text-xs">
+                    Standard 5-field cron expression.
+                  </p>
+                )}
+              </div>
+            );
+          }}
+        />
+
+        <div className="space-y-1.5">
+          <Label htmlFor="cfg-database">Databases</Label>
+          <div className="border-input focus-within:ring-ring flex flex-wrap items-center gap-1 rounded-md border px-2 py-1.5 focus-within:ring-1">
+            {databases.map((d, i) => (
+              <span
+                key={d}
+                className="bg-muted inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs"
+              >
+                <code className="font-mono">{d}</code>
+                <button
+                  type="button"
+                  aria-label={`Remove ${d}`}
+                  className="text-muted-foreground hover:text-foreground"
+                  onClick={() =>
+                    form.setFieldValue(
+                      "databases",
+                      databases.filter((_, idx) => idx !== i),
+                    )
+                  }
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </span>
+            ))}
+            <input
+              id="cfg-database"
+              value={dbInput}
+              onChange={(e) => setDbInput(e.target.value)}
+              onKeyDown={handleDbKeyDown}
+              onBlur={commitDbInput}
+              placeholder={databases.length ? "" : "All databases"}
+              className="placeholder:text-muted-foreground min-w-24 flex-1 bg-transparent text-sm outline-none"
+            />
+          </div>
+          <p className="text-muted-foreground text-xs">
+            Databases in this container to back up (type a name, press Enter).
+            Leave empty to back up <span className="font-medium">all</span>{" "}
+            databases.
+          </p>
+        </div>
+
+        <form.Field
+          name="prefix"
+          children={(field) => (
+            <div className="space-y-1.5">
+              <Label htmlFor="cfg-prefix">Prefix</Label>
+              <Input
+                id="cfg-prefix"
+                value={field.state.value}
+                onBlur={field.handleBlur}
+                onChange={(e) => field.handleChange(e.target.value)}
+                placeholder="/my-project"
               />
+              <p className="text-muted-foreground text-xs">
+                Optional path inside the bucket.
+              </p>
             </div>
-            <p className="text-muted-foreground text-xs">
-              Databases in this container to back up (type a name, press Enter).
-              Leave empty to back up <span className="font-medium">all</span>{" "}
-              databases.
-            </p>
-          </div>
+          )}
+        />
 
-          <div className="space-y-1.5">
-            <Label htmlFor="cfg-prefix">Prefix</Label>
-            <Input
-              id="cfg-prefix"
-              value={prefix}
-              onChange={(e) => setPrefix(e.target.value)}
-              placeholder="/my-project"
-            />
-            <p className="text-muted-foreground text-xs">
-              Optional path inside the bucket.
-            </p>
-          </div>
+        <form.Field
+          name="keepLatest"
+          validators={{
+            onChange: z
+              .string()
+              .refine(
+                (v) => v.trim() === "" || /^\d+$/.test(v.trim()),
+                "Must be a whole number",
+              )
+              .refine(
+                (v) => v.trim() === "" || Number(v) >= 1,
+                "Must be at least 1",
+              ),
+          }}
+          children={(field) => {
+            const error = fieldError(field.state.meta.errors);
+            return (
+              <div className="space-y-1.5">
+                <Label htmlFor="cfg-keep">Keep latest</Label>
+                <Input
+                  id="cfg-keep"
+                  type="number"
+                  min={1}
+                  value={field.state.value}
+                  onBlur={field.handleBlur}
+                  onChange={(e) => field.handleChange(e.target.value)}
+                  placeholder="Keeps all if empty"
+                />
+                {error ? (
+                  <p className="text-destructive text-xs">{error}</p>
+                ) : (
+                  <p className="text-muted-foreground text-xs">
+                    Optional. Only keep the latest N backups in the
+                    destination.
+                  </p>
+                )}
+              </div>
+            );
+          }}
+        />
 
-          <div className="space-y-1.5">
-            <Label htmlFor="cfg-keep">Keep latest</Label>
-            <Input
-              id="cfg-keep"
-              type="number"
-              min={1}
-              value={keepLatest}
-              onChange={(e) => setKeepLatest(e.target.value)}
-              placeholder="Keeps all if empty"
-            />
-            <p className="text-muted-foreground text-xs">
-              Optional. Only keep the latest N backups in the destination.
-            </p>
-          </div>
-
-          <Label className="flex items-center gap-2 text-sm font-normal">
-            <Checkbox checked={enabled} onCheckedChange={setEnabled} />
-            Enabled (run on schedule)
-          </Label>
+        <form.Field
+          name="enabled"
+          children={(field) => (
+            <Label className="flex items-center gap-2 text-sm font-normal">
+              <Checkbox
+                checked={field.state.value}
+                onCheckedChange={(v) => field.handleChange(v === true)}
+              />
+              Enabled (run on schedule)
+            </Label>
+          )}
+        />
 
         <DialogFooter>
           <Button type="submit" disabled={pending}>
