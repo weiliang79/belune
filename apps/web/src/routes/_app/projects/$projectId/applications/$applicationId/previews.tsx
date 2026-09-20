@@ -1,6 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
+import { useForm } from "@tanstack/react-form";
 import { toast } from "sonner";
+import { z } from "zod";
 import { Loader2 } from "lucide-react";
 
 import { useApplication } from "@/lib/hooks/use-applications";
@@ -170,6 +172,14 @@ function PreviewsPage() {
   );
 }
 
+function fieldError(errors: unknown[]): string | undefined {
+  const first = errors[0];
+  if (!first) return undefined;
+  return typeof first === "string"
+    ? first
+    : (first as { message?: string }).message;
+}
+
 function ConfigCard({
   application,
   onSave,
@@ -177,15 +187,26 @@ function ConfigCard({
   application: ReturnType<typeof useApplication>["data"];
   onSave: (pattern: string, template: string) => Promise<void>;
 }) {
-  const [pattern, setPattern] = useState(application?.preview_branch_pattern ?? "");
-  const [template, setTemplate] = useState(
-    application?.preview_domain_template ?? "",
-  );
   const [saving, setSaving] = useState(false);
 
   const enabled = !!(
     application?.preview_branch_pattern && application?.preview_domain_template
   );
+
+  const form = useForm({
+    defaultValues: {
+      pattern: application?.preview_branch_pattern ?? "",
+      template: application?.preview_domain_template ?? "",
+    },
+    onSubmit: async ({ value }) => {
+      setSaving(true);
+      try {
+        await onSave(value.pattern, value.template);
+      } finally {
+        setSaving(false);
+      }
+    },
+  });
 
   return (
     <Card>
@@ -197,84 +218,109 @@ function ConfigCard({
           </Badge>
         </div>
       </CardHeader>
-      <CardContent className="space-y-4">
-        <p className="text-muted-foreground text-sm">
-          When a push arrives on a branch matching the pattern (and not the
-          auto-deploy branch), a dedicated preview environment is built and
-          exposed at a templated hostname.
-        </p>
-        <div className="space-y-2">
-          <Label htmlFor="preview-pattern">Branch pattern</Label>
-          <Input
-            id="preview-pattern"
-            placeholder="feature/*"
-            value={pattern}
-            onChange={(e) => setPattern(e.target.value)}
-          />
-          <p className="text-muted-foreground text-xs">
-            Glob-style. Use <span className="font-mono">*</span> for a single
-            segment or <span className="font-mono">**</span> for many (e.g.{" "}
-            <span className="font-mono">feature/**</span>).
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          form.handleSubmit();
+        }}
+      >
+        <CardContent className="space-y-4">
+          <p className="text-muted-foreground text-sm">
+            When a push arrives on a branch matching the pattern (and not the
+            auto-deploy branch), a dedicated preview environment is built and
+            exposed at a templated hostname.
           </p>
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="preview-template">Domain template</Label>
-          <Input
-            id="preview-template"
-            placeholder="{branch}.{app}.preview.example.com"
-            value={template}
-            onChange={(e) => setTemplate(e.target.value)}
-          />
-          <p className="text-muted-foreground text-xs">
-            Must contain <span className="font-mono">{"{branch}"}</span>.{" "}
-            <span className="font-mono">{"{app}"}</span> expands to this
-            application's slug. A wildcard DNS record (e.g.{" "}
-            <span className="font-mono">*.preview.example.com</span>) pointing
-            to this host is required.
-          </p>
-        </div>
-        <div className="flex justify-end gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={async () => {
-              setSaving(true);
-              try {
-                await onSave("", "");
-                setPattern("");
-                setTemplate("");
-              } finally {
-                setSaving(false);
-              }
-            }}
-            disabled={saving || (!pattern && !template)}
-          >
-            Disable
-          </Button>
-          <Button
-            size="sm"
-            onClick={async () => {
-              if (template && !template.includes("{branch}")) {
-                toast.error("Template must contain {branch}");
-                return;
-              }
-              setSaving(true);
-              try {
-                await onSave(pattern, template);
-              } finally {
-                setSaving(false);
-              }
-            }}
-            disabled={saving}
-          >
-            {saving ? (
-              <Loader2 aria-hidden="true" className="h-4 w-4 animate-spin" />
-            ) : (
-              "Save"
+          <form.Field
+            name="pattern"
+            children={(field) => (
+              <div className="space-y-2">
+                <Label htmlFor="preview-pattern">Branch pattern</Label>
+                <Input
+                  id="preview-pattern"
+                  placeholder="feature/*"
+                  value={field.state.value}
+                  onBlur={field.handleBlur}
+                  onChange={(e) => field.handleChange(e.target.value)}
+                />
+                <p className="text-muted-foreground text-xs">
+                  Glob-style. Use <span className="font-mono">*</span> for a
+                  single segment or <span className="font-mono">**</span> for
+                  many (e.g. <span className="font-mono">feature/**</span>).
+                </p>
+              </div>
             )}
-          </Button>
-        </div>
-      </CardContent>
+          />
+          <form.Field
+            name="template"
+            validators={{
+              onChange: z
+                .string()
+                .refine(
+                  (v) => !v || v.includes("{branch}"),
+                  "Template must contain {branch}",
+                ),
+            }}
+            children={(field) => {
+              const error = fieldError(field.state.meta.errors);
+              return (
+                <div className="space-y-2">
+                  <Label htmlFor="preview-template">Domain template</Label>
+                  <Input
+                    id="preview-template"
+                    placeholder="{branch}.{app}.preview.example.com"
+                    value={field.state.value}
+                    onBlur={field.handleBlur}
+                    onChange={(e) => field.handleChange(e.target.value)}
+                  />
+                  {error ? (
+                    <p className="text-destructive text-xs">{error}</p>
+                  ) : (
+                    <p className="text-muted-foreground text-xs">
+                      Must contain <span className="font-mono">{"{branch}"}</span>.{" "}
+                      <span className="font-mono">{"{app}"}</span> expands to
+                      this application's slug. A wildcard DNS record (e.g.{" "}
+                      <span className="font-mono">*.preview.example.com</span>)
+                      pointing to this host is required.
+                    </p>
+                  )}
+                </div>
+              );
+            }}
+          />
+          <form.Subscribe
+            selector={(s) => [s.values.pattern, s.values.template] as const}
+            children={([pattern, template]) => (
+              <div className="flex justify-end gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={async () => {
+                    setSaving(true);
+                    try {
+                      await onSave("", "");
+                      form.reset({ pattern: "", template: "" });
+                    } finally {
+                      setSaving(false);
+                    }
+                  }}
+                  disabled={saving || (!pattern && !template)}
+                >
+                  Disable
+                </Button>
+                <Button type="submit" size="sm" disabled={saving}>
+                  {saving ? (
+                    <Loader2 aria-hidden="true" className="h-4 w-4 animate-spin" />
+                  ) : (
+                    "Save"
+                  )}
+                </Button>
+              </div>
+            )}
+          />
+        </CardContent>
+      </form>
     </Card>
   );
 }
