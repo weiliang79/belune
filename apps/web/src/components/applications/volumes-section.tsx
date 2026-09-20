@@ -256,7 +256,7 @@ export function VolumesSection({ projectId, applicationId, canDelete }: Props) {
               by recreating a volume at the same mount path.
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <label className="flex items-start gap-2 rounded-md border p-3 text-sm">
+          <Label className="flex items-start gap-2 rounded-md border p-3 text-sm font-normal">
             <Checkbox
               className="mt-0.5"
               checked={deleteData}
@@ -270,7 +270,7 @@ export function VolumesSection({ projectId, applicationId, canDelete }: Props) {
                 This cannot be undone. The underlying data volume is destroyed.
               </span>
             </span>
-          </label>
+          </Label>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction

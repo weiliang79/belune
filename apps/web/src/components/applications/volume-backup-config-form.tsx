@@ -299,7 +299,7 @@ function ConfigForm({
           </p>
         </div>
 
-        <label className="flex items-start gap-2 text-sm">
+        <Label className="flex items-start gap-2 text-sm font-normal">
           <Checkbox
             className="mt-0.5"
             checked={quiesce}
@@ -312,12 +312,12 @@ function ConfigForm({
               consistency-critical data (e.g. an embedded database).
             </span>
           </span>
-        </label>
+        </Label>
 
-        <label className="flex items-center gap-2 text-sm">
+        <Label className="flex items-center gap-2 text-sm font-normal">
           <Checkbox checked={enabled} onCheckedChange={setEnabled} />
           Enabled (run on schedule)
-        </label>
+        </Label>
 
         <DialogFooter>
           <Button type="submit" disabled={pending}>

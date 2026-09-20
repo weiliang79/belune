@@ -448,14 +448,14 @@ function ChannelForm({
                 {/* Optional secrets can be removed on edit — a blank field alone
                     can't distinguish "keep" from "clear". */}
                 {editing && f.secret && !f.required && (
-                  <label className="text-muted-foreground flex items-center gap-2 text-xs">
+                  <Label className="text-muted-foreground flex items-center gap-2 text-xs font-normal">
                     <Checkbox
                       className="size-3.5"
                       checked={clearedSecrets.has(f.key)}
                       onCheckedChange={() => toggleCleared(f.key)}
                     />
                     Remove the stored {f.label.toLowerCase()}
-                  </label>
+                  </Label>
                 )}
                 {f.help && (
                   <p className="text-muted-foreground text-xs">{f.help}</p>

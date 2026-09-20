@@ -292,10 +292,10 @@ function BackupConfigForm({
             </p>
           </div>
 
-          <label className="flex items-center gap-2 text-sm">
+          <Label className="flex items-center gap-2 text-sm font-normal">
             <Checkbox checked={enabled} onCheckedChange={setEnabled} />
             Enabled (run on schedule)
-          </label>
+          </Label>
 
         <DialogFooter>
           <Button type="submit" disabled={pending}>

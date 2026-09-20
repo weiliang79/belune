@@ -938,10 +938,10 @@ function RemoteStorageSection({ remote }: { remote: BackupRemoteConfig | null })
             </div>
           </div>
 
-          <label className="flex items-center gap-2 text-sm">
+          <Label className="flex items-center gap-2 text-sm font-normal">
             <Checkbox checked={useSSL} onCheckedChange={setUseSSL} />
             Use SSL (HTTPS)
-          </label>
+          </Label>
 
           <div className="flex items-center justify-between gap-2 pt-1">
             <Button

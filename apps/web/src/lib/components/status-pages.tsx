@@ -24,7 +24,7 @@ function StatusPageFrame({
       <div className="flex items-center gap-2.5">
         <div
           aria-hidden="true"
-          className="grid size-8 place-items-center rounded-lg text-white"
+          className="grid size-8 place-items-center rounded-lg text-brand-fg"
           style={{
             background:
               "linear-gradient(140deg, var(--brand), var(--brand-press))",

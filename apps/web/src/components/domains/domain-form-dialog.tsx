@@ -328,13 +328,13 @@ function DomainForm({
                 <form.Field
                   name="strip_path"
                   children={(field) => (
-                    <label className="flex items-center gap-2 text-sm">
+                    <Label className="flex items-center gap-2 text-sm font-normal">
                       <Checkbox
                         checked={field.state.value}
                         onCheckedChange={(v) => field.handleChange(v)}
                       />
                       Strip the prefix before forwarding
-                    </label>
+                    </Label>
                   )}
                 />
               ) : null
@@ -617,7 +617,7 @@ function DomainForm({
                 name="force_https"
                 children={(field) => (
                   <div className="space-y-1 border-t pt-3">
-                    <label className="flex items-center gap-2 text-sm">
+                    <Label className="flex items-center gap-2 text-sm font-normal">
                       <Checkbox
                         checked={sslMode !== "off" && field.state.value}
                         disabled={sslMode === "off"}
@@ -632,7 +632,7 @@ function DomainForm({
                       >
                         Force HTTPS
                       </span>
-                    </label>
+                    </Label>
                     <p className="text-muted-foreground text-xs">
                       {sslMode === "off"
                         ? "Unavailable while TLS is off — there is no HTTPS to redirect to."

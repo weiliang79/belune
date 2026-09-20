@@ -278,13 +278,13 @@ export function FileMountsSection({ projectId, applicationId }: Props) {
               />
             </div>
             <div className="flex items-center justify-between gap-4">
-              <label className="flex items-center gap-2 text-sm">
+              <Label className="flex items-center gap-2 text-sm font-normal">
                 <Checkbox
                   checked={isSecret}
                   onCheckedChange={setIsSecret}
                 />
                 Secret (mask content in the UI)
-              </label>
+              </Label>
               <div className="flex items-center gap-2">
                 <Label htmlFor="fm-mode" className="text-sm">
                   Mode

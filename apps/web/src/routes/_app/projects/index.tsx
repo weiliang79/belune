@@ -172,7 +172,7 @@ function ProjectsOnboarding() {
     <div className="mx-auto max-w-2xl py-10 text-center">
       <div
         aria-hidden="true"
-        className="mx-auto grid size-14 place-items-center rounded-2xl text-white shadow-sm"
+        className="mx-auto grid size-14 place-items-center rounded-2xl text-brand-fg shadow-sm"
         style={{
           background:
             "linear-gradient(140deg, var(--brand), var(--brand-press))",

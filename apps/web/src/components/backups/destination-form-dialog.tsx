@@ -419,10 +419,10 @@ function DestinationForm({
         {/* SSL is only user-controllable for self-hosted/other endpoints;
             managed providers are always HTTPS; local has no transport at all. */}
         {provider !== "local" && !meta.forceSSL && (
-          <label className="flex items-center gap-2 text-sm">
+          <Label className="flex items-center gap-2 text-sm font-normal">
             <Checkbox checked={useSSL} onCheckedChange={setUseSSL} />
             Use SSL (HTTPS)
-          </label>
+          </Label>
         )}
 
         <DialogFooter className="sm:justify-between">

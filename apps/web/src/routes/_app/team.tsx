@@ -109,7 +109,7 @@ function TeamSettingsPage() {
           return (
             <div className="flex items-center gap-2.5">
               <span
-                className="grid size-8 shrink-0 place-items-center rounded-full text-xs font-semibold text-white"
+                className="grid size-8 shrink-0 place-items-center rounded-full text-xs font-semibold text-brand-fg"
                 style={{
                   background:
                     "linear-gradient(140deg, var(--brand), var(--brand-press))",

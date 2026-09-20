@@ -170,7 +170,7 @@ export function Sidebar({ mobileOpen, onMobileClose }: SidebarProps) {
         <Link
           to="/about"
           aria-label="About Belune"
-          className="grid size-8 shrink-0 place-items-center rounded-lg text-white shadow-sm transition-opacity hover:opacity-90"
+          className="grid size-8 shrink-0 place-items-center rounded-lg text-brand-fg shadow-sm transition-opacity hover:opacity-90"
           style={{
             background:
               "linear-gradient(140deg, var(--brand), var(--brand-press))",
