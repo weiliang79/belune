@@ -12,6 +12,7 @@ import {
   Play,
   Plus,
   RotateCcw,
+  ScrollText,
   Square,
   Trash2,
 } from "lucide-react";
@@ -310,12 +311,12 @@ const SERVICE_COLUMNS: ColumnDef<FakeService>[] = [
         <IconAction label="Restart" onClick={noop}>
           <RotateCcw aria-hidden="true" className="size-4" />
         </IconAction>
-        <Button variant="outline" size="sm" className="ml-1">
-          Logs
-        </Button>
-        <Button variant="destructive" size="sm">
-          Delete
-        </Button>
+        <IconAction label="Logs" onClick={noop}>
+          <ScrollText aria-hidden="true" className="size-4" />
+        </IconAction>
+        <IconAction label="Delete" onClick={noop} destructive>
+          <Trash2 aria-hidden="true" className="size-4" />
+        </IconAction>
         <DropdownMenu
           onOpenChange={(open) => {
             if (!open) settlePageTheme();
