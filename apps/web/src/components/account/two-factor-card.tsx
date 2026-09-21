@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Field, FieldError, FieldLabel } from "@/components/ui/field";
+import { fieldError } from "@/lib/utils/field-error";
 import { Input } from "@/components/ui/input";
 import {
   useDisableTotp,
@@ -30,14 +31,6 @@ import {
   useVerifyTotpEnrollment,
 } from "@/lib/hooks/use-totp";
 import type { TOTPEnrollment } from "@/lib/api/totp";
-
-function fieldError(errors: unknown[]): string | undefined {
-  const first = errors[0];
-  if (!first) return undefined;
-  return typeof first === "string"
-    ? first
-    : (first as { message?: string }).message;
-}
 
 /** Shown once, at the moment they are generated. There is no endpoint that can
  *  read them back — only regeneration, which replaces the set. */

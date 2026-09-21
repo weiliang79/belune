@@ -14,6 +14,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Field, FieldError, FieldLabel } from "@/components/ui/field";
+import { fieldError } from "@/lib/utils/field-error";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -45,14 +46,6 @@ const SCHEDULE_PRESETS: { value: string; label: string }[] = [
   { value: "0 0 * * 0", label: "Every week (Sunday midnight)" },
   { value: "0 0 1 * *", label: "Every month (1st, midnight)" },
 ];
-
-function fieldError(errors: unknown[]): string | undefined {
-  const first = errors[0];
-  if (!first) return undefined;
-  return typeof first === "string"
-    ? first
-    : (first as { message?: string }).message;
-}
 
 export function VolumeBackupConfigForm({
   projectId,

@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Field, FieldError, FieldLabel } from "@/components/ui/field";
+import { fieldError } from "@/lib/utils/field-error";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -41,14 +42,6 @@ type HealthType = "none" | "http" | "command";
 function numOrUndefined(s: string): number | undefined {
   const n = parseInt(s, 10);
   return Number.isFinite(n) && n > 0 ? n : undefined;
-}
-
-function fieldError(errors: unknown[]): string | undefined {
-  const first = errors[0];
-  if (!first) return undefined;
-  return typeof first === "string"
-    ? first
-    : (first as { message?: string }).message;
 }
 
 const positiveNumber = z

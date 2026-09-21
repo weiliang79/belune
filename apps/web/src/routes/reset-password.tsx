@@ -5,6 +5,7 @@ import { resetPassword } from "@/lib/api/auth";
 import { ApiError } from "@/lib/api/client";
 import { Button } from "@/components/ui/button";
 import { Field, FieldError, FieldLabel } from "@/components/ui/field";
+import { fieldError } from "@/lib/utils/field-error";
 import { Input } from "@/components/ui/input";
 import { AuthLayout } from "@/lib/components/layout/auth-layout";
 import { useState } from "react";
@@ -78,12 +79,7 @@ function ResetPasswordPage() {
             onChange: z.string().min(8, "At least 8 characters required"),
           }}
           children={(field) => {
-            const first = field.state.meta.errors[0];
-            const error = !first
-              ? undefined
-              : typeof first === "string"
-                ? first
-                : first?.message;
+            const error = fieldError(field.state.meta.errors);
             return (
               <Field data-invalid={!!error}>
                 <FieldLabel htmlFor="password">New password</FieldLabel>
@@ -107,12 +103,7 @@ function ResetPasswordPage() {
             onChange: z.string().min(1, "Please confirm your password"),
           }}
           children={(field) => {
-            const first = field.state.meta.errors[0];
-            const error = !first
-              ? undefined
-              : typeof first === "string"
-                ? first
-                : first?.message;
+            const error = fieldError(field.state.meta.errors);
             return (
               <Field data-invalid={!!error}>
                 <FieldLabel htmlFor="confirm">Confirm password</FieldLabel>

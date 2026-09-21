@@ -6,6 +6,7 @@ import { PlusIcon } from "lucide-react";
 import { useCreateProject } from "@/lib/hooks/use-projects";
 import { Button } from "@/components/ui/button";
 import { Field, FieldError, FieldLabel } from "@/components/ui/field";
+import { fieldError } from "@/lib/utils/field-error";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
@@ -71,12 +72,7 @@ function NewProjectPage() {
               name="name"
               validators={{ onChange: z.string().min(1, "Name is required") }}
               children={(field) => {
-                const first = field.state.meta.errors[0];
-                const error = !first
-                  ? undefined
-                  : typeof first === "string"
-                    ? first
-                    : first?.message;
+                const error = fieldError(field.state.meta.errors);
                 return (
                   <Field data-invalid={!!error}>
                     <FieldLabel htmlFor="name">Project Name</FieldLabel>
@@ -114,12 +110,7 @@ function NewProjectPage() {
                   ),
               }}
               children={(field) => {
-                const first = field.state.meta.errors[0];
-                const error = !first
-                  ? undefined
-                  : typeof first === "string"
-                    ? first
-                    : first?.message;
+                const error = fieldError(field.state.meta.errors);
                 return (
                   <Field data-invalid={!!error}>
                     <FieldLabel htmlFor="slug">Slug</FieldLabel>

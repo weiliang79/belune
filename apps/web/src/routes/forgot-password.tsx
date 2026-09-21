@@ -5,6 +5,7 @@ import { forgotPassword } from "@/lib/api/auth";
 import { redirectIfAuthenticated } from "@/lib/utils/auth-guard";
 import { Button } from "@/components/ui/button";
 import { Field, FieldError, FieldLabel } from "@/components/ui/field";
+import { fieldError } from "@/lib/utils/field-error";
 import { Input } from "@/components/ui/input";
 import { AuthLayout } from "@/lib/components/layout/auth-layout";
 import { useState } from "react";
@@ -63,12 +64,7 @@ function ForgotPasswordPage() {
             name="email"
             validators={{ onChange: z.string().email("Valid email required") }}
             children={(field) => {
-              const first = field.state.meta.errors[0];
-              const error = !first
-                ? undefined
-                : typeof first === "string"
-                  ? first
-                  : first?.message;
+              const error = fieldError(field.state.meta.errors);
               return (
                 <Field data-invalid={!!error}>
                   <FieldLabel htmlFor="email">Email</FieldLabel>

@@ -95,19 +95,12 @@ import {
   FieldError,
   FieldLabel,
 } from "@/components/ui/field";
+import { fieldError } from "@/lib/utils/field-error";
 
 // Engines with an in-image logical-dump tool (pg_dump/mysqldump/mongodump).
 // redis (cache) has no logical backup. "other" is backed up when a backup mode
 // (volume snapshot or custom commands) was configured at creation.
 const BACKUP_SUPPORTED_TYPES = ["postgres", "mysql", "mongo"];
-
-function fieldError(errors: unknown[]): string | undefined {
-  const first = errors[0];
-  if (!first) return undefined;
-  return typeof first === "string"
-    ? first
-    : (first as { message?: string }).message;
-}
 
 function dbBackupEnabled(db: Database): boolean {
   if (db.type === "other") return db.backup_mode !== "none";

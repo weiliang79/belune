@@ -6,6 +6,7 @@ import { useAuthStore } from "@/lib/stores/auth";
 import { redirectIfAuthenticated } from "@/lib/utils/auth-guard";
 import { Button } from "@/components/ui/button";
 import { Field, FieldError, FieldLabel } from "@/components/ui/field";
+import { fieldError } from "@/lib/utils/field-error";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { AuthLayout } from "@/lib/components/layout/auth-layout";
@@ -98,12 +99,7 @@ function SetupPage() {
             onChange: z.string().min(1, "Username is required"),
           }}
           children={(field) => {
-            const first = field.state.meta.errors[0];
-            const error = !first
-              ? undefined
-              : typeof first === "string"
-                ? first
-                : first?.message;
+            const error = fieldError(field.state.meta.errors);
             return (
               <Field data-invalid={!!error}>
                 <FieldLabel htmlFor="username">Username</FieldLabel>
@@ -127,12 +123,7 @@ function SetupPage() {
             onChange: z.string().email("Valid email required"),
           }}
           children={(field) => {
-            const first = field.state.meta.errors[0];
-            const error = !first
-              ? undefined
-              : typeof first === "string"
-                ? first
-                : first?.message;
+            const error = fieldError(field.state.meta.errors);
             return (
               <Field data-invalid={!!error}>
                 <FieldLabel htmlFor="email">Email</FieldLabel>
@@ -158,12 +149,7 @@ function SetupPage() {
               .min(8, "Password must be at least 8 characters"),
           }}
           children={(field) => {
-            const first = field.state.meta.errors[0];
-            const error = !first
-              ? undefined
-              : typeof first === "string"
-                ? first
-                : first?.message;
+            const error = fieldError(field.state.meta.errors);
             return (
               <Field data-invalid={!!error}>
                 <FieldLabel htmlFor="password">Password</FieldLabel>
@@ -186,12 +172,7 @@ function SetupPage() {
             onChange: z.string().min(1, "Please confirm your password"),
           }}
           children={(field) => {
-            const first = field.state.meta.errors[0];
-            const error = !first
-              ? undefined
-              : typeof first === "string"
-                ? first
-                : first?.message;
+            const error = fieldError(field.state.meta.errors);
             return (
               <Field data-invalid={!!error}>
                 <FieldLabel htmlFor="confirmPassword">

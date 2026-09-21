@@ -6,6 +6,7 @@ import { ApiError } from "@/lib/api/client";
 import { useAuthStore } from "@/lib/stores/auth";
 import { Button } from "@/components/ui/button";
 import { Field, FieldError, FieldLabel } from "@/components/ui/field";
+import { fieldError } from "@/lib/utils/field-error";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
@@ -117,12 +118,7 @@ function AcceptInvitePage() {
             onChange: z.string().min(8, "At least 8 characters required"),
           }}
           children={(field) => {
-            const first = field.state.meta.errors[0];
-            const error = !first
-              ? undefined
-              : typeof first === "string"
-                ? first
-                : first?.message;
+            const error = fieldError(field.state.meta.errors);
             return (
               <Field data-invalid={!!error}>
                 <FieldLabel htmlFor="password">Password</FieldLabel>

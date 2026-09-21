@@ -15,6 +15,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { IconAction } from "@/components/ui/icon-action";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Field, FieldError, FieldLabel } from "@/components/ui/field";
+import { fieldError } from "@/lib/utils/field-error";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -41,14 +42,6 @@ interface Props {
   projectId: string;
   applicationId: string;
   canDelete: boolean;
-}
-
-function fieldError(errors: unknown[]): string | undefined {
-  const first = errors[0];
-  if (!first) return undefined;
-  return typeof first === "string"
-    ? first
-    : (first as { message?: string }).message;
 }
 
 const SYSTEM_PATHS = new Set(["/", "/tmp", "/etc"]);

@@ -35,6 +35,7 @@ import { Badge } from "@/components/ui/badge";
 import { BlobLogViewer } from "@/components/logs/blob-log-viewer";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Field, FieldError, FieldLabel } from "@/components/ui/field";
+import { fieldError } from "@/lib/utils/field-error";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
@@ -74,14 +75,6 @@ const RUNS_PAGE_SIZE = 10;
 // handler/settings.go) — client-side just gives immediate feedback.
 const RETAIN_DAYS_MAX = 3650;
 const RETAIN_COUNT_MAX = 1000;
-
-function fieldError(errors: unknown[]): string | undefined {
-  const first = errors[0];
-  if (!first) return undefined;
-  return typeof first === "string"
-    ? first
-    : (first as { message?: string }).message;
-}
 
 /** "YYYY-MM-DD HH:mm:ss" for table cells (null-safe). */
 function fmtTableDate(iso: string | null) {

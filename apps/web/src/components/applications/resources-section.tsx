@@ -11,18 +11,11 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Field, FieldError, FieldLabel } from "@/components/ui/field";
+import { fieldError } from "@/lib/utils/field-error";
 import { Input } from "@/components/ui/input";
 import { PendingChangeBadge } from "@/lib/components/pending-change-badge";
 import { useSetResources } from "@/lib/hooks/use-applications";
 import type { Application } from "@/lib/types";
-
-function fieldError(errors: unknown[]): string | undefined {
-  const first = errors[0];
-  if (!first) return undefined;
-  return typeof first === "string"
-    ? first
-    : (first as { message?: string }).message;
-}
 
 const nonNegative = z
   .string()
