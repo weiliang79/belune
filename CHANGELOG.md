@@ -24,6 +24,53 @@ Belune is pre-1.0. The versioning contract while it stays there:
 Release notes for each version are also published on the
 [Releases page](https://github.com/weiliang79/belune/releases).
 
+## [0.1.8]
+
+### Belune can now update itself from the dashboard
+
+**Until now, updating meant SSH.** Belune checks belune.dev once a day for a
+newer release, tells you when there is one, and applies it from
+**Server → Configuration → Updates** — no terminal required.
+
+- **You are told, not left to wonder.** A dot appears beside the version in the
+  sidebar, the Updates card names the release and links to its notes, and
+  admins get a notification through whichever channels they already use. A
+  release marked breaking says so before you click anything.
+- **Updating is deliberate, never automatic.** The button asks for your
+  password (and your second factor, if enrolled), takes a full backup first,
+  then runs the same `scripts/update.sh` the manual path uses — so the two can
+  never drift. Belune restarts itself; the dashboard reconnects on the new
+  version.
+- **Check now** runs the check immediately instead of waiting for the daily
+  sweep, and **Skip this version** silences one release without turning
+  checks off.
+- **A release that changes host-level configuration cannot be applied from
+  the dashboard**, and the card says so instead of offering a button that
+  would fail — run `update.sh` on the host for those, as before.
+
+The check is a plain `GET` of a public manifest, sends nothing about your
+install, and is on by default. Turn it off with the **Check automatically**
+switch on the same card, or set `update_check_enabled` to `false`.
+
+**If an in-app update fails, nothing is lost.** The helper that applies it
+keeps its own log, the Updates card reports what went wrong, and the manual
+path is untouched — `sudo bash scripts/update.sh` on the host works exactly as
+before. Your previous `.env` and infra files are kept in the install directory
+as `.env.backup-<version>` and `.infra-backup-<version>/`.
+
+### Upgrading
+
+**This release cannot be installed with the button it introduces.** Reaching
+0.1.8 is one last manual update — `sudo bash scripts/update.sh` from your
+install directory. Every release after it can be applied from the dashboard.
+
+No migrations, no changes to how Belune is deployed, no host action.
+`update.sh` takes a backup first, as always.
+
+**The image is about 30 MB larger per architecture.** It now carries the
+`docker compose` plugin, which the in-app updater needs to reconcile the stack
+from inside a container. Nothing else changed in the image's footprint.
+
 ## [0.1.7]
 
 ### Belune now has a complete API reference
@@ -465,6 +512,7 @@ iterations; this is what Belune _is_ at launch, not a list of what changed.
 - Registry credentials for private images, monorepo subdirectory builds, and
   custom start commands are not yet configurable.
 
+[0.1.8]: https://github.com/weiliang79/belune/releases/tag/v0.1.8
 [0.1.7]: https://github.com/weiliang79/belune/releases/tag/v0.1.7
 [0.1.6]: https://github.com/weiliang79/belune/releases/tag/v0.1.6
 [0.1.5]: https://github.com/weiliang79/belune/releases/tag/v0.1.5

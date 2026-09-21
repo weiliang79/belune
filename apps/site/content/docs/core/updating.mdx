@@ -3,11 +3,35 @@ title: Updating
 description: Move Belune to a new version, safely.
 ---
 
-Belune installs are pinned to a version, never `:latest`, so a routine pull can't move you across a migration boundary. Updating is a deliberate step, so Belune ships an `update.sh` script to handle it. 
+Belune installs are pinned to a version, never `:latest`, so a routine pull can't move you across a migration boundary. Updating is a deliberate step, and there are two ways to take it: a button on the dashboard, or the `update.sh` script on the host. Both run the same updater underneath.
 
 The updater takes a backup, fetches the version-matched infra files, moves the image pin, and health-checks the result — with clear rollback instructions if anything goes wrong.
 
+## Update from the Dashboard
+
+Belune checks [belune.dev](https://belune.dev/versions.json) once a day for a newer release. When there is one, a dot appears beside the version in the sidebar, admins are notified, and **Server → Configuration → Updates** shows the release with a link to its notes.
+
+**Update now** asks for your password — and a second-factor code if you have one enrolled — then takes a full backup and applies the update. Belune restarts itself; the dashboard reconnects on the new version a few seconds later. It runs the exact `scripts/update.sh` described below, so the dashboard and host paths cannot drift apart.
+
+<Callout type="info" title="Some Releases Need the Host">
+A release that changes `docker-compose.yml` or a systemd unit can't be applied from inside a container. The Updates card says so instead of offering the button — use `update.sh` on the host for those, as described next.
+</Callout>
+
+Two smaller controls sit on the same card. **Check now** runs the check immediately rather than waiting for the daily sweep — useful right after you've read release notes. **Skip this version** silences one release without turning checks off; the next one will still be flagged.
+
+The check is a plain `GET` of a public manifest and sends nothing about your install. It's on by default; turn it off with the **Check automatically** switch, or set `update_check_enabled` to `false`.
+
+### If It Fails
+
+The Updates card reports what went wrong, quoting the updater's own output. Nothing on the host is left half-done: the previous `.env` and infra files are kept as `.env.backup-<version>` and `.infra-backup-<version>/` in the install directory, and `update.sh` on the host still works exactly as before.
+
+<Callout type="warn" title="Reaching 0.1.8">
+The dashboard updater arrived in 0.1.8, so an install on 0.1.7 or earlier can't use it to get there. That one update is manual — `sudo bash scripts/update.sh` — and every release after it can be applied from the dashboard.
+</Callout>
+
 ## Update to the Latest Release
+
+From the host, in the install directory:
 
 ```bash
 cd /opt/belune
