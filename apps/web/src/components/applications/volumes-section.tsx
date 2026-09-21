@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { IconAction } from "@/components/ui/icon-action";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Field, FieldError, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -205,8 +206,8 @@ export function VolumesSection({ projectId, applicationId, canDelete }: Props) {
             <DialogHeader>
               <DialogTitle>Add Volume</DialogTitle>
               <DialogDescription>
-                Give the volume a name and the absolute path where it should
-                be mounted inside the container.
+                Give the volume a name and the absolute path where it should be
+                mounted inside the container.
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4 py-2">
@@ -224,24 +225,25 @@ export function VolumesSection({ projectId, applicationId, canDelete }: Props) {
                 children={(field) => {
                   const error = fieldError(field.state.meta.errors);
                   return (
-                    <div className="space-y-1.5">
-                      <Label htmlFor="volume-name">Name</Label>
+                    <Field data-invalid={!!error}>
+                      <FieldLabel htmlFor="volume-name">Name</FieldLabel>
                       <Input
                         id="volume-name"
                         placeholder="data"
                         value={field.state.value}
                         onBlur={field.handleBlur}
                         onChange={(e) => field.handleChange(e.target.value)}
+                        aria-invalid={!!error}
                       />
                       {error ? (
-                        <p className="text-destructive text-xs">{error}</p>
+                        <FieldError>{error}</FieldError>
                       ) : (
                         <p className="text-text-faint text-xs">
                           Lowercase letters, numbers and hyphens. Used to
                           identify the stored volume.
                         </p>
                       )}
-                    </div>
+                    </Field>
                   );
                 }}
               />
@@ -251,7 +253,10 @@ export function VolumesSection({ projectId, applicationId, canDelete }: Props) {
                   onChange: z
                     .string()
                     .min(1, "Mount path is required")
-                    .refine((v) => v.startsWith("/"), "Must be an absolute path")
+                    .refine(
+                      (v) => v.startsWith("/"),
+                      "Must be an absolute path",
+                    )
                     .refine(
                       (v) => !SYSTEM_PATHS.has(v),
                       "Cannot be a system path",
@@ -260,8 +265,10 @@ export function VolumesSection({ projectId, applicationId, canDelete }: Props) {
                 children={(field) => {
                   const error = fieldError(field.state.meta.errors);
                   return (
-                    <div className="space-y-1.5">
-                      <Label htmlFor="volume-mount-path">Mount path</Label>
+                    <Field data-invalid={!!error}>
+                      <FieldLabel htmlFor="volume-mount-path">
+                        Mount path
+                      </FieldLabel>
                       <Input
                         id="volume-mount-path"
                         placeholder="/data"
@@ -269,9 +276,10 @@ export function VolumesSection({ projectId, applicationId, canDelete }: Props) {
                         value={field.state.value}
                         onBlur={field.handleBlur}
                         onChange={(e) => field.handleChange(e.target.value)}
+                        aria-invalid={!!error}
                       />
                       {error ? (
-                        <p className="text-destructive text-xs">{error}</p>
+                        <FieldError>{error}</FieldError>
                       ) : (
                         <p className="text-text-faint text-xs">
                           Absolute path inside the container, e.g.{" "}
@@ -280,7 +288,7 @@ export function VolumesSection({ projectId, applicationId, canDelete }: Props) {
                           .
                         </p>
                       )}
-                    </div>
+                    </Field>
                   );
                 }}
               />

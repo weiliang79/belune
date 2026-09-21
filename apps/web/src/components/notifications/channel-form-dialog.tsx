@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Field, FieldError, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -400,19 +401,18 @@ function ChannelForm({
             children={(field) => {
               const error = fieldError(field.state.meta.errors);
               return (
-                <div className="space-y-1.5">
-                  <Label htmlFor="channel-name">Name</Label>
+                <Field data-invalid={!!error}>
+                  <FieldLabel htmlFor="channel-name">Name</FieldLabel>
                   <Input
                     id="channel-name"
                     value={field.state.value}
                     onBlur={field.handleBlur}
                     onChange={(e) => field.handleChange(e.target.value)}
                     placeholder="Ops Discord"
+                    aria-invalid={!!error}
                   />
-                  {error && (
-                    <p className="text-destructive text-xs">{error}</p>
-                  )}
-                </div>
+                  {error && <FieldError>{error}</FieldError>}
+                </Field>
               );
             }}
           />

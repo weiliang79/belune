@@ -10,8 +10,8 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Field, FieldError, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { PendingChangeBadge } from "@/lib/components/pending-change-badge";
 import { useSetResources } from "@/lib/hooks/use-applications";
 import type { Application } from "@/lib/types";
@@ -48,9 +48,7 @@ export function ResourcesSection({
   const form = useForm({
     defaultValues: {
       cpu: application.cpu_limit?.toString() ?? "0",
-      memoryMb: Math.round(
-        application.memory_limit / (1024 * 1024),
-      ).toString(),
+      memoryMb: Math.round(application.memory_limit / (1024 * 1024)).toString(),
     },
     onSubmit: ({ value }) => {
       const cpuLimit = parseFloat(value.cpu) || 0;
@@ -96,8 +94,10 @@ export function ResourcesSection({
               children={(field) => {
                 const error = fieldError(field.state.meta.errors);
                 return (
-                  <div className="space-y-2">
-                    <Label htmlFor="cpu-limit">CPU Limit (cores)</Label>
+                  <Field data-invalid={!!error}>
+                    <FieldLabel htmlFor="cpu-limit">
+                      CPU Limit (cores)
+                    </FieldLabel>
                     <Input
                       id="cpu-limit"
                       type="number"
@@ -107,15 +107,16 @@ export function ResourcesSection({
                       onBlur={field.handleBlur}
                       onChange={(e) => field.handleChange(e.target.value)}
                       placeholder="0 = unlimited"
+                      aria-invalid={!!error}
                     />
                     {error ? (
-                      <p className="text-destructive text-xs">{error}</p>
+                      <FieldError>{error}</FieldError>
                     ) : (
                       <p className="text-muted-foreground text-xs">
                         e.g. 0.5 = half a core, 0 = unlimited
                       </p>
                     )}
-                  </div>
+                  </Field>
                 );
               }}
             />
@@ -125,8 +126,10 @@ export function ResourcesSection({
               children={(field) => {
                 const error = fieldError(field.state.meta.errors);
                 return (
-                  <div className="space-y-2">
-                    <Label htmlFor="memory-limit">Memory Limit (MB)</Label>
+                  <Field data-invalid={!!error}>
+                    <FieldLabel htmlFor="memory-limit">
+                      Memory Limit (MB)
+                    </FieldLabel>
                     <Input
                       id="memory-limit"
                       type="number"
@@ -136,15 +139,16 @@ export function ResourcesSection({
                       onBlur={field.handleBlur}
                       onChange={(e) => field.handleChange(e.target.value)}
                       placeholder="0 = unlimited"
+                      aria-invalid={!!error}
                     />
                     {error ? (
-                      <p className="text-destructive text-xs">{error}</p>
+                      <FieldError>{error}</FieldError>
                     ) : (
                       <p className="text-muted-foreground text-xs">
                         e.g. 512 = 512 MB, 0 = unlimited
                       </p>
                     )}
-                  </div>
+                  </Field>
                 );
               }}
             />

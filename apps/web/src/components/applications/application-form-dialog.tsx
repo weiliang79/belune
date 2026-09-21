@@ -12,6 +12,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Field, FieldError, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -56,7 +57,7 @@ export function ApplicationFormDialog({
       {/* Cap the height and let only the body scroll (grid rows pin the header
           and footer): connected-account mode adds account + repo + branch fields,
           which otherwise grew the dialog past the viewport with no way to scroll. */}
-      <DialogContent className="grid-rows-[auto_minmax(0,1fr)_auto] max-h-[85vh]">
+      <DialogContent className="max-h-[85vh] grid-rows-[auto_minmax(0,1fr)_auto]">
         {/* Remounted per open, so the form resets without an effect. */}
         {open && (
           <FormBody
@@ -70,11 +71,7 @@ export function ApplicationFormDialog({
   );
 }
 
-function FormBody({
-  projectId,
-  onOpenChange,
-  onCreated,
-}: Omit<Props, "open">) {
+function FormBody({ projectId, onOpenChange, onCreated }: Omit<Props, "open">) {
   const navigate = useNavigate();
   const createApplication = useCreateApplication(projectId);
   const { data: features } = useFeatures();
@@ -165,8 +162,8 @@ function FormBody({
           children={(field) => {
             const error = fieldError(field.state.meta.errors);
             return (
-              <div className="space-y-2">
-                <Label htmlFor="app-name">Application Name</Label>
+              <Field data-invalid={!!error}>
+                <FieldLabel htmlFor="app-name">Application Name</FieldLabel>
                 <Input
                   id="app-name"
                   value={field.state.value}
@@ -178,9 +175,10 @@ function FormBody({
                     }
                   }}
                   placeholder="my-api"
+                  aria-invalid={!!error}
                 />
-                {error && <p className="text-destructive text-xs">{error}</p>}
-              </div>
+                {error && <FieldError>{error}</FieldError>}
+              </Field>
             );
           }}
         />
@@ -218,9 +216,7 @@ function FormBody({
               <Label>Source</Label>
               <SegmentedControl
                 value={field.state.value}
-                onValueChange={(v) =>
-                  field.handleChange(v as "image" | "git")
-                }
+                onValueChange={(v) => field.handleChange(v as "image" | "git")}
               >
                 <SegmentedControlItem value="image">
                   Docker Image
@@ -249,19 +245,20 @@ function FormBody({
                 children={(field) => {
                   const error = fieldError(field.state.meta.errors);
                   return (
-                    <div className="space-y-2">
-                      <Label htmlFor="source-image">Docker Image</Label>
+                    <Field data-invalid={!!error}>
+                      <FieldLabel htmlFor="source-image">
+                        Docker Image
+                      </FieldLabel>
                       <Input
                         id="source-image"
                         value={field.state.value}
                         onBlur={field.handleBlur}
                         onChange={(e) => field.handleChange(e.target.value)}
                         placeholder="nginx:latest"
+                        aria-invalid={!!error}
                       />
-                      {error && (
-                        <p className="text-destructive text-xs">{error}</p>
-                      )}
-                    </div>
+                      {error && <FieldError>{error}</FieldError>}
+                    </Field>
                   );
                 }}
               />
@@ -315,7 +312,7 @@ function FormBody({
                         selector={(s) => s.values.gitSource}
                         children={(gitSource) =>
                           gitSource === "connection" ? (
-                            <div className="space-y-2">
+                            <Field data-invalid={!!error}>
                               <IntegrationRepoPicker
                                 onSelect={({
                                   integrationId,
@@ -330,35 +327,26 @@ function FormBody({
                                   form.setFieldValue("branch", branch);
                                 }}
                               />
-                              {error && (
-                                <p className="text-destructive text-xs">
-                                  {error}
-                                </p>
-                              )}
-                            </div>
+                              {error && <FieldError>{error}</FieldError>}
+                            </Field>
                           ) : (
                             <>
-                              <div className="space-y-2">
-                                <Label htmlFor="source-repo">
+                              <Field data-invalid={!!error}>
+                                <FieldLabel htmlFor="source-repo">
                                   Repository URL
-                                </Label>
+                                </FieldLabel>
                                 <Input
                                   id="source-repo"
                                   value={sourceRepoField.state.value}
                                   onBlur={sourceRepoField.handleBlur}
                                   onChange={(e) =>
-                                    sourceRepoField.handleChange(
-                                      e.target.value,
-                                    )
+                                    sourceRepoField.handleChange(e.target.value)
                                   }
                                   placeholder="https://github.com/user/repo.git"
+                                  aria-invalid={!!error}
                                 />
-                                {error && (
-                                  <p className="text-destructive text-xs">
-                                    {error}
-                                  </p>
-                                )}
-                              </div>
+                                {error && <FieldError>{error}</FieldError>}
+                              </Field>
                               <form.Field
                                 name="gitToken"
                                 children={(field) => (
@@ -378,12 +366,11 @@ function FormBody({
                                       className="font-mono"
                                     />
                                     <p className="text-muted-foreground text-xs">
-                                      Per-app token for private repositories.
-                                      A connected account is still recommended
-                                      when available — it's scoped and
-                                      registers push-to-deploy webhooks
-                                      automatically, which a URL + PAT source
-                                      does not.
+                                      Per-app token for private repositories. A
+                                      connected account is still recommended
+                                      when available — it's scoped and registers
+                                      push-to-deploy webhooks automatically,
+                                      which a URL + PAT source does not.
                                     </p>
                                   </div>
                                 )}

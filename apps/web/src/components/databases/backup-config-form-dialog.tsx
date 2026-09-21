@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Field, FieldError, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -101,13 +102,13 @@ function BackupConfigForm({
       destinationId: config?.destination_id ?? "",
       schedule: config?.schedule ?? "0 0 * * *",
       prefix: config?.prefix ?? "",
-      keepLatest:
-        config?.keep_latest != null ? String(config.keep_latest) : "",
+      keepLatest: config?.keep_latest != null ? String(config.keep_latest) : "",
       enabled: config?.enabled ?? true,
       databases: config?.databases ?? ([] as string[]),
     },
     onSubmit: ({ value }) => {
-      const keep = value.keepLatest.trim() === "" ? null : Number(value.keepLatest);
+      const keep =
+        value.keepLatest.trim() === "" ? null : Number(value.keepLatest);
       // Include a pending typed-but-not-committed value so it isn't lost on submit.
       const pendingDb = dbInput.trim();
       const finalDatabases =
@@ -182,13 +183,13 @@ function BackupConfigForm({
           children={(field) => {
             const error = fieldError(field.state.meta.errors);
             return (
-              <div className="space-y-1.5">
-                <Label>Destination</Label>
+              <Field data-invalid={!!error}>
+                <FieldLabel>Destination</FieldLabel>
                 <Select
                   value={field.state.value}
                   onValueChange={(v) => field.handleChange(v ?? "")}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger aria-invalid={!!error}>
                     <SelectValue placeholder="Select destination" />
                   </SelectTrigger>
                   <SelectContent>
@@ -200,7 +201,7 @@ function BackupConfigForm({
                   </SelectContent>
                 </Select>
                 {error ? (
-                  <p className="text-destructive text-xs">{error}</p>
+                  <FieldError>{error}</FieldError>
                 ) : (
                   destinations &&
                   destinations.length === 0 && (
@@ -210,7 +211,7 @@ function BackupConfigForm({
                     </p>
                   )
                 )}
-              </div>
+              </Field>
             );
           }}
         />
@@ -232,8 +233,8 @@ function BackupConfigForm({
               SCHEDULE_PRESETS.find((p) => p.value === field.state.value)
                 ?.value ?? "custom";
             return (
-              <div className="space-y-1.5">
-                <Label>Schedule</Label>
+              <Field data-invalid={!!error}>
+                <FieldLabel>Schedule</FieldLabel>
                 <Select
                   value={presetValue}
                   onValueChange={(v) => {
@@ -268,15 +269,16 @@ function BackupConfigForm({
                   onBlur={field.handleBlur}
                   onChange={(e) => field.handleChange(e.target.value)}
                   placeholder="Custom cron (e.g. 0 0 * * *)"
+                  aria-invalid={!!error}
                 />
                 {error ? (
-                  <p className="text-destructive text-xs">{error}</p>
+                  <FieldError>{error}</FieldError>
                 ) : (
                   <p className="text-muted-foreground text-xs">
                     Standard 5-field cron expression.
                   </p>
                 )}
-              </div>
+              </Field>
             );
           }}
         />
@@ -358,8 +360,8 @@ function BackupConfigForm({
           children={(field) => {
             const error = fieldError(field.state.meta.errors);
             return (
-              <div className="space-y-1.5">
-                <Label htmlFor="cfg-keep">Keep latest</Label>
+              <Field data-invalid={!!error}>
+                <FieldLabel htmlFor="cfg-keep">Keep latest</FieldLabel>
                 <Input
                   id="cfg-keep"
                   type="number"
@@ -368,16 +370,16 @@ function BackupConfigForm({
                   onBlur={field.handleBlur}
                   onChange={(e) => field.handleChange(e.target.value)}
                   placeholder="Keeps all if empty"
+                  aria-invalid={!!error}
                 />
                 {error ? (
-                  <p className="text-destructive text-xs">{error}</p>
+                  <FieldError>{error}</FieldError>
                 ) : (
                   <p className="text-muted-foreground text-xs">
-                    Optional. Only keep the latest N backups in the
-                    destination.
+                    Optional. Only keep the latest N backups in the destination.
                   </p>
                 )}
-              </div>
+              </Field>
             );
           }}
         />

@@ -27,7 +27,11 @@ function collectSelectItems(
   React.Children.forEach(children, (child) => {
     if (!React.isValidElement(child)) return;
     if (child.type === SelectItem) {
-      const { value, children: label, icon } = child.props as {
+      const {
+        value,
+        children: label,
+        icon,
+      } = child.props as {
         value?: unknown;
         children?: React.ReactNode;
         icon?: React.ReactNode;
@@ -79,7 +83,7 @@ function SelectTrigger({
     <SelectPrimitive.Trigger
       data-slot="select-trigger"
       className={cn(
-        "flex h-9 w-full items-center justify-between gap-2 rounded-md border border-input bg-background px-3 py-2 text-sm shadow-xs outline-none transition-[color,box-shadow] focus:border-ring focus:ring-[3px] focus:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 data-[popup-open]:border-ring data-[popup-open]:ring-[3px] data-[popup-open]:ring-ring/50",
+        "border-input bg-background focus:border-ring focus:ring-ring/50 data-[popup-open]:border-ring data-[popup-open]:ring-ring/50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40 flex h-9 w-full items-center justify-between gap-2 rounded-md border px-3 py-2 text-sm shadow-xs transition-[color,box-shadow] outline-none focus:ring-[3px] disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:ring-3 data-[popup-open]:ring-[3px]",
         className,
       )}
       {...props}
@@ -158,7 +162,7 @@ function SelectContent({
         <SelectPrimitive.Popup
           data-slot="select-content"
           className={cn(
-            "z-50 max-h-[min(var(--available-height,320px),320px)] w-fit max-w-[24rem] min-w-(--anchor-width) origin-(--transform-origin) overflow-x-hidden overflow-y-auto rounded-lg bg-popover p-1 text-popover-foreground shadow-md ring-1 ring-foreground/10 duration-100 outline-none data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:overflow-hidden data-closed:fade-out-0 data-closed:zoom-out-95",
+            "bg-popover text-popover-foreground ring-foreground/10 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95 z-50 max-h-[min(var(--available-height,320px),320px)] w-fit max-w-[24rem] min-w-(--anchor-width) origin-(--transform-origin) overflow-x-hidden overflow-y-auto rounded-lg p-1 shadow-md ring-1 duration-100 outline-none data-closed:overflow-hidden",
             className,
           )}
           {...props}
@@ -180,7 +184,7 @@ function SelectItem({
     <SelectPrimitive.Item
       data-slot="select-item"
       className={cn(
-        "relative flex cursor-default items-center gap-2 rounded-md py-1.5 pr-8 pl-2 text-sm outline-none select-none focus:bg-foreground/10 focus:text-accent-foreground data-disabled:pointer-events-none data-disabled:opacity-50 [&_svg]:size-4 [&_svg]:shrink-0",
+        "focus:bg-foreground/10 focus:text-accent-foreground relative flex cursor-default items-center gap-2 rounded-md py-1.5 pr-8 pl-2 text-sm outline-none select-none data-disabled:pointer-events-none data-disabled:opacity-50 [&_svg]:size-4 [&_svg]:shrink-0",
         className,
       )}
       {...props}
@@ -198,14 +202,11 @@ function SelectItem({
   );
 }
 
-function SelectSeparator({
-  className,
-  ...props
-}: React.ComponentProps<"div">) {
+function SelectSeparator({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="select-separator"
-      className={cn("-mx-1 my-1 h-px bg-border", className)}
+      className={cn("bg-border -mx-1 my-1 h-px", className)}
       {...props}
     />
   );
@@ -215,11 +216,17 @@ function SelectGroup({ ...props }: SelectPrimitive.Group.Props) {
   return <SelectPrimitive.Group data-slot="select-group" {...props} />;
 }
 
-function SelectGroupLabel({ className, ...props }: SelectPrimitive.GroupLabel.Props) {
+function SelectGroupLabel({
+  className,
+  ...props
+}: SelectPrimitive.GroupLabel.Props) {
   return (
     <SelectPrimitive.GroupLabel
       data-slot="select-group-label"
-      className={cn("px-2 py-1 text-xs font-medium text-muted-foreground", className)}
+      className={cn(
+        "text-muted-foreground px-2 py-1 text-xs font-medium",
+        className,
+      )}
       {...props}
     />
   );

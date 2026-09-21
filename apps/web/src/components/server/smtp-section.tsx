@@ -9,6 +9,7 @@ import {
 import { useAuthStore } from "@/lib/stores/auth";
 import type { SmtpSettings, SmtpTLSMode } from "@/lib/api/smtp-settings";
 import { Button } from "@/components/ui/button";
+import { Field, FieldError, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -158,8 +159,8 @@ function SmtpForm({ initial }: { initial: SmtpSettings }) {
           children={(field) => {
             const error = fieldError(field.state.meta.errors);
             return (
-              <div className="space-y-1.5">
-                <Label htmlFor="smtp-port">Port</Label>
+              <Field data-invalid={!!error}>
+                <FieldLabel htmlFor="smtp-port">Port</FieldLabel>
                 <Input
                   id="smtp-port"
                   inputMode="numeric"
@@ -169,9 +170,10 @@ function SmtpForm({ initial }: { initial: SmtpSettings }) {
                     field.handleChange(e.target.value.replace(/[^0-9]/g, ""))
                   }
                   placeholder="587"
+                  aria-invalid={!!error}
                 />
-                {error && <p className="text-destructive text-xs">{error}</p>}
-              </div>
+                {error && <FieldError>{error}</FieldError>}
+              </Field>
             );
           }}
         />
@@ -227,19 +229,18 @@ function SmtpForm({ initial }: { initial: SmtpSettings }) {
           children={(field) => {
             const error = fieldError(field.state.meta.errors);
             return (
-              <div className="space-y-1.5">
-                <Label htmlFor="smtp-from-email">From address</Label>
+              <Field data-invalid={!!error}>
+                <FieldLabel htmlFor="smtp-from-email">From address</FieldLabel>
                 <Input
                   id="smtp-from-email"
                   value={field.state.value}
                   onBlur={field.handleBlur}
                   onChange={(e) => field.handleChange(e.target.value)}
                   placeholder="noreply@example.com"
+                  aria-invalid={!!error}
                 />
-                {error && (
-                  <p className="text-destructive text-xs">{error}</p>
-                )}
-              </div>
+                {error && <FieldError>{error}</FieldError>}
+              </Field>
             );
           }}
         />

@@ -21,6 +21,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Field, FieldError, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -217,8 +218,8 @@ function DatabaseForm({
           children={(field) => {
             const error = fieldError(field.state.meta.errors);
             return (
-              <div className="space-y-2">
-                <Label htmlFor="db-name">Name</Label>
+              <Field data-invalid={!!error}>
+                <FieldLabel htmlFor="db-name">Name</FieldLabel>
                 <Input
                   id="db-name"
                   value={field.state.value}
@@ -230,9 +231,10 @@ function DatabaseForm({
                     }
                   }}
                   placeholder="my-database"
+                  aria-invalid={!!error}
                 />
-                {error && <p className="text-destructive text-xs">{error}</p>}
-              </div>
+                {error && <FieldError>{error}</FieldError>}
+              </Field>
             );
           }}
         />
@@ -440,23 +442,24 @@ function DatabaseForm({
                     children={(field) => {
                       const error = fieldError(field.state.meta.errors);
                       return (
-                        <div className="space-y-2">
-                          <Label htmlFor="other-image">Image</Label>
+                        <Field data-invalid={!!error}>
+                          <FieldLabel htmlFor="other-image">Image</FieldLabel>
                           <Input
                             id="other-image"
                             value={field.state.value}
                             onBlur={field.handleBlur}
                             onChange={(e) => field.handleChange(e.target.value)}
                             placeholder="e.g. clickhouse/clickhouse-server:24.3"
+                            aria-invalid={!!error}
                           />
                           {error ? (
-                            <p className="text-destructive text-xs">{error}</p>
+                            <FieldError>{error}</FieldError>
                           ) : (
                             <p className="text-muted-foreground text-xs">
                               Full image reference. Pin a version tag.
                             </p>
                           )}
-                        </div>
+                        </Field>
                       );
                     }}
                   />
@@ -476,8 +479,10 @@ function DatabaseForm({
                     children={(field) => {
                       const error = fieldError(field.state.meta.errors);
                       return (
-                        <div className="space-y-2">
-                          <Label htmlFor="other-port">Container Port</Label>
+                        <Field data-invalid={!!error}>
+                          <FieldLabel htmlFor="other-port">
+                            Container Port
+                          </FieldLabel>
                           <Input
                             id="other-port"
                             type="number"
@@ -486,16 +491,17 @@ function DatabaseForm({
                             onBlur={field.handleBlur}
                             onChange={(e) => field.handleChange(e.target.value)}
                             placeholder="e.g. 9000"
+                            aria-invalid={!!error}
                           />
                           {error ? (
-                            <p className="text-destructive text-xs">{error}</p>
+                            <FieldError>{error}</FieldError>
                           ) : (
                             <p className="text-muted-foreground text-xs">
                               The port the database listens on inside the
                               container.
                             </p>
                           )}
-                        </div>
+                        </Field>
                       );
                     }}
                   />
@@ -583,10 +589,10 @@ function DatabaseForm({
                             children={(field) => {
                               const error = fieldError(field.state.meta.errors);
                               return (
-                                <div className="space-y-1">
-                                  <Label htmlFor="other-backup-cmd">
+                                <Field data-invalid={!!error} className="gap-1">
+                                  <FieldLabel htmlFor="other-backup-cmd">
                                     Backup Command
-                                  </Label>
+                                  </FieldLabel>
                                   <Textarea
                                     id="other-backup-cmd"
                                     value={field.state.value}
@@ -597,13 +603,10 @@ function DatabaseForm({
                                     rows={2}
                                     placeholder="dump into $BELUNE_BACKUP_DIR"
                                     className="font-mono text-xs"
+                                    aria-invalid={!!error}
                                   />
-                                  {error && (
-                                    <p className="text-destructive text-xs">
-                                      {error}
-                                    </p>
-                                  )}
-                                </div>
+                                  {error && <FieldError>{error}</FieldError>}
+                                </Field>
                               );
                             }}
                           />
@@ -622,10 +625,10 @@ function DatabaseForm({
                             children={(field) => {
                               const error = fieldError(field.state.meta.errors);
                               return (
-                                <div className="space-y-1">
-                                  <Label htmlFor="other-restore-cmd">
+                                <Field data-invalid={!!error} className="gap-1">
+                                  <FieldLabel htmlFor="other-restore-cmd">
                                     Restore Command
-                                  </Label>
+                                  </FieldLabel>
                                   <Textarea
                                     id="other-restore-cmd"
                                     value={field.state.value}
@@ -636,13 +639,10 @@ function DatabaseForm({
                                     rows={2}
                                     placeholder="restore from $BELUNE_BACKUP_DIR"
                                     className="font-mono text-xs"
+                                    aria-invalid={!!error}
                                   />
-                                  {error && (
-                                    <p className="text-destructive text-xs">
-                                      {error}
-                                    </p>
-                                  )}
-                                </div>
+                                  {error && <FieldError>{error}</FieldError>}
+                                </Field>
                               );
                             }}
                           />

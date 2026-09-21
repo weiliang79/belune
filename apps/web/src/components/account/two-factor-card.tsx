@@ -20,8 +20,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
+import { Field, FieldError, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   useDisableTotp,
   useEnrollTotp,
@@ -149,7 +149,9 @@ function EnableDialog({ onIssued }: { onIssued: (codes: string[]) => void }) {
       try {
         setEnrollment(await enroll.mutateAsync(value.password));
       } catch (err) {
-        toast.error(err instanceof Error ? err.message : "Could not start setup");
+        toast.error(
+          err instanceof Error ? err.message : "Could not start setup",
+        );
       }
     },
   });
@@ -207,19 +209,26 @@ function EnableDialog({ onIssued }: { onIssued: (codes: string[]) => void }) {
                 validators={{
                   onChange: z.string().min(1, "Password is required"),
                 }}
-                children={(field) => (
-                  <div className="space-y-2 py-4">
-                    <Label htmlFor="enroll-password">Password</Label>
-                    <Input
-                      id="enroll-password"
-                      type="password"
-                      autoFocus
-                      value={field.state.value}
-                      onBlur={field.handleBlur}
-                      onChange={(e) => field.handleChange(e.target.value)}
-                    />
-                  </div>
-                )}
+                children={(field) => {
+                  const error = fieldError(field.state.meta.errors);
+                  return (
+                    <Field data-invalid={!!error} className="py-4">
+                      <FieldLabel htmlFor="enroll-password">
+                        Password
+                      </FieldLabel>
+                      <Input
+                        id="enroll-password"
+                        type="password"
+                        autoFocus
+                        value={field.state.value}
+                        onBlur={field.handleBlur}
+                        onChange={(e) => field.handleChange(e.target.value)}
+                        aria-invalid={!!error}
+                      />
+                      {error && <FieldError>{error}</FieldError>}
+                    </Field>
+                  );
+                }}
               />
               <DialogFooter>
                 <Button type="button" variant="outline" onClick={close}>
@@ -281,8 +290,10 @@ function EnableDialog({ onIssued }: { onIssued: (codes: string[]) => void }) {
                   children={(field) => {
                     const error = fieldError(field.state.meta.errors);
                     return (
-                      <div className="space-y-2">
-                        <Label htmlFor="totp-code">Verification code</Label>
+                      <Field data-invalid={!!error}>
+                        <FieldLabel htmlFor="totp-code">
+                          Verification code
+                        </FieldLabel>
                         <Input
                           id="totp-code"
                           inputMode="numeric"
@@ -291,11 +302,10 @@ function EnableDialog({ onIssued }: { onIssued: (codes: string[]) => void }) {
                           value={field.state.value}
                           onBlur={field.handleBlur}
                           onChange={(e) => field.handleChange(e.target.value)}
+                          aria-invalid={!!error}
                         />
-                        {error && (
-                          <p className="text-destructive text-xs">{error}</p>
-                        )}
-                      </div>
+                        {error && <FieldError>{error}</FieldError>}
+                      </Field>
                     );
                   }}
                 />
@@ -339,7 +349,9 @@ function DisableDialog() {
         toast.success("Two-factor authentication is off");
         close();
       } catch (err) {
-        toast.error(err instanceof Error ? err.message : "Could not turn it off");
+        toast.error(
+          err instanceof Error ? err.message : "Could not turn it off",
+        );
       }
     },
   });
@@ -382,19 +394,18 @@ function DisableDialog() {
               children={(field) => {
                 const error = fieldError(field.state.meta.errors);
                 return (
-                  <div className="space-y-2">
-                    <Label htmlFor="disable-password">Password</Label>
+                  <Field data-invalid={!!error}>
+                    <FieldLabel htmlFor="disable-password">Password</FieldLabel>
                     <Input
                       id="disable-password"
                       type="password"
                       value={field.state.value}
                       onBlur={field.handleBlur}
                       onChange={(e) => field.handleChange(e.target.value)}
+                      aria-invalid={!!error}
                     />
-                    {error && (
-                      <p className="text-destructive text-xs">{error}</p>
-                    )}
-                  </div>
+                    {error && <FieldError>{error}</FieldError>}
+                  </Field>
                 );
               }}
             />
@@ -409,28 +420,25 @@ function DisableDialog() {
                   children={(field) => {
                     const error = fieldError(field.state.meta.errors);
                     return (
-                      <div className="space-y-2">
-                        <Label htmlFor="disable-code">
+                      <Field data-invalid={!!error}>
+                        <FieldLabel htmlFor="disable-code">
                           {useRecoveryCode
                             ? "Recovery code"
                             : "Verification code"}
-                        </Label>
+                        </FieldLabel>
                         <Input
                           id="disable-code"
                           inputMode={useRecoveryCode ? "text" : "numeric"}
                           autoComplete="one-time-code"
                           placeholder={
-                            useRecoveryCode
-                              ? "XXXX-XXXX-XXXX-XXXX"
-                              : "123456"
+                            useRecoveryCode ? "XXXX-XXXX-XXXX-XXXX" : "123456"
                           }
                           value={field.state.value}
                           onBlur={field.handleBlur}
                           onChange={(e) => field.handleChange(e.target.value)}
+                          aria-invalid={!!error}
                         />
-                        {error && (
-                          <p className="text-destructive text-xs">{error}</p>
-                        )}
+                        {error && <FieldError>{error}</FieldError>}
                         <button
                           type="button"
                           onClick={() => {
@@ -446,7 +454,7 @@ function DisableDialog() {
                             ? "Use your authenticator app instead"
                             : "Lost your device? Use a recovery code"}
                         </button>
-                      </div>
+                      </Field>
                     );
                   }}
                 />
@@ -484,7 +492,9 @@ function RegenerateCodesDialog() {
         setCodes(result.recovery_codes);
         form.reset();
       } catch (err) {
-        toast.error(err instanceof Error ? err.message : "Could not regenerate");
+        toast.error(
+          err instanceof Error ? err.message : "Could not regenerate",
+        );
       }
     },
   });
@@ -541,19 +551,18 @@ function RegenerateCodesDialog() {
                 children={(field) => {
                   const error = fieldError(field.state.meta.errors);
                   return (
-                    <div className="space-y-2">
-                      <Label htmlFor="regen-password">Password</Label>
+                    <Field data-invalid={!!error}>
+                      <FieldLabel htmlFor="regen-password">Password</FieldLabel>
                       <Input
                         id="regen-password"
                         type="password"
                         value={field.state.value}
                         onBlur={field.handleBlur}
                         onChange={(e) => field.handleChange(e.target.value)}
+                        aria-invalid={!!error}
                       />
-                      {error && (
-                        <p className="text-destructive text-xs">{error}</p>
-                      )}
-                    </div>
+                      {error && <FieldError>{error}</FieldError>}
+                    </Field>
                   );
                 }}
               />
@@ -567,8 +576,10 @@ function RegenerateCodesDialog() {
                 children={(field) => {
                   const error = fieldError(field.state.meta.errors);
                   return (
-                    <div className="space-y-2">
-                      <Label htmlFor="regen-code">Verification code</Label>
+                    <Field data-invalid={!!error}>
+                      <FieldLabel htmlFor="regen-code">
+                        Verification code
+                      </FieldLabel>
                       <Input
                         id="regen-code"
                         inputMode="numeric"
@@ -577,11 +588,10 @@ function RegenerateCodesDialog() {
                         value={field.state.value}
                         onBlur={field.handleBlur}
                         onChange={(e) => field.handleChange(e.target.value)}
+                        aria-invalid={!!error}
                       />
-                      {error && (
-                        <p className="text-destructive text-xs">{error}</p>
-                      )}
-                    </div>
+                      {error && <FieldError>{error}</FieldError>}
+                    </Field>
                   );
                 }}
               />

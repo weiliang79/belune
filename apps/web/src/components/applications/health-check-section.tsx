@@ -10,6 +10,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Field, FieldError, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -117,9 +118,9 @@ export function HealthCheckSection({
         </CardTitle>
         <CardDescription>
           How the platform decides the application is healthy. A command check
-          runs continuously inside the container and marks the app Unhealthy when
-          it fails; an HTTP check is probed once after each deploy. Changes apply
-          on the next deploy.
+          runs continuously inside the container and marks the app Unhealthy
+          when it fails; an HTTP check is probed once after each deploy. Changes
+          apply on the next deploy.
         </CardDescription>
       </CardHeader>
       <form
@@ -168,8 +169,8 @@ export function HealthCheckSection({
                       children={(field) => {
                         const error = fieldError(field.state.meta.errors);
                         return (
-                          <div className="space-y-2">
-                            <Label>Path</Label>
+                          <Field data-invalid={!!error}>
+                            <FieldLabel>Path</FieldLabel>
                             <Input
                               value={field.state.value}
                               onBlur={field.handleBlur}
@@ -178,11 +179,10 @@ export function HealthCheckSection({
                               }
                               placeholder="/healthz"
                               className="font-mono"
+                              aria-invalid={!!error}
                             />
                             {error ? (
-                              <p className="text-destructive text-xs">
-                                {error}
-                              </p>
+                              <FieldError>{error}</FieldError>
                             ) : (
                               <p className="text-muted-foreground text-xs">
                                 Probed on the container's port after each
@@ -190,7 +190,7 @@ export function HealthCheckSection({
                                 fails the deploy.
                               </p>
                             )}
-                          </div>
+                          </Field>
                         );
                       }}
                     />
@@ -218,8 +218,8 @@ export function HealthCheckSection({
                         children={(field) => {
                           const error = fieldError(field.state.meta.errors);
                           return (
-                            <div className="space-y-2">
-                              <Label>Timeout (seconds)</Label>
+                            <Field data-invalid={!!error}>
+                              <FieldLabel>Timeout (seconds)</FieldLabel>
                               <Input
                                 type="number"
                                 value={field.state.value}
@@ -228,13 +228,10 @@ export function HealthCheckSection({
                                   field.handleChange(e.target.value)
                                 }
                                 placeholder="120"
+                                aria-invalid={!!error}
                               />
-                              {error && (
-                                <p className="text-destructive text-xs">
-                                  {error}
-                                </p>
-                              )}
-                            </div>
+                              {error && <FieldError>{error}</FieldError>}
+                            </Field>
                           );
                         }}
                       />
@@ -257,8 +254,8 @@ export function HealthCheckSection({
                       children={(field) => {
                         const error = fieldError(field.state.meta.errors);
                         return (
-                          <div className="space-y-2">
-                            <Label>Command</Label>
+                          <Field data-invalid={!!error}>
+                            <FieldLabel>Command</FieldLabel>
                             <Input
                               value={field.state.value}
                               onBlur={field.handleBlur}
@@ -267,20 +264,18 @@ export function HealthCheckSection({
                               }
                               placeholder="curl -f http://localhost:3000/health || exit 1"
                               className="font-mono"
+                              aria-invalid={!!error}
                             />
                             {error ? (
-                              <p className="text-destructive text-xs">
-                                {error}
-                              </p>
+                              <FieldError>{error}</FieldError>
                             ) : (
                               <p className="text-muted-foreground text-xs">
-                                Run inside the container via{" "}
-                                <code>sh -c</code>. Exit 0 = healthy. The tool
-                                you use (curl, wget, pg_isready…) must exist in
-                                the image.
+                                Run inside the container via <code>sh -c</code>.
+                                Exit 0 = healthy. The tool you use (curl, wget,
+                                pg_isready…) must exist in the image.
                               </p>
                             )}
-                          </div>
+                          </Field>
                         );
                       }}
                     />
@@ -291,8 +286,8 @@ export function HealthCheckSection({
                         children={(field) => {
                           const error = fieldError(field.state.meta.errors);
                           return (
-                            <div className="space-y-2">
-                              <Label>Interval (seconds)</Label>
+                            <Field data-invalid={!!error}>
+                              <FieldLabel>Interval (seconds)</FieldLabel>
                               <Input
                                 type="number"
                                 value={field.state.value}
@@ -301,13 +296,10 @@ export function HealthCheckSection({
                                   field.handleChange(e.target.value)
                                 }
                                 placeholder="30"
+                                aria-invalid={!!error}
                               />
-                              {error && (
-                                <p className="text-destructive text-xs">
-                                  {error}
-                                </p>
-                              )}
-                            </div>
+                              {error && <FieldError>{error}</FieldError>}
+                            </Field>
                           );
                         }}
                       />
@@ -317,8 +309,8 @@ export function HealthCheckSection({
                         children={(field) => {
                           const error = fieldError(field.state.meta.errors);
                           return (
-                            <div className="space-y-2">
-                              <Label>Timeout (seconds)</Label>
+                            <Field data-invalid={!!error}>
+                              <FieldLabel>Timeout (seconds)</FieldLabel>
                               <Input
                                 type="number"
                                 value={field.state.value}
@@ -327,13 +319,10 @@ export function HealthCheckSection({
                                   field.handleChange(e.target.value)
                                 }
                                 placeholder="30"
+                                aria-invalid={!!error}
                               />
-                              {error && (
-                                <p className="text-destructive text-xs">
-                                  {error}
-                                </p>
-                              )}
-                            </div>
+                              {error && <FieldError>{error}</FieldError>}
+                            </Field>
                           );
                         }}
                       />
@@ -343,8 +332,8 @@ export function HealthCheckSection({
                         children={(field) => {
                           const error = fieldError(field.state.meta.errors);
                           return (
-                            <div className="space-y-2">
-                              <Label>Retries</Label>
+                            <Field data-invalid={!!error}>
+                              <FieldLabel>Retries</FieldLabel>
                               <Input
                                 type="number"
                                 value={field.state.value}
@@ -353,17 +342,16 @@ export function HealthCheckSection({
                                   field.handleChange(e.target.value)
                                 }
                                 placeholder="3"
+                                aria-invalid={!!error}
                               />
                               {error ? (
-                                <p className="text-destructive text-xs">
-                                  {error}
-                                </p>
+                                <FieldError>{error}</FieldError>
                               ) : (
                                 <p className="text-muted-foreground text-xs">
                                   Consecutive failures before Unhealthy.
                                 </p>
                               )}
-                            </div>
+                            </Field>
                           );
                         }}
                       />
@@ -373,8 +361,8 @@ export function HealthCheckSection({
                         children={(field) => {
                           const error = fieldError(field.state.meta.errors);
                           return (
-                            <div className="space-y-2">
-                              <Label>Start period (seconds)</Label>
+                            <Field data-invalid={!!error}>
+                              <FieldLabel>Start period (seconds)</FieldLabel>
                               <Input
                                 type="number"
                                 value={field.state.value}
@@ -383,18 +371,17 @@ export function HealthCheckSection({
                                   field.handleChange(e.target.value)
                                 }
                                 placeholder="0"
+                                aria-invalid={!!error}
                               />
                               {error ? (
-                                <p className="text-destructive text-xs">
-                                  {error}
-                                </p>
+                                <FieldError>{error}</FieldError>
                               ) : (
                                 <p className="text-muted-foreground text-xs">
                                   Grace window at startup where failures don't
                                   count.
                                 </p>
                               )}
-                            </div>
+                            </Field>
                           );
                         }}
                       />
@@ -407,11 +394,9 @@ export function HealthCheckSection({
 
           <div className="flex justify-end">
             <form.Subscribe
-              selector={(s) => [
-                s.values.type,
-                s.values.path,
-                s.values.command,
-              ] as const}
+              selector={(s) =>
+                [s.values.type, s.values.path, s.values.command] as const
+              }
               children={([type, path, command]) => {
                 const canSave =
                   type === "none" ||

@@ -25,6 +25,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page-header";
 import { Badge } from "@/components/ui/badge";
+import { Field, FieldError, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -165,17 +166,18 @@ function ProfileCard() {
             children={(field) => {
               const error = fieldError(field.state.meta.errors);
               return (
-                <div className="space-y-2">
-                  <Label htmlFor="profile-username">Username</Label>
+                <Field data-invalid={!!error}>
+                  <FieldLabel htmlFor="profile-username">Username</FieldLabel>
                   <Input
                     id="profile-username"
                     value={field.state.value}
                     onBlur={field.handleBlur}
                     onChange={(e) => field.handleChange(e.target.value)}
                     placeholder="username"
+                    aria-invalid={!!error}
                   />
-                  {error && <p className="text-destructive text-xs">{error}</p>}
-                </div>
+                  {error && <FieldError>{error}</FieldError>}
+                </Field>
               );
             }}
           />
@@ -271,17 +273,20 @@ function ChangePasswordCard() {
             children={(field) => {
               const error = fieldError(field.state.meta.errors);
               return (
-                <div className="space-y-2">
-                  <Label htmlFor="current-password">Current Password</Label>
+                <Field data-invalid={!!error}>
+                  <FieldLabel htmlFor="current-password">
+                    Current Password
+                  </FieldLabel>
                   <Input
                     id="current-password"
                     type="password"
                     value={field.state.value}
                     onBlur={field.handleBlur}
                     onChange={(e) => field.handleChange(e.target.value)}
+                    aria-invalid={!!error}
                   />
-                  {error && <p className="text-destructive text-xs">{error}</p>}
-                </div>
+                  {error && <FieldError>{error}</FieldError>}
+                </Field>
               );
             }}
           />
@@ -295,8 +300,8 @@ function ChangePasswordCard() {
             children={(field) => {
               const error = fieldError(field.state.meta.errors);
               return (
-                <div className="space-y-2">
-                  <Label htmlFor="new-password">New Password</Label>
+                <Field data-invalid={!!error}>
+                  <FieldLabel htmlFor="new-password">New Password</FieldLabel>
                   <Input
                     id="new-password"
                     type="password"
@@ -304,9 +309,10 @@ function ChangePasswordCard() {
                     onBlur={field.handleBlur}
                     onChange={(e) => field.handleChange(e.target.value)}
                     placeholder="At least 8 characters"
+                    aria-invalid={!!error}
                   />
-                  {error && <p className="text-destructive text-xs">{error}</p>}
-                </div>
+                  {error && <FieldError>{error}</FieldError>}
+                </Field>
               );
             }}
           />
@@ -322,17 +328,20 @@ function ChangePasswordCard() {
             children={(field) => {
               const error = fieldError(field.state.meta.errors);
               return (
-                <div className="space-y-2">
-                  <Label htmlFor="confirm-password">Confirm New Password</Label>
+                <Field data-invalid={!!error}>
+                  <FieldLabel htmlFor="confirm-password">
+                    Confirm New Password
+                  </FieldLabel>
                   <Input
                     id="confirm-password"
                     type="password"
                     value={field.state.value}
                     onBlur={field.handleBlur}
                     onChange={(e) => field.handleChange(e.target.value)}
+                    aria-invalid={!!error}
                   />
-                  {error && <p className="text-destructive text-xs">{error}</p>}
-                </div>
+                  {error && <FieldError>{error}</FieldError>}
+                </Field>
               );
             }}
           />
@@ -472,11 +481,11 @@ function AlertPreferencesForm({
               children={(field) => {
                 const error = fieldError(field.state.meta.errors);
                 return (
-                  <div className="space-y-1">
+                  <Field data-invalid={!!error}>
                     <div className="flex items-center gap-3 pl-1">
-                      <Label htmlFor="quota-pct" className="text-sm">
+                      <FieldLabel htmlFor="quota-pct" className="text-sm">
                         Alert at
-                      </Label>
+                      </FieldLabel>
                       <Input
                         id="quota-pct"
                         type="number"
@@ -488,15 +497,14 @@ function AlertPreferencesForm({
                           field.handleChange(Number(e.target.value))
                         }
                         className="w-20"
+                        aria-invalid={!!error}
                       />
                       <span className="text-muted-foreground text-sm">
                         % usage
                       </span>
                     </div>
-                    {error && (
-                      <p className="text-destructive pl-1 text-xs">{error}</p>
-                    )}
-                  </div>
+                    {error && <FieldError className="pl-1">{error}</FieldError>}
+                  </Field>
                 );
               }}
             />

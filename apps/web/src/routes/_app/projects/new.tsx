@@ -5,8 +5,8 @@ import { toast } from "sonner";
 import { PlusIcon } from "lucide-react";
 import { useCreateProject } from "@/lib/hooks/use-projects";
 import { Button } from "@/components/ui/button";
+import { Field, FieldError, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
 
@@ -29,15 +29,17 @@ function NewProjectPage() {
     defaultValues: { name: "", slug: "" },
     onSubmit: async ({ value }) => {
       toast.promise(
-        createProject.mutateAsync({
-          name: value.name,
-          slug: value.slug,
-        }).then((project) => {
-          navigate({
-            to: "/projects/$projectId",
-            params: { projectId: project.id },
-          });
-        }),
+        createProject
+          .mutateAsync({
+            name: value.name,
+            slug: value.slug,
+          })
+          .then((project) => {
+            navigate({
+              to: "/projects/$projectId",
+              params: { projectId: project.id },
+            });
+          }),
         {
           loading: "Creating project...",
           success: "Project created",
@@ -68,32 +70,37 @@ function NewProjectPage() {
             <form.Field
               name="name"
               validators={{ onChange: z.string().min(1, "Name is required") }}
-              children={(field) => (
-                <div className="space-y-2">
-                  <Label htmlFor="name">Project Name</Label>
-                  <Input
-                    id="name"
-                    placeholder="My App"
-                    value={field.state.value}
-                    onBlur={field.handleBlur}
-                    onChange={(e) => {
-                      field.handleChange(e.target.value);
-                      const slugField = form.getFieldValue("slug");
-                      if (
-                        !slugField ||
-                        slugField === slugify(field.state.value)
-                      ) {
-                        form.setFieldValue("slug", slugify(e.target.value));
-                      }
-                    }}
-                  />
-                  {field.state.meta.errors.length > 0 && (
-                    <p className="text-destructive text-sm">
-                      {typeof field.state.meta.errors[0] === 'string' ? field.state.meta.errors[0] : field.state.meta.errors[0]?.message}
-                    </p>
-                  )}
-                </div>
-              )}
+              children={(field) => {
+                const first = field.state.meta.errors[0];
+                const error = !first
+                  ? undefined
+                  : typeof first === "string"
+                    ? first
+                    : first?.message;
+                return (
+                  <Field data-invalid={!!error}>
+                    <FieldLabel htmlFor="name">Project Name</FieldLabel>
+                    <Input
+                      id="name"
+                      placeholder="My App"
+                      value={field.state.value}
+                      onBlur={field.handleBlur}
+                      onChange={(e) => {
+                        field.handleChange(e.target.value);
+                        const slugField = form.getFieldValue("slug");
+                        if (
+                          !slugField ||
+                          slugField === slugify(field.state.value)
+                        ) {
+                          form.setFieldValue("slug", slugify(e.target.value));
+                        }
+                      }}
+                      aria-invalid={!!error}
+                    />
+                    {error && <FieldError>{error}</FieldError>}
+                  </Field>
+                );
+              }}
             />
             <form.Field
               name="slug"
@@ -106,23 +113,28 @@ function NewProjectPage() {
                     "Slug must be lowercase letters, numbers, and hyphens",
                   ),
               }}
-              children={(field) => (
-                <div className="space-y-2">
-                  <Label htmlFor="slug">Slug</Label>
-                  <Input
-                    id="slug"
-                    placeholder="my-app"
-                    value={field.state.value}
-                    onBlur={field.handleBlur}
-                    onChange={(e) => field.handleChange(e.target.value)}
-                  />
-                  {field.state.meta.errors.length > 0 && (
-                    <p className="text-destructive text-sm">
-                      {typeof field.state.meta.errors[0] === 'string' ? field.state.meta.errors[0] : field.state.meta.errors[0]?.message}
-                    </p>
-                  )}
-                </div>
-              )}
+              children={(field) => {
+                const first = field.state.meta.errors[0];
+                const error = !first
+                  ? undefined
+                  : typeof first === "string"
+                    ? first
+                    : first?.message;
+                return (
+                  <Field data-invalid={!!error}>
+                    <FieldLabel htmlFor="slug">Slug</FieldLabel>
+                    <Input
+                      id="slug"
+                      placeholder="my-app"
+                      value={field.state.value}
+                      onBlur={field.handleBlur}
+                      onChange={(e) => field.handleChange(e.target.value)}
+                      aria-invalid={!!error}
+                    />
+                    {error && <FieldError>{error}</FieldError>}
+                  </Field>
+                );
+              }}
             />
             <div className="flex gap-3">
               <Button

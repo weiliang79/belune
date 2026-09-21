@@ -34,6 +34,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { BlobLogViewer } from "@/components/logs/blob-log-viewer";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Field, FieldError, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
@@ -745,8 +746,8 @@ function RetentionSection({
           children={(field) => {
             const error = fieldError(field.state.meta.errors);
             return (
-              <div className="space-y-1.5">
-                <Label htmlFor="retain-days">Keep for (days)</Label>
+              <Field data-invalid={!!error}>
+                <FieldLabel htmlFor="retain-days">Keep for (days)</FieldLabel>
                 <Input
                   id="retain-days"
                   type="number"
@@ -755,11 +756,10 @@ function RetentionSection({
                   value={field.state.value}
                   onBlur={field.handleBlur}
                   onChange={(e) => field.handleChange(e.target.value)}
+                  aria-invalid={!!error}
                 />
-                {error && (
-                  <p className="text-destructive text-xs">{error}</p>
-                )}
-              </div>
+                {error && <FieldError>{error}</FieldError>}
+              </Field>
             );
           }}
         />
@@ -769,8 +769,10 @@ function RetentionSection({
           children={(field) => {
             const error = fieldError(field.state.meta.errors);
             return (
-              <div className="space-y-1.5">
-                <Label htmlFor="retain-count">Keep at least (count)</Label>
+              <Field data-invalid={!!error}>
+                <FieldLabel htmlFor="retain-count">
+                  Keep at least (count)
+                </FieldLabel>
                 <Input
                   id="retain-count"
                   type="number"
@@ -779,11 +781,10 @@ function RetentionSection({
                   value={field.state.value}
                   onBlur={field.handleBlur}
                   onChange={(e) => field.handleChange(e.target.value)}
+                  aria-invalid={!!error}
                 />
-                {error && (
-                  <p className="text-destructive text-xs">{error}</p>
-                )}
-              </div>
+                {error && <FieldError>{error}</FieldError>}
+              </Field>
             );
           }}
         />
@@ -812,7 +813,11 @@ function RetentionSection({
 // separate from .env (kept out of the database so a total-loss restore can
 // still find where its own backups live), read fresh on every backup — no
 // restart needed.
-function RemoteStorageSection({ remote }: { remote: BackupRemoteConfig | null }) {
+function RemoteStorageSection({
+  remote,
+}: {
+  remote: BackupRemoteConfig | null;
+}) {
   const update = useUpdateBackupRemote();
   const test = useTestBackupRemote();
 
@@ -911,19 +916,18 @@ function RemoteStorageSection({ remote }: { remote: BackupRemoteConfig | null })
               children={(field) => {
                 const error = fieldError(field.state.meta.errors);
                 return (
-                  <div className="space-y-1.5">
-                    <Label htmlFor="remote-bucket">Bucket</Label>
+                  <Field data-invalid={!!error}>
+                    <FieldLabel htmlFor="remote-bucket">Bucket</FieldLabel>
                     <Input
                       id="remote-bucket"
                       value={field.state.value}
                       onBlur={field.handleBlur}
                       onChange={(e) => field.handleChange(e.target.value)}
                       placeholder="my-belune-backups"
+                      aria-invalid={!!error}
                     />
-                    {error && (
-                      <p className="text-destructive text-xs">{error}</p>
-                    )}
-                  </div>
+                    {error && <FieldError>{error}</FieldError>}
+                  </Field>
                 );
               }}
             />
@@ -1042,12 +1046,11 @@ function RemoteStorageSection({ remote }: { remote: BackupRemoteConfig | null })
           </div>
 
           <p className="text-text-faint text-xs">
-            Saved to <code className="font-mono">backup-remote.env</code> on
-            the server, separate from{" "}
-            <code className="font-mono">.env</code> — takes effect on the
-            next backup, no restart needed. Kept out of the database so a
-            full restore can still locate its backups. Per-database backups
-            use project destinations instead.
+            Saved to <code className="font-mono">backup-remote.env</code> on the
+            server, separate from <code className="font-mono">.env</code> —
+            takes effect on the next backup, no restart needed. Kept out of the
+            database so a full restore can still locate its backups.
+            Per-database backups use project destinations instead.
           </p>
         </>
       )}

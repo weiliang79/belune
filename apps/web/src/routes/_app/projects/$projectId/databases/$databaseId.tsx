@@ -92,6 +92,7 @@ import {
   Field,
   FieldContent,
   FieldDescription,
+  FieldError,
   FieldLabel,
 } from "@/components/ui/field";
 
@@ -600,7 +601,9 @@ function DatabaseDetailPage() {
                           className="space-y-4"
                         >
                           <AlertDialogHeader>
-                            <AlertDialogTitle>Delete database?</AlertDialogTitle>
+                            <AlertDialogTitle>
+                              Delete database?
+                            </AlertDialogTitle>
                             <AlertDialogDescription>
                               This will permanently delete &quot;{db.name}&quot;
                               and all its data. This action cannot be undone.
@@ -615,9 +618,9 @@ function DatabaseDetailPage() {
                                 {deleteImpact.backup_destinations.length > 0
                                   ? `, including copies in ${formatList(deleteImpact.backup_destinations)}`
                                   : ""}
-                                , and stay listed under the project&apos;s Backups
-                                tab. You can restore a replacement database from
-                                them.
+                                , and stay listed under the project&apos;s
+                                Backups tab. You can restore a replacement
+                                database from them.
                               </AlertDialogDescription>
                             ) : null}
                           </AlertDialogHeader>
@@ -647,7 +650,8 @@ function DatabaseDetailPage() {
                                     </FieldLabel>
 
                                     <FieldDescription>
-                                      {deleteImpact.backup_destinations.length > 0
+                                      {deleteImpact.backup_destinations.length >
+                                      0
                                         ? "Erases the archives, including the remote copies. This cannot be undone."
                                         : "Erases the archives. This cannot be undone."}
                                     </FieldDescription>
@@ -997,8 +1001,8 @@ function AdvancedCard({ db }: { db: Database }) {
               children={(field) => {
                 const error = fieldError(field.state.meta.errors);
                 return (
-                  <div className="space-y-2">
-                    <Label htmlFor="db-cpu">CPU limit (cores)</Label>
+                  <Field data-invalid={!!error}>
+                    <FieldLabel htmlFor="db-cpu">CPU limit (cores)</FieldLabel>
                     <Input
                       id="db-cpu"
                       type="number"
@@ -1007,9 +1011,10 @@ function AdvancedCard({ db }: { db: Database }) {
                       value={field.state.value}
                       onBlur={field.handleBlur}
                       onChange={(e) => field.handleChange(e.target.value)}
+                      aria-invalid={!!error}
                     />
-                    {error && <p className="text-destructive text-xs">{error}</p>}
-                  </div>
+                    {error && <FieldError>{error}</FieldError>}
+                  </Field>
                 );
               }}
             />
@@ -1019,8 +1024,8 @@ function AdvancedCard({ db }: { db: Database }) {
               children={(field) => {
                 const error = fieldError(field.state.meta.errors);
                 return (
-                  <div className="space-y-2">
-                    <Label htmlFor="db-mem">Memory limit (MB)</Label>
+                  <Field data-invalid={!!error}>
+                    <FieldLabel htmlFor="db-mem">Memory limit (MB)</FieldLabel>
                     <Input
                       id="db-mem"
                       type="number"
@@ -1029,9 +1034,10 @@ function AdvancedCard({ db }: { db: Database }) {
                       value={field.state.value}
                       onBlur={field.handleBlur}
                       onChange={(e) => field.handleChange(e.target.value)}
+                      aria-invalid={!!error}
                     />
-                    {error && <p className="text-destructive text-xs">{error}</p>}
-                  </div>
+                    {error && <FieldError>{error}</FieldError>}
+                  </Field>
                 );
               }}
             />
@@ -1082,7 +1088,8 @@ function AdvancedCard({ db }: { db: Database }) {
                         <span className="font-medium">{db.name}</span>, rebuilds
                         the container at the new version, and restores the data.
                         The database is briefly offline. If anything fails it
-                        rolls back to {db.version}. A pre-upgrade backup is kept.
+                        rolls back to {db.version}. A pre-upgrade backup is
+                        kept.
                       </AlertDialogDescription>
                     </AlertDialogHeader>
                     <upgradeForm.Field

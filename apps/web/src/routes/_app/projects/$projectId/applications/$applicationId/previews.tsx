@@ -12,6 +12,7 @@ import {
   useDeletePreview,
 } from "@/lib/hooks/use-previews";
 import { Button } from "@/components/ui/button";
+import { Field, FieldError, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -40,7 +41,10 @@ export const Route = createFileRoute(
 function PreviewsPage() {
   const { projectId, applicationId } = Route.useParams();
   const { data: application } = useApplication(projectId, applicationId);
-  const { data: previewsData, isLoading } = usePreviews(projectId, applicationId);
+  const { data: previewsData, isLoading } = usePreviews(
+    projectId,
+    applicationId,
+  );
   const updateConfig = useUpdatePreviewConfig(projectId, applicationId);
   const deletePreview = useDeletePreview(projectId, applicationId);
 
@@ -88,84 +92,89 @@ function PreviewsPage() {
             </div>
           ) : !previewsData?.previews.length ? (
             <p className="text-muted-foreground text-sm">
-              No preview environments yet. Push a branch matching the pattern
-              to spin one up.
+              No preview environments yet. Push a branch matching the pattern to
+              spin one up.
             </p>
           ) : (
-            <div role="list" aria-label="Preview environments" className="divide-y text-sm">
+            <div
+              role="list"
+              aria-label="Preview environments"
+              className="divide-y text-sm"
+            >
               {previewsData.previews.map((preview) => {
                 const branchLabel = preview.branch || "unknown";
                 return (
-                <div
-                  key={preview.id}
-                  role="listitem"
-                  aria-label={`Preview environment for branch ${branchLabel}`}
-                  className="flex items-center justify-between gap-4 py-3"
-                >
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <span className="truncate font-medium">
-                        {branchLabel}
-                      </span>
-                      <StatusBadge status={preview.status} />
-                    </div>
-                    {preview.hostname && (
-                      <a
-                        href={`https://${preview.hostname}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        aria-label={`Open ${branchLabel} preview at ${preview.hostname} in a new tab`}
-                        className="text-muted-foreground truncate font-mono text-xs hover:underline"
-                      >
-                        {preview.hostname}
-                      </a>
-                    )}
-                    <div className="text-muted-foreground text-xs">
-                      Last activity: {formatDateTimeShort(preview.last_activity_at)}
-                    </div>
-                  </div>
-                  <AlertDialog>
-                    <AlertDialogTrigger
-                      render={
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          aria-label={`Delete preview for branch ${branchLabel}`}
-                        />
-                      }
-                    >
-                      Delete
-                    </AlertDialogTrigger>
-                    <AlertDialogContent>
-                      <AlertDialogHeader>
-                        <AlertDialogTitle>Delete preview?</AlertDialogTitle>
-                        <AlertDialogDescription>
-                          This removes the preview container and all its
-                          resources. A subsequent push to{" "}
-                          <span className="font-mono">{preview.branch}</span>{" "}
-                          will recreate it.
-                        </AlertDialogDescription>
-                      </AlertDialogHeader>
-                      <AlertDialogFooter>
-                        <AlertDialogCancel>Cancel</AlertDialogCancel>
-                        <AlertDialogAction
-                          onClick={() => {
-                            toast.promise(
-                              deletePreview.mutateAsync(preview.id),
-                              {
-                                loading: "Deleting...",
-                                success: "Preview deleted",
-                                error: (err) => err.message,
-                              },
-                            );
-                          }}
+                  <div
+                    key={preview.id}
+                    role="listitem"
+                    aria-label={`Preview environment for branch ${branchLabel}`}
+                    className="flex items-center justify-between gap-4 py-3"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="truncate font-medium">
+                          {branchLabel}
+                        </span>
+                        <StatusBadge status={preview.status} />
+                      </div>
+                      {preview.hostname && (
+                        <a
+                          href={`https://${preview.hostname}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          aria-label={`Open ${branchLabel} preview at ${preview.hostname} in a new tab`}
+                          className="text-muted-foreground truncate font-mono text-xs hover:underline"
                         >
-                          Delete
-                        </AlertDialogAction>
-                      </AlertDialogFooter>
-                    </AlertDialogContent>
-                  </AlertDialog>
-                </div>
+                          {preview.hostname}
+                        </a>
+                      )}
+                      <div className="text-muted-foreground text-xs">
+                        Last activity:{" "}
+                        {formatDateTimeShort(preview.last_activity_at)}
+                      </div>
+                    </div>
+                    <AlertDialog>
+                      <AlertDialogTrigger
+                        render={
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            aria-label={`Delete preview for branch ${branchLabel}`}
+                          />
+                        }
+                      >
+                        Delete
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>Delete preview?</AlertDialogTitle>
+                          <AlertDialogDescription>
+                            This removes the preview container and all its
+                            resources. A subsequent push to{" "}
+                            <span className="font-mono">{preview.branch}</span>{" "}
+                            will recreate it.
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>Cancel</AlertDialogCancel>
+                          <AlertDialogAction
+                            onClick={() => {
+                              toast.promise(
+                                deletePreview.mutateAsync(preview.id),
+                                {
+                                  loading: "Deleting...",
+                                  success: "Preview deleted",
+                                  error: (err) => err.message,
+                                },
+                              );
+                            }}
+                          >
+                            Delete
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
+                  </div>
                 );
               })}
             </div>
@@ -268,27 +277,31 @@ function ConfigCard({
             children={(field) => {
               const error = fieldError(field.state.meta.errors);
               return (
-                <div className="space-y-2">
-                  <Label htmlFor="preview-template">Domain template</Label>
+                <Field data-invalid={!!error}>
+                  <FieldLabel htmlFor="preview-template">
+                    Domain template
+                  </FieldLabel>
                   <Input
                     id="preview-template"
                     placeholder="{branch}.{app}.preview.example.com"
                     value={field.state.value}
                     onBlur={field.handleBlur}
                     onChange={(e) => field.handleChange(e.target.value)}
+                    aria-invalid={!!error}
                   />
                   {error ? (
-                    <p className="text-destructive text-xs">{error}</p>
+                    <FieldError>{error}</FieldError>
                   ) : (
                     <p className="text-muted-foreground text-xs">
-                      Must contain <span className="font-mono">{"{branch}"}</span>.{" "}
+                      Must contain{" "}
+                      <span className="font-mono">{"{branch}"}</span>.{" "}
                       <span className="font-mono">{"{app}"}</span> expands to
                       this application's slug. A wildcard DNS record (e.g.{" "}
                       <span className="font-mono">*.preview.example.com</span>)
                       pointing to this host is required.
                     </p>
                   )}
-                </div>
+                </Field>
               );
             }}
           />
@@ -314,7 +327,10 @@ function ConfigCard({
                 </Button>
                 <Button type="submit" size="sm" disabled={saving}>
                   {saving ? (
-                    <Loader2 aria-hidden="true" className="h-4 w-4 animate-spin" />
+                    <Loader2
+                      aria-hidden="true"
+                      className="h-4 w-4 animate-spin"
+                    />
                   ) : (
                     "Save"
                   )}

@@ -23,6 +23,7 @@ import {
   TooltipPositioner,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { Field, FieldError, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -312,6 +313,14 @@ function parseLimit(value: string | number): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+function fieldError(errors: unknown[]): string | undefined {
+  const first = errors[0];
+  if (!first) return undefined;
+  return typeof first === "string"
+    ? first
+    : (first as { message?: string }).message;
+}
+
 function QuotaDialog({
   open,
   onOpenChange,
@@ -417,114 +426,105 @@ function QuotaDialog({
               <form.Field
                 name="scopeId"
                 validators={{ onChange: z.string().min(1, "Pick a target") }}
-                children={(field) => (
-                  <div className="space-y-2">
-                    <Label htmlFor="target">Target</Label>
-                    <Select
-                      value={field.state.value}
-                      onValueChange={(v) => field.handleChange(v ?? "")}
-                    >
-                      <SelectTrigger id="target">
-                        <SelectValue placeholder={`Pick a ${scope}`} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {targetOptions.map((o) => (
-                          <SelectItem
-                            key={o.id}
-                            value={o.id}
-                            icon={
-                              scope === "user" ? <UserIcon /> : <FolderIcon />
-                            }
-                          >
-                            {o.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    {field.state.meta.errors.length > 0 && (
-                      <p className="text-destructive text-sm">
-                        {typeof field.state.meta.errors[0] === "string"
-                          ? field.state.meta.errors[0]
-                          : field.state.meta.errors[0]?.message}
-                      </p>
-                    )}
-                  </div>
-                )}
+                children={(field) => {
+                  const error = fieldError(field.state.meta.errors);
+                  return (
+                    <Field data-invalid={!!error}>
+                      <FieldLabel htmlFor="target">Target</FieldLabel>
+                      <Select
+                        value={field.state.value}
+                        onValueChange={(v) => field.handleChange(v ?? "")}
+                      >
+                        <SelectTrigger id="target" aria-invalid={!!error}>
+                          <SelectValue placeholder={`Pick a ${scope}`} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {targetOptions.map((o) => (
+                            <SelectItem
+                              key={o.id}
+                              value={o.id}
+                              icon={
+                                scope === "user" ? <UserIcon /> : <FolderIcon />
+                              }
+                            >
+                              {o.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      {error && <FieldError>{error}</FieldError>}
+                    </Field>
+                  );
+                }}
               />
             </>
           )}
           <form.Field
             name="maxApps"
             validators={{ onChange: optionalInt }}
-            children={(field) => (
-              <div className="space-y-2">
-                <Label htmlFor="max-apps">Max Applications</Label>
-                <Input
-                  id="max-apps"
-                  type="number"
-                  min="0"
-                  value={field.state.value}
-                  onChange={(e) => field.handleChange(e.target.value)}
-                  placeholder="unlimited"
-                />
-                {field.state.meta.errors.length > 0 && (
-                  <p className="text-destructive text-sm">
-                    {typeof field.state.meta.errors[0] === "string"
-                      ? field.state.meta.errors[0]
-                      : field.state.meta.errors[0]?.message}
-                  </p>
-                )}
-              </div>
-            )}
+            children={(field) => {
+              const error = fieldError(field.state.meta.errors);
+              return (
+                <Field data-invalid={!!error}>
+                  <FieldLabel htmlFor="max-apps">Max Applications</FieldLabel>
+                  <Input
+                    id="max-apps"
+                    type="number"
+                    min="0"
+                    value={field.state.value}
+                    onChange={(e) => field.handleChange(e.target.value)}
+                    placeholder="unlimited"
+                    aria-invalid={!!error}
+                  />
+                  {error && <FieldError>{error}</FieldError>}
+                </Field>
+              );
+            }}
           />
           <form.Field
             name="maxCpu"
             validators={{ onChange: optionalNumber }}
-            children={(field) => (
-              <div className="space-y-2">
-                <Label htmlFor="max-cpu">Max CPU (cores)</Label>
-                <Input
-                  id="max-cpu"
-                  type="number"
-                  min="0"
-                  step="0.1"
-                  value={field.state.value}
-                  onChange={(e) => field.handleChange(e.target.value)}
-                  placeholder="unlimited"
-                />
-                {field.state.meta.errors.length > 0 && (
-                  <p className="text-destructive text-sm">
-                    {typeof field.state.meta.errors[0] === "string"
-                      ? field.state.meta.errors[0]
-                      : field.state.meta.errors[0]?.message}
-                  </p>
-                )}
-              </div>
-            )}
+            children={(field) => {
+              const error = fieldError(field.state.meta.errors);
+              return (
+                <Field data-invalid={!!error}>
+                  <FieldLabel htmlFor="max-cpu">Max CPU (cores)</FieldLabel>
+                  <Input
+                    id="max-cpu"
+                    type="number"
+                    min="0"
+                    step="0.1"
+                    value={field.state.value}
+                    onChange={(e) => field.handleChange(e.target.value)}
+                    placeholder="unlimited"
+                    aria-invalid={!!error}
+                  />
+                  {error && <FieldError>{error}</FieldError>}
+                </Field>
+              );
+            }}
           />
           <form.Field
             name="maxMemMb"
             validators={{ onChange: optionalInt }}
-            children={(field) => (
-              <div className="space-y-2">
-                <Label htmlFor="max-mem">Max Memory (MB)</Label>
-                <Input
-                  id="max-mem"
-                  type="number"
-                  min="0"
-                  value={field.state.value}
-                  onChange={(e) => field.handleChange(e.target.value)}
-                  placeholder="unlimited"
-                />
-                {field.state.meta.errors.length > 0 && (
-                  <p className="text-destructive text-sm">
-                    {typeof field.state.meta.errors[0] === "string"
-                      ? field.state.meta.errors[0]
-                      : field.state.meta.errors[0]?.message}
-                  </p>
-                )}
-              </div>
-            )}
+            children={(field) => {
+              const error = fieldError(field.state.meta.errors);
+              return (
+                <Field data-invalid={!!error}>
+                  <FieldLabel htmlFor="max-mem">Max Memory (MB)</FieldLabel>
+                  <Input
+                    id="max-mem"
+                    type="number"
+                    min="0"
+                    value={field.state.value}
+                    onChange={(e) => field.handleChange(e.target.value)}
+                    placeholder="unlimited"
+                    aria-invalid={!!error}
+                  />
+                  {error && <FieldError>{error}</FieldError>}
+                </Field>
+              );
+            }}
           />
           <DialogFooter>
             <form.Subscribe

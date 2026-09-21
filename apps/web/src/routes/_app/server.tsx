@@ -24,6 +24,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { LiveIndicator } from "@/components/ui/live-indicator";
 import { Button } from "@/components/ui/button";
+import { Field, FieldError, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { StatusPill } from "@/components/ui/status-pill";
@@ -191,16 +192,17 @@ function ServerIpField({
       children={(field) => {
         const error = fieldError(field.state.meta.errors);
         return (
-          <>
-            <Label htmlFor="server-ip" className="pt-2">
+          <Field data-invalid={!!error}>
+            <FieldLabel htmlFor="server-ip" className="pt-2">
               Server IP
-            </Label>
+            </FieldLabel>
             <div className="flex max-w-md items-center gap-2">
               <Input
                 id="server-ip"
                 value={field.state.value}
                 onChange={(e) => field.handleChange(e.target.value)}
                 placeholder={placeholder}
+                aria-invalid={!!error}
               />
               <Button
                 onClick={() => form.handleSubmit()}
@@ -213,7 +215,7 @@ function ServerIpField({
               </Button>
             </div>
             {error ? (
-              <p className="text-destructive text-xs">{error}</p>
+              <FieldError>{error}</FieldError>
             ) : (
               <p className="text-muted-foreground text-xs">
                 The public address domains must point at for a certificate.
@@ -221,7 +223,7 @@ function ServerIpField({
                 behind NAT.
               </p>
             )}
-          </>
+          </Field>
         );
       }}
     />
@@ -960,18 +962,19 @@ function RangeForm({
           children={(field) => {
             const error = fieldError(field.state.meta.errors);
             return (
-              <div className="space-y-1.5">
-                <Label htmlFor="metric-to" className="text-xs">
+              <Field data-invalid={!!error} className="gap-1.5">
+                <FieldLabel htmlFor="metric-to" className="text-xs">
                   End
-                </Label>
+                </FieldLabel>
                 <Input
                   id="metric-to"
                   type="datetime-local"
                   value={field.state.value}
                   onChange={(e) => field.handleChange(e.target.value)}
+                  aria-invalid={!!error}
                 />
-                {error && <p className="text-destructive text-xs">{error}</p>}
-              </div>
+                {error && <FieldError>{error}</FieldError>}
+              </Field>
             );
           }}
         />

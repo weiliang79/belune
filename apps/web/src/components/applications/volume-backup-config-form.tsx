@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Field, FieldError, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -104,13 +105,13 @@ function ConfigForm({
       destinationId: config?.destination_id ?? "",
       prefix: config?.prefix ?? "",
       schedule: config?.schedule ?? "",
-      keepLatest:
-        config?.keep_latest != null ? String(config.keep_latest) : "",
+      keepLatest: config?.keep_latest != null ? String(config.keep_latest) : "",
       quiesce: config?.quiesce ?? false,
       enabled: config?.enabled ?? true,
     },
     onSubmit: ({ value }) => {
-      const keep = value.keepLatest.trim() === "" ? null : Number(value.keepLatest);
+      const keep =
+        value.keepLatest.trim() === "" ? null : Number(value.keepLatest);
       const data = {
         destination_id: value.destinationId,
         prefix: value.prefix.trim(),
@@ -133,7 +134,11 @@ function ConfigForm({
   });
 
   const volumeId = useStore(form.store, (s) => s.values.volumeId);
-  const create = useCreateVolumeBackupConfig(projectId, applicationId, volumeId);
+  const create = useCreateVolumeBackupConfig(
+    projectId,
+    applicationId,
+    volumeId,
+  );
   const update = useUpdateVolumeBackupConfig(
     projectId,
     applicationId,
@@ -170,8 +175,8 @@ function ConfigForm({
           children={(field) => {
             const error = fieldError(field.state.meta.errors);
             return (
-              <div className="space-y-1.5">
-                <Label>Volume</Label>
+              <Field data-invalid={!!error && !editing}>
+                <FieldLabel>Volume</FieldLabel>
                 {editing ? (
                   <div className="border-input flex items-center gap-2 rounded-md border px-3 py-2 text-sm">
                     <HardDriveIcon aria-hidden="true" className="size-4" />
@@ -185,12 +190,16 @@ function ConfigForm({
                     value={field.state.value}
                     onValueChange={(v) => field.handleChange(v ?? "")}
                   >
-                    <SelectTrigger>
+                    <SelectTrigger aria-invalid={!!error}>
                       <SelectValue placeholder="Select a volume" />
                     </SelectTrigger>
                     <SelectContent>
                       {(volumes ?? []).map((v) => (
-                        <SelectItem key={v.id} value={v.id} icon={<HardDriveIcon />}>
+                        <SelectItem
+                          key={v.id}
+                          value={v.id}
+                          icon={<HardDriveIcon />}
+                        >
                           {v.name}
                           <span className="text-text-faint ml-1 font-mono text-xs">
                             {v.mount_path}
@@ -201,7 +210,7 @@ function ConfigForm({
                   </Select>
                 )}
                 {error && !editing ? (
-                  <p className="text-destructive text-xs">{error}</p>
+                  <FieldError>{error}</FieldError>
                 ) : (
                   noVolumes && (
                     <p className="text-muted-foreground text-xs">
@@ -209,7 +218,7 @@ function ConfigForm({
                     </p>
                   )
                 )}
-              </div>
+              </Field>
             );
           }}
         />
@@ -222,13 +231,13 @@ function ConfigForm({
           children={(field) => {
             const error = fieldError(field.state.meta.errors);
             return (
-              <div className="space-y-1.5">
-                <Label>Destination</Label>
+              <Field data-invalid={!!error}>
+                <FieldLabel>Destination</FieldLabel>
                 <Select
                   value={field.state.value}
                   onValueChange={(v) => field.handleChange(v ?? "")}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger aria-invalid={!!error}>
                     <SelectValue placeholder="Select destination" />
                   </SelectTrigger>
                   <SelectContent>
@@ -240,7 +249,7 @@ function ConfigForm({
                   </SelectContent>
                 </Select>
                 {error ? (
-                  <p className="text-destructive text-xs">{error}</p>
+                  <FieldError>{error}</FieldError>
                 ) : (
                   noDestinations && (
                     <p className="text-muted-foreground text-xs">
@@ -249,7 +258,7 @@ function ConfigForm({
                     </p>
                   )
                 )}
-              </div>
+              </Field>
             );
           }}
         />
@@ -295,8 +304,8 @@ function ConfigForm({
                 : (SCHEDULE_PRESETS.find((p) => p.value === field.state.value)
                     ?.value ?? "custom");
             return (
-              <div className="space-y-1.5">
-                <Label>Schedule</Label>
+              <Field data-invalid={!!error}>
+                <FieldLabel>Schedule</FieldLabel>
                 <Select
                   value={presetValue}
                   onValueChange={(v) => {
@@ -319,7 +328,11 @@ function ConfigForm({
                       Manual only (no schedule)
                     </SelectItem>
                     {SCHEDULE_PRESETS.map((p) => (
-                      <SelectItem key={p.value} value={p.value} icon={<ClockIcon />}>
+                      <SelectItem
+                        key={p.value}
+                        value={p.value}
+                        icon={<ClockIcon />}
+                      >
                         {p.label}
                       </SelectItem>
                     ))}
@@ -338,16 +351,17 @@ function ConfigForm({
                   placeholder="0 0 * * * (leave empty for manual only)"
                   className="font-mono"
                   aria-label="Cron expression"
+                  aria-invalid={!!error}
                 />
                 {error ? (
-                  <p className="text-destructive text-xs">{error}</p>
+                  <FieldError>{error}</FieldError>
                 ) : (
                   <p className="text-muted-foreground text-xs">
-                    Standard 5-field cron expression. Empty = back up on
-                    demand only.
+                    Standard 5-field cron expression. Empty = back up on demand
+                    only.
                   </p>
                 )}
-              </div>
+              </Field>
             );
           }}
         />
@@ -369,8 +383,8 @@ function ConfigForm({
           children={(field) => {
             const error = fieldError(field.state.meta.errors);
             return (
-              <div className="space-y-1.5">
-                <Label htmlFor="vbc-keep">Keep latest</Label>
+              <Field data-invalid={!!error}>
+                <FieldLabel htmlFor="vbc-keep">Keep latest</FieldLabel>
                 <Input
                   id="vbc-keep"
                   type="number"
@@ -379,16 +393,16 @@ function ConfigForm({
                   onBlur={field.handleBlur}
                   onChange={(e) => field.handleChange(e.target.value)}
                   placeholder="Keeps all if empty"
+                  aria-invalid={!!error}
                 />
                 {error ? (
-                  <p className="text-destructive text-xs">{error}</p>
+                  <FieldError>{error}</FieldError>
                 ) : (
                   <p className="text-muted-foreground text-xs">
-                    Optional. Only keep the latest N backups in the
-                    destination.
+                    Optional. Only keep the latest N backups in the destination.
                   </p>
                 )}
-              </div>
+              </Field>
             );
           }}
         />

@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Field, FieldError, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -93,7 +94,12 @@ const PROVIDER_META: Record<
     regionPlaceholder?: string;
   }
 > = {
-  s3: { label: "AWS S3", mode: "aws", forceSSL: true, regionPlaceholder: "us-east-1" },
+  s3: {
+    label: "AWS S3",
+    mode: "aws",
+    forceSSL: true,
+    regionPlaceholder: "us-east-1",
+  },
   r2: { label: "Cloudflare R2", mode: "r2", forceSSL: true },
   b2: {
     label: "Backblaze B2",
@@ -199,7 +205,8 @@ function DestinationForm({
   // regardless of what's sent, but keep the payload honest anyway.
   const buildData = (value: typeof form.state.values) => {
     const meta = PROVIDER_META[value.provider];
-    if (value.provider === "local") return { name: value.name, provider: value.provider };
+    if (value.provider === "local")
+      return { name: value.name, provider: value.provider };
     const resolvedEndpoint = resolveEndpoint(
       value.provider,
       value.region,
@@ -210,7 +217,8 @@ function DestinationForm({
       name: value.name,
       provider: value.provider,
       endpoint: resolvedEndpoint,
-      region: value.provider === "r2" ? "auto" : value.region.trim() || "us-east-1",
+      region:
+        value.provider === "r2" ? "auto" : value.region.trim() || "us-east-1",
       bucket: value.bucket,
       prefix: value.prefix.trim(),
       use_ssl: meta.forceSSL ? true : value.useSSL,
@@ -275,17 +283,18 @@ function DestinationForm({
           children={(field) => {
             const error = fieldError(field.state.meta.errors);
             return (
-              <div className="space-y-1.5">
-                <Label htmlFor="dest-name">Name</Label>
+              <Field data-invalid={!!error}>
+                <FieldLabel htmlFor="dest-name">Name</FieldLabel>
                 <Input
                   id="dest-name"
                   value={field.state.value}
                   onBlur={field.handleBlur}
                   onChange={(e) => field.handleChange(e.target.value)}
                   placeholder="AWS S3 Backup"
+                  aria-invalid={!!error}
                 />
-                {error && <p className="text-destructive text-xs">{error}</p>}
-              </div>
+                {error && <FieldError>{error}</FieldError>}
+              </Field>
             );
           }}
         />
@@ -322,14 +331,13 @@ function DestinationForm({
         />
 
         <form.Subscribe
-          selector={
-            (s) =>
-              [
-                s.values.provider,
-                s.values.region,
-                s.values.accountId,
-                s.values.endpoint,
-              ] as const
+          selector={(s) =>
+            [
+              s.values.provider,
+              s.values.region,
+              s.values.accountId,
+              s.values.endpoint,
+            ] as const
           }
           children={([provider, region, accountId, endpoint]) => {
             const meta = PROVIDER_META[provider];
@@ -343,8 +351,8 @@ function DestinationForm({
               <>
                 {provider === "local" && (
                   <p className="text-muted-foreground text-xs">
-                    Backups stay on this host's disk — nothing is uploaded.
-                    They don't survive losing the host, so use an off-host
+                    Backups stay on this host's disk — nothing is uploaded. They
+                    don't survive losing the host, so use an off-host
                     destination too for real disaster recovery.
                   </p>
                 )}
@@ -364,8 +372,10 @@ function DestinationForm({
                       children={(field) => {
                         const error = fieldError(field.state.meta.errors);
                         return (
-                          <div className="space-y-1.5">
-                            <Label htmlFor="dest-bucket">Bucket</Label>
+                          <Field data-invalid={!!error}>
+                            <FieldLabel htmlFor="dest-bucket">
+                              Bucket
+                            </FieldLabel>
                             <Input
                               id="dest-bucket"
                               value={field.state.value}
@@ -374,13 +384,10 @@ function DestinationForm({
                                 field.handleChange(e.target.value)
                               }
                               placeholder="my-backups"
+                              aria-invalid={!!error}
                             />
-                            {error && (
-                              <p className="text-destructive text-xs">
-                                {error}
-                              </p>
-                            )}
-                          </div>
+                            {error && <FieldError>{error}</FieldError>}
+                          </Field>
                         );
                       }}
                     />
@@ -396,7 +403,9 @@ function DestinationForm({
                               onChange={(e) =>
                                 field.handleChange(e.target.value)
                               }
-                              placeholder={meta.regionPlaceholder ?? "us-east-1"}
+                              placeholder={
+                                meta.regionPlaceholder ?? "us-east-1"
+                              }
                             />
                           </div>
                         )}
@@ -441,23 +450,20 @@ function DestinationForm({
                     children={(field) => {
                       const error = fieldError(field.state.meta.errors);
                       return (
-                        <div className="space-y-1.5">
-                          <Label htmlFor="dest-account">Account ID</Label>
+                        <Field data-invalid={!!error}>
+                          <FieldLabel htmlFor="dest-account">
+                            Account ID
+                          </FieldLabel>
                           <Input
                             id="dest-account"
                             value={field.state.value}
                             onBlur={field.handleBlur}
-                            onChange={(e) =>
-                              field.handleChange(e.target.value)
-                            }
+                            onChange={(e) => field.handleChange(e.target.value)}
                             placeholder="your-cloudflare-account-id"
+                            aria-invalid={!!error}
                           />
-                          {error && (
-                            <p className="text-destructive text-xs">
-                              {error}
-                            </p>
-                          )}
-                        </div>
+                          {error && <FieldError>{error}</FieldError>}
+                        </Field>
                       );
                     }}
                   />
@@ -478,28 +484,27 @@ function DestinationForm({
                     children={(field) => {
                       const error = fieldError(field.state.meta.errors);
                       return (
-                        <div className="space-y-1.5">
-                          <Label htmlFor="dest-endpoint">Endpoint</Label>
+                        <Field data-invalid={!!error}>
+                          <FieldLabel htmlFor="dest-endpoint">
+                            Endpoint
+                          </FieldLabel>
                           <Input
                             id="dest-endpoint"
                             value={field.state.value}
                             onBlur={field.handleBlur}
-                            onChange={(e) =>
-                              field.handleChange(e.target.value)
-                            }
+                            onChange={(e) => field.handleChange(e.target.value)}
                             placeholder="minio.example.com:9000"
+                            aria-invalid={!!error}
                           />
                           {error ? (
-                            <p className="text-destructive text-xs">
-                              {error}
-                            </p>
+                            <FieldError>{error}</FieldError>
                           ) : (
                             <p className="text-muted-foreground text-xs">
                               Host (and port) only — no scheme. SSL is
                               controlled below.
                             </p>
                           )}
-                        </div>
+                        </Field>
                       );
                     }}
                   />
@@ -533,9 +538,7 @@ function DestinationForm({
                           <Input
                             id="dest-access"
                             value={field.state.value}
-                            onChange={(e) =>
-                              field.handleChange(e.target.value)
-                            }
+                            onChange={(e) => field.handleChange(e.target.value)}
                             placeholder={editing ? "•••• (unchanged)" : ""}
                             autoComplete="off"
                           />
@@ -551,9 +554,7 @@ function DestinationForm({
                             id="dest-secret"
                             type="password"
                             value={field.state.value}
-                            onChange={(e) =>
-                              field.handleChange(e.target.value)
-                            }
+                            onChange={(e) => field.handleChange(e.target.value)}
                             placeholder={editing ? "•••• (unchanged)" : ""}
                             autoComplete="off"
                           />

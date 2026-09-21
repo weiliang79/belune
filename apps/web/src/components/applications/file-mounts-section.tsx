@@ -16,6 +16,12 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { IconAction } from "@/components/ui/icon-action";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Field,
+  FieldContent,
+  FieldError,
+  FieldLabel,
+} from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -256,13 +262,16 @@ function FileMountForm({
             file_mode: value.fileMode || undefined,
           });
 
-      toast.promise(promise.then(() => onClose()), {
-        loading: editing ? "Saving..." : "Creating file mount...",
-        success: editing
-          ? "File mount saved — reload the application to apply it"
-          : "File mount created — reload the application to mount it",
-        error: (err) => err.message,
-      });
+      toast.promise(
+        promise.then(() => onClose()),
+        {
+          loading: editing ? "Saving..." : "Creating file mount...",
+          success: editing
+            ? "File mount saved — reload the application to apply it"
+            : "File mount created — reload the application to mount it",
+          error: (err) => err.message,
+        },
+      );
     },
   });
 
@@ -291,10 +300,11 @@ function FileMountForm({
       className="space-y-4"
     >
       <DialogHeader>
-        <DialogTitle>{editing ? "Edit File Mount" : "Add File Mount"}</DialogTitle>
+        <DialogTitle>
+          {editing ? "Edit File Mount" : "Add File Mount"}
+        </DialogTitle>
         <DialogDescription>
-          The file is written into the container read-only on the next
-          deploy.
+          The file is written into the container read-only on the next deploy.
         </DialogDescription>
       </DialogHeader>
       <div className="space-y-4 py-2">
@@ -309,8 +319,8 @@ function FileMountForm({
           children={(field) => {
             const error = fieldError(field.state.meta.errors);
             return (
-              <div className="space-y-1.5">
-                <Label htmlFor="fm-path">Mount path</Label>
+              <Field data-invalid={!!error}>
+                <FieldLabel htmlFor="fm-path">Mount path</FieldLabel>
                 <Input
                   id="fm-path"
                   placeholder="/etc/app/config.yaml"
@@ -319,9 +329,10 @@ function FileMountForm({
                   disabled={!!editing}
                   onBlur={field.handleBlur}
                   onChange={(e) => field.handleChange(e.target.value)}
+                  aria-invalid={!!error}
                 />
                 {error ? (
-                  <p className="text-destructive text-xs">{error}</p>
+                  <FieldError>{error}</FieldError>
                 ) : (
                   <p className="text-text-faint text-xs">
                     Absolute file path inside the container, e.g.{" "}
@@ -329,7 +340,7 @@ function FileMountForm({
                     must exist in the image.
                   </p>
                 )}
-              </div>
+              </Field>
             );
           }}
         />
@@ -396,11 +407,15 @@ function FileMountForm({
             children={(field) => {
               const error = fieldError(field.state.meta.errors);
               return (
-                <div className="flex items-center gap-2">
-                  <Label htmlFor="fm-mode" className="text-sm">
+                <Field
+                  orientation="horizontal"
+                  data-invalid={!!error}
+                  className="gap-2"
+                >
+                  <FieldLabel htmlFor="fm-mode" className="text-sm">
                     Mode
-                  </Label>
-                  <div>
+                  </FieldLabel>
+                  <FieldContent className="gap-1">
                     <Input
                       id="fm-mode"
                       className="w-20 font-mono"
@@ -408,12 +423,11 @@ function FileMountForm({
                       value={field.state.value}
                       onBlur={field.handleBlur}
                       onChange={(e) => field.handleChange(e.target.value)}
+                      aria-invalid={!!error}
                     />
-                    {error && (
-                      <p className="text-destructive mt-1 text-xs">{error}</p>
-                    )}
-                  </div>
-                </div>
+                    {error && <FieldError>{error}</FieldError>}
+                  </FieldContent>
+                </Field>
               );
             }}
           />

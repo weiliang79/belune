@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Field, FieldError, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { TemplateLogo } from "@/components/templates/template-logo";
@@ -89,9 +90,10 @@ function WizardBody({
 
   const [inputs, setInputs] = useState<Record<string, string>>({});
   const [error, setError] = useState("");
-  const [done, setDone] = useState<{ projectId: string; notes?: string } | null>(
-    null,
-  );
+  const [done, setDone] = useState<{
+    projectId: string;
+    notes?: string;
+  } | null>(null);
 
   // Input values fall back to the manifest default for display; the backend
   // applies the same default server-side, so we never need to seed state.
@@ -123,7 +125,9 @@ function WizardBody({
         });
         setDone({ projectId: res.project_id, notes: res.notes });
       } catch (e) {
-        setError(e instanceof ApiError ? e.message : "Failed to create from template");
+        setError(
+          e instanceof ApiError ? e.message : "Failed to create from template",
+        );
       }
     },
   });
@@ -131,7 +135,10 @@ function WizardBody({
   const goToProject = () => {
     if (!done) return;
     onOpenChange(false);
-    navigate({ to: "/projects/$projectId", params: { projectId: done.projectId } });
+    navigate({
+      to: "/projects/$projectId",
+      params: { projectId: done.projectId },
+    });
   };
 
   if (done) {
@@ -139,21 +146,21 @@ function WizardBody({
       <>
         <DialogHeader className="shrink-0 p-4 pb-2">
           <DialogTitle className="flex items-center gap-2">
-            <CheckCircle2 aria-hidden="true" className="size-5 text-success" />
+            <CheckCircle2 aria-hidden="true" className="text-success size-5" />
             {template.name} is being created
           </DialogTitle>
           <DialogDescription>
-            Databases provision first, then the app deploys automatically. Follow
-            progress on the project page.
+            Databases provision first, then the app deploys automatically.
+            Follow progress on the project page.
           </DialogDescription>
         </DialogHeader>
         <div className="flex-1 overflow-y-auto px-4 pb-4">
           {done.notes && (
-            <div className="rounded-lg border bg-elev/50 p-3">
-              <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-text-faint">
+            <div className="bg-elev/50 rounded-lg border p-3">
+              <p className="text-text-faint mb-1 text-xs font-semibold tracking-wide uppercase">
                 Next steps
               </p>
-              <p className="whitespace-pre-wrap text-sm leading-relaxed">
+              <p className="text-sm leading-relaxed whitespace-pre-wrap">
                 {done.notes}
               </p>
             </div>
@@ -178,7 +185,7 @@ function WizardBody({
       // would break the flex-1/overflow-y-auto scroll area below.
       className="contents"
     >
-      <DialogHeader className="flex-row items-center gap-3 shrink-0 p-4 pb-3">
+      <DialogHeader className="shrink-0 flex-row items-center gap-3 p-4 pb-3">
         <TemplateLogo logoUrl={template.logo_url} />
         <div className="min-w-0 flex-1 space-y-1">
           <DialogTitle className="flex items-center gap-2">
@@ -211,7 +218,9 @@ function WizardBody({
                   value={targetField.state.value}
                   onValueChange={(v) => targetField.handleChange(v as Target)}
                 >
-                  <SegmentedControlItem value="new">New project</SegmentedControlItem>
+                  <SegmentedControlItem value="new">
+                    New project
+                  </SegmentedControlItem>
                   <SegmentedControlItem value="existing">
                     Existing project
                   </SegmentedControlItem>
@@ -221,23 +230,24 @@ function WizardBody({
                     name="projectName"
                     validators={{
                       onChange: ({ value }) =>
-                        value.trim() === "" ? "Project name is required" : undefined,
+                        value.trim() === ""
+                          ? "Project name is required"
+                          : undefined,
                     }}
                     children={(field) => {
                       const error = fieldError(field.state.meta.errors);
                       return (
-                        <>
+                        <Field data-invalid={!!error}>
                           <Input
                             value={field.state.value}
                             onBlur={field.handleBlur}
                             onChange={(e) => field.handleChange(e.target.value)}
                             placeholder="Project Name"
                             aria-label="New project name"
+                            aria-invalid={!!error}
                           />
-                          {error && (
-                            <p className="text-destructive text-xs">{error}</p>
-                          )}
-                        </>
+                          {error && <FieldError>{error}</FieldError>}
+                        </Field>
                       );
                     }}
                   />
@@ -251,12 +261,15 @@ function WizardBody({
                     children={(field) => {
                       const error = fieldError(field.state.meta.errors);
                       return (
-                        <>
+                        <Field data-invalid={!!error}>
                           <Select
                             value={field.state.value}
                             onValueChange={(v) => field.handleChange(v ?? "")}
                           >
-                            <SelectTrigger className="h-8">
+                            <SelectTrigger
+                              className="h-8"
+                              aria-invalid={!!error}
+                            >
                               <SelectValue placeholder="Select a Project" />
                             </SelectTrigger>
                             <SelectContent>
@@ -267,10 +280,8 @@ function WizardBody({
                               ))}
                             </SelectContent>
                           </Select>
-                          {error && (
-                            <p className="text-destructive text-xs">{error}</p>
-                          )}
-                        </>
+                          {error && <FieldError>{error}</FieldError>}
+                        </Field>
                       );
                     }}
                   />
@@ -291,32 +302,35 @@ function WizardBody({
             children={(field) => {
               const error = fieldError(field.state.meta.errors);
               return (
-                <div className="space-y-2">
-                  <Label htmlFor="tpl-hostname">
+                <Field data-invalid={!!error}>
+                  <FieldLabel htmlFor="tpl-hostname">
                     Hostname{" "}
                     {needsHostname ? (
                       <span className="text-destructive">*</span>
                     ) : (
-                      <span className="text-text-faint font-normal">(optional)</span>
+                      <span className="text-text-faint font-normal">
+                        (optional)
+                      </span>
                     )}
-                  </Label>
+                  </FieldLabel>
                   <Input
                     id="tpl-hostname"
                     value={field.state.value}
                     onBlur={field.handleBlur}
                     onChange={(e) => field.handleChange(e.target.value)}
                     placeholder="app.example.com"
+                    aria-invalid={!!error}
                   />
                   {error ? (
-                    <p className="text-destructive text-xs">{error}</p>
+                    <FieldError>{error}</FieldError>
                   ) : (
-                    <p className="text-xs text-text-faint">
+                    <p className="text-text-faint text-xs">
                       {needsHostname
                         ? "This app needs its public URL to work correctly."
                         : "Add one now to get a routed URL, or configure it later."}
                     </p>
                   )}
-                </div>
+                </Field>
               );
             }}
           />
@@ -334,12 +348,15 @@ function WizardBody({
                     id={`tpl-input-${i.key}`}
                     value={inputValue(i.key, i.default)}
                     onChange={(e) =>
-                      setInputs((prev) => ({ ...prev, [i.key]: e.target.value }))
+                      setInputs((prev) => ({
+                        ...prev,
+                        [i.key]: e.target.value,
+                      }))
                     }
                     type={i.validation === "email" ? "email" : "text"}
                   />
                   {i.description && (
-                    <p className="text-xs text-text-faint">{i.description}</p>
+                    <p className="text-text-faint text-xs">{i.description}</p>
                   )}
                 </div>
               ))}
@@ -350,7 +367,7 @@ function WizardBody({
           <form.Subscribe
             selector={(s) => s.values.hostname}
             children={(hostname) => (
-              <div className="flex flex-wrap gap-x-4 gap-y-1 rounded-lg border bg-elev/40 px-3 py-2 text-xs text-muted-foreground">
+              <div className="bg-elev/40 text-muted-foreground flex flex-wrap gap-x-4 gap-y-1 rounded-lg border px-3 py-2 text-xs">
                 <span className="flex items-center gap-1.5">
                   <Package aria-hidden="true" className="size-3.5" />
                   {detail.services} app{detail.services === 1 ? "" : "s"}
@@ -358,7 +375,8 @@ function WizardBody({
                 {detail.databases > 0 && (
                   <span className="flex items-center gap-1.5">
                     <Database aria-hidden="true" className="size-3.5" />
-                    {detail.databases} database{detail.databases === 1 ? "" : "s"}
+                    {detail.databases} database
+                    {detail.databases === 1 ? "" : "s"}
                   </span>
                 )}
                 {hostname.trim() && (
@@ -406,20 +424,28 @@ function WizardBody({
           )}
         </div>
         <div className="flex gap-2">
-          <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={() => onOpenChange(false)}
+          >
             Cancel
           </Button>
           <form.Subscribe
-            selector={(s) => [
-              s.values.target,
-              s.values.projectName,
-              s.values.existingProjectId,
-              s.values.hostname,
-            ] as const}
+            selector={(s) =>
+              [
+                s.values.target,
+                s.values.projectName,
+                s.values.existingProjectId,
+                s.values.hostname,
+              ] as const
+            }
             children={([target, projectName, existingProjectId, hostname]) => {
               let canSubmit = !!detail;
-              if (target === "new" && projectName.trim() === "") canSubmit = false;
-              if (target === "existing" && existingProjectId === "") canSubmit = false;
+              if (target === "new" && projectName.trim() === "")
+                canSubmit = false;
+              if (target === "existing" && existingProjectId === "")
+                canSubmit = false;
               if (needsHostname && hostname.trim() === "") canSubmit = false;
               for (const i of detail?.inputs ?? []) {
                 if (i.required && inputValue(i.key, i.default).trim() === "") {
@@ -433,7 +459,10 @@ function WizardBody({
                 >
                   {instantiate.isPending ? (
                     <>
-                      <Loader2 aria-hidden="true" className="size-4 animate-spin" />
+                      <Loader2
+                        aria-hidden="true"
+                        className="size-4 animate-spin"
+                      />
                       Creating…
                     </>
                   ) : (

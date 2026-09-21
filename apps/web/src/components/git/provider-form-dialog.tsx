@@ -12,6 +12,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Field, FieldError, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
@@ -34,9 +35,24 @@ const PROVIDERS: {
   selfHosted: boolean;
   baseUrlRequired: boolean;
 }[] = [
-  { value: "github", label: "GitHub", selfHosted: false, baseUrlRequired: false },
-  { value: "gitlab", label: "GitLab", selfHosted: true, baseUrlRequired: false },
-  { value: "bitbucket", label: "Bitbucket", selfHosted: false, baseUrlRequired: false },
+  {
+    value: "github",
+    label: "GitHub",
+    selfHosted: false,
+    baseUrlRequired: false,
+  },
+  {
+    value: "gitlab",
+    label: "GitLab",
+    selfHosted: true,
+    baseUrlRequired: false,
+  },
+  {
+    value: "bitbucket",
+    label: "Bitbucket",
+    selfHosted: false,
+    baseUrlRequired: false,
+  },
   { value: "gitea", label: "Gitea", selfHosted: true, baseUrlRequired: true },
 ];
 
@@ -77,7 +93,11 @@ export function ProviderFormDialog({ open, onOpenChange }: Props) {
             is_public: value.isPublic,
           })
           .then(close),
-        { loading: "Saving...", success: "Provider added", error: (e) => e.message },
+        {
+          loading: "Saving...",
+          success: "Provider added",
+          error: (e) => e.message,
+        },
       );
     },
   });
@@ -111,12 +131,17 @@ export function ProviderFormDialog({ open, onOpenChange }: Props) {
       );
       submitGitHubManifest(manifest);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed to start GitHub App setup");
+      toast.error(
+        e instanceof Error ? e.message : "Failed to start GitHub App setup",
+      );
     }
   };
 
   return (
-    <Dialog open={open} onOpenChange={(o) => (o ? onOpenChange(true) : close())}>
+    <Dialog
+      open={open}
+      onOpenChange={(o) => (o ? onOpenChange(true) : close())}
+    >
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
         <form
           onSubmit={(e) => {
@@ -184,7 +209,8 @@ export function ProviderFormDialog({ open, onOpenChange }: Props) {
                         <Lock className="h-3.5 w-3.5" /> Private
                       </span>
                       <span className="text-muted-foreground text-xs">
-                        Only you (this admin account) can connect via this provider
+                        Only you (this admin account) can connect via this
+                        provider
                       </span>
                     </button>
                     <button
@@ -217,7 +243,9 @@ export function ProviderFormDialog({ open, onOpenChange }: Props) {
                     <div className="space-y-2">
                       <Label htmlFor="gh-org">
                         Organization{" "}
-                        <span className="text-muted-foreground font-normal">optional</span>
+                        <span className="text-muted-foreground font-normal">
+                          optional
+                        </span>
                       </Label>
                       <Input
                         id="gh-org"
@@ -227,28 +255,32 @@ export function ProviderFormDialog({ open, onOpenChange }: Props) {
                         placeholder="acme-corp"
                       />
                       <p className="text-muted-foreground text-xs">
-                        Scopes the GitHub App to an org. Leave blank for a personal
-                        installation.
+                        Scopes the GitHub App to an org. Leave blank for a
+                        personal installation.
                       </p>
                     </div>
                   )}
                 />
                 {isPublic && (
                   <p className="bg-primary/10 text-foreground rounded-md px-3 py-2 text-xs">
-                    Setting visibility to <strong>Public</strong> makes the GitHub
-                    App installable by <strong>any GitHub account</strong>, not just
-                    yours.
+                    Setting visibility to <strong>Public</strong> makes the
+                    GitHub App installable by{" "}
+                    <strong>any GitHub account</strong>, not just yours.
                   </p>
                 )}
                 <div className="bg-muted/40 flex items-center justify-between rounded-lg border p-3">
                   <div className="space-y-0.5">
                     <p className="text-sm font-medium">Create GitHub App</p>
                     <p className="text-muted-foreground text-xs">
-                      You'll be redirected to GitHub to create and install the App.
-                      The provider is configured automatically on return.
+                      You'll be redirected to GitHub to create and install the
+                      App. The provider is configured automatically on return.
                     </p>
                   </div>
-                  <Button type="button" onClick={startGitHubApp} className="shrink-0">
+                  <Button
+                    type="button"
+                    onClick={startGitHubApp}
+                    className="shrink-0"
+                  >
                     <Github className="mr-1 h-4 w-4" /> Create GitHub App
                   </Button>
                 </div>
@@ -267,30 +299,34 @@ export function ProviderFormDialog({ open, onOpenChange }: Props) {
                     children={(field) => {
                       const error = fieldError(field.state.meta.errors);
                       return (
-                        <div className="space-y-2">
-                          <Label htmlFor="base-url">
+                        <Field data-invalid={!!error}>
+                          <FieldLabel htmlFor="base-url">
                             Base URL{" "}
                             <span className="text-muted-foreground font-normal">
-                              {meta.baseUrlRequired ? "required" : "self-hosted only"}
+                              {meta.baseUrlRequired
+                                ? "required"
+                                : "self-hosted only"}
                             </span>
-                          </Label>
+                          </FieldLabel>
                           <Input
                             id="base-url"
                             value={field.state.value}
                             onBlur={field.handleBlur}
                             onChange={(e) => field.handleChange(e.target.value)}
                             placeholder={`https://${provider}.yourcompany.com`}
+                            aria-invalid={!!error}
                           />
                           {error ? (
-                            <p className="text-destructive text-xs">{error}</p>
+                            <FieldError>{error}</FieldError>
                           ) : (
                             !meta.baseUrlRequired && (
                               <p className="text-muted-foreground text-xs">
-                                Leave blank to use the cloud-hosted {meta.label}.
+                                Leave blank to use the cloud-hosted {meta.label}
+                                .
                               </p>
                             )
                           )}
-                        </div>
+                        </Field>
                       );
                     }}
                   />
@@ -303,17 +339,18 @@ export function ProviderFormDialog({ open, onOpenChange }: Props) {
                   children={(field) => {
                     const error = fieldError(field.state.meta.errors);
                     return (
-                      <div className="space-y-2">
-                        <Label htmlFor="client-id">Client ID</Label>
+                      <Field data-invalid={!!error}>
+                        <FieldLabel htmlFor="client-id">Client ID</FieldLabel>
                         <Input
                           id="client-id"
                           value={field.state.value}
                           onBlur={field.handleBlur}
                           onChange={(e) => field.handleChange(e.target.value)}
                           placeholder="your-client-id"
+                          aria-invalid={!!error}
                         />
-                        {error && <p className="text-destructive text-xs">{error}</p>}
-                      </div>
+                        {error && <FieldError>{error}</FieldError>}
+                      </Field>
                     );
                   }}
                 />
@@ -325,8 +362,10 @@ export function ProviderFormDialog({ open, onOpenChange }: Props) {
                   children={(field) => {
                     const error = fieldError(field.state.meta.errors);
                     return (
-                      <div className="space-y-2">
-                        <Label htmlFor="client-secret">Client secret</Label>
+                      <Field data-invalid={!!error}>
+                        <FieldLabel htmlFor="client-secret">
+                          Client secret
+                        </FieldLabel>
                         <div className="relative">
                           <Input
                             id="client-secret"
@@ -335,23 +374,25 @@ export function ProviderFormDialog({ open, onOpenChange }: Props) {
                             onBlur={field.handleBlur}
                             onChange={(e) => field.handleChange(e.target.value)}
                             placeholder="••••••••••••••••"
+                            aria-invalid={!!error}
                           />
                           <button
                             type="button"
                             onClick={() => setShowSecret((s) => !s)}
-                            className="text-muted-foreground hover:text-foreground absolute right-2 top-1/2 -translate-y-1/2 text-xs"
+                            className="text-muted-foreground hover:text-foreground absolute top-1/2 right-2 -translate-y-1/2 text-xs"
                           >
                             {showSecret ? "Hide" : "Show"}
                           </button>
                         </div>
                         {error ? (
-                          <p className="text-destructive text-xs">{error}</p>
+                          <FieldError>{error}</FieldError>
                         ) : (
                           <p className="text-muted-foreground text-xs">
-                            Stored encrypted — never returned in plaintext after saving.
+                            Stored encrypted — never returned in plaintext after
+                            saving.
                           </p>
                         )}
-                      </div>
+                      </Field>
                     );
                   }}
                 />
