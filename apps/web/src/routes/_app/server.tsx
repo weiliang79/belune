@@ -25,6 +25,7 @@ import { Badge } from "@/components/ui/badge";
 import { LiveIndicator } from "@/components/ui/live-indicator";
 import { Button } from "@/components/ui/button";
 import { Field, FieldError, FieldLabel } from "@/components/ui/field";
+import { fieldError } from "@/lib/utils/field-error";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { StatusPill } from "@/components/ui/status-pill";
@@ -74,14 +75,6 @@ const SERVER_TABS: PageTab<ServerTab>[] = [
   { value: "configuration", label: "Configuration", icon: Settings },
 ];
 type CustomRange = { from: string; to: string };
-
-function fieldError(errors: unknown[]): string | undefined {
-  const first = errors[0];
-  if (!first) return undefined;
-  return typeof first === "string"
-    ? first
-    : (first as { message?: string }).message;
-}
 
 export const Route = createFileRoute("/_app/server")({
   component: ServerSettingsPage,
@@ -933,27 +926,37 @@ function RangeForm({
       >
         <form.Field
           name="from"
-          children={(field) => (
-            <div className="space-y-1.5">
-              <Label htmlFor="metric-from" className="text-xs">
-                Start
-              </Label>
-              <Input
-                id="metric-from"
-                type="datetime-local"
-                value={field.state.value}
-                onChange={(e) => field.handleChange(e.target.value)}
-              />
-            </div>
-          )}
+          validators={{
+            onChange: ({ value }) =>
+              value ? undefined : "Start time is required",
+          }}
+          children={(field) => {
+            const error = fieldError(field.state.meta.errors);
+            return (
+              <Field data-invalid={!!error} className="gap-1.5">
+                <FieldLabel htmlFor="metric-from" className="text-xs">
+                  Start
+                </FieldLabel>
+                <Input
+                  id="metric-from"
+                  type="datetime-local"
+                  value={field.state.value}
+                  onChange={(e) => field.handleChange(e.target.value)}
+                  aria-invalid={!!error}
+                />
+                {error && <FieldError>{error}</FieldError>}
+              </Field>
+            );
+          }}
         />
         <form.Field
           name="to"
           validators={{
             onChangeListenTo: ["from"],
             onChange: ({ value: v, fieldApi }) => {
+              if (!v) return "End time is required";
               const fromVal = fieldApi.form.state.values.from;
-              if (fromVal && v && new Date(fromVal) >= new Date(v)) {
+              if (fromVal && new Date(fromVal) >= new Date(v)) {
                 return "Start time must be before end time";
               }
               return undefined;
