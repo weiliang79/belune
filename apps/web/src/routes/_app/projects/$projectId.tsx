@@ -3,7 +3,12 @@ import {
   Outlet,
   useRouterState,
 } from "@tanstack/react-router";
-import { LayoutDashboard, Archive, SlidersHorizontal, Settings } from "lucide-react";
+import {
+  LayoutDashboard,
+  Archive,
+  SlidersHorizontal,
+  Settings,
+} from "lucide-react";
 import { useProject } from "@/lib/hooks/use-projects";
 import { useApplications } from "@/lib/hooks/use-applications";
 import { useDatabases } from "@/lib/hooks/use-databases";
@@ -52,9 +57,13 @@ function ProjectLayout() {
   // navigation starts, in step with the Topbar breadcrumb above it — reading
   // the settled path instead left this header showing (mismatched against an
   // already-updated breadcrumb) for the entire time the child route took to
-  // load.
+  // load. This only guards the forward direction (arriving at a child-detail
+  // page); leaving one, the incoming project header is already correct and
+  // any stale content beneath it is the same brief, everywhere-normal
+  // pending-route flash every other transition in the app has.
   const isChildDetail =
-    currentPath.includes("/applications/") || currentPath.includes("/databases/");
+    currentPath.includes("/applications/") ||
+    currentPath.includes("/databases/");
 
   if (isChildDetail) {
     // Freshly crossing in from project overview/settings/etc: the child
@@ -69,17 +78,27 @@ function ProjectLayout() {
     const wasChildDetail =
       resolvedPath.includes("/applications/") ||
       resolvedPath.includes("/databases/");
-    if (!wasChildDetail && resolvedPath !== currentPath) {
-      return <RouteSkeleton />;
-    }
-    return <Outlet />;
+    return wasChildDetail ? <Outlet /> : <RouteSkeleton />;
   }
 
   const tabs: PageTabLink[] = [
-    { to: `/projects/${projectId}`, label: "Overview", exact: true, icon: LayoutDashboard },
+    {
+      to: `/projects/${projectId}`,
+      label: "Overview",
+      exact: true,
+      icon: LayoutDashboard,
+    },
     { to: `/projects/${projectId}/backups`, label: "Backups", icon: Archive },
-    { to: `/projects/${projectId}/env`, label: "Env Vars", icon: SlidersHorizontal },
-    { to: `/projects/${projectId}/settings`, label: "Settings", icon: Settings },
+    {
+      to: `/projects/${projectId}/env`,
+      label: "Env Vars",
+      icon: SlidersHorizontal,
+    },
+    {
+      to: `/projects/${projectId}/settings`,
+      label: "Settings",
+      icon: Settings,
+    },
   ];
 
   return (
