@@ -369,10 +369,16 @@ function Showcase({ id }: { id: string }) {
         <span className="bg-primary text-primary-foreground rounded-md px-2.5 py-1 text-sm">
           text-brand-fg
         </span>
-        {/* Deliberately wrong, kept as the reference for CLAUDE.md's rule: it
-            looks fine in three quadrants and fails in emerald · dark. */}
+        {/* Hardcoded white, kept for comparison against text-brand-fg above.
+            It currently matches in all four theme+accent combinations —
+            dark+emerald only gets there because --brand itself was
+            deliberately darkened (see the .dark[data-accent="emerald"]
+            comment in index.css) specifically so its foreground could stay
+            white — so this won't visibly diverge today. The point survives
+            anyway: a future accent or a lighter brand color could need dark
+            text again, and a hardcoded span wouldn't know to follow. */}
         <span className="bg-primary rounded-md px-2.5 py-1 text-sm text-white">
-          text-white ✕
+          text-white
         </span>
         <span className="text-primary text-sm">text-primary on surface</span>
       </Row>

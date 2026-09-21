@@ -207,13 +207,26 @@
    below covers an emerald subtree of a dark page, unless that subtree is
    itself a `.light` scope. There is deliberately no
    `[data-accent="emerald"] .dark`: a `.dark` scope re-declares the violet
-   brand, so its foreground must stay white regardless of what is above it. */
+   brand, so its foreground must stay white regardless of what is above it.
+
+   --status-ready/--ring/--sidebar-ring/--chart-1 are pinned back to the
+   undarkened #10b981 here rather than left to inherit the new --brand: they
+   read fine as-is (the running-status dot, focus ring and chart line were
+   never the thing failing contrast) and --brand-soft/--brand-line below are
+   still tuned for #10b981 — letting the darkened --brand leak into --status-
+   ready would pair it against a soft/line background sized for the lighter
+   color, undershooting even the 3:1 UI floor. */
 .dark[data-accent="emerald"],
 .dark [data-accent="emerald"]:not(.light, .light *) {
   --brand: #047857;
   --brand-hover: #059669;
   --brand-press: #065f46;
   --brand-fg: #ffffff;
+
+  --status-ready: #10b981;
+  --ring: #10b981;
+  --sidebar-ring: #10b981;
+  --chart-1: #10b981;
 }
 
 @theme inline {
