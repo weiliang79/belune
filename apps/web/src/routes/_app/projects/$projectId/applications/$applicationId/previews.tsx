@@ -13,6 +13,7 @@ import {
 } from "@/lib/hooks/use-previews";
 import { Button } from "@/components/ui/button";
 import { Field, FieldError, FieldLabel } from "@/components/ui/field";
+import { fieldError } from "@/lib/utils/field-error";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -40,7 +41,10 @@ export const Route = createFileRoute(
 
 function PreviewsPage() {
   const { projectId, applicationId } = Route.useParams();
-  const { data: application } = useApplication(projectId, applicationId);
+  const { data: application, isLoading: applicationLoading } = useApplication(
+    projectId,
+    applicationId,
+  );
   const { data: previewsData, isLoading } = usePreviews(
     projectId,
     applicationId,
@@ -58,26 +62,39 @@ function PreviewsPage() {
 
   return (
     <div className="space-y-6">
-      <ConfigCard
-        // Remounts once the save/disable mutation's invalidation lands, so the
-        // form's defaultValues re-derive from the fresh application record
-        // instead of racing useForm's own defaultValues-sync effect.
-        key={`${application?.preview_branch_pattern ?? ""}-${application?.preview_domain_template ?? ""}`}
-        application={application}
-        onSave={async (pattern, template) => {
-          await toast.promise(
-            updateConfig.mutateAsync({
-              preview_branch_pattern: pattern,
-              preview_domain_template: template,
-            }),
-            {
-              loading: "Saving...",
-              success: "Preview config saved",
-              error: (err) => err.message,
-            },
-          );
-        }}
-      />
+      {applicationLoading ? (
+        <Card>
+          <CardContent className="space-y-4 pt-6">
+            <Skeleton className="h-4 w-full" />
+            <Skeleton className="h-9 w-full" />
+            <Skeleton className="h-9 w-full" />
+          </CardContent>
+        </Card>
+      ) : (
+        <ConfigCard
+          // Remounts once the save/disable mutation's invalidation lands, so
+          // the form's defaultValues re-derive from the fresh application
+          // record instead of racing useForm's own defaultValues-sync effect.
+          // Not mounted until the application has loaded — keying on "" here
+          // first and remounting once real data arrives caused the same
+          // double-render InstanceNameField/ServerIpField hit on server.tsx.
+          key={`${application?.preview_branch_pattern ?? ""}-${application?.preview_domain_template ?? ""}`}
+          application={application}
+          onSave={async (pattern, template) => {
+            await toast.promise(
+              updateConfig.mutateAsync({
+                preview_branch_pattern: pattern,
+                preview_domain_template: template,
+              }),
+              {
+                loading: "Saving...",
+                success: "Preview config saved",
+                error: (err) => err.message,
+              },
+            );
+          }}
+        />
+      )}
 
       <Card>
         <CardHeader>
@@ -183,14 +200,6 @@ function PreviewsPage() {
       </Card>
     </div>
   );
-}
-
-function fieldError(errors: unknown[]): string | undefined {
-  const first = errors[0];
-  if (!first) return undefined;
-  return typeof first === "string"
-    ? first
-    : (first as { message?: string }).message;
 }
 
 function ConfigCard({
