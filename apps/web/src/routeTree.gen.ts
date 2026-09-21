@@ -16,6 +16,7 @@ import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
 import { Route as AcceptInviteRouteImport } from './routes/accept-invite'
 import { Route as AppRouteImport } from './routes/_app'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as DevThemeRouteImport } from './routes/dev.theme'
 import { Route as AppTemplatesRouteImport } from './routes/_app/templates'
 import { Route as AppTeamRouteImport } from './routes/_app/team'
 import { Route as AppServerRouteImport } from './routes/_app/server'
@@ -82,6 +83,11 @@ const AppRoute = AppRouteImport.update({
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DevThemeRoute = DevThemeRouteImport.update({
+  id: '/dev/theme',
+  path: '/dev/theme',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AppTemplatesRoute = AppTemplatesRouteImport.update({
@@ -284,6 +290,7 @@ export interface FileRoutesByFullPath {
   '/server': typeof AppServerRoute
   '/team': typeof AppTeamRoute
   '/templates': typeof AppTemplatesRoute
+  '/dev/theme': typeof DevThemeRoute
   '/projects/$projectId': typeof AppProjectsProjectIdRouteWithChildren
   '/projects/new': typeof AppProjectsNewRoute
   '/deployments/': typeof AppDeploymentsIndexRoute
@@ -325,6 +332,7 @@ export interface FileRoutesByTo {
   '/server': typeof AppServerRoute
   '/team': typeof AppTeamRoute
   '/templates': typeof AppTemplatesRoute
+  '/dev/theme': typeof DevThemeRoute
   '/projects/new': typeof AppProjectsNewRoute
   '/deployments': typeof AppDeploymentsIndexRoute
   '/projects': typeof AppProjectsIndexRoute
@@ -366,6 +374,7 @@ export interface FileRoutesById {
   '/_app/server': typeof AppServerRoute
   '/_app/team': typeof AppTeamRoute
   '/_app/templates': typeof AppTemplatesRoute
+  '/dev/theme': typeof DevThemeRoute
   '/_app/projects/$projectId': typeof AppProjectsProjectIdRouteWithChildren
   '/_app/projects/new': typeof AppProjectsNewRoute
   '/_app/deployments/': typeof AppDeploymentsIndexRoute
@@ -409,6 +418,7 @@ export interface FileRouteTypes {
     | '/server'
     | '/team'
     | '/templates'
+    | '/dev/theme'
     | '/projects/$projectId'
     | '/projects/new'
     | '/deployments/'
@@ -450,6 +460,7 @@ export interface FileRouteTypes {
     | '/server'
     | '/team'
     | '/templates'
+    | '/dev/theme'
     | '/projects/new'
     | '/deployments'
     | '/projects'
@@ -490,6 +501,7 @@ export interface FileRouteTypes {
     | '/_app/server'
     | '/_app/team'
     | '/_app/templates'
+    | '/dev/theme'
     | '/_app/projects/$projectId'
     | '/_app/projects/new'
     | '/_app/deployments/'
@@ -521,6 +533,7 @@ export interface RootRouteChildren {
   LoginRoute: typeof LoginRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
   SetupRoute: typeof SetupRoute
+  DevThemeRoute: typeof DevThemeRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -572,6 +585,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/dev/theme': {
+      id: '/dev/theme'
+      path: '/dev/theme'
+      fullPath: '/dev/theme'
+      preLoaderRoute: typeof DevThemeRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_app/templates': {
@@ -923,6 +943,7 @@ const rootRouteChildren: RootRouteChildren = {
   LoginRoute: LoginRoute,
   ResetPasswordRoute: ResetPasswordRoute,
   SetupRoute: SetupRoute,
+  DevThemeRoute: DevThemeRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
