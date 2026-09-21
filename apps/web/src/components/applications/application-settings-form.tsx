@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { TriangleAlert, Settings2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Field, FieldError, FieldLabel } from "@/components/ui/field";
+import { fieldError } from "@/lib/utils/field-error";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -230,16 +231,21 @@ export function ApplicationSettingsForm({
           <form.Field
             name="name"
             validators={{ onChange: z.string().min(1, "Name is required") }}
-            children={(field) => (
-              <div className="space-y-2">
-                <Label>Application Name</Label>
-                <Input
-                  value={field.state.value}
-                  onBlur={field.handleBlur}
-                  onChange={(e) => field.handleChange(e.target.value)}
-                />
-              </div>
-            )}
+            children={(field) => {
+              const error = fieldError(field.state.meta.errors);
+              return (
+                <Field data-invalid={!!error}>
+                  <FieldLabel>Application Name</FieldLabel>
+                  <Input
+                    value={field.state.value}
+                    onBlur={field.handleBlur}
+                    onChange={(e) => field.handleChange(e.target.value)}
+                    aria-invalid={!!error}
+                  />
+                  {error && <FieldError>{error}</FieldError>}
+                </Field>
+              );
+            }}
           />
           <div className="space-y-2">
             <Label>Source</Label>
@@ -380,12 +386,7 @@ export function ApplicationSettingsForm({
                       ),
                   }}
                   children={(field) => {
-                    const first = field.state.meta.errors[0];
-                    const error = !first
-                      ? undefined
-                      : typeof first === "string"
-                        ? first
-                        : first?.message;
+                    const error = fieldError(field.state.meta.errors);
                     return (
                       <Field data-invalid={!!error}>
                         <FieldLabel>Repository URL</FieldLabel>
