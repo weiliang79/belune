@@ -83,8 +83,10 @@
   --terminal-dbg: #8b5cf6;
 
   /* Shadows */
-  --shadow: 0 1px 2px rgba(24, 24, 27, 0.06), 0 8px 24px -16px rgba(24, 24, 27, 0.18);
-  --shadow-lg: 0 24px 60px -22px rgba(24, 24, 27, 0.28), 0 2px 8px rgba(24, 24, 27, 0.08);
+  --shadow:
+    0 1px 2px rgba(24, 24, 27, 0.06), 0 8px 24px -16px rgba(24, 24, 27, 0.18);
+  --shadow-lg:
+    0 24px 60px -22px rgba(24, 24, 27, 0.28), 0 2px 8px rgba(24, 24, 27, 0.08);
 
   /* Active nav item. In light mode the rail (--bg-subtle) and --elev are the
      same #f4f4f5, so reusing --elev here left the selection invisible; use a
@@ -175,7 +177,8 @@
   --status-error-line: rgba(244, 63, 94, 0.4);
 
   --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px -12px rgba(0, 0, 0, 0.6);
-  --shadow-lg: 0 24px 60px -20px rgba(0, 0, 0, 0.75), 0 2px 8px rgba(0, 0, 0, 0.5);
+  --shadow-lg:
+    0 24px 60px -20px rgba(0, 0, 0, 0.75), 0 2px 8px rgba(0, 0, 0, 0.5);
 
   /* Active nav item — dark rail (--sidebar=#0c0c0e) already contrasts with
      --elev, so keep the elevated surface here (the :root override is light-only). */
@@ -192,14 +195,25 @@
   --brand-line: rgba(16, 185, 129, 0.4);
 }
 
-/* Near-black text on emerald in dark mode — white fails contrast there. The
-   second form covers an emerald subtree of a dark page, unless that subtree
-   is itself a `.light` scope. There is deliberately no
+/* Dark mode's emerald darkens the brand itself rather than the text on it, so
+   white foreground text stays legible AND dark+emerald visually matches
+   dark+violet's white-on-brand treatment instead of standing out as the one
+   accent with dark text. Light mode's #10b981 only carries 2.54:1 with white
+   (fails the 4.5:1 AA text minimum); #047857 (Tailwind emerald-700) carries
+   5.48:1, close to violet dark's own 5.7:1. Hover/press keep the same
+   lighter/darker relationship as violet's, recalibrated into the same safe
+   zone: #059669 (3.77:1, still above the 3:1 UI-component minimum — hover is
+   transient, not a resting state) and #065f46 (7.68:1). The second selector
+   below covers an emerald subtree of a dark page, unless that subtree is
+   itself a `.light` scope. There is deliberately no
    `[data-accent="emerald"] .dark`: a `.dark` scope re-declares the violet
    brand, so its foreground must stay white regardless of what is above it. */
 .dark[data-accent="emerald"],
 .dark [data-accent="emerald"]:not(.light, .light *) {
-  --brand-fg: #04130c;
+  --brand: #047857;
+  --brand-hover: #059669;
+  --brand-press: #065f46;
+  --brand-fg: #ffffff;
 }
 
 @theme inline {
@@ -306,7 +320,10 @@
   pre,
   samp {
     font-family: var(--font-mono);
-    font-feature-settings: "ss01", "liga" 0, "calt" 0;
+    font-feature-settings:
+      "ss01",
+      "liga" 0,
+      "calt" 0;
     font-variant-ligatures: none;
   }
   ::selection {
