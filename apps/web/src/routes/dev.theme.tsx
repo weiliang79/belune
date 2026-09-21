@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from "react";
 import { createFileRoute, notFound } from "@tanstack/react-router";
-import { Check, Plus, Trash2 } from "lucide-react";
+import type { ColumnDef } from "@tanstack/react-table";
+import { Check, Play, Plus, RotateCcw, Square, Trash2 } from "lucide-react";
 import { BeluneLogo } from "@/lib/components/belune-logo";
 import { cn } from "@/lib/utils";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -14,7 +15,9 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
+import { DataTable, buildActionColumnDef } from "@/components/ui/data-table";
 import { FieldError } from "@/components/ui/field";
+import { IconAction } from "@/components/ui/icon-action";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { LiveIndicator } from "@/components/ui/live-indicator";
@@ -28,14 +31,6 @@ import { Sparkline } from "@/components/ui/sparkline";
 import { StatusBar } from "@/components/ui/status-bar";
 import { StatusPill } from "@/components/ui/status-pill";
 import { Switch } from "@/components/ui/switch";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 
@@ -128,6 +123,104 @@ function Quadrant({ mode, accent }: { mode: Mode; accent: Accent }) {
 }
 
 const SPARK = [3, 5, 4, 8, 6, 9, 7, 11, 10, 12];
+
+interface FakeService {
+  id: string;
+  name: string;
+  kind: string;
+  status: string;
+  cpu: string;
+}
+
+const SERVICES: FakeService[] = [
+  {
+    id: "web",
+    name: "web",
+    kind: "Application",
+    status: "running",
+    cpu: "12%",
+  },
+  {
+    id: "worker",
+    name: "worker",
+    kind: "Application",
+    status: "building",
+    cpu: "—",
+  },
+  {
+    id: "db",
+    name: "postgres",
+    kind: "Database",
+    status: "running",
+    cpu: "3%",
+  },
+  { id: "cache", name: "redis", kind: "Database", status: "stopped", cpu: "—" },
+  {
+    id: "cron",
+    name: "reports",
+    kind: "Application",
+    status: "failed",
+    cpu: "—",
+  },
+];
+
+// The two action styles the app actually uses in a row: the icon actions of
+// the project services table, and the labelled small buttons of the team page.
+const SERVICE_COLUMNS: ColumnDef<FakeService>[] = [
+  {
+    id: "name",
+    header: "Service",
+    accessorKey: "name",
+    cell: ({ row: { original: svc } }) => (
+      <div className="min-w-0">
+        <div className="truncate font-medium">{svc.name}</div>
+        <div className="text-text-faint text-xs">{svc.kind}</div>
+      </div>
+    ),
+  },
+  {
+    id: "status",
+    header: "Status",
+    accessorKey: "status",
+    cell: ({ row: { original: svc } }) => <StatusPill status={svc.status} />,
+  },
+  {
+    id: "cpu",
+    header: "CPU",
+    accessorKey: "cpu",
+    meta: { headerClassName: "text-right", className: "text-right" },
+    cell: ({ row: { original: svc } }) => (
+      <span className="text-muted-foreground tabular-nums">{svc.cpu}</span>
+    ),
+  },
+  buildActionColumnDef<FakeService>({
+    meta: { headerClassName: "text-right", className: "text-right" },
+    cell: ({ row: { original: svc } }) => (
+      <div className="flex items-center justify-end gap-1">
+        {svc.status === "running" ? (
+          <IconAction label="Stop" onClick={noop} destructive>
+            <Square aria-hidden="true" className="size-4" />
+          </IconAction>
+        ) : (
+          <IconAction label="Start" onClick={noop}>
+            <Play aria-hidden="true" className="size-4" />
+          </IconAction>
+        )}
+        <IconAction label="Restart" onClick={noop}>
+          <RotateCcw aria-hidden="true" className="size-4" />
+        </IconAction>
+        <Button variant="outline" size="sm" className="ml-1">
+          Logs
+        </Button>
+        <Button variant="destructive" size="sm">
+          Delete
+        </Button>
+      </div>
+    ),
+  }),
+];
+
+function noop() {}
 
 function Showcase({ id }: { id: string }) {
   const [segment, setSegment] = useState("all");
@@ -255,6 +348,16 @@ function Showcase({ id }: { id: string }) {
         </div>
       </Row>
 
+      <Row title="Table">
+        <DataTable
+          columns={SERVICE_COLUMNS}
+          data={SERVICES}
+          getRowId={(svc) => svc.id}
+          enableSorting
+          className="w-full"
+        />
+      </Row>
+
       <Row title="Surfaces">
         <Card className="w-full">
           <CardHeader>
@@ -281,31 +384,6 @@ function Showcase({ id }: { id: string }) {
             />
             <Sparkline values={SPARK} height={32} />
             <Separator />
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Service</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-right">CPU</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                <TableRow>
-                  <TableCell className="font-mono text-xs">web</TableCell>
-                  <TableCell>
-                    <StatusPill status="running" />
-                  </TableCell>
-                  <TableCell className="text-right tabular-nums">12%</TableCell>
-                </TableRow>
-                <TableRow>
-                  <TableCell className="font-mono text-xs">worker</TableCell>
-                  <TableCell>
-                    <StatusPill status="building" />
-                  </TableCell>
-                  <TableCell className="text-right tabular-nums">—</TableCell>
-                </TableRow>
-              </TableBody>
-            </Table>
             <div className="space-y-2">
               <Skeleton className="h-4 w-1/2" />
               <Skeleton className="h-4 w-1/3" />
