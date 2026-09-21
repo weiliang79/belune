@@ -1,7 +1,20 @@
-import { useState, type ReactNode } from "react";
+import {
+  useState,
+  type FocusEvent,
+  type PointerEvent,
+  type ReactNode,
+} from "react";
 import { createFileRoute, notFound } from "@tanstack/react-router";
 import type { ColumnDef } from "@tanstack/react-table";
-import { Check, Play, Plus, RotateCcw, Square, Trash2 } from "lucide-react";
+import {
+  Check,
+  MoreHorizontal,
+  Play,
+  Plus,
+  RotateCcw,
+  Square,
+  Trash2,
+} from "lucide-react";
 import { BeluneLogo } from "@/lib/components/belune-logo";
 import { cn } from "@/lib/utils";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -16,6 +29,13 @@ import {
 } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DataTable, buildActionColumnDef } from "@/components/ui/data-table";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { FieldError } from "@/components/ui/field";
 import { IconAction } from "@/components/ui/icon-action";
 import { Input } from "@/components/ui/input";
@@ -25,6 +45,13 @@ import {
   SegmentedControl,
   SegmentedControlItem,
 } from "@/components/ui/segmented-control";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Sparkline } from "@/components/ui/sparkline";
@@ -42,9 +69,15 @@ import { Textarea } from "@/components/ui/textarea";
  *
  * The quadrants are real theme scopes (`.light`/`.dark` + `data-accent`), so
  * they render through the same tokens and the same `dark:` utilities as the
- * app — not a copy of the stylesheet. Anything that portals to <body>
- * (Dialog, Select's popup, DropdownMenu, Tooltip, Sonner) escapes its quadrant
- * and takes the page theme, so overlays are deliberately not shown here.
+ * app — not a copy of the stylesheet.
+ *
+ * Overlays are the one thing a scope cannot contain: Tooltip, Select's popup,
+ * DropdownMenu and Dialog all portal to <body>, so they take the PAGE theme,
+ * not their quadrant's. Rather than leave them out, each quadrant sets the
+ * page theme to its own while the pointer or focus is inside it and restores
+ * it on the way out — so an overlay opened from a quadrant renders under that
+ * quadrant's theme. The matrix itself never depends on the page theme, so
+ * the quadrants do not move while this happens.
  *
  * Gated in beforeLoad rather than by omission so the URL 404s in a production
  * build; the component itself is code-split by the router plugin and never
@@ -73,8 +106,8 @@ function ThemeMatrixPage() {
       <header className="mb-4 flex flex-wrap items-baseline justify-between gap-2">
         <h1 className="text-lg font-semibold">Theme matrix</h1>
         <p className="text-muted-foreground text-sm">
-          Development only. Overlays (dialogs, menus, selects, toasts) portal
-          out of their quadrant and are not shown.
+          Development only. Overlays (tooltips, menus, selects) portal to the
+          page, so the page follows whichever quadrant the pointer is in.
         </p>
       </header>
       <div className="grid gap-4 xl:grid-cols-2">
@@ -86,10 +119,78 @@ function ThemeMatrixPage() {
   );
 }
 
+/** What <html> looked like before a quadrant borrowed the page theme. */
+interface PageTheme {
+  className: string;
+  accent: string | undefined;
+  colorScheme: string;
+}
+
+// One snapshot for the page, not one per quadrant: moving straight from one
+// quadrant into another borrows twice and restores once, and the restore must
+// land on what the page had before either of them.
+let original: PageTheme | null = null;
+
+// next-themes owns <html>'s class and the accent store owns data-accent, but
+// neither watches for outside changes, so borrowing and restoring by hand is
+// safe as long as the snapshot is eventually restored.
+function borrowPageTheme(mode: Mode, accent: Accent) {
+  const html = document.documentElement;
+  original ??= {
+    className: html.className,
+    accent: html.dataset.accent,
+    colorScheme: html.style.colorScheme,
+  };
+  html.className = mode;
+  if (accent === "emerald") html.dataset.accent = "emerald";
+  else delete html.dataset.accent;
+  html.style.colorScheme = mode;
+}
+
+function restorePageTheme() {
+  if (!original) return;
+  const html = document.documentElement;
+  html.className = original.className;
+  if (original.accent) html.dataset.accent = original.accent;
+  else delete html.dataset.accent;
+  html.style.colorScheme = original.colorScheme;
+  original = null;
+}
+
+/**
+ * Restore unless some quadrant still holds the pointer or focus. A menu or
+ * select popup is outside its quadrant, so the pointer has usually already
+ * left by the time the popup closes — the leave was ignored (see Quadrant),
+ * and this is the deferred restore for it.
+ */
+function settlePageTheme() {
+  const held = document.querySelector(
+    "section[data-quadrant]:hover, section[data-quadrant]:focus-within",
+  );
+  if (!held) restorePageTheme();
+}
+
 function Quadrant({ mode, accent }: { mode: Mode; accent: Accent }) {
   const id = `${mode}-${accent}`;
+  const borrow = () => borrowPageTheme(mode, accent);
+  // Leaving for an open popup is not leaving: the popup is the quadrant's own
+  // overlay, and settlePageTheme runs when it closes.
+  const onPointerLeave = (e: PointerEvent<HTMLElement>) => {
+    if (!e.currentTarget.querySelector("[data-popup-open]")) restorePageTheme();
+  };
+  // Keyboard users open tooltips and menus with focus, not hover; only restore
+  // when focus actually leaves the quadrant, not when it moves inside it.
+  const onBlur = (e: FocusEvent<HTMLElement>) => {
+    if (!e.currentTarget.contains(e.relatedTarget)) restorePageTheme();
+  };
+
   return (
     <section
+      data-quadrant
+      onPointerEnter={borrow}
+      onPointerLeave={onPointerLeave}
+      onFocus={borrow}
+      onBlur={onBlur}
       // The app only ever sets data-accent for emerald (violet is the absence
       // of it), and the `.light`/`.dark` blocks each re-declare the violet
       // brand, so a violet quadrant needs no attribute to override an emerald
@@ -215,6 +316,25 @@ const SERVICE_COLUMNS: ColumnDef<FakeService>[] = [
         <Button variant="destructive" size="sm">
           Delete
         </Button>
+        <DropdownMenu
+          onOpenChange={(open) => {
+            if (!open) settlePageTheme();
+          }}
+        >
+          <DropdownMenuTrigger
+            render={
+              <Button variant="ghost" size="icon" aria-label="More actions" />
+            }
+          >
+            <MoreHorizontal aria-hidden="true" className="size-4" />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-40">
+            <DropdownMenuItem>Open</DropdownMenuItem>
+            <DropdownMenuItem>Redeploy</DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem variant="destructive">Delete</DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
     ),
   }),
@@ -316,6 +436,21 @@ function Showcase({ id }: { id: string }) {
             <Switch disabled defaultChecked /> Disabled
           </Label>
         </div>
+        <Select
+          defaultValue="postgres"
+          onOpenChange={(open) => {
+            if (!open) settlePageTheme();
+          }}
+        >
+          <SelectTrigger className="w-40" aria-label="Database type">
+            <SelectValue placeholder="Select type" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="postgres">Postgres</SelectItem>
+            <SelectItem value="mysql">MySQL</SelectItem>
+            <SelectItem value="redis">Redis</SelectItem>
+          </SelectContent>
+        </Select>
         <SegmentedControl value={segment} onValueChange={setSegment} size="sm">
           <SegmentedControlItem value="all">All</SegmentedControlItem>
           <SegmentedControlItem value="running">Running</SegmentedControlItem>
