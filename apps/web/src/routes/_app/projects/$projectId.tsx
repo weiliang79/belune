@@ -12,6 +12,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useBreadcrumbLabel } from "@/lib/hooks/use-breadcrumb";
 import { ProjectHeader } from "@/components/projects/project-header";
 import { RouteError } from "@/lib/components/route-error";
+import { RouteSkeleton } from "@/lib/components/route-skeleton";
 
 export const Route = createFileRoute("/_app/projects/$projectId")({
   component: ProjectLayout,
@@ -46,11 +47,31 @@ function ProjectLayout() {
     return <div className="text-destructive">Project not found.</div>;
   }
 
-  // Hide project chrome when viewing a service or database detail page
+  // Hide project chrome when viewing a service or database detail page. Read
+  // from the live (optimistic) pathname so this reacts the instant a
+  // navigation starts, in step with the Topbar breadcrumb above it — reading
+  // the settled path instead left this header showing (mismatched against an
+  // already-updated breadcrumb) for the entire time the child route took to
+  // load.
   const isChildDetail =
     currentPath.includes("/applications/") || currentPath.includes("/databases/");
 
   if (isChildDetail) {
+    // Freshly crossing in from project overview/settings/etc: the child
+    // route hasn't mounted yet, so render a plain skeleton instead of
+    // <Outlet/>, which would otherwise keep showing this project's
+    // now-unrelated previous match until the new route resolves. Once
+    // already inside child-detail territory (switching tabs within one app,
+    // or jumping straight to a different app/database), defer to <Outlet/>
+    // and let that layout's own loading state handle it — guarding on exact
+    // pathname equality here would flash its header away on every tab click.
+    const resolvedPath = routerState.resolvedLocation?.pathname ?? currentPath;
+    const wasChildDetail =
+      resolvedPath.includes("/applications/") ||
+      resolvedPath.includes("/databases/");
+    if (!wasChildDetail && resolvedPath !== currentPath) {
+      return <RouteSkeleton />;
+    }
     return <Outlet />;
   }
 
