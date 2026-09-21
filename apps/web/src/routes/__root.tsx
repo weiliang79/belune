@@ -6,6 +6,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { checkSetup, getMe } from "@/lib/api/auth";
 import { useAuthStore } from "@/lib/stores/auth";
 import { useAccentSync } from "@/lib/stores/accent";
+import { useReloadOnVersionChange } from "@/lib/hooks/use-reload-on-version-change";
 import { ApiError } from "@/lib/api/client";
 import { RootErrorBoundary, NotFoundPage } from "@/lib/components/status-pages";
 import { ProgressProvider } from "@bprogress/react";
@@ -53,6 +54,10 @@ export const Route = createRootRoute({
 
 function RootLayout() {
   useAccentSync();
+  // Self-update replaces the container under an open dashboard; this reloads
+  // the page once the backend comes back on a new version, so the old bundle
+  // never keeps running against the new API.
+  useReloadOnVersionChange();
   return (
     <ThemeProvider
       attribute="class"

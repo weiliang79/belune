@@ -16,7 +16,10 @@ export function useVersion(): string {
   const { data } = useQuery({
     queryKey: queryKeys.version,
     queryFn: versionApi.getVersion,
-    // The version cannot change without the page reloading with it.
+    // Constant for one page lifetime. It CAN change underneath an open page
+    // now that self-update replaces the container — but when it does,
+    // useReloadOnVersionChange reloads the page, so within a lifetime this
+    // never goes stale and there is nothing to refetch.
     staleTime: Infinity,
     retry: false,
   });
