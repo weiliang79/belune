@@ -4,17 +4,25 @@
 @import "@fontsource-variable/geist";
 @import "@fontsource-variable/geist-mono";
 
-@custom-variant dark (&:is(.dark *));
+/* "Nearest themed ancestor wins": an element is dark when it sits under a
+   `.dark` scope with no `.light` scope in between. Plain `.dark *` would keep
+   dark: utilities lit inside a light subtree of a dark page, which is exactly
+   what the /dev/theme matrix relies on. In the app itself only <html> carries
+   a theme class, so this reads the same as before. */
+@custom-variant dark (&:is(.dark *):not(:is(.dark .light *)));
 
 /* ──────────────────────────────────────────────────────────────────────────
    Design tokens (PaaS design system, ported)
-   - Light is the default (:root); dark is the `.dark` class (next-themes).
+   - Light is the default (:root, and `.light` for a subtree); dark is the
+     `.dark` class (next-themes). Both scope to any element, so a subtree can
+     carry its own theme — see /dev/theme.
    - Brand accent toggles violet (default) ↔ emerald via [data-accent="emerald"].
    - shadcn semantic tokens (--background, --primary, …) are re-mapped onto the
      design palette so existing shadcn components adopt the look automatically.
    ────────────────────────────────────────────────────────────────────────── */
 
-:root {
+:root,
+.light {
   /* Surfaces (light) */
   --bg: #fafafa;
   --bg-subtle: #f4f4f5;
@@ -78,6 +86,23 @@
   --shadow: 0 1px 2px rgba(24, 24, 27, 0.06), 0 8px 24px -16px rgba(24, 24, 27, 0.18);
   --shadow-lg: 0 24px 60px -22px rgba(24, 24, 27, 0.28), 0 2px 8px rgba(24, 24, 27, 0.08);
 
+  /* Active nav item. In light mode the rail (--bg-subtle) and --elev are the
+     same #f4f4f5, so reusing --elev here left the selection invisible; use a
+     deeper gray that reads as highlighted against the rail. Dark mode pins
+     --elev below to keep its existing look. */
+  --sidebar-accent: #e4e4e7;
+}
+
+/* Pure aliases, so they carry no theme of their own — but a `var()` resolves
+   where it is DECLARED, not where it is read. Declared only on :root they
+   would freeze to the page theme and a `.dark` or emerald subtree would
+   inherit the wrong computed --primary. Re-declaring them on every scoping
+   selector makes each scope resolve them against its own brand and surfaces.
+   In the app <html> carries all of these at once, so nothing changes there. */
+:root,
+.light,
+.dark,
+[data-accent="emerald"] {
   /* ── shadcn semantic tokens → design palette ── */
   --background: var(--bg);
   --foreground: var(--text);
@@ -110,11 +135,6 @@
   --sidebar-foreground: var(--text-muted);
   --sidebar-primary: var(--brand);
   --sidebar-primary-foreground: var(--brand-fg);
-  /* Active nav item. In light mode the rail (--bg-subtle) and --elev are the
-     same #f4f4f5, so reusing --elev here left the selection invisible; use a
-     deeper gray that reads as highlighted against the rail. Dark mode pins
-     --elev below to keep its existing look. */
-  --sidebar-accent: #e4e4e7;
   --sidebar-accent-foreground: var(--text);
   --sidebar-border: var(--border-subtle);
   --sidebar-ring: var(--brand);
@@ -172,9 +192,13 @@
   --brand-line: rgba(16, 185, 129, 0.4);
 }
 
+/* Near-black text on emerald in dark mode — white fails contrast there. The
+   second form covers an emerald subtree of a dark page, unless that subtree
+   is itself a `.light` scope. There is deliberately no
+   `[data-accent="emerald"] .dark`: a `.dark` scope re-declares the violet
+   brand, so its foreground must stay white regardless of what is above it. */
 .dark[data-accent="emerald"],
-[data-accent="emerald"] .dark,
-.dark [data-accent="emerald"] {
+.dark [data-accent="emerald"]:not(.light, .light *) {
   --brand-fg: #04130c;
 }
 
