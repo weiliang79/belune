@@ -284,6 +284,7 @@ export function ProviderFormDialog({ open, onOpenChange }: Props) {
                   <form.Field
                     name="baseUrl"
                     validators={{
+                      onChangeListenTo: ["provider"],
                       onChange: ({ value }) =>
                         meta.baseUrlRequired && !value.trim()
                           ? `Base URL is required for ${meta.label}`
