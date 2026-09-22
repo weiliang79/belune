@@ -380,7 +380,9 @@ function Showcase({ id }: { id: string }) {
         <span className="bg-primary rounded-md px-2.5 py-1 text-sm text-white">
           text-white
         </span>
-        <span className="text-primary text-sm">text-primary on surface</span>
+        <span className="text-brand-text text-sm">
+          text-brand-text on surface
+        </span>
       </Row>
 
       <Row title="Badges & status">
