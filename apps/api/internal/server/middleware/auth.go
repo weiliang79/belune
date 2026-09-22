@@ -148,6 +148,27 @@ func RequireSession() func(http.Handler) http.Handler {
 	}
 }
 
+// RequireToken returns a middleware that rejects a session-authenticated
+// request, accepting only a personal access token. Must be used after Auth.
+// The mirror image of RequireSession.
+//
+// MCP clients are machines, not a human at a browser — accepting a session
+// JWT on /mcp would blur the boundary the PAT model draws, and CSRF already
+// exempts the Bearer branch (see csrf.go), so a JWT arriving there would skip
+// that protection with no compensating control. There is no legitimate
+// reason for a dashboard session to call it.
+func RequireToken() func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if TokenIDFromContext(r.Context()) == "" {
+				http.Error(w, `{"error":"this action requires a personal access token, not a session"}`, http.StatusForbidden)
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
 // UserIDFromContext returns the authenticated user's ID from the request context.
 func UserIDFromContext(ctx context.Context) string {
 	v, _ := ctx.Value(ctxUserID).(string)
