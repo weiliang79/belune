@@ -4,6 +4,8 @@ import { z } from "zod";
 import { toast } from "sonner";
 import { TriangleAlert, Settings2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Field, FieldError, FieldLabel } from "@/components/ui/field";
+import { fieldError } from "@/lib/utils/field-error";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -141,7 +143,9 @@ export function ApplicationSettingsForm({
           name: value.name || undefined,
           source_repo: isGit ? value.source_repo || undefined : undefined,
           source_image: isGit ? undefined : value.source_image || undefined,
-          dockerfile_path: isGit ? value.dockerfile_path || undefined : undefined,
+          dockerfile_path: isGit
+            ? value.dockerfile_path || undefined
+            : undefined,
           root_directory: isGit ? value.root_directory || undefined : undefined,
           // Sent even when blank: blank means "the repository's default ref",
           // which must be able to clear a previously set branch.
@@ -227,16 +231,21 @@ export function ApplicationSettingsForm({
           <form.Field
             name="name"
             validators={{ onChange: z.string().min(1, "Name is required") }}
-            children={(field) => (
-              <div className="space-y-2">
-                <Label>Application Name</Label>
-                <Input
-                  value={field.state.value}
-                  onBlur={field.handleBlur}
-                  onChange={(e) => field.handleChange(e.target.value)}
-                />
-              </div>
-            )}
+            children={(field) => {
+              const error = fieldError(field.state.meta.errors);
+              return (
+                <Field data-invalid={!!error}>
+                  <FieldLabel>Application Name</FieldLabel>
+                  <Input
+                    value={field.state.value}
+                    onBlur={field.handleBlur}
+                    onChange={(e) => field.handleChange(e.target.value)}
+                    aria-invalid={!!error}
+                  />
+                  {error && <FieldError>{error}</FieldError>}
+                </Field>
+              );
+            }}
           />
           <div className="space-y-2">
             <Label>Source</Label>
@@ -325,9 +334,7 @@ export function ApplicationSettingsForm({
                 <Label>Repository Source</Label>
                 <SegmentedControl
                   value={gitSource}
-                  onValueChange={(v) =>
-                    setGitSource(v as "connection" | "url")
-                  }
+                  onValueChange={(v) => setGitSource(v as "connection" | "url")}
                 >
                   <SegmentedControlItem value="connection">
                     Connected Account
@@ -378,23 +385,21 @@ export function ApplicationSettingsForm({
                         "URL must start with https:// or git@",
                       ),
                   }}
-                  children={(field) => (
-                    <div className="space-y-2">
-                      <Label>Repository URL</Label>
-                      <Input
-                        value={field.state.value}
-                        onBlur={field.handleBlur}
-                        onChange={(e) => field.handleChange(e.target.value)}
-                      />
-                      {field.state.meta.errors.length > 0 && (
-                        <p className="text-destructive text-sm">
-                          {typeof field.state.meta.errors[0] === "string"
-                            ? field.state.meta.errors[0]
-                            : field.state.meta.errors[0]?.message}
-                        </p>
-                      )}
-                    </div>
-                  )}
+                  children={(field) => {
+                    const error = fieldError(field.state.meta.errors);
+                    return (
+                      <Field data-invalid={!!error}>
+                        <FieldLabel>Repository URL</FieldLabel>
+                        <Input
+                          value={field.state.value}
+                          onBlur={field.handleBlur}
+                          onChange={(e) => field.handleChange(e.target.value)}
+                          aria-invalid={!!error}
+                        />
+                        {error && <FieldError>{error}</FieldError>}
+                      </Field>
+                    );
+                  }}
                 />
               )}
               {/* Connected-account mode has its own branch dropdown inside the
@@ -439,8 +444,8 @@ export function ApplicationSettingsForm({
                         className="font-mono"
                       />
                       <p className="text-muted-foreground text-xs">
-                        Per-app token for private repositories. Use a repo-scoped
-                        token where possible.
+                        Per-app token for private repositories. Use a
+                        repo-scoped token where possible.
                       </p>
                     </div>
                   )}

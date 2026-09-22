@@ -4,8 +4,9 @@ import { z } from "zod";
 import { resetPassword } from "@/lib/api/auth";
 import { ApiError } from "@/lib/api/client";
 import { Button } from "@/components/ui/button";
+import { Field, FieldError, FieldLabel } from "@/components/ui/field";
+import { fieldError } from "@/lib/utils/field-error";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { AuthLayout } from "@/lib/components/layout/auth-layout";
 import { useState } from "react";
 
@@ -77,44 +78,47 @@ function ResetPasswordPage() {
           validators={{
             onChange: z.string().min(8, "At least 8 characters required"),
           }}
-          children={(field) => (
-            <div className="space-y-2">
-              <Label htmlFor="password">New password</Label>
-              <Input
-                id="password"
-                type="password"
-                placeholder="At least 8 characters"
-                value={field.state.value}
-                onBlur={field.handleBlur}
-                onChange={(e) => field.handleChange(e.target.value)}
-              />
-              {field.state.meta.errors.length > 0 && (
-                <p className="text-destructive text-sm">
-                  {typeof field.state.meta.errors[0] === "string"
-                    ? field.state.meta.errors[0]
-                    : field.state.meta.errors[0]?.message}
-                </p>
-              )}
-            </div>
-          )}
+          children={(field) => {
+            const error = fieldError(field.state.meta.errors);
+            return (
+              <Field data-invalid={!!error}>
+                <FieldLabel htmlFor="password">New password</FieldLabel>
+                <Input
+                  id="password"
+                  type="password"
+                  placeholder="At least 8 characters"
+                  value={field.state.value}
+                  onBlur={field.handleBlur}
+                  onChange={(e) => field.handleChange(e.target.value)}
+                  aria-invalid={!!error}
+                />
+                {error && <FieldError>{error}</FieldError>}
+              </Field>
+            );
+          }}
         />
         <form.Field
           name="confirm"
           validators={{
             onChange: z.string().min(1, "Please confirm your password"),
           }}
-          children={(field) => (
-            <div className="space-y-2">
-              <Label htmlFor="confirm">Confirm password</Label>
-              <Input
-                id="confirm"
-                type="password"
-                value={field.state.value}
-                onBlur={field.handleBlur}
-                onChange={(e) => field.handleChange(e.target.value)}
-              />
-            </div>
-          )}
+          children={(field) => {
+            const error = fieldError(field.state.meta.errors);
+            return (
+              <Field data-invalid={!!error}>
+                <FieldLabel htmlFor="confirm">Confirm password</FieldLabel>
+                <Input
+                  id="confirm"
+                  type="password"
+                  value={field.state.value}
+                  onBlur={field.handleBlur}
+                  onChange={(e) => field.handleChange(e.target.value)}
+                  aria-invalid={!!error}
+                />
+                {error && <FieldError>{error}</FieldError>}
+              </Field>
+            );
+          }}
         />
         <form.Subscribe
           selector={(s) => s.isSubmitting}

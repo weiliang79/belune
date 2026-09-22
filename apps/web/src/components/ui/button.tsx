@@ -25,7 +25,7 @@ const buttonVariants = cva(
         // irreversible action should carry the weight of a solid button.
         "destructive-solid":
           "bg-status-error-strong text-white hover:bg-status-error-strong/90 focus-visible:border-destructive/40 focus-visible:ring-destructive/40",
-        link: "text-primary underline-offset-4 hover:underline",
+        link: "text-brand-text underline-offset-4 hover:underline",
       },
       size: {
         default:

@@ -38,13 +38,13 @@ function TemplateCard({
       <button
         type="button"
         onClick={onSelect}
-        className="hover:bg-card-hover focus-visible:ring-ring flex flex-1 flex-col gap-3 rounded-t-xl p-4 text-left outline-none transition-colors focus-visible:ring-2 focus-visible:ring-inset"
+        className="hover:bg-card-hover focus-visible:ring-ring flex flex-1 flex-col gap-3 rounded-t-xl p-4 text-left transition-colors outline-none focus-visible:ring-2 focus-visible:ring-inset"
       >
         <div className="flex items-start justify-between gap-2">
           <div className="flex min-w-0 items-center gap-3">
             <TemplateLogo logoUrl={template.logo_url} />
             <div className="min-w-0">
-              <h3 className="group-hover/card:text-primary truncate text-sm font-semibold transition-colors">
+              <h3 className="group-hover/card:text-brand-text truncate text-sm font-semibold transition-colors">
                 {template.name}
               </h3>
               <span className="text-text-faint text-xs capitalize">
@@ -53,10 +53,7 @@ function TemplateCard({
             </div>
           </div>
           {template.version && (
-            <Badge
-              variant="outline"
-              className="shrink-0 gap-1 font-normal"
-            >
+            <Badge variant="outline" className="shrink-0 gap-1 font-normal">
               <Tag aria-hidden="true" className="size-3" />
               {template.version}
             </Badge>
@@ -167,7 +164,7 @@ function TemplatesPage() {
         <div className="relative sm:max-w-xs">
           <SearchIcon
             aria-hidden="true"
-            className="text-text-faint pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2"
+            className="text-text-faint pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2"
           />
           <Input
             value={search}
@@ -209,7 +206,11 @@ function TemplatesPage() {
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {filtered.map((t) => (
-            <TemplateCard key={t.id} template={t} onSelect={() => openWizard(t)} />
+            <TemplateCard
+              key={t.id}
+              template={t}
+              onSelect={() => openWizard(t)}
+            />
           ))}
         </div>
       )}

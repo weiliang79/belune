@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useForm } from "@tanstack/react-form";
 import { toast } from "sonner";
+import { z } from "zod";
 import { HeartPulse } from "lucide-react";
 import {
   Card,
@@ -9,6 +10,8 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Field, FieldError, FieldLabel } from "@/components/ui/field";
+import { fieldError } from "@/lib/utils/field-error";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -41,6 +44,13 @@ function numOrUndefined(s: string): number | undefined {
   return Number.isFinite(n) && n > 0 ? n : undefined;
 }
 
+const positiveNumber = z
+  .string()
+  .refine(
+    (v) => v === "" || (/^\d+$/.test(v) && Number(v) > 0),
+    "Must be a positive whole number",
+  );
+
 export function HealthCheckSection({
   projectId,
   applicationId,
@@ -52,56 +62,45 @@ export function HealthCheckSection({
 }) {
   const setHealthCheck = useSetHealthCheck(projectId, applicationId);
 
-  const [type, setType] = useState<HealthType>(application.health_check_type);
-  const [path, setPath] = useState(application.health_check_path ?? "");
-  const [expectStatus, setExpectStatus] = useState(
-    application.health_check_expect_status?.toString() ?? "",
-  );
-  const [command, setCommand] = useState(application.health_check_command ?? "");
-  const [interval, setInterval] = useState(
-    application.health_check_interval_seconds?.toString() ?? "",
-  );
-  const [retries, setRetries] = useState(
-    application.health_check_retries?.toString() ?? "",
-  );
-  const [startPeriod, setStartPeriod] = useState(
-    application.health_check_start_period_seconds?.toString() ?? "",
-  );
-  const [timeout, setTimeout] = useState(
-    application.health_check_timeout_seconds?.toString() ?? "",
-  );
+  const form = useForm({
+    defaultValues: {
+      type: application.health_check_type as HealthType,
+      path: application.health_check_path ?? "",
+      expectStatus: application.health_check_expect_status?.toString() ?? "",
+      command: application.health_check_command ?? "",
+      interval: application.health_check_interval_seconds?.toString() ?? "",
+      retries: application.health_check_retries?.toString() ?? "",
+      startPeriod:
+        application.health_check_start_period_seconds?.toString() ?? "",
+      timeout: application.health_check_timeout_seconds?.toString() ?? "",
+    },
+    onSubmit: ({ value }) => {
+      const data =
+        value.type === "none"
+          ? { type: "none" as const }
+          : value.type === "http"
+            ? {
+                type: "http" as const,
+                path: value.path.trim(),
+                expect_status: numOrUndefined(value.expectStatus),
+                timeout_seconds: numOrUndefined(value.timeout),
+              }
+            : {
+                type: "command" as const,
+                command: value.command.trim(),
+                interval_seconds: numOrUndefined(value.interval),
+                retries: numOrUndefined(value.retries),
+                start_period_seconds: numOrUndefined(value.startPeriod),
+                timeout_seconds: numOrUndefined(value.timeout),
+              };
 
-  const canSave =
-    type === "none" ||
-    (type === "http" && path.trim() !== "") ||
-    (type === "command" && command.trim() !== "");
-
-  const save = () => {
-    const data =
-      type === "none"
-        ? { type: "none" as const }
-        : type === "http"
-          ? {
-              type: "http" as const,
-              path: path.trim(),
-              expect_status: numOrUndefined(expectStatus),
-              timeout_seconds: numOrUndefined(timeout),
-            }
-          : {
-              type: "command" as const,
-              command: command.trim(),
-              interval_seconds: numOrUndefined(interval),
-              retries: numOrUndefined(retries),
-              start_period_seconds: numOrUndefined(startPeriod),
-              timeout_seconds: numOrUndefined(timeout),
-            };
-
-    toast.promise(setHealthCheck.mutateAsync(data), {
-      loading: "Saving...",
-      success: "Health check saved — applies on the next deploy",
-      error: (err) => err.message,
-    });
-  };
+      toast.promise(setHealthCheck.mutateAsync(data), {
+        loading: "Saving...",
+        success: "Health check saved — applies on the next deploy",
+        error: (err) => err.message,
+      });
+    },
+  });
 
   return (
     <Card>
@@ -112,131 +111,303 @@ export function HealthCheckSection({
         </CardTitle>
         <CardDescription>
           How the platform decides the application is healthy. A command check
-          runs continuously inside the container and marks the app Unhealthy when
-          it fails; an HTTP check is probed once after each deploy. Changes apply
-          on the next deploy.
+          runs continuously inside the container and marks the app Unhealthy
+          when it fails; an HTTP check is probed once after each deploy. Changes
+          apply on the next deploy.
         </CardDescription>
       </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="space-y-2">
-          <Label>Method</Label>
-          <SegmentedControl
-            value={type}
-            onValueChange={(v) => setType(v as HealthType)}
-          >
-            <SegmentedControlItem value="none">None</SegmentedControlItem>
-            <SegmentedControlItem value="http">HTTP</SegmentedControlItem>
-            <SegmentedControlItem value="command">Command</SegmentedControlItem>
-          </SegmentedControl>
-        </div>
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          form.handleSubmit();
+        }}
+      >
+        <CardContent className="space-y-4">
+          <form.Field
+            name="type"
+            children={(field) => (
+              <div className="space-y-2">
+                <Label>Method</Label>
+                <SegmentedControl
+                  value={field.state.value}
+                  onValueChange={(v) => field.handleChange(v as HealthType)}
+                >
+                  <SegmentedControlItem value="none">None</SegmentedControlItem>
+                  <SegmentedControlItem value="http">HTTP</SegmentedControlItem>
+                  <SegmentedControlItem value="command">
+                    Command
+                  </SegmentedControlItem>
+                </SegmentedControl>
+              </div>
+            )}
+          />
 
-        {type === "http" && (
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label>Path</Label>
-              <Input
-                value={path}
-                onChange={(e) => setPath(e.target.value)}
-                placeholder="/healthz"
-                className="font-mono"
-              />
-              <p className="text-muted-foreground text-xs">
-                Probed on the container's port after each deploy. A non-2xx
-                response (or the code below) fails the deploy.
-              </p>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Expected status</Label>
-                <Input
-                  type="number"
-                  value={expectStatus}
-                  onChange={(e) => setExpectStatus(e.target.value)}
-                  placeholder="any 2xx"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Timeout (seconds)</Label>
-                <Input
-                  type="number"
-                  value={timeout}
-                  onChange={(e) => setTimeout(e.target.value)}
-                  placeholder="120"
-                />
-              </div>
-            </div>
+          <form.Subscribe
+            selector={(s) => s.values.type}
+            children={(type) => (
+              <>
+                {type === "http" && (
+                  <div className="space-y-4">
+                    <form.Field
+                      name="path"
+                      validators={{
+                        onChangeListenTo: ["type"],
+                        onChange: ({ value, fieldApi }) =>
+                          fieldApi.form.state.values.type === "http" &&
+                          value.trim() === ""
+                            ? "Path is required"
+                            : undefined,
+                      }}
+                      children={(field) => {
+                        const error = fieldError(field.state.meta.errors);
+                        return (
+                          <Field data-invalid={!!error}>
+                            <FieldLabel>Path</FieldLabel>
+                            <Input
+                              value={field.state.value}
+                              onBlur={field.handleBlur}
+                              onChange={(e) =>
+                                field.handleChange(e.target.value)
+                              }
+                              placeholder="/healthz"
+                              className="font-mono"
+                              aria-invalid={!!error}
+                            />
+                            {error ? (
+                              <FieldError>{error}</FieldError>
+                            ) : (
+                              <p className="text-muted-foreground text-xs">
+                                Probed on the container's port after each
+                                deploy. A non-2xx response (or the code below)
+                                fails the deploy.
+                              </p>
+                            )}
+                          </Field>
+                        );
+                      }}
+                    />
+                    <div className="grid grid-cols-2 gap-4">
+                      <form.Field
+                        name="expectStatus"
+                        children={(field) => (
+                          <div className="space-y-2">
+                            <Label>Expected status</Label>
+                            <Input
+                              type="number"
+                              value={field.state.value}
+                              onBlur={field.handleBlur}
+                              onChange={(e) =>
+                                field.handleChange(e.target.value)
+                              }
+                              placeholder="any 2xx"
+                            />
+                          </div>
+                        )}
+                      />
+                      <form.Field
+                        name="timeout"
+                        validators={{ onChange: positiveNumber }}
+                        children={(field) => {
+                          const error = fieldError(field.state.meta.errors);
+                          return (
+                            <Field data-invalid={!!error}>
+                              <FieldLabel>Timeout (seconds)</FieldLabel>
+                              <Input
+                                type="number"
+                                value={field.state.value}
+                                onBlur={field.handleBlur}
+                                onChange={(e) =>
+                                  field.handleChange(e.target.value)
+                                }
+                                placeholder="120"
+                                aria-invalid={!!error}
+                              />
+                              {error && <FieldError>{error}</FieldError>}
+                            </Field>
+                          );
+                        }}
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {type === "command" && (
+                  <div className="space-y-4">
+                    <form.Field
+                      name="command"
+                      validators={{
+                        onChangeListenTo: ["type"],
+                        onChange: ({ value, fieldApi }) =>
+                          fieldApi.form.state.values.type === "command" &&
+                          value.trim() === ""
+                            ? "Command is required"
+                            : undefined,
+                      }}
+                      children={(field) => {
+                        const error = fieldError(field.state.meta.errors);
+                        return (
+                          <Field data-invalid={!!error}>
+                            <FieldLabel>Command</FieldLabel>
+                            <Input
+                              value={field.state.value}
+                              onBlur={field.handleBlur}
+                              onChange={(e) =>
+                                field.handleChange(e.target.value)
+                              }
+                              placeholder="curl -f http://localhost:3000/health || exit 1"
+                              className="font-mono"
+                              aria-invalid={!!error}
+                            />
+                            {error ? (
+                              <FieldError>{error}</FieldError>
+                            ) : (
+                              <p className="text-muted-foreground text-xs">
+                                Run inside the container via <code>sh -c</code>.
+                                Exit 0 = healthy. The tool you use (curl, wget,
+                                pg_isready…) must exist in the image.
+                              </p>
+                            )}
+                          </Field>
+                        );
+                      }}
+                    />
+                    <div className="grid grid-cols-2 gap-4">
+                      <form.Field
+                        name="interval"
+                        validators={{ onChange: positiveNumber }}
+                        children={(field) => {
+                          const error = fieldError(field.state.meta.errors);
+                          return (
+                            <Field data-invalid={!!error}>
+                              <FieldLabel>Interval (seconds)</FieldLabel>
+                              <Input
+                                type="number"
+                                value={field.state.value}
+                                onBlur={field.handleBlur}
+                                onChange={(e) =>
+                                  field.handleChange(e.target.value)
+                                }
+                                placeholder="30"
+                                aria-invalid={!!error}
+                              />
+                              {error && <FieldError>{error}</FieldError>}
+                            </Field>
+                          );
+                        }}
+                      />
+                      <form.Field
+                        name="timeout"
+                        validators={{ onChange: positiveNumber }}
+                        children={(field) => {
+                          const error = fieldError(field.state.meta.errors);
+                          return (
+                            <Field data-invalid={!!error}>
+                              <FieldLabel>Timeout (seconds)</FieldLabel>
+                              <Input
+                                type="number"
+                                value={field.state.value}
+                                onBlur={field.handleBlur}
+                                onChange={(e) =>
+                                  field.handleChange(e.target.value)
+                                }
+                                placeholder="30"
+                                aria-invalid={!!error}
+                              />
+                              {error && <FieldError>{error}</FieldError>}
+                            </Field>
+                          );
+                        }}
+                      />
+                      <form.Field
+                        name="retries"
+                        validators={{ onChange: positiveNumber }}
+                        children={(field) => {
+                          const error = fieldError(field.state.meta.errors);
+                          return (
+                            <Field data-invalid={!!error}>
+                              <FieldLabel>Retries</FieldLabel>
+                              <Input
+                                type="number"
+                                value={field.state.value}
+                                onBlur={field.handleBlur}
+                                onChange={(e) =>
+                                  field.handleChange(e.target.value)
+                                }
+                                placeholder="3"
+                                aria-invalid={!!error}
+                              />
+                              {error ? (
+                                <FieldError>{error}</FieldError>
+                              ) : (
+                                <p className="text-muted-foreground text-xs">
+                                  Consecutive failures before Unhealthy.
+                                </p>
+                              )}
+                            </Field>
+                          );
+                        }}
+                      />
+                      <form.Field
+                        name="startPeriod"
+                        validators={{ onChange: positiveNumber }}
+                        children={(field) => {
+                          const error = fieldError(field.state.meta.errors);
+                          return (
+                            <Field data-invalid={!!error}>
+                              <FieldLabel>Start period (seconds)</FieldLabel>
+                              <Input
+                                type="number"
+                                value={field.state.value}
+                                onBlur={field.handleBlur}
+                                onChange={(e) =>
+                                  field.handleChange(e.target.value)
+                                }
+                                placeholder="0"
+                                aria-invalid={!!error}
+                              />
+                              {error ? (
+                                <FieldError>{error}</FieldError>
+                              ) : (
+                                <p className="text-muted-foreground text-xs">
+                                  Grace window at startup where failures don't
+                                  count.
+                                </p>
+                              )}
+                            </Field>
+                          );
+                        }}
+                      />
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+          />
+
+          <div className="flex justify-end">
+            <form.Subscribe
+              selector={(s) =>
+                [s.values.type, s.values.path, s.values.command] as const
+              }
+              children={([type, path, command]) => {
+                const canSave =
+                  type === "none" ||
+                  (type === "http" && path.trim() !== "") ||
+                  (type === "command" && command.trim() !== "");
+                return (
+                  <Button
+                    type="submit"
+                    disabled={!canSave || setHealthCheck.isPending}
+                  >
+                    {setHealthCheck.isPending ? "Saving..." : "Save"}
+                  </Button>
+                );
+              }}
+            />
           </div>
-        )}
-
-        {type === "command" && (
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label>Command</Label>
-              <Input
-                value={command}
-                onChange={(e) => setCommand(e.target.value)}
-                placeholder="curl -f http://localhost:3000/health || exit 1"
-                className="font-mono"
-              />
-              <p className="text-muted-foreground text-xs">
-                Run inside the container via <code>sh -c</code>. Exit 0 = healthy.
-                The tool you use (curl, wget, pg_isready…) must exist in the
-                image.
-              </p>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Interval (seconds)</Label>
-                <Input
-                  type="number"
-                  value={interval}
-                  onChange={(e) => setInterval(e.target.value)}
-                  placeholder="30"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Timeout (seconds)</Label>
-                <Input
-                  type="number"
-                  value={timeout}
-                  onChange={(e) => setTimeout(e.target.value)}
-                  placeholder="30"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Retries</Label>
-                <Input
-                  type="number"
-                  value={retries}
-                  onChange={(e) => setRetries(e.target.value)}
-                  placeholder="3"
-                />
-                <p className="text-muted-foreground text-xs">
-                  Consecutive failures before Unhealthy.
-                </p>
-              </div>
-              <div className="space-y-2">
-                <Label>Start period (seconds)</Label>
-                <Input
-                  type="number"
-                  value={startPeriod}
-                  onChange={(e) => setStartPeriod(e.target.value)}
-                  placeholder="0"
-                />
-                <p className="text-muted-foreground text-xs">
-                  Grace window at startup where failures don't count.
-                </p>
-              </div>
-            </div>
-          </div>
-        )}
-
-        <div className="flex justify-end">
-          <Button onClick={save} disabled={!canSave || setHealthCheck.isPending}>
-            {setHealthCheck.isPending ? "Saving..." : "Save"}
-          </Button>
-        </div>
-      </CardContent>
+        </CardContent>
+      </form>
     </Card>
   );
 }

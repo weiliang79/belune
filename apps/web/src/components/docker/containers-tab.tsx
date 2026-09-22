@@ -84,7 +84,7 @@ export function DockerContainersTab({ enabled }: { enabled: boolean }) {
                   projectId: owner.project_id,
                   applicationId: owner.id,
                 }}
-                className="text-primary text-sm hover:underline"
+                className="text-brand-text text-sm hover:underline"
               >
                 {owner.name}
               </Link>
@@ -95,7 +95,7 @@ export function DockerContainersTab({ enabled }: { enabled: boolean }) {
               <Link
                 to="/projects/$projectId"
                 params={{ projectId: owner.project_id }}
-                className="text-primary text-sm hover:underline"
+                className="text-brand-text text-sm hover:underline"
               >
                 {owner.name}
               </Link>

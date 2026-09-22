@@ -5,6 +5,8 @@ import { setup, login, getMe } from "@/lib/api/auth";
 import { useAuthStore } from "@/lib/stores/auth";
 import { redirectIfAuthenticated } from "@/lib/utils/auth-guard";
 import { Button } from "@/components/ui/button";
+import { Field, FieldError, FieldLabel } from "@/components/ui/field";
+import { fieldError } from "@/lib/utils/field-error";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { AuthLayout } from "@/lib/components/layout/auth-layout";
@@ -96,52 +98,48 @@ function SetupPage() {
           validators={{
             onChange: z.string().min(1, "Username is required"),
           }}
-          children={(field) => (
-            <div className="space-y-2">
-              <Label htmlFor="username">Username</Label>
-              <Input
-                id="username"
-                type="text"
-                placeholder="admin"
-                value={field.state.value}
-                onBlur={field.handleBlur}
-                onChange={(e) => field.handleChange(e.target.value)}
-              />
-              {field.state.meta.errors.length > 0 && (
-                <p className="text-destructive text-sm">
-                  {typeof field.state.meta.errors[0] === "string"
-                    ? field.state.meta.errors[0]
-                    : field.state.meta.errors[0]?.message}
-                </p>
-              )}
-            </div>
-          )}
+          children={(field) => {
+            const error = fieldError(field.state.meta.errors);
+            return (
+              <Field data-invalid={!!error}>
+                <FieldLabel htmlFor="username">Username</FieldLabel>
+                <Input
+                  id="username"
+                  type="text"
+                  placeholder="admin"
+                  value={field.state.value}
+                  onBlur={field.handleBlur}
+                  onChange={(e) => field.handleChange(e.target.value)}
+                  aria-invalid={!!error}
+                />
+                {error && <FieldError>{error}</FieldError>}
+              </Field>
+            );
+          }}
         />
         <form.Field
           name="email"
           validators={{
             onChange: z.string().email("Valid email required"),
           }}
-          children={(field) => (
-            <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
-              <Input
-                id="email"
-                type="email"
-                placeholder="admin@example.com"
-                value={field.state.value}
-                onBlur={field.handleBlur}
-                onChange={(e) => field.handleChange(e.target.value)}
-              />
-              {field.state.meta.errors.length > 0 && (
-                <p className="text-destructive text-sm">
-                  {typeof field.state.meta.errors[0] === "string"
-                    ? field.state.meta.errors[0]
-                    : field.state.meta.errors[0]?.message}
-                </p>
-              )}
-            </div>
-          )}
+          children={(field) => {
+            const error = fieldError(field.state.meta.errors);
+            return (
+              <Field data-invalid={!!error}>
+                <FieldLabel htmlFor="email">Email</FieldLabel>
+                <Input
+                  id="email"
+                  type="email"
+                  placeholder="admin@example.com"
+                  value={field.state.value}
+                  onBlur={field.handleBlur}
+                  onChange={(e) => field.handleChange(e.target.value)}
+                  aria-invalid={!!error}
+                />
+                {error && <FieldError>{error}</FieldError>}
+              </Field>
+            );
+          }}
         />
         <form.Field
           name="password"
@@ -150,50 +148,48 @@ function SetupPage() {
               .string()
               .min(8, "Password must be at least 8 characters"),
           }}
-          children={(field) => (
-            <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
-              <Input
-                id="password"
-                type="password"
-                value={field.state.value}
-                onBlur={field.handleBlur}
-                onChange={(e) => field.handleChange(e.target.value)}
-              />
-              {field.state.meta.errors.length > 0 && (
-                <p className="text-destructive text-sm">
-                  {typeof field.state.meta.errors[0] === "string"
-                    ? field.state.meta.errors[0]
-                    : field.state.meta.errors[0]?.message}
-                </p>
-              )}
-            </div>
-          )}
+          children={(field) => {
+            const error = fieldError(field.state.meta.errors);
+            return (
+              <Field data-invalid={!!error}>
+                <FieldLabel htmlFor="password">Password</FieldLabel>
+                <Input
+                  id="password"
+                  type="password"
+                  value={field.state.value}
+                  onBlur={field.handleBlur}
+                  onChange={(e) => field.handleChange(e.target.value)}
+                  aria-invalid={!!error}
+                />
+                {error && <FieldError>{error}</FieldError>}
+              </Field>
+            );
+          }}
         />
         <form.Field
           name="confirmPassword"
           validators={{
             onChange: z.string().min(1, "Please confirm your password"),
           }}
-          children={(field) => (
-            <div className="space-y-2">
-              <Label htmlFor="confirmPassword">Confirm Password</Label>
-              <Input
-                id="confirmPassword"
-                type="password"
-                value={field.state.value}
-                onBlur={field.handleBlur}
-                onChange={(e) => field.handleChange(e.target.value)}
-              />
-              {field.state.meta.errors.length > 0 && (
-                <p className="text-destructive text-sm">
-                  {typeof field.state.meta.errors[0] === "string"
-                    ? field.state.meta.errors[0]
-                    : field.state.meta.errors[0]?.message}
-                </p>
-              )}
-            </div>
-          )}
+          children={(field) => {
+            const error = fieldError(field.state.meta.errors);
+            return (
+              <Field data-invalid={!!error}>
+                <FieldLabel htmlFor="confirmPassword">
+                  Confirm Password
+                </FieldLabel>
+                <Input
+                  id="confirmPassword"
+                  type="password"
+                  value={field.state.value}
+                  onBlur={field.handleBlur}
+                  onChange={(e) => field.handleChange(e.target.value)}
+                  aria-invalid={!!error}
+                />
+                {error && <FieldError>{error}</FieldError>}
+              </Field>
+            );
+          }}
         />
         <form.Subscribe
           selector={(s) => s.isSubmitting}

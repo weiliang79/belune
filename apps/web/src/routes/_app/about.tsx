@@ -23,7 +23,7 @@ function AboutPage() {
           {/* Brand tile, matching the sidebar identity block. */}
           <div
             aria-hidden="true"
-            className="grid size-16 place-items-center rounded-2xl text-white shadow-sm"
+            className="grid size-16 place-items-center rounded-2xl text-brand-fg shadow-sm"
             style={{
               background:
                 "linear-gradient(140deg, var(--brand), var(--brand-press))",

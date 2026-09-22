@@ -1,5 +1,7 @@
 import { useState } from "react";
+import { useForm } from "@tanstack/react-form";
 import { toast } from "sonner";
+import { z } from "zod";
 import { CopyIcon, ShieldCheckIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -18,8 +20,9 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
+import { Field, FieldError, FieldLabel } from "@/components/ui/field";
+import { fieldError } from "@/lib/utils/field-error";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   useDisableTotp,
   useEnrollTotp,
@@ -127,42 +130,46 @@ export function TwoFactorCard() {
 
 function EnableDialog({ onIssued }: { onIssued: (codes: string[]) => void }) {
   const [open, setOpen] = useState(false);
-  const [password, setPassword] = useState("");
   const [enrollment, setEnrollment] = useState<TOTPEnrollment | null>(null);
-  const [code, setCode] = useState("");
   const enroll = useEnrollTotp();
   const verify = useVerifyTotpEnrollment();
 
   // Two steps in one dialog: the password buys the secret, the code proves the
   // authenticator holds it.
-  const startEnrollment = async (e: React.FormEvent) => {
-    e.preventDefault();
-    try {
-      setEnrollment(await enroll.mutateAsync(password));
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Could not start setup");
-    }
-  };
+  const passwordForm = useForm({
+    defaultValues: { password: "" },
+    onSubmit: async ({ value }) => {
+      try {
+        setEnrollment(await enroll.mutateAsync(value.password));
+      } catch (err) {
+        toast.error(
+          err instanceof Error ? err.message : "Could not start setup",
+        );
+      }
+    },
+  });
 
-  const submit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    try {
-      const result = await verify.mutateAsync(code);
-      // Hand the codes to the card before this dialog goes away with the
-      // card's own re-render, then close.
-      onIssued(result.recovery_codes);
-      close();
-      toast.success("Two-factor authentication is on");
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Verification failed");
-    }
-  };
+  const codeForm = useForm({
+    defaultValues: { code: "" },
+    onSubmit: async ({ value }) => {
+      try {
+        const result = await verify.mutateAsync(value.code);
+        // Hand the codes to the card before this dialog goes away with the
+        // card's own re-render, then close.
+        onIssued(result.recovery_codes);
+        close();
+        toast.success("Two-factor authentication is on");
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "Verification failed");
+      }
+    },
+  });
 
   const close = () => {
     setOpen(false);
-    setPassword("");
+    passwordForm.reset();
+    codeForm.reset();
     setEnrollment(null);
-    setCode("");
   };
 
   return (
@@ -175,7 +182,13 @@ function EnableDialog({ onIssued }: { onIssued: (codes: string[]) => void }) {
       >
         <DialogContent>
           {!enrollment ? (
-            <form onSubmit={startEnrollment}>
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                passwordForm.handleSubmit();
+              }}
+            >
               <DialogHeader>
                 <DialogTitle>Confirm your password</DialogTitle>
                 <DialogDescription>
@@ -184,27 +197,57 @@ function EnableDialog({ onIssued }: { onIssued: (codes: string[]) => void }) {
                   for your password first.
                 </DialogDescription>
               </DialogHeader>
-              <div className="space-y-2 py-4">
-                <Label htmlFor="enroll-password">Password</Label>
-                <Input
-                  id="enroll-password"
-                  type="password"
-                  autoFocus
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                />
-              </div>
+              <passwordForm.Field
+                name="password"
+                validators={{
+                  onChange: z.string().min(1, "Password is required"),
+                }}
+                children={(field) => {
+                  const error = fieldError(field.state.meta.errors);
+                  return (
+                    <Field data-invalid={!!error} className="py-4">
+                      <FieldLabel htmlFor="enroll-password">
+                        Password
+                      </FieldLabel>
+                      <Input
+                        id="enroll-password"
+                        type="password"
+                        autoFocus
+                        value={field.state.value}
+                        onBlur={field.handleBlur}
+                        onChange={(e) => field.handleChange(e.target.value)}
+                        aria-invalid={!!error}
+                      />
+                      {error && <FieldError>{error}</FieldError>}
+                    </Field>
+                  );
+                }}
+              />
               <DialogFooter>
                 <Button type="button" variant="outline" onClick={close}>
                   Cancel
                 </Button>
-                <Button type="submit" disabled={enroll.isPending || !password}>
-                  {enroll.isPending ? "Preparing..." : "Continue"}
-                </Button>
+                <passwordForm.Subscribe
+                  selector={(s) => s.values.password}
+                  children={(password) => (
+                    <Button
+                      type="submit"
+                      disabled={enroll.isPending || !password}
+                    >
+                      {enroll.isPending ? "Preparing..." : "Continue"}
+                    </Button>
+                  )}
+                />
               </DialogFooter>
             </form>
           ) : (
-            <form onSubmit={submit}>
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                codeForm.handleSubmit();
+              }}
+            >
               <DialogHeader>
                 <DialogTitle>Scan this with your authenticator</DialogTitle>
                 <DialogDescription>
@@ -230,17 +273,35 @@ function EnableDialog({ onIssued }: { onIssued: (codes: string[]) => void }) {
                     </div>
                   </div>
                 )}
-                <div className="space-y-2">
-                  <Label htmlFor="totp-code">Verification code</Label>
-                  <Input
-                    id="totp-code"
-                    inputMode="numeric"
-                    autoComplete="one-time-code"
-                    placeholder="123456"
-                    value={code}
-                    onChange={(e) => setCode(e.target.value)}
-                  />
-                </div>
+                <codeForm.Field
+                  name="code"
+                  validators={{
+                    onChange: z
+                      .string()
+                      .regex(/^\d{6}$/, "Enter the 6-digit code"),
+                  }}
+                  children={(field) => {
+                    const error = fieldError(field.state.meta.errors);
+                    return (
+                      <Field data-invalid={!!error}>
+                        <FieldLabel htmlFor="totp-code">
+                          Verification code
+                        </FieldLabel>
+                        <Input
+                          id="totp-code"
+                          inputMode="numeric"
+                          autoComplete="one-time-code"
+                          placeholder="123456"
+                          value={field.state.value}
+                          onBlur={field.handleBlur}
+                          onChange={(e) => field.handleChange(e.target.value)}
+                          aria-invalid={!!error}
+                        />
+                        {error && <FieldError>{error}</FieldError>}
+                      </Field>
+                    );
+                  }}
+                />
               </div>
               <DialogFooter>
                 <Button type="button" variant="outline" onClick={close}>
@@ -260,34 +321,37 @@ function EnableDialog({ onIssued }: { onIssued: (codes: string[]) => void }) {
 
 function DisableDialog() {
   const [open, setOpen] = useState(false);
-  const [password, setPassword] = useState("");
-  const [code, setCode] = useState("");
-  // Losing the authenticator is the most likely reason to be turning this off,
-  // so the way out cannot itself require the authenticator. The endpoint takes
-  // the method as data, exactly as the login step does.
-  const [useRecoveryCode, setUseRecoveryCode] = useState(false);
   const disable = useDisableTotp();
+
+  const form = useForm({
+    defaultValues: {
+      password: "",
+      code: "",
+      // Losing the authenticator is the most likely reason to be turning this
+      // off, so the way out cannot itself require the authenticator. The
+      // endpoint takes the method as data, exactly as the login step does.
+      useRecoveryCode: false,
+    },
+    onSubmit: async ({ value }) => {
+      try {
+        await disable.mutateAsync({
+          password: value.password,
+          code: value.code,
+          method: value.useRecoveryCode ? "recovery_code" : "totp",
+        });
+        toast.success("Two-factor authentication is off");
+        close();
+      } catch (err) {
+        toast.error(
+          err instanceof Error ? err.message : "Could not turn it off",
+        );
+      }
+    },
+  });
 
   const close = () => {
     setOpen(false);
-    setPassword("");
-    setCode("");
-    setUseRecoveryCode(false);
-  };
-
-  const submit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    try {
-      await disable.mutateAsync({
-        password,
-        code,
-        method: useRecoveryCode ? "recovery_code" : "totp",
-      });
-      toast.success("Two-factor authentication is off");
-      close();
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Could not turn it off");
-    }
+    form.reset();
   };
 
   return (
@@ -299,7 +363,13 @@ function DisableDialog() {
         Turn off
       </Button>
       <DialogContent>
-        <form onSubmit={submit}>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            form.handleSubmit();
+          }}
+        >
           <DialogHeader>
             <DialogTitle>Turn off two-factor authentication</DialogTitle>
             <DialogDescription>
@@ -309,40 +379,80 @@ function DisableDialog() {
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label htmlFor="disable-password">Password</Label>
-              <Input
-                id="disable-password"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="disable-code">
-                {useRecoveryCode ? "Recovery code" : "Verification code"}
-              </Label>
-              <Input
-                id="disable-code"
-                inputMode={useRecoveryCode ? "text" : "numeric"}
-                autoComplete="one-time-code"
-                placeholder={useRecoveryCode ? "XXXX-XXXX-XXXX-XXXX" : "123456"}
-                value={code}
-                onChange={(e) => setCode(e.target.value)}
-              />
-              <button
-                type="button"
-                onClick={() => {
-                  setUseRecoveryCode((s) => !s);
-                  setCode("");
-                }}
-                className="text-muted-foreground hover:text-foreground text-sm underline-offset-4 hover:underline"
-              >
-                {useRecoveryCode
-                  ? "Use your authenticator app instead"
-                  : "Lost your device? Use a recovery code"}
-              </button>
-            </div>
+            <form.Field
+              name="password"
+              validators={{
+                onChange: z.string().min(1, "Password is required"),
+              }}
+              children={(field) => {
+                const error = fieldError(field.state.meta.errors);
+                return (
+                  <Field data-invalid={!!error}>
+                    <FieldLabel htmlFor="disable-password">Password</FieldLabel>
+                    <Input
+                      id="disable-password"
+                      type="password"
+                      value={field.state.value}
+                      onBlur={field.handleBlur}
+                      onChange={(e) => field.handleChange(e.target.value)}
+                      aria-invalid={!!error}
+                    />
+                    {error && <FieldError>{error}</FieldError>}
+                  </Field>
+                );
+              }}
+            />
+            <form.Subscribe
+              selector={(s) => s.values.useRecoveryCode}
+              children={(useRecoveryCode) => (
+                <form.Field
+                  name="code"
+                  validators={{
+                    onChange: z.string().min(1, "Code is required"),
+                  }}
+                  children={(field) => {
+                    const error = fieldError(field.state.meta.errors);
+                    return (
+                      <Field data-invalid={!!error}>
+                        <FieldLabel htmlFor="disable-code">
+                          {useRecoveryCode
+                            ? "Recovery code"
+                            : "Verification code"}
+                        </FieldLabel>
+                        <Input
+                          id="disable-code"
+                          inputMode={useRecoveryCode ? "text" : "numeric"}
+                          autoComplete="one-time-code"
+                          placeholder={
+                            useRecoveryCode ? "XXXX-XXXX-XXXX-XXXX" : "123456"
+                          }
+                          value={field.state.value}
+                          onBlur={field.handleBlur}
+                          onChange={(e) => field.handleChange(e.target.value)}
+                          aria-invalid={!!error}
+                        />
+                        {error && <FieldError>{error}</FieldError>}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            form.setFieldValue(
+                              "useRecoveryCode",
+                              !useRecoveryCode,
+                            );
+                            field.handleChange("");
+                          }}
+                          className="text-muted-foreground hover:text-foreground text-sm underline-offset-4 hover:underline"
+                        >
+                          {useRecoveryCode
+                            ? "Use your authenticator app instead"
+                            : "Lost your device? Use a recovery code"}
+                        </button>
+                      </Field>
+                    );
+                  }}
+                />
+              )}
+            />
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={close}>
@@ -364,27 +474,27 @@ function DisableDialog() {
 
 function RegenerateCodesDialog() {
   const [open, setOpen] = useState(false);
-  const [password, setPassword] = useState("");
-  const [code, setCode] = useState("");
   const [codes, setCodes] = useState<string[] | null>(null);
   const regenerate = useRegenerateRecoveryCodes();
 
-  const submit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    try {
-      const result = await regenerate.mutateAsync({ password, code });
-      setCodes(result.recovery_codes);
-      setPassword("");
-      setCode("");
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Could not regenerate");
-    }
-  };
+  const form = useForm({
+    defaultValues: { password: "", code: "" },
+    onSubmit: async ({ value }) => {
+      try {
+        const result = await regenerate.mutateAsync(value);
+        setCodes(result.recovery_codes);
+        form.reset();
+      } catch (err) {
+        toast.error(
+          err instanceof Error ? err.message : "Could not regenerate",
+        );
+      }
+    },
+  });
 
   const close = () => {
     setOpen(false);
-    setPassword("");
-    setCode("");
+    form.reset();
     setCodes(null);
   };
 
@@ -411,7 +521,13 @@ function RegenerateCodesDialog() {
             </DialogFooter>
           </>
         ) : (
-          <form onSubmit={submit}>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              form.handleSubmit();
+            }}
+          >
             <DialogHeader>
               <DialogTitle>Generate new recovery codes</DialogTitle>
               <DialogDescription>
@@ -420,37 +536,74 @@ function RegenerateCodesDialog() {
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <Label htmlFor="regen-password">Password</Label>
-                <Input
-                  id="regen-password"
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="regen-code">Verification code</Label>
-                <Input
-                  id="regen-code"
-                  inputMode="numeric"
-                  autoComplete="one-time-code"
-                  placeholder="123456"
-                  value={code}
-                  onChange={(e) => setCode(e.target.value)}
-                />
-              </div>
+              <form.Field
+                name="password"
+                validators={{
+                  onChange: z.string().min(1, "Password is required"),
+                }}
+                children={(field) => {
+                  const error = fieldError(field.state.meta.errors);
+                  return (
+                    <Field data-invalid={!!error}>
+                      <FieldLabel htmlFor="regen-password">Password</FieldLabel>
+                      <Input
+                        id="regen-password"
+                        type="password"
+                        value={field.state.value}
+                        onBlur={field.handleBlur}
+                        onChange={(e) => field.handleChange(e.target.value)}
+                        aria-invalid={!!error}
+                      />
+                      {error && <FieldError>{error}</FieldError>}
+                    </Field>
+                  );
+                }}
+              />
+              <form.Field
+                name="code"
+                validators={{
+                  onChange: z
+                    .string()
+                    .regex(/^\d{6}$/, "Enter the 6-digit code"),
+                }}
+                children={(field) => {
+                  const error = fieldError(field.state.meta.errors);
+                  return (
+                    <Field data-invalid={!!error}>
+                      <FieldLabel htmlFor="regen-code">
+                        Verification code
+                      </FieldLabel>
+                      <Input
+                        id="regen-code"
+                        inputMode="numeric"
+                        autoComplete="one-time-code"
+                        placeholder="123456"
+                        value={field.state.value}
+                        onBlur={field.handleBlur}
+                        onChange={(e) => field.handleChange(e.target.value)}
+                        aria-invalid={!!error}
+                      />
+                      {error && <FieldError>{error}</FieldError>}
+                    </Field>
+                  );
+                }}
+              />
             </div>
             <DialogFooter>
               <Button type="button" variant="outline" onClick={close}>
                 Cancel
               </Button>
-              <Button
-                type="submit"
-                disabled={regenerate.isPending || !password || !code}
-              >
-                {regenerate.isPending ? "Generating..." : "Generate"}
-              </Button>
+              <form.Subscribe
+                selector={(s) => [s.values.password, s.values.code] as const}
+                children={([password, code]) => (
+                  <Button
+                    type="submit"
+                    disabled={regenerate.isPending || !password || !code}
+                  >
+                    {regenerate.isPending ? "Generating..." : "Generate"}
+                  </Button>
+                )}
+              />
             </DialogFooter>
           </form>
         )}

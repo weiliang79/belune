@@ -1,4 +1,5 @@
-import { useEffect, useId, useState } from "react";
+import { useDialogBody } from "@/lib/hooks/use-dialog-body";
+import { useId, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { toast } from "sonner";
 import {
@@ -35,92 +36,111 @@ export function DeleteProjectDialog({
   open,
   onOpenChange,
 }: Props) {
+  // Remount on every open so confirmText always starts blank — a user who
+  // typed the name, cancelled, then reopened would otherwise find the
+  // confirmation already satisfied. See useDialogBody.
+  const body = useDialogBody(open, null);
+
+  return (
+    <AlertDialog open={open} onOpenChange={onOpenChange}>
+      <AlertDialogContent>
+        <DeleteProjectDialogBody
+          key={body.key}
+          projectId={projectId}
+          projectName={projectName}
+          onDone={() => onOpenChange(false)}
+        />
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}
+
+function DeleteProjectDialogBody({
+  projectId,
+  projectName,
+  onDone,
+}: {
+  projectId: string;
+  projectName: string;
+  onDone: () => void;
+}) {
   const navigate = useNavigate();
   const deleteProject = useDeleteProject();
   const inputId = useId();
   const [confirmText, setConfirmText] = useState("");
-
-  // Clear on *open*, not on close: this component stays mounted between
-  // openings, so without a reset a user who typed the name, cancelled and
-  // reopened would find the confirmation already satisfied — one click from
-  // deleting, which is what typing the name exists to prevent.
-  useEffect(() => {
-    if (open) setConfirmText("");
-  }, [open]);
 
   // Trimmed because a trailing space from copy-paste is not a different
   // project, but otherwise exact: matching case is the deliberate act.
   const confirmed = confirmText.trim() === projectName.trim();
 
   return (
-    <AlertDialog open={open} onOpenChange={onOpenChange}>
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>Delete {projectName}?</AlertDialogTitle>
-          <AlertDialogDescription>
-            This will permanently delete the project and everything in it —
-            every application and database, their containers and volumes, and
-            all configuration including environment variables, domains, backup
-            destinations and schedules. This action cannot be undone.
-          </AlertDialogDescription>
-          {/* Backups are called out separately because they are the one thing
-              that survives losing the server, so an operator may reasonably
-              believe they are a safety net here. Project deletion removes each
-              database and application through its own delete path, and both
-              erase remote copies. ⚠️ Volume backups are named here only
-              because application deletion now actually erases them — before
-              that fix their objects were left behind, so claiming destruction
-              would have been false in a new direction. Static wording, not a
-              count: an accurate number needs impact
-              aggregated across databases and volumes (see the project-deletion
-              gap), and a partial count on a confirmation dialog would be worse
-              than none. Worded so it claims nothing about what the project
-              actually contains. */}
-          <AlertDialogDescription className="text-destructive font-medium">
-            Every backup of its databases and volumes is destroyed as well,
-            including copies already uploaded to a remote destination. Restore
-            from them will no longer be possible.
-          </AlertDialogDescription>
-        </AlertDialogHeader>
+    <>
+      <AlertDialogHeader>
+        <AlertDialogTitle>Delete {projectName}?</AlertDialogTitle>
+        <AlertDialogDescription>
+          This will permanently delete the project and everything in it — every
+          application and database, their containers and volumes, and all
+          configuration including environment variables, domains, backup
+          destinations and schedules. This action cannot be undone.
+        </AlertDialogDescription>
+        {/* Backups are called out separately because they are the one thing
+            that survives losing the server, so an operator may reasonably
+            believe they are a safety net here. Project deletion removes each
+            database and application through its own delete path, and both
+            erase remote copies. ⚠️ Volume backups are named here only
+            because application deletion now actually erases them — before
+            that fix their objects were left behind, so claiming destruction
+            would have been false in a new direction. Static wording, not a
+            count: an accurate number needs impact
+            aggregated across databases and volumes (see the project-deletion
+            gap), and a partial count on a confirmation dialog would be worse
+            than none. Worded so it claims nothing about what the project
+            actually contains. */}
+        <AlertDialogDescription className="text-destructive font-medium">
+          Every backup of its databases and volumes is destroyed as well,
+          including copies already uploaded to a remote destination. Restore
+          from them will no longer be possible.
+        </AlertDialogDescription>
+      </AlertDialogHeader>
 
-        <div className="space-y-2">
-          <Label htmlFor={inputId} className="font-normal">
-            Type{" "}
-            <span className="text-foreground font-medium">{projectName}</span>{" "}
-            to confirm.
-          </Label>
-          <Input
-            id={inputId}
-            value={confirmText}
-            onChange={(e) => setConfirmText(e.target.value)}
-            autoComplete="off"
-            autoCorrect="off"
-            spellCheck={false}
-          />
-        </div>
+      <div className="space-y-2">
+        <Label htmlFor={inputId} className="font-normal">
+          Type{" "}
+          <span className="text-foreground font-medium">{projectName}</span> to
+          confirm.
+        </Label>
+        <Input
+          id={inputId}
+          value={confirmText}
+          onChange={(e) => setConfirmText(e.target.value)}
+          autoComplete="off"
+          autoCorrect="off"
+          spellCheck={false}
+        />
+      </div>
 
-        <AlertDialogFooter>
-          <AlertDialogCancel>Cancel</AlertDialogCancel>
-          <AlertDialogAction
-            variant="destructive-solid"
-            disabled={!confirmed}
-            onClick={() => {
-              toast.promise(
-                deleteProject.mutateAsync(projectId).then(() => {
-                  navigate({ to: "/projects" });
-                }),
-                {
-                  loading: "Deleting project...",
-                  success: "Project deleted",
-                  error: (err) => err.message,
-                },
-              );
-            }}
-          >
-            Delete
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
+      <AlertDialogFooter>
+        <AlertDialogCancel>Cancel</AlertDialogCancel>
+        <AlertDialogAction
+          variant="destructive-solid"
+          disabled={!confirmed}
+          onClick={() => {
+            toast.promise(
+              deleteProject.mutateAsync(projectId).then(() => {
+                onDone();
+                navigate({ to: "/projects" });
+              }),
+              {
+                loading: "Deleting project...",
+                success: "Project deleted",
+                error: (err) => err.message,
+              },
+            );
+          }}
+        >
+          Delete
+        </AlertDialogAction>
+      </AlertDialogFooter>
+    </>
   );
 }

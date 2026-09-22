@@ -7,6 +7,8 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { useState } from "react";
+import { useForm } from "@tanstack/react-form";
+import { z } from "zod";
 import { ContainerLogViewer } from "@/components/logs/container-log-viewer";
 import { BackupConfigFormDialog } from "@/components/databases/backup-config-form-dialog";
 import { BackupConfigRunsSheet } from "@/components/databases/backup-config-runs-sheet";
@@ -90,8 +92,10 @@ import {
   Field,
   FieldContent,
   FieldDescription,
+  FieldError,
   FieldLabel,
 } from "@/components/ui/field";
+import { fieldError } from "@/lib/utils/field-error";
 
 // Engines with an in-image logical-dump tool (pg_dump/mysqldump/mongodump).
 // redis (cache) has no logical backup. "other" is backed up when a backup mode
@@ -150,10 +154,25 @@ function DatabaseDetailPage() {
     currentUser?.role === "admin" || currentUser?.id === project?.user_id;
   const deleteDb = useDeleteDatabase(projectId);
   const [deleteOpen, setDeleteOpen] = useState(false);
-  const [deleteConfirm, setDeleteConfirm] = useState("");
-  // Unchecked by default: deleting a database is recoverable from a backup,
-  // deleting the backups with it is not.
-  const [deleteBackups, setDeleteBackups] = useState(false);
+  const deleteForm = useForm({
+    // Unchecked by default: deleting a database is recoverable from a
+    // backup, deleting the backups with it is not.
+    defaultValues: { confirm: "", deleteBackups: false },
+    onSubmit: ({ value }) => {
+      toast.promise(
+        deleteDb
+          .mutateAsync({ databaseId, deleteBackups: value.deleteBackups })
+          .then(() => {
+            navigate({ to: "/projects/$projectId", params: { projectId } });
+          }),
+        {
+          loading: "Deleting database...",
+          success: "Database deleted",
+          error: (err) => err.message,
+        },
+      );
+    },
+  });
   const { data: deleteImpact } = useDatabaseDeletionImpact(
     projectId,
     databaseId,
@@ -210,22 +229,6 @@ function DatabaseDetailPage() {
       success: "Reload started — recreating the container",
       error: (err) => err.message,
     });
-  };
-
-  const handleDelete = () => {
-    toast.promise(
-      deleteDb.mutateAsync({ databaseId, deleteBackups }).then(() => {
-        navigate({
-          to: "/projects/$projectId",
-          params: { projectId },
-        });
-      }),
-      {
-        loading: "Deleting database...",
-        success: "Database deleted",
-        error: (err) => err.message,
-      },
-    );
   };
 
   return (
@@ -571,10 +574,7 @@ function DatabaseDetailPage() {
                         setDeleteOpen(o);
                         // Reset on open, so a previous tick or half-typed name can
                         // never carry into a later, different decision.
-                        if (o) {
-                          setDeleteConfirm("");
-                          setDeleteBackups(false);
-                        }
+                        if (o) deleteForm.reset();
                       }}
                     >
                       <AlertDialogTrigger
@@ -585,94 +585,132 @@ function DatabaseDetailPage() {
                         Delete
                       </AlertDialogTrigger>
                       <AlertDialogContent>
-                        <AlertDialogHeader>
-                          <AlertDialogTitle>Delete database?</AlertDialogTitle>
-                          <AlertDialogDescription>
-                            This will permanently delete &quot;{db.name}&quot;
-                            and all its data. This action cannot be undone.
-                          </AlertDialogDescription>
-                          {deleteImpact && deleteImpact.backup_count > 0 ? (
+                        <form
+                          onSubmit={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            deleteForm.handleSubmit();
+                          }}
+                          className="space-y-4"
+                        >
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>
+                              Delete database?
+                            </AlertDialogTitle>
                             <AlertDialogDescription>
-                              Its{" "}
-                              {deleteImpact.backup_count === 1
-                                ? "1 backup is"
-                                : `${deleteImpact.backup_count} backups are`}{" "}
-                              kept
-                              {deleteImpact.backup_destinations.length > 0
-                                ? `, including copies in ${formatList(deleteImpact.backup_destinations)}`
-                                : ""}
-                              , and stay listed under the project&apos;s Backups
-                              tab. You can restore a replacement database from
-                              them.
+                              This will permanently delete &quot;{db.name}&quot;
+                              and all its data. This action cannot be undone.
                             </AlertDialogDescription>
-                          ) : null}
-                        </AlertDialogHeader>
-                        {deleteImpact && deleteImpact.backup_count > 0 ? (
-                          <Field orientation="horizontal">
-                            <Checkbox
-                              id="delete-db-backups"
-                              checked={deleteBackups}
-                              onCheckedChange={(checked) =>
-                                setDeleteBackups(checked === true)
-                              }
-                              className="mt-0.5"
-                            />
-
-                            <FieldContent>
-                              <FieldLabel
-                                htmlFor="delete-db-backups"
-                                className="leading-snug font-normal"
-                              >
-                                Also delete{" "}
+                            {deleteImpact && deleteImpact.backup_count > 0 ? (
+                              <AlertDialogDescription>
+                                Its{" "}
                                 {deleteImpact.backup_count === 1
-                                  ? "this backup"
-                                  : "these backups"}
-                              </FieldLabel>
-
-                              <FieldDescription>
+                                  ? "1 backup is"
+                                  : `${deleteImpact.backup_count} backups are`}{" "}
+                                kept
                                 {deleteImpact.backup_destinations.length > 0
-                                  ? "Erases the archives, including the remote copies. This cannot be undone."
-                                  : "Erases the archives. This cannot be undone."}
-                              </FieldDescription>
-                            </FieldContent>
-                          </Field>
-                        ) : null}
-                        <div className="space-y-2">
-                          <Label
-                            htmlFor="delete-db-confirm"
-                            className="font-normal"
-                          >
-                            Type{" "}
-                            <span className="text-foreground font-medium">
-                              {db.name}
-                            </span>{" "}
-                            to confirm.
-                          </Label>
-                          <Input
-                            id="delete-db-confirm"
-                            value={deleteConfirm}
-                            onChange={(e) => setDeleteConfirm(e.target.value)}
-                            autoComplete="off"
-                            autoCorrect="off"
-                            spellCheck={false}
-                          />
-                        </div>
-                        <AlertDialogFooter>
-                          <AlertDialogCancel>Cancel</AlertDialogCancel>
-                          <AlertDialogAction
-                            onClick={handleDelete}
-                            disabled={
-                              deleteConfirm.trim() !== db.name.trim() ||
-                              deleteDb.isPending
-                            }
-                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                          >
-                            {deleteDb.isPending ? (
-                              <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                                  ? `, including copies in ${formatList(deleteImpact.backup_destinations)}`
+                                  : ""}
+                                , and stay listed under the project&apos;s
+                                Backups tab. You can restore a replacement
+                                database from them.
+                              </AlertDialogDescription>
                             ) : null}
-                            Delete
-                          </AlertDialogAction>
-                        </AlertDialogFooter>
+                          </AlertDialogHeader>
+                          {deleteImpact && deleteImpact.backup_count > 0 ? (
+                            <deleteForm.Field
+                              name="deleteBackups"
+                              children={(field) => (
+                                <Field orientation="horizontal">
+                                  <Checkbox
+                                    id="delete-db-backups"
+                                    checked={field.state.value}
+                                    onCheckedChange={(checked) =>
+                                      field.handleChange(checked === true)
+                                    }
+                                    className="mt-0.5"
+                                  />
+
+                                  <FieldContent>
+                                    <FieldLabel
+                                      htmlFor="delete-db-backups"
+                                      className="leading-snug font-normal"
+                                    >
+                                      Also delete{" "}
+                                      {deleteImpact.backup_count === 1
+                                        ? "this backup"
+                                        : "these backups"}
+                                    </FieldLabel>
+
+                                    <FieldDescription>
+                                      {deleteImpact.backup_destinations.length >
+                                      0
+                                        ? "Erases the archives, including the remote copies. This cannot be undone."
+                                        : "Erases the archives. This cannot be undone."}
+                                    </FieldDescription>
+                                  </FieldContent>
+                                </Field>
+                              )}
+                            />
+                          ) : null}
+                          <deleteForm.Field
+                            name="confirm"
+                            validators={{
+                              onChange: ({ value }) =>
+                                value.trim() !== db.name.trim()
+                                  ? "Does not match"
+                                  : undefined,
+                            }}
+                            children={(field) => (
+                              <div className="space-y-2">
+                                <Label
+                                  htmlFor="delete-db-confirm"
+                                  className="font-normal"
+                                >
+                                  Type{" "}
+                                  <span className="text-foreground font-medium">
+                                    {db.name}
+                                  </span>{" "}
+                                  to confirm.
+                                </Label>
+                                <Input
+                                  id="delete-db-confirm"
+                                  value={field.state.value}
+                                  onBlur={field.handleBlur}
+                                  onChange={(e) =>
+                                    field.handleChange(e.target.value)
+                                  }
+                                  autoComplete="off"
+                                  autoCorrect="off"
+                                  spellCheck={false}
+                                />
+                              </div>
+                            )}
+                          />
+                          <AlertDialogFooter>
+                            <AlertDialogCancel type="button">
+                              Cancel
+                            </AlertDialogCancel>
+                            <deleteForm.Subscribe
+                              selector={(s) => s.values.confirm}
+                              children={(confirm) => (
+                                <AlertDialogAction
+                                  type="submit"
+                                  disabled={
+                                    confirm.trim() !== db.name.trim() ||
+                                    deleteDb.isPending
+                                  }
+                                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                >
+                                  {deleteDb.isPending ? (
+                                    <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                                  ) : null}
+                                  Delete
+                                </AlertDialogAction>
+                              )}
+                            />
+                          </AlertDialogFooter>
+                        </form>
                       </AlertDialogContent>
                     </AlertDialog>
                   </div>
@@ -895,44 +933,41 @@ function AdvancedCard({ db }: { db: Database }) {
     db.project_id,
     db.id,
   );
-  const [cpu, setCpu] = useState(String(db.cpu_limit ?? 0));
-  const [memMb, setMemMb] = useState(
-    String(db.memory_limit ? Math.round(db.memory_limit / MB) : 0),
-  );
-  const [targetVersion, setTargetVersion] = useState("");
+  const resourcesForm = useForm({
+    defaultValues: {
+      cpu: String(db.cpu_limit ?? 0),
+      memMb: String(db.memory_limit ? Math.round(db.memory_limit / MB) : 0),
+    },
+    onSubmit: ({ value }) => {
+      toast.promise(
+        update.mutateAsync({
+          cpu_limit: Number(value.cpu),
+          memory_limit: Number(value.memMb) * MB,
+        }),
+        {
+          loading: "Applying resource limits…",
+          success: "Resource limits updated",
+          error: (err) => err.message,
+        },
+      );
+    },
+  });
 
-  const handleUpgrade = () => {
-    const target = targetVersion.trim();
-    if (!target) return;
-    toast.promise(upgrade.mutateAsync(target), {
-      loading: "Starting upgrade…",
-      success: "Upgrade started — the database will be briefly offline",
-      error: (err) => err.message,
-    });
-    setTargetVersion("");
-  };
-
-  const handleSave = () => {
-    const cpuVal = Number(cpu);
-    const memVal = Number(memMb);
-    if (
-      Number.isNaN(cpuVal) ||
-      cpuVal < 0 ||
-      Number.isNaN(memVal) ||
-      memVal < 0
-    ) {
-      toast.error("CPU and memory must be non-negative numbers");
-      return;
-    }
-    toast.promise(
-      update.mutateAsync({ cpu_limit: cpuVal, memory_limit: memVal * MB }),
-      {
-        loading: "Applying resource limits…",
-        success: "Resource limits updated",
+  const upgradeForm = useForm({
+    defaultValues: { version: "" },
+    onSubmit: ({ value }) => {
+      toast.promise(upgrade.mutateAsync(value.version.trim()), {
+        loading: "Starting upgrade…",
+        success: "Upgrade started — the database will be briefly offline",
         error: (err) => err.message,
-      },
-    );
-  };
+      });
+      upgradeForm.reset();
+    },
+  });
+
+  const nonNegative = z
+    .string()
+    .refine((v) => v === "" || Number(v) >= 0, "Cannot be negative");
 
   return (
     <Card>
@@ -944,33 +979,66 @@ function AdvancedCard({ db }: { db: Database }) {
       </CardHeader>
       <CardContent className="space-y-6">
         {/* Resource limits — editable */}
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div className="space-y-2">
-            <Label htmlFor="db-cpu">CPU limit (cores)</Label>
-            <Input
-              id="db-cpu"
-              type="number"
-              min={0}
-              step={0.1}
-              value={cpu}
-              onChange={(e) => setCpu(e.target.value)}
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            resourcesForm.handleSubmit();
+          }}
+          className="space-y-6"
+        >
+          <div className="grid gap-4 sm:grid-cols-2">
+            <resourcesForm.Field
+              name="cpu"
+              validators={{ onChange: nonNegative }}
+              children={(field) => {
+                const error = fieldError(field.state.meta.errors);
+                return (
+                  <Field data-invalid={!!error}>
+                    <FieldLabel htmlFor="db-cpu">CPU limit (cores)</FieldLabel>
+                    <Input
+                      id="db-cpu"
+                      type="number"
+                      min={0}
+                      step={0.1}
+                      value={field.state.value}
+                      onBlur={field.handleBlur}
+                      onChange={(e) => field.handleChange(e.target.value)}
+                      aria-invalid={!!error}
+                    />
+                    {error && <FieldError>{error}</FieldError>}
+                  </Field>
+                );
+              }}
+            />
+            <resourcesForm.Field
+              name="memMb"
+              validators={{ onChange: nonNegative }}
+              children={(field) => {
+                const error = fieldError(field.state.meta.errors);
+                return (
+                  <Field data-invalid={!!error}>
+                    <FieldLabel htmlFor="db-mem">Memory limit (MB)</FieldLabel>
+                    <Input
+                      id="db-mem"
+                      type="number"
+                      min={0}
+                      step={64}
+                      value={field.state.value}
+                      onBlur={field.handleBlur}
+                      onChange={(e) => field.handleChange(e.target.value)}
+                      aria-invalid={!!error}
+                    />
+                    {error && <FieldError>{error}</FieldError>}
+                  </Field>
+                );
+              }}
             />
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="db-mem">Memory limit (MB)</Label>
-            <Input
-              id="db-mem"
-              type="number"
-              min={0}
-              step={64}
-              value={memMb}
-              onChange={(e) => setMemMb(e.target.value)}
-            />
-          </div>
-        </div>
-        <Button size="sm" onClick={handleSave} disabled={update.isPending}>
-          {update.isPending ? "Saving…" : "Save resource limits"}
-        </Button>
+          <Button type="submit" size="sm" disabled={update.isPending}>
+            {update.isPending ? "Saving…" : "Save resource limits"}
+          </Button>
+        </form>
 
         <Separator />
 
@@ -996,41 +1064,65 @@ function AdvancedCard({ db }: { db: Database }) {
                   Upgrade
                 </AlertDialogTrigger>
                 <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>
-                      Upgrade {db.type} version
-                    </AlertDialogTitle>
-                    <AlertDialogDescription>
-                      This takes a dump of{" "}
-                      <span className="font-medium">{db.name}</span>, rebuilds
-                      the container at the new version, and restores the data.
-                      The database is briefly offline. If anything fails it
-                      rolls back to {db.version}. A pre-upgrade backup is kept.
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <div className="space-y-2">
-                    <Label htmlFor="upgrade-version">
-                      Target version (current: {db.version})
-                    </Label>
-                    <Input
-                      id="upgrade-version"
-                      value={targetVersion}
-                      onChange={(e) => setTargetVersion(e.target.value)}
-                      placeholder="e.g. 17"
+                  <form
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      upgradeForm.handleSubmit();
+                    }}
+                    className="space-y-4"
+                  >
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>
+                        Upgrade {db.type} version
+                      </AlertDialogTitle>
+                      <AlertDialogDescription>
+                        This takes a dump of{" "}
+                        <span className="font-medium">{db.name}</span>, rebuilds
+                        the container at the new version, and restores the data.
+                        The database is briefly offline. If anything fails it
+                        rolls back to {db.version}. A pre-upgrade backup is
+                        kept.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <upgradeForm.Field
+                      name="version"
+                      children={(field) => (
+                        <div className="space-y-2">
+                          <Label htmlFor="upgrade-version">
+                            Target version (current: {db.version})
+                          </Label>
+                          <Input
+                            id="upgrade-version"
+                            value={field.state.value}
+                            onBlur={field.handleBlur}
+                            onChange={(e) => field.handleChange(e.target.value)}
+                            placeholder="e.g. 17"
+                          />
+                          <p className="text-text-faint text-xs">
+                            Enter the same version to refresh it to the latest
+                            patch.
+                          </p>
+                        </div>
+                      )}
                     />
-                    <p className="text-text-faint text-xs">
-                      Enter the same version to refresh it to the latest patch.
-                    </p>
-                  </div>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel>Cancel</AlertDialogCancel>
-                    <AlertDialogAction
-                      onClick={handleUpgrade}
-                      disabled={!targetVersion.trim()}
-                    >
-                      Upgrade
-                    </AlertDialogAction>
-                  </AlertDialogFooter>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel type="button">
+                        Cancel
+                      </AlertDialogCancel>
+                      <upgradeForm.Subscribe
+                        selector={(s) => s.values.version}
+                        children={(version) => (
+                          <AlertDialogAction
+                            type="submit"
+                            disabled={!version.trim()}
+                          >
+                            Upgrade
+                          </AlertDialogAction>
+                        )}
+                      />
+                    </AlertDialogFooter>
+                  </form>
                 </AlertDialogContent>
               </AlertDialog>
             )}

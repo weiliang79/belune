@@ -4,8 +4,9 @@ import { z } from "zod";
 import { forgotPassword } from "@/lib/api/auth";
 import { redirectIfAuthenticated } from "@/lib/utils/auth-guard";
 import { Button } from "@/components/ui/button";
+import { Field, FieldError, FieldLabel } from "@/components/ui/field";
+import { fieldError } from "@/lib/utils/field-error";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { AuthLayout } from "@/lib/components/layout/auth-layout";
 import { useState } from "react";
 
@@ -62,26 +63,24 @@ function ForgotPasswordPage() {
           <form.Field
             name="email"
             validators={{ onChange: z.string().email("Valid email required") }}
-            children={(field) => (
-              <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  placeholder="you@example.com"
-                  value={field.state.value}
-                  onBlur={field.handleBlur}
-                  onChange={(e) => field.handleChange(e.target.value)}
-                />
-                {field.state.meta.errors.length > 0 && (
-                  <p className="text-destructive text-sm">
-                    {typeof field.state.meta.errors[0] === "string"
-                      ? field.state.meta.errors[0]
-                      : field.state.meta.errors[0]?.message}
-                  </p>
-                )}
-              </div>
-            )}
+            children={(field) => {
+              const error = fieldError(field.state.meta.errors);
+              return (
+                <Field data-invalid={!!error}>
+                  <FieldLabel htmlFor="email">Email</FieldLabel>
+                  <Input
+                    id="email"
+                    type="email"
+                    placeholder="you@example.com"
+                    value={field.state.value}
+                    onBlur={field.handleBlur}
+                    onChange={(e) => field.handleChange(e.target.value)}
+                    aria-invalid={!!error}
+                  />
+                  {error && <FieldError>{error}</FieldError>}
+                </Field>
+              );
+            }}
           />
           {submitError && (
             <p className="text-destructive text-sm">{submitError}</p>

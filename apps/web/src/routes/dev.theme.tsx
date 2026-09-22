@@ -12,6 +12,7 @@ import {
   Play,
   Plus,
   RotateCcw,
+  ScrollText,
   Square,
   Trash2,
 } from "lucide-react";
@@ -310,12 +311,12 @@ const SERVICE_COLUMNS: ColumnDef<FakeService>[] = [
         <IconAction label="Restart" onClick={noop}>
           <RotateCcw aria-hidden="true" className="size-4" />
         </IconAction>
-        <Button variant="outline" size="sm" className="ml-1">
-          Logs
-        </Button>
-        <Button variant="destructive" size="sm">
-          Delete
-        </Button>
+        <IconAction label="Logs" onClick={noop}>
+          <ScrollText aria-hidden="true" className="size-4" />
+        </IconAction>
+        <IconAction label="Delete" onClick={noop} destructive>
+          <Trash2 aria-hidden="true" className="size-4" />
+        </IconAction>
         <DropdownMenu
           onOpenChange={(open) => {
             if (!open) settlePageTheme();
@@ -368,12 +369,20 @@ function Showcase({ id }: { id: string }) {
         <span className="bg-primary text-primary-foreground rounded-md px-2.5 py-1 text-sm">
           text-brand-fg
         </span>
-        {/* Deliberately wrong, kept as the reference for CLAUDE.md's rule: it
-            looks fine in three quadrants and fails in emerald · dark. */}
+        {/* Hardcoded white, kept for comparison against text-brand-fg above.
+            It currently matches in all four theme+accent combinations —
+            dark+emerald only gets there because --brand itself was
+            deliberately darkened (see the .dark[data-accent="emerald"]
+            comment in index.css) specifically so its foreground could stay
+            white — so this won't visibly diverge today. The point survives
+            anyway: a future accent or a lighter brand color could need dark
+            text again, and a hardcoded span wouldn't know to follow. */}
         <span className="bg-primary rounded-md px-2.5 py-1 text-sm text-white">
-          text-white ✕
+          text-white
         </span>
-        <span className="text-primary text-sm">text-primary on surface</span>
+        <span className="text-brand-text text-sm">
+          text-brand-text on surface
+        </span>
       </Row>
 
       <Row title="Badges & status">

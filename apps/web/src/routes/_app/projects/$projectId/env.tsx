@@ -16,7 +16,10 @@ import {
   type EnvVarCardModel,
 } from "@/components/env-vars/env-var-card";
 import { EnvVarsActionBar } from "@/components/env-vars/env-vars-action-bar";
-import { sortDraftRows, type EnvVarSortKey } from "@/components/env-vars/env-vars-sort";
+import {
+  sortDraftRows,
+  type EnvVarSortKey,
+} from "@/components/env-vars/env-vars-sort";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
@@ -122,7 +125,9 @@ function ProjectEnvVarsPage() {
 
   // Set right after adding a row; the effect below waits for that row to
   // actually be in the DOM (it renders expanded on the same pass) before
-  // scrolling to it and focusing its Key field.
+  // scrolling to it and focusing its Key field. Never reset to null — each
+  // clientId is a fresh crypto.randomUUID(), so it never repeats and the
+  // effect's dependency diff alone is enough to fire exactly once per add.
   const [pendingFocusKey, setPendingFocusKey] = useState<string | null>(null);
 
   useEffect(() => {
@@ -134,7 +139,6 @@ function ProjectEnvVarsPage() {
     // Plain focus() scrolls the element into view itself — instantly,
     // hijacking the smooth scroll started above mid-animation.
     input?.focus({ preventScroll: true });
-    setPendingFocusKey(null);
   }, [pendingFocusKey]);
 
   const handleAdd = () => {

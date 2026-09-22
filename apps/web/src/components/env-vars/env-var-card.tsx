@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { IconAction } from "@/components/ui/icon-action";
@@ -217,14 +218,14 @@ export function EnvVarCard({
           </div>
 
           <div className="flex items-center justify-between">
-            <label className="text-muted-foreground flex shrink-0 items-center gap-1 text-xs whitespace-nowrap">
+            <Label className="text-muted-foreground flex shrink-0 items-center gap-1 text-xs font-normal whitespace-nowrap">
               <Checkbox
                 checked={model.isSecret}
                 disabled={locked}
                 onCheckedChange={(v) => model.onSecretChange?.(v === true)}
               />
               Secret
-            </label>
+            </Label>
 
             <div>
               <DropdownMenu>

@@ -21,6 +21,8 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page-header";
+import { Field, FieldError, FieldLabel } from "@/components/ui/field";
+import { fieldError } from "@/lib/utils/field-error";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
@@ -109,7 +111,7 @@ function TeamSettingsPage() {
           return (
             <div className="flex items-center gap-2.5">
               <span
-                className="grid size-8 shrink-0 place-items-center rounded-full text-xs font-semibold text-white"
+                className="text-brand-fg grid size-8 shrink-0 place-items-center rounded-full text-xs font-semibold"
                 style={{
                   background:
                     "linear-gradient(140deg, var(--brand), var(--brand-press))",
@@ -482,26 +484,24 @@ function CreateUserDialog({
             validators={{
               onChange: z.string().email("Email is required"),
             }}
-            children={(field) => (
-              <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  value={field.state.value}
-                  onBlur={field.handleBlur}
-                  onChange={(e) => field.handleChange(e.target.value)}
-                  placeholder="user@example.com"
-                />
-                {field.state.meta.errors.length > 0 && (
-                  <p className="text-destructive text-sm">
-                    {typeof field.state.meta.errors[0] === "string"
-                      ? field.state.meta.errors[0]
-                      : field.state.meta.errors[0]?.message}
-                  </p>
-                )}
-              </div>
-            )}
+            children={(field) => {
+              const error = fieldError(field.state.meta.errors);
+              return (
+                <Field data-invalid={!!error}>
+                  <FieldLabel htmlFor="email">Email</FieldLabel>
+                  <Input
+                    id="email"
+                    type="email"
+                    value={field.state.value}
+                    onBlur={field.handleBlur}
+                    onChange={(e) => field.handleChange(e.target.value)}
+                    placeholder="user@example.com"
+                    aria-invalid={!!error}
+                  />
+                  {error && <FieldError>{error}</FieldError>}
+                </Field>
+              );
+            }}
           />
           <form.Field
             name="password"
@@ -510,26 +510,24 @@ function CreateUserDialog({
                 .string()
                 .min(8, "Password must be at least 8 characters"),
             }}
-            children={(field) => (
-              <div className="space-y-2">
-                <Label htmlFor="password">Password</Label>
-                <Input
-                  id="password"
-                  type="password"
-                  value={field.state.value}
-                  onBlur={field.handleBlur}
-                  onChange={(e) => field.handleChange(e.target.value)}
-                  placeholder="At least 8 characters"
-                />
-                {field.state.meta.errors.length > 0 && (
-                  <p className="text-destructive text-sm">
-                    {typeof field.state.meta.errors[0] === "string"
-                      ? field.state.meta.errors[0]
-                      : field.state.meta.errors[0]?.message}
-                  </p>
-                )}
-              </div>
-            )}
+            children={(field) => {
+              const error = fieldError(field.state.meta.errors);
+              return (
+                <Field data-invalid={!!error}>
+                  <FieldLabel htmlFor="password">Password</FieldLabel>
+                  <Input
+                    id="password"
+                    type="password"
+                    value={field.state.value}
+                    onBlur={field.handleBlur}
+                    onChange={(e) => field.handleChange(e.target.value)}
+                    placeholder="At least 8 characters"
+                    aria-invalid={!!error}
+                  />
+                  {error && <FieldError>{error}</FieldError>}
+                </Field>
+              );
+            }}
           />
           <form.Field
             name="role"
@@ -635,55 +633,53 @@ function ResetPasswordDialog({
                 .string()
                 .min(8, "Password must be at least 8 characters"),
             }}
-            children={(field) => (
-              <div className="space-y-2">
-                <Label htmlFor="new-password">New Password</Label>
-                <Input
-                  id="new-password"
-                  type="password"
-                  value={field.state.value}
-                  onBlur={field.handleBlur}
-                  onChange={(e) => field.handleChange(e.target.value)}
-                  placeholder="At least 8 characters"
-                />
-                {field.state.meta.errors.length > 0 && (
-                  <p className="text-destructive text-sm">
-                    {typeof field.state.meta.errors[0] === "string"
-                      ? field.state.meta.errors[0]
-                      : field.state.meta.errors[0]?.message}
-                  </p>
-                )}
-              </div>
-            )}
+            children={(field) => {
+              const error = fieldError(field.state.meta.errors);
+              return (
+                <Field data-invalid={!!error}>
+                  <FieldLabel htmlFor="new-password">New Password</FieldLabel>
+                  <Input
+                    id="new-password"
+                    type="password"
+                    value={field.state.value}
+                    onBlur={field.handleBlur}
+                    onChange={(e) => field.handleChange(e.target.value)}
+                    placeholder="At least 8 characters"
+                    aria-invalid={!!error}
+                  />
+                  {error && <FieldError>{error}</FieldError>}
+                </Field>
+              );
+            }}
           />
           <form.Field
             name="currentPassword"
             validators={{
               onChange: z.string().min(1, "Your password is required"),
             }}
-            children={(field) => (
-              <div className="space-y-2">
-                <Label htmlFor="reset-password-confirm">Confirm It's You</Label>
-                <Input
-                  id="reset-password-confirm"
-                  type="password"
-                  value={field.state.value}
-                  onBlur={field.handleBlur}
-                  onChange={(e) => field.handleChange(e.target.value)}
-                  placeholder="Your current password"
-                />
-                <p className="text-muted-foreground text-xs">
-                  Re-enter your own password to set a new one for {email}.
-                </p>
-                {field.state.meta.errors.length > 0 && (
-                  <p className="text-destructive text-sm">
-                    {typeof field.state.meta.errors[0] === "string"
-                      ? field.state.meta.errors[0]
-                      : field.state.meta.errors[0]?.message}
+            children={(field) => {
+              const error = fieldError(field.state.meta.errors);
+              return (
+                <Field data-invalid={!!error}>
+                  <FieldLabel htmlFor="reset-password-confirm">
+                    Confirm It's You
+                  </FieldLabel>
+                  <Input
+                    id="reset-password-confirm"
+                    type="password"
+                    value={field.state.value}
+                    onBlur={field.handleBlur}
+                    onChange={(e) => field.handleChange(e.target.value)}
+                    placeholder="Your current password"
+                    aria-invalid={!!error}
+                  />
+                  <p className="text-muted-foreground text-xs">
+                    Re-enter your own password to set a new one for {email}.
                   </p>
-                )}
-              </div>
-            )}
+                  {error && <FieldError>{error}</FieldError>}
+                </Field>
+              );
+            }}
           />
           <DialogFooter>
             <form.Subscribe
@@ -878,26 +874,24 @@ function InviteUserDialog({
           <form.Field
             name="email"
             validators={{ onChange: z.string().email("Email is required") }}
-            children={(field) => (
-              <div className="space-y-2">
-                <Label htmlFor="invite-email">Email</Label>
-                <Input
-                  id="invite-email"
-                  type="email"
-                  value={field.state.value}
-                  onBlur={field.handleBlur}
-                  onChange={(e) => field.handleChange(e.target.value)}
-                  placeholder="user@example.com"
-                />
-                {field.state.meta.errors.length > 0 && (
-                  <p className="text-destructive text-sm">
-                    {typeof field.state.meta.errors[0] === "string"
-                      ? field.state.meta.errors[0]
-                      : field.state.meta.errors[0]?.message}
-                  </p>
-                )}
-              </div>
-            )}
+            children={(field) => {
+              const error = fieldError(field.state.meta.errors);
+              return (
+                <Field data-invalid={!!error}>
+                  <FieldLabel htmlFor="invite-email">Email</FieldLabel>
+                  <Input
+                    id="invite-email"
+                    type="email"
+                    value={field.state.value}
+                    onBlur={field.handleBlur}
+                    onChange={(e) => field.handleChange(e.target.value)}
+                    placeholder="user@example.com"
+                    aria-invalid={!!error}
+                  />
+                  {error && <FieldError>{error}</FieldError>}
+                </Field>
+              );
+            }}
           />
           <form.Field
             name="role"

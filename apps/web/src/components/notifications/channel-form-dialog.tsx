@@ -1,4 +1,6 @@
+import { useDialogBody } from "@/lib/hooks/use-dialog-body";
 import { useMemo, useState } from "react";
+import { useForm } from "@tanstack/react-form";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -10,6 +12,8 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Field, FieldError, FieldLabel } from "@/components/ui/field";
+import { fieldError } from "@/lib/utils/field-error";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -167,19 +171,21 @@ const SMTP_TLS_MODES = [
 ];
 
 export function ChannelFormDialog({ channel, open, onOpenChange }: Props) {
+  // Fields initialise from props on each open, and the target is held
+  // through the close animation (the page clears it on close); see
+  // useDialogBody.
+  const body = useDialogBody(open, channel);
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       {/* Flex column with a capped height: header and footer stay put, only the
           fields between them scroll. */}
       <DialogContent className="flex max-h-[calc(100dvh-4rem)] flex-col sm:max-w-lg">
-        {/* Remount per open/target so fields initialise from props without an effect. */}
-        {open && (
-          <ChannelForm
-            key={channel?.id ?? "new"}
-            channel={channel}
-            onDone={() => onOpenChange(false)}
-          />
-        )}
+        <ChannelForm
+          key={body.key}
+          channel={body.target}
+          onDone={() => onOpenChange(false)}
+        />
       </DialogContent>
     </Dialog>
   );
@@ -198,7 +204,6 @@ function ChannelForm({
   const test = useTestNotificationChannelParams();
   const { data: events } = useNotificationEvents();
 
-  const [name, setName] = useState(channel?.name ?? "");
   const [type, setType] = useState<ChannelType>(channel?.type ?? "discord");
   const [selectedEvents, setSelectedEvents] = useState<string[]>(
     channel?.events ?? [],
@@ -306,38 +311,36 @@ function ChannelForm({
     return { config: out };
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!name.trim()) {
-      toast.error("Name is required");
-      return;
-    }
-    const built = buildConfig();
-    if (built.error) {
-      toast.error(built.error);
-      return;
-    }
-    const data: SaveNotificationChannel = {
-      name: name.trim(),
-      type,
-      events: selectedEvents,
-      enabled: channel?.enabled ?? true,
-      ...(built.omit ? {} : { config: built.config }),
-    };
+  const form = useForm({
+    defaultValues: { name: channel?.name ?? "" },
+    onSubmit: ({ value }) => {
+      const built = buildConfig();
+      if (built.error) {
+        toast.error(built.error);
+        return;
+      }
+      const data: SaveNotificationChannel = {
+        name: value.name.trim(),
+        type,
+        events: selectedEvents,
+        enabled: channel?.enabled ?? true,
+        ...(built.omit ? {} : { config: built.config }),
+      };
 
-    const action =
-      editing && channel
-        ? update.mutateAsync({ id: channel.id, data })
-        : create.mutateAsync(data);
-    toast.promise(action, {
-      loading: editing ? "Saving channel…" : "Creating channel…",
-      success: () => {
-        onDone();
-        return editing ? "Channel saved" : "Channel created";
-      },
-      error: (err) => err.message,
-    });
-  };
+      const action =
+        editing && channel
+          ? update.mutateAsync({ id: channel.id, data })
+          : create.mutateAsync(data);
+      toast.promise(action, {
+        loading: editing ? "Saving channel…" : "Creating channel…",
+        success: () => {
+          onDone();
+          return editing ? "Channel saved" : "Channel created";
+        },
+        error: (err) => err.message,
+      });
+    },
+  });
 
   // handleTest delivers a sample event through the current form values. On edit
   // with the config left blank, the backend falls back to the stored config.
@@ -377,20 +380,38 @@ function ChannelForm({
       </DialogHeader>
 
       <form
-        onSubmit={handleSubmit}
+        onSubmit={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          form.handleSubmit();
+        }}
         className="flex min-h-0 flex-1 flex-col gap-4"
       >
         <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pr-1">
-          <div className="space-y-1.5">
-            <Label htmlFor="channel-name">Name</Label>
-            <Input
-              id="channel-name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Ops Discord"
-              required
-            />
-          </div>
+          <form.Field
+            name="name"
+            validators={{
+              onChange: ({ value }) =>
+                value.trim() === "" ? "Name is required" : undefined,
+            }}
+            children={(field) => {
+              const error = fieldError(field.state.meta.errors);
+              return (
+                <Field data-invalid={!!error}>
+                  <FieldLabel htmlFor="channel-name">Name</FieldLabel>
+                  <Input
+                    id="channel-name"
+                    value={field.state.value}
+                    onBlur={field.handleBlur}
+                    onChange={(e) => field.handleChange(e.target.value)}
+                    placeholder="Ops Discord"
+                    aria-invalid={!!error}
+                  />
+                  {error && <FieldError>{error}</FieldError>}
+                </Field>
+              );
+            }}
+          />
 
           <div className="space-y-1.5">
             <Label>Type</Label>
@@ -448,14 +469,14 @@ function ChannelForm({
                 {/* Optional secrets can be removed on edit — a blank field alone
                     can't distinguish "keep" from "clear". */}
                 {editing && f.secret && !f.required && (
-                  <label className="text-muted-foreground flex items-center gap-2 text-xs">
+                  <Label className="text-muted-foreground flex items-center gap-2 text-xs font-normal">
                     <Checkbox
                       className="size-3.5"
                       checked={clearedSecrets.has(f.key)}
                       onCheckedChange={() => toggleCleared(f.key)}
                     />
                     Remove the stored {f.label.toLowerCase()}
-                  </label>
+                  </Label>
                 )}
                 {f.help && (
                   <p className="text-muted-foreground text-xs">{f.help}</p>

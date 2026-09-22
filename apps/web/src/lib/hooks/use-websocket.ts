@@ -1,4 +1,10 @@
-import { useEffect, useRef, useCallback, useState } from "react";
+import {
+  useEffect,
+  useRef,
+  useCallback,
+  useLayoutEffect,
+  useSyncExternalStore,
+} from "react";
 
 interface OutboundMessage {
   channel: string;
@@ -13,7 +19,11 @@ interface InboundMessage {
 
 type MessageHandler = (event: string, data: unknown) => void;
 
-export type ConnectionState = "connected" | "connecting" | "disconnected" | "failed";
+export type ConnectionState =
+  | "connected"
+  | "connecting"
+  | "disconnected"
+  | "failed";
 
 // Singleton WebSocket state
 let ws: WebSocket | null = null;
@@ -60,7 +70,10 @@ function handleMessage(event: MessageEvent) {
 }
 
 function connect(): Promise<void> {
-  if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
+  if (
+    ws &&
+    (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)
+  ) {
     return connectPromise ?? Promise.resolve();
   }
 
@@ -110,7 +123,11 @@ function connect(): Promise<void> {
 }
 
 function ensureConnected() {
-  if (!ws || ws.readyState === WebSocket.CLOSED || ws.readyState === WebSocket.CLOSING) {
+  if (
+    !ws ||
+    ws.readyState === WebSocket.CLOSED ||
+    ws.readyState === WebSocket.CLOSING
+  ) {
     connect();
   }
 }
@@ -173,36 +190,48 @@ export function useChannel<T = unknown>(
   channel: string | null,
   onMessage: (event: string, data: T) => void,
 ) {
-  const [connected, setConnected] = useState(() => connectionState === "connected");
   const onMessageRef = useRef(onMessage);
-  onMessageRef.current = onMessage;
+  // Layout effect, not a plain assignment: mutating a ref during render is
+  // disallowed (can desync from a discarded render). This still updates
+  // before any WS message could fire — synchronously after commit, before
+  // paint — so onMessageRef is never stale when handler() runs.
+  useLayoutEffect(() => {
+    onMessageRef.current = onMessage;
+  });
 
   const handler = useCallback((event: string, data: unknown) => {
     onMessageRef.current(event, data as T);
   }, []);
 
   useEffect(() => {
-    if (!channel) {
-      setConnected(false);
-      return;
-    }
-
+    if (!channel) return;
     subscribe(channel, handler);
-    setConnected(connectionState === "connected");
-
-    const stateListener = (state: ConnectionState) => {
-      setConnected(state === "connected");
-    };
-    stateListeners.add(stateListener);
-
-    return () => {
-      unsubscribe(channel, handler);
-      stateListeners.delete(stateListener);
-      setConnected(false);
-    };
+    return () => unsubscribe(channel, handler);
   }, [channel, handler]);
 
+  // Derived straight from the same external store as useWebSocketStatus,
+  // folding in the local `channel` prop — no local setConnected juggling in
+  // the effect above, which used to duplicate this via a stateListener.
+  const connected = useSyncExternalStore(
+    subscribeToConnectionState,
+    () => !!channel && connectionState === "connected",
+  );
+
   return { connected };
+}
+
+function subscribeToConnectionState(onStoreChange: () => void) {
+  // stateListeners' callbacks take the new state; useSyncExternalStore's
+  // subscribe callback takes none and re-reads getSnapshot itself instead,
+  // which is what makes this immune to the render/commit race a manual
+  // useEffect subscription has to work around by re-syncing on mount.
+  const listener = () => onStoreChange();
+  stateListeners.add(listener);
+  return () => stateListeners.delete(listener);
+}
+
+function getConnectionStateSnapshot() {
+  return connectionState;
 }
 
 /**
@@ -210,16 +239,8 @@ export function useChannel<T = unknown>(
  * global "connection lost" banner when the state is "failed".
  */
 export function useWebSocketStatus(): ConnectionState {
-  const [state, setState] = useState<ConnectionState>(() => connectionState);
-
-  useEffect(() => {
-    // Sync in case state changed between render and effect.
-    setState(connectionState);
-    stateListeners.add(setState);
-    return () => {
-      stateListeners.delete(setState);
-    };
-  }, []);
-
-  return state;
+  return useSyncExternalStore(
+    subscribeToConnectionState,
+    getConnectionStateSnapshot,
+  );
 }

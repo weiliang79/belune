@@ -24,6 +24,8 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Field, FieldError, FieldLabel } from "@/components/ui/field";
+import { fieldError } from "@/lib/utils/field-error";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -72,14 +74,6 @@ interface Props {
   domain?: DomainExpanded;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-}
-
-function fieldError(errors: unknown[]): string | undefined {
-  const first = errors[0];
-  if (!first) return undefined;
-  return typeof first === "string"
-    ? first
-    : (first as { message?: string }).message;
 }
 
 export function DomainFormDialog({
@@ -262,23 +256,24 @@ function DomainForm({
             children={(field) => {
               const error = fieldError(field.state.meta.errors);
               return (
-                <div className="space-y-2">
-                  <Label htmlFor="hostname">Hostname</Label>
+                <Field data-invalid={!!error}>
+                  <FieldLabel htmlFor="hostname">Hostname</FieldLabel>
                   <Input
                     id="hostname"
                     placeholder="app.example.com"
                     value={field.state.value}
                     onBlur={field.handleBlur}
                     onChange={(e) => field.handleChange(e.target.value)}
+                    aria-invalid={!!error}
                   />
                   {error ? (
-                    <p className="text-destructive text-xs">{error}</p>
+                    <FieldError>{error}</FieldError>
                   ) : (
                     <p className="text-muted-foreground text-xs">
                       Fully qualified domain. Must resolve to this server.
                     </p>
                   )}
-                </div>
+                </Field>
               );
             }}
           />
@@ -299,17 +294,18 @@ function DomainForm({
             children={(field) => {
               const error = fieldError(field.state.meta.errors);
               return (
-                <div className="space-y-2">
-                  <Label htmlFor="path">Path</Label>
+                <Field data-invalid={!!error}>
+                  <FieldLabel htmlFor="path">Path</FieldLabel>
                   <Input
                     id="path"
                     placeholder="/"
                     value={field.state.value}
                     onBlur={field.handleBlur}
                     onChange={(e) => field.handleChange(e.target.value)}
+                    aria-invalid={!!error}
                   />
                   {error ? (
-                    <p className="text-destructive text-xs">{error}</p>
+                    <FieldError>{error}</FieldError>
                   ) : (
                     <p className="text-muted-foreground text-xs">
                       The prefix this app answers on. Leave blank to serve the
@@ -317,7 +313,7 @@ function DomainForm({
                       several apps.
                     </p>
                   )}
-                </div>
+                </Field>
               );
             }}
           />
@@ -328,13 +324,13 @@ function DomainForm({
                 <form.Field
                   name="strip_path"
                   children={(field) => (
-                    <label className="flex items-center gap-2 text-sm">
+                    <Label className="flex items-center gap-2 text-sm font-normal">
                       <Checkbox
                         checked={field.state.value}
                         onCheckedChange={(v) => field.handleChange(v)}
                       />
                       Strip the prefix before forwarding
-                    </label>
+                    </Label>
                   )}
                 />
               ) : null
@@ -353,17 +349,18 @@ function DomainForm({
             children={(field) => {
               const error = fieldError(field.state.meta.errors);
               return (
-                <div className="space-y-2">
-                  <Label htmlFor="internal_path">Internal path</Label>
+                <Field data-invalid={!!error}>
+                  <FieldLabel htmlFor="internal_path">Internal path</FieldLabel>
                   <Input
                     id="internal_path"
                     placeholder="(none)"
                     value={field.state.value}
                     onBlur={field.handleBlur}
                     onChange={(e) => field.handleChange(e.target.value)}
+                    aria-invalid={!!error}
                   />
                   {error ? (
-                    <p className="text-destructive text-xs">{error}</p>
+                    <FieldError>{error}</FieldError>
                   ) : (
                     <p className="text-muted-foreground text-xs">
                       Prepended before the request reaches the app. Only needed
@@ -371,7 +368,7 @@ function DomainForm({
                       own — Grafana under /grafana. Leave blank otherwise.
                     </p>
                   )}
-                </div>
+                </Field>
               );
             }}
           />
@@ -447,8 +444,8 @@ function DomainForm({
             children={(field) => {
               const error = fieldError(field.state.meta.errors);
               return (
-                <div className="space-y-2">
-                  <Label htmlFor="port">Container Port</Label>
+                <Field data-invalid={!!error}>
+                  <FieldLabel htmlFor="port">Container Port</FieldLabel>
                   <Input
                     id="port"
                     type="number"
@@ -458,16 +455,17 @@ function DomainForm({
                     value={field.state.value}
                     onBlur={field.handleBlur}
                     onChange={(e) => field.handleChange(e.target.value)}
+                    aria-invalid={!!error}
                   />
                   {error ? (
-                    <p className="text-destructive text-xs">{error}</p>
+                    <FieldError>{error}</FieldError>
                   ) : (
                     <p className="text-muted-foreground text-xs">
                       The port this domain routes to inside the container. Leave
                       blank to use the app's default port (8080).
                     </p>
                   )}
-                </div>
+                </Field>
               );
             }}
           />
@@ -526,14 +524,17 @@ function DomainForm({
                   children={(field) => {
                     const error = fieldError(field.state.meta.errors);
                     return (
-                      <div className="space-y-2">
-                        <Label>Certificate</Label>
+                      <Field data-invalid={!!error}>
+                        <FieldLabel>Certificate</FieldLabel>
                         <Select
                           value={field.state.value}
                           onValueChange={(v) => field.handleChange(v ?? "")}
                           disabled={certificatesLoading}
                         >
-                          <SelectTrigger className="w-full min-w-0">
+                          <SelectTrigger
+                            className="w-full min-w-0"
+                            aria-invalid={!!error}
+                          >
                             {/* Name only. The default renders the whole item —
                                 name *and* every subject — which a real
                                 certificate (a wildcard, an Origin CA) blows the
@@ -596,10 +597,8 @@ function DomainForm({
                               an admin to upload one that does.
                             </p>
                           ))}
-                        {error && (
-                          <p className="text-destructive text-xs">{error}</p>
-                        )}
-                      </div>
+                        {error && <FieldError>{error}</FieldError>}
+                      </Field>
                     );
                   }}
                 />
@@ -617,7 +616,7 @@ function DomainForm({
                 name="force_https"
                 children={(field) => (
                   <div className="space-y-1 border-t pt-3">
-                    <label className="flex items-center gap-2 text-sm">
+                    <Label className="flex items-center gap-2 text-sm font-normal">
                       <Checkbox
                         checked={sslMode !== "off" && field.state.value}
                         disabled={sslMode === "off"}
@@ -632,7 +631,7 @@ function DomainForm({
                       >
                         Force HTTPS
                       </span>
-                    </label>
+                    </Label>
                     <p className="text-muted-foreground text-xs">
                       {sslMode === "off"
                         ? "Unavailable while TLS is off — there is no HTTPS to redirect to."

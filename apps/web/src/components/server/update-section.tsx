@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { useForm } from "@tanstack/react-form";
+import { z } from "zod";
 import { ExternalLinkIcon } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
@@ -45,8 +47,6 @@ export function UpdateSection() {
   const checkNow = useTriggerUpdateCheck();
 
   const [confirmOpen, setConfirmOpen] = useState(false);
-  const [password, setPassword] = useState("");
-  const [code, setCode] = useState("");
 
   // Shared with the sidebar's dot — see useUpdateAvailable for why the
   // comparison must not be duplicated.
@@ -106,30 +106,31 @@ export function UpdateSection() {
 
   const closeConfirm = () => {
     setConfirmOpen(false);
-    setPassword("");
-    setCode("");
+    form.reset();
   };
 
-  const applyUpdate = () => {
-    if (!password) return;
-    triggerUpdate.mutate(
-      { password, code: code || undefined },
-      {
-        onSuccess: (res) => {
-          closeConfirm();
-          toast.success(
-            `Update to v${res.target} started — the dashboard will disconnect briefly while it restarts.`,
-            { duration: 10_000 },
-          );
+  const form = useForm({
+    defaultValues: { password: "", code: "" },
+    onSubmit: ({ value }) => {
+      triggerUpdate.mutate(
+        { password: value.password, code: value.code || undefined },
+        {
+          onSuccess: (res) => {
+            closeConfirm();
+            toast.success(
+              `Update to v${res.target} started — the dashboard will disconnect briefly while it restarts.`,
+              { duration: 10_000 },
+            );
+          },
+          onError: (err) => {
+            toast.error(
+              err instanceof Error ? err.message : "Failed to start the update",
+            );
+          },
         },
-        onError: (err) => {
-          toast.error(
-            err instanceof Error ? err.message : "Failed to start the update",
-          );
-        },
-      },
-    );
-  };
+      );
+    },
+  });
 
   return (
     <div className="space-y-4">
@@ -263,52 +264,81 @@ export function UpdateSection() {
         onOpenChange={(open) => !open && closeConfirm()}
       >
         <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Update to v{latestVersion}?</DialogTitle>
-            <DialogDescription>
-              Re-enter your Belune password to apply this update.
-              {totpEnabled && " Your authenticator code is required too."} A
-              pre-update backup runs first. The dashboard will be briefly
-              unreachable while it restarts.
-              {breaking &&
-                " This release includes breaking changes — read the release notes before continuing."}
-            </DialogDescription>
-          </DialogHeader>
-          <Input
-            type="password"
-            autoFocus
-            value={password}
-            placeholder="Password"
-            onChange={(e) => setPassword(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") applyUpdate();
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              form.handleSubmit();
             }}
-          />
-          {totpEnabled && (
-            <Input
-              inputMode="numeric"
-              autoComplete="one-time-code"
-              value={code}
-              placeholder="Verification code"
-              onChange={(e) => setCode(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") applyUpdate();
+            className="space-y-4"
+          >
+            <DialogHeader>
+              <DialogTitle>Update to v{latestVersion}?</DialogTitle>
+              <DialogDescription>
+                Re-enter your Belune password to apply this update.
+                {totpEnabled && " Your authenticator code is required too."} A
+                pre-update backup runs first. The dashboard will be briefly
+                unreachable while it restarts.
+                {breaking &&
+                  " This release includes breaking changes — read the release notes before continuing."}
+              </DialogDescription>
+            </DialogHeader>
+            <form.Field
+              name="password"
+              validators={{
+                onChange: z.string().min(1, "Password is required"),
               }}
+              children={(field) => (
+                <Input
+                  type="password"
+                  autoFocus
+                  value={field.state.value}
+                  placeholder="Password"
+                  onBlur={field.handleBlur}
+                  onChange={(e) => field.handleChange(e.target.value)}
+                />
+              )}
             />
-          )}
-          <DialogFooter>
-            <Button variant="outline" onClick={closeConfirm}>
-              Cancel
-            </Button>
-            <Button
-              onClick={applyUpdate}
-              disabled={
-                triggerUpdate.isPending || !password || (totpEnabled && !code)
-              }
-            >
-              {triggerUpdate.isPending ? "Starting…" : "Update now"}
-            </Button>
-          </DialogFooter>
+            {totpEnabled && (
+              <form.Field
+                name="code"
+                validators={{
+                  onChange: ({ value }) =>
+                    value ? undefined : "Verification code is required",
+                }}
+                children={(field) => (
+                  <Input
+                    inputMode="numeric"
+                    autoComplete="one-time-code"
+                    value={field.state.value}
+                    placeholder="Verification code"
+                    onBlur={field.handleBlur}
+                    onChange={(e) => field.handleChange(e.target.value)}
+                  />
+                )}
+              />
+            )}
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={closeConfirm}>
+                Cancel
+              </Button>
+              <form.Subscribe
+                selector={(s) => [s.values.password, s.values.code] as const}
+                children={([password, code]) => (
+                  <Button
+                    type="submit"
+                    disabled={
+                      triggerUpdate.isPending ||
+                      !password ||
+                      (totpEnabled && !code)
+                    }
+                  >
+                    {triggerUpdate.isPending ? "Starting…" : "Update now"}
+                  </Button>
+                )}
+              />
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
     </div>

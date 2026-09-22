@@ -1,5 +1,6 @@
-import { useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
+import { useForm } from "@tanstack/react-form";
+import { z } from "zod";
 import { useTheme } from "next-themes";
 import {
   BellRingIcon,
@@ -24,6 +25,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page-header";
 import { Badge } from "@/components/ui/badge";
+import { Field, FieldError, FieldLabel } from "@/components/ui/field";
+import { fieldError } from "@/lib/utils/field-error";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -94,32 +97,39 @@ function SettingsPage() {
 function ProfileCard() {
   const user = useAuthStore((s) => s.user);
   const setUser = useAuthStore((s) => s.setUser);
-  const [username, setUsername] = useState(user?.username ?? "");
-  const [firstName, setFirstName] = useState(user?.first_name ?? "");
-  const [lastName, setLastName] = useState(user?.last_name ?? "");
   const updateProfile = useUpdateProfile();
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    toast.promise(
-      updateProfile
-        .mutateAsync({ username, first_name: firstName, last_name: lastName })
-        .then((updated) => {
-          if (user)
-            setUser({
-              ...user,
-              username: updated.username,
-              first_name: updated.first_name,
-              last_name: updated.last_name,
-            });
-        }),
-      {
-        loading: "Saving profile...",
-        success: "Profile updated",
-        error: (err) => err.message,
-      },
-    );
-  };
+  const form = useForm({
+    defaultValues: {
+      username: user?.username ?? "",
+      firstName: user?.first_name ?? "",
+      lastName: user?.last_name ?? "",
+    },
+    onSubmit: ({ value }) => {
+      toast.promise(
+        updateProfile
+          .mutateAsync({
+            username: value.username,
+            first_name: value.firstName,
+            last_name: value.lastName,
+          })
+          .then((updated) => {
+            if (user)
+              setUser({
+                ...user,
+                username: updated.username,
+                first_name: updated.first_name,
+                last_name: updated.last_name,
+              });
+          }),
+        {
+          loading: "Saving profile...",
+          success: "Profile updated",
+          error: (err) => err.message,
+        },
+      );
+    },
+  });
 
   return (
     <Card>
@@ -133,35 +143,68 @@ function ProfileCard() {
         </p>
       </CardHeader>
       <CardContent>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="profile-username">Username</Label>
-            <Input
-              id="profile-username"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              placeholder="username"
-            />
-          </div>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            form.handleSubmit();
+          }}
+          className="space-y-4"
+        >
+          <form.Field
+            name="username"
+            validators={{
+              onChange: z.string().min(1, "Username is required"),
+            }}
+            children={(field) => {
+              const error = fieldError(field.state.meta.errors);
+              return (
+                <Field data-invalid={!!error}>
+                  <FieldLabel htmlFor="profile-username">Username</FieldLabel>
+                  <Input
+                    id="profile-username"
+                    value={field.state.value}
+                    onBlur={field.handleBlur}
+                    onChange={(e) => field.handleChange(e.target.value)}
+                    placeholder="username"
+                    aria-invalid={!!error}
+                  />
+                  {error && <FieldError>{error}</FieldError>}
+                </Field>
+              );
+            }}
+          />
           <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="first-name">First Name</Label>
-              <Input
-                id="first-name"
-                value={firstName}
-                onChange={(e) => setFirstName(e.target.value)}
-                placeholder="First"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="last-name">Last Name</Label>
-              <Input
-                id="last-name"
-                value={lastName}
-                onChange={(e) => setLastName(e.target.value)}
-                placeholder="Last"
-              />
-            </div>
+            <form.Field
+              name="firstName"
+              children={(field) => (
+                <div className="space-y-2">
+                  <Label htmlFor="first-name">First Name</Label>
+                  <Input
+                    id="first-name"
+                    value={field.state.value}
+                    onBlur={field.handleBlur}
+                    onChange={(e) => field.handleChange(e.target.value)}
+                    placeholder="First"
+                  />
+                </div>
+              )}
+            />
+            <form.Field
+              name="lastName"
+              children={(field) => (
+                <div className="space-y-2">
+                  <Label htmlFor="last-name">Last Name</Label>
+                  <Input
+                    id="last-name"
+                    value={field.state.value}
+                    onBlur={field.handleBlur}
+                    onChange={(e) => field.handleChange(e.target.value)}
+                    placeholder="Last"
+                  />
+                </div>
+              )}
+            />
           </div>
           <Button type="submit" disabled={updateProfile.isPending}>
             {updateProfile.isPending ? "Saving..." : "Save Profile"}
@@ -173,45 +216,30 @@ function ProfileCard() {
 }
 
 function ChangePasswordCard() {
-  const [currentPassword, setCurrentPassword] = useState("");
-  const [newPassword, setNewPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
   const changePassword = useChangeOwnPassword();
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-
-    if (!currentPassword || !newPassword) {
-      toast.error("All fields are required");
-      return;
-    }
-    if (newPassword.length < 8) {
-      toast.error("New password must be at least 8 characters");
-      return;
-    }
-    if (newPassword !== confirmPassword) {
-      toast.error("New passwords do not match");
-      return;
-    }
-
-    toast.promise(
-      changePassword
-        .mutateAsync({
-          current_password: currentPassword,
-          new_password: newPassword,
-        })
-        .then(() => {
-          setCurrentPassword("");
-          setNewPassword("");
-          setConfirmPassword("");
-        }),
-      {
-        loading: "Updating password...",
-        success: "Password updated",
-        error: (err) => err.message,
-      },
-    );
-  };
+  const form = useForm({
+    defaultValues: {
+      currentPassword: "",
+      newPassword: "",
+      confirmPassword: "",
+    },
+    onSubmit: ({ value }) => {
+      toast.promise(
+        changePassword
+          .mutateAsync({
+            current_password: value.currentPassword,
+            new_password: value.newPassword,
+          })
+          .then(() => form.reset()),
+        {
+          loading: "Updating password...",
+          success: "Password updated",
+          error: (err) => err.message,
+        },
+      );
+    },
+  });
 
   return (
     <Card>
@@ -222,35 +250,94 @@ function ChangePasswordCard() {
         </CardTitle>
       </CardHeader>
       <CardContent>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="current-password">Current Password</Label>
-            <Input
-              id="current-password"
-              type="password"
-              value={currentPassword}
-              onChange={(e) => setCurrentPassword(e.target.value)}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="new-password">New Password</Label>
-            <Input
-              id="new-password"
-              type="password"
-              value={newPassword}
-              onChange={(e) => setNewPassword(e.target.value)}
-              placeholder="At least 8 characters"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="confirm-password">Confirm New Password</Label>
-            <Input
-              id="confirm-password"
-              type="password"
-              value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
-            />
-          </div>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            form.handleSubmit();
+          }}
+          className="space-y-4"
+        >
+          <form.Field
+            name="currentPassword"
+            validators={{
+              onChange: z.string().min(1, "Current password is required"),
+            }}
+            children={(field) => {
+              const error = fieldError(field.state.meta.errors);
+              return (
+                <Field data-invalid={!!error}>
+                  <FieldLabel htmlFor="current-password">
+                    Current Password
+                  </FieldLabel>
+                  <Input
+                    id="current-password"
+                    type="password"
+                    value={field.state.value}
+                    onBlur={field.handleBlur}
+                    onChange={(e) => field.handleChange(e.target.value)}
+                    aria-invalid={!!error}
+                  />
+                  {error && <FieldError>{error}</FieldError>}
+                </Field>
+              );
+            }}
+          />
+          <form.Field
+            name="newPassword"
+            validators={{
+              onChange: z
+                .string()
+                .min(8, "New password must be at least 8 characters"),
+            }}
+            children={(field) => {
+              const error = fieldError(field.state.meta.errors);
+              return (
+                <Field data-invalid={!!error}>
+                  <FieldLabel htmlFor="new-password">New Password</FieldLabel>
+                  <Input
+                    id="new-password"
+                    type="password"
+                    value={field.state.value}
+                    onBlur={field.handleBlur}
+                    onChange={(e) => field.handleChange(e.target.value)}
+                    placeholder="At least 8 characters"
+                    aria-invalid={!!error}
+                  />
+                  {error && <FieldError>{error}</FieldError>}
+                </Field>
+              );
+            }}
+          />
+          <form.Field
+            name="confirmPassword"
+            validators={{
+              onChangeListenTo: ["newPassword"],
+              onChange: ({ value, fieldApi }) =>
+                value !== fieldApi.form.state.values.newPassword
+                  ? "New passwords do not match"
+                  : undefined,
+            }}
+            children={(field) => {
+              const error = fieldError(field.state.meta.errors);
+              return (
+                <Field data-invalid={!!error}>
+                  <FieldLabel htmlFor="confirm-password">
+                    Confirm New Password
+                  </FieldLabel>
+                  <Input
+                    id="confirm-password"
+                    type="password"
+                    value={field.state.value}
+                    onBlur={field.handleBlur}
+                    onChange={(e) => field.handleChange(e.target.value)}
+                    aria-invalid={!!error}
+                  />
+                  {error && <FieldError>{error}</FieldError>}
+                </Field>
+              );
+            }}
+          />
           <Button type="submit" disabled={changePassword.isPending}>
             {changePassword.isPending ? "Updating..." : "Update Password"}
           </Button>
@@ -260,47 +347,17 @@ function ChangePasswordCard() {
   );
 }
 
+const DEFAULT_ALERT_PREFS = {
+  deploy_failures: true,
+  deploy_success: true,
+  build_failures: true,
+  quota_threshold: true,
+  quota_threshold_percent: 80,
+};
+
 function AlertPreferencesCard() {
   const { data: prefs, isLoading } = useAlertPreferences();
   const update = useUpdateAlertPreferences();
-
-  const [local, setLocal] = useState<{
-    deploy_failures: boolean;
-    deploy_success: boolean;
-    build_failures: boolean;
-    quota_threshold: boolean;
-    quota_threshold_percent: number;
-  } | null>(null);
-
-  const current = local ??
-    prefs ?? {
-      deploy_failures: true,
-      deploy_success: true,
-      build_failures: true,
-      quota_threshold: true,
-      quota_threshold_percent: 80,
-    };
-
-  const toggle = (
-    key:
-      | "deploy_failures"
-      | "deploy_success"
-      | "build_failures"
-      | "quota_threshold",
-  ) => {
-    setLocal({ ...current, [key]: !current[key] });
-  };
-
-  const handleSave = () => {
-    toast.promise(
-      update.mutateAsync(current).then(() => setLocal(null)),
-      {
-        loading: "Saving…",
-        success: "Alert preferences saved",
-        error: (err) => err.message,
-      },
-    );
-  };
 
   return (
     <Card>
@@ -318,64 +375,148 @@ function AlertPreferencesCard() {
             ))}
           </div>
         ) : (
-          <div className="space-y-4">
-            <PreferenceRow
-              label="Deploy failures"
-              description="Email and notify when a deployment fails."
-              checked={current.deploy_failures}
-              onToggle={() => toggle("deploy_failures")}
-            />
-            <PreferenceRow
-              label="Deploy successes"
-              description="Notify when a deployment finishes successfully."
-              checked={current.deploy_success}
-              onToggle={() => toggle("deploy_success")}
-            />
-            <PreferenceRow
-              label="Build failures"
-              description="Email and notify when a build fails."
-              checked={current.build_failures}
-              onToggle={() => toggle("build_failures")}
-            />
-            <PreferenceRow
-              label="Quota threshold"
-              description="Email when resource usage exceeds the threshold."
-              checked={current.quota_threshold}
-              onToggle={() => toggle("quota_threshold")}
-            />
-            {current.quota_threshold && (
-              <div className="flex items-center gap-3 pl-1">
-                <Label htmlFor="quota-pct" className="text-sm">
-                  Alert at
-                </Label>
-                <Input
-                  id="quota-pct"
-                  type="number"
-                  min={1}
-                  max={100}
-                  value={current.quota_threshold_percent}
-                  onChange={(e) =>
-                    setLocal({
-                      ...current,
-                      quota_threshold_percent: Number(e.target.value),
-                    })
-                  }
-                  className="w-20"
-                />
-                <span className="text-muted-foreground text-sm">% usage</span>
-              </div>
-            )}
-            <Button
-              size="sm"
-              onClick={handleSave}
-              disabled={update.isPending || local === null}
-            >
-              {update.isPending ? "Saving…" : "Save"}
-            </Button>
-          </div>
+          // Keyed so a fresh save re-derives defaultValues from the refetched
+          // prefs instead of racing useForm's own defaultValues-sync effect.
+          <AlertPreferencesForm
+            key={JSON.stringify(prefs)}
+            prefs={prefs ?? DEFAULT_ALERT_PREFS}
+            update={update}
+          />
         )}
       </CardContent>
     </Card>
+  );
+}
+
+function AlertPreferencesForm({
+  prefs,
+  update,
+}: {
+  prefs: typeof DEFAULT_ALERT_PREFS;
+  update: ReturnType<typeof useUpdateAlertPreferences>;
+}) {
+  const form = useForm({
+    defaultValues: prefs,
+    onSubmit: ({ value }) => {
+      toast.promise(update.mutateAsync(value), {
+        loading: "Saving…",
+        success: "Alert preferences saved",
+        error: (err) => err.message,
+      });
+    },
+  });
+
+  return (
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        form.handleSubmit();
+      }}
+      className="space-y-4"
+    >
+      <form.Field
+        name="deploy_failures"
+        children={(field) => (
+          <PreferenceRow
+            label="Deploy failures"
+            description="Email and notify when a deployment fails."
+            checked={field.state.value}
+            onToggle={() => field.handleChange(!field.state.value)}
+          />
+        )}
+      />
+      <form.Field
+        name="deploy_success"
+        children={(field) => (
+          <PreferenceRow
+            label="Deploy successes"
+            description="Notify when a deployment finishes successfully."
+            checked={field.state.value}
+            onToggle={() => field.handleChange(!field.state.value)}
+          />
+        )}
+      />
+      <form.Field
+        name="build_failures"
+        children={(field) => (
+          <PreferenceRow
+            label="Build failures"
+            description="Email and notify when a build fails."
+            checked={field.state.value}
+            onToggle={() => field.handleChange(!field.state.value)}
+          />
+        )}
+      />
+      <form.Field
+        name="quota_threshold"
+        children={(field) => (
+          <PreferenceRow
+            label="Quota threshold"
+            description="Email when resource usage exceeds the threshold."
+            checked={field.state.value}
+            onToggle={() => field.handleChange(!field.state.value)}
+          />
+        )}
+      />
+      <form.Subscribe
+        selector={(s) => s.values.quota_threshold}
+        children={(quotaThreshold) =>
+          quotaThreshold && (
+            <form.Field
+              name="quota_threshold_percent"
+              validators={{
+                onChange: z
+                  .number()
+                  .min(1, "Must be between 1 and 100")
+                  .max(100, "Must be between 1 and 100"),
+              }}
+              children={(field) => {
+                const error = fieldError(field.state.meta.errors);
+                return (
+                  <Field data-invalid={!!error}>
+                    <div className="flex items-center gap-3 pl-1">
+                      <FieldLabel htmlFor="quota-pct" className="text-sm">
+                        Alert at
+                      </FieldLabel>
+                      <Input
+                        id="quota-pct"
+                        type="number"
+                        min={1}
+                        max={100}
+                        value={field.state.value}
+                        onBlur={field.handleBlur}
+                        onChange={(e) =>
+                          field.handleChange(Number(e.target.value))
+                        }
+                        className="w-20"
+                        aria-invalid={!!error}
+                      />
+                      <span className="text-muted-foreground text-sm">
+                        % usage
+                      </span>
+                    </div>
+                    {error && <FieldError className="pl-1">{error}</FieldError>}
+                  </Field>
+                );
+              }}
+            />
+          )
+        }
+      />
+      <form.Subscribe
+        selector={(s) => s.isDirty}
+        children={(isDirty) => (
+          <Button
+            type="submit"
+            size="sm"
+            disabled={update.isPending || !isDirty}
+          >
+            {update.isPending ? "Saving…" : "Save"}
+          </Button>
+        )}
+      />
+    </form>
   );
 }
 

@@ -176,7 +176,7 @@ const deploymentColumns: ColumnDef<GlobalDeployment>[] = [
       <Link
         to="/projects/$projectId/applications/$applicationId/deployments"
         params={{ projectId: d.project_id, applicationId: d.application_id }}
-        className="hover:text-primary block"
+        className="hover:text-brand-text block"
       >
         <span className="font-medium">{d.application_name}</span>
         <span className="text-text-faint block text-xs">{d.project_name}</span>

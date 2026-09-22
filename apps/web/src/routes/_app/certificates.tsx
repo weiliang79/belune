@@ -19,8 +19,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page-header";
 import { Badge } from "@/components/ui/badge";
+import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { DataTable, buildActionColumnDef } from "@/components/ui/data-table";
 import {
@@ -318,24 +318,25 @@ function UploadCertificateDialog({
         >
           <form.Field name="name">
             {(field) => (
-              <div className="space-y-2">
-                <Label htmlFor="name">Name</Label>
+              <Field data-invalid={isFieldInvalid(field)}>
+                <FieldLabel htmlFor="name">Name</FieldLabel>
                 <Input
                   id="name"
                   placeholder="example.com origin"
                   value={field.state.value}
                   onChange={(e) => field.handleChange(e.target.value)}
                   onBlur={field.handleBlur}
+                  aria-invalid={isFieldInvalid(field)}
                 />
                 <FieldError field={field} />
-              </div>
+              </Field>
             )}
           </form.Field>
 
           <form.Field name="cert_pem">
             {(field) => (
-              <div className="space-y-2">
-                <Label htmlFor="cert_pem">Certificate (PEM)</Label>
+              <Field data-invalid={isFieldInvalid(field)}>
+                <FieldLabel htmlFor="cert_pem">Certificate (PEM)</FieldLabel>
                 <Textarea
                   id="cert_pem"
                   rows={7}
@@ -349,19 +350,20 @@ function UploadCertificateDialog({
                   value={field.state.value}
                   onChange={(e) => field.handleChange(e.target.value)}
                   onBlur={field.handleBlur}
+                  aria-invalid={isFieldInvalid(field)}
                 />
                 <p className="text-muted-foreground text-xs">
                   Include any intermediate certificates below the leaf.
                 </p>
                 <FieldError field={field} />
-              </div>
+              </Field>
             )}
           </form.Field>
 
           <form.Field name="key_pem">
             {(field) => (
-              <div className="space-y-2">
-                <Label htmlFor="key_pem">Private Key (PEM)</Label>
+              <Field data-invalid={isFieldInvalid(field)}>
+                <FieldLabel htmlFor="key_pem">Private Key (PEM)</FieldLabel>
                 <Textarea
                   id="key_pem"
                   rows={7}
@@ -371,9 +373,10 @@ function UploadCertificateDialog({
                   value={field.state.value}
                   onChange={(e) => field.handleChange(e.target.value)}
                   onBlur={field.handleBlur}
+                  aria-invalid={isFieldInvalid(field)}
                 />
                 <FieldError field={field} />
-              </div>
+              </Field>
             )}
           </form.Field>
 
@@ -395,12 +398,20 @@ function UploadCertificateDialog({
   );
 }
 
+type TanStackFieldMeta = {
+  state: { meta: { errors: unknown[]; isTouched: boolean } };
+};
+
+// True once the field both has an error and has been visited — matches
+// FieldError below, so the border/label and the message agree on when to
+// switch into the error state rather than the border jumping red on the
+// first keystroke while the message waits for blur.
+function isFieldInvalid(field: TanStackFieldMeta): boolean {
+  return field.state.meta.errors.length > 0 && field.state.meta.isTouched;
+}
+
 // FieldError renders the first validation message for a TanStack form field.
-function FieldError({
-  field,
-}: {
-  field: { state: { meta: { errors: unknown[]; isTouched: boolean } } };
-}) {
+function FieldError({ field }: { field: TanStackFieldMeta }) {
   const error = field.state.meta.errors[0];
   if (!error || !field.state.meta.isTouched) return null;
   const message =

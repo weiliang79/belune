@@ -35,7 +35,7 @@ export function AuthLayout({
     <div className="grid min-h-screen lg:grid-cols-2">
       {/* Brand panel */}
       <div
-        className="relative hidden flex-col justify-between overflow-hidden p-12 text-white lg:flex"
+        className="relative hidden flex-col justify-between overflow-hidden p-12 text-brand-fg lg:flex"
         style={{
           background:
             "linear-gradient(150deg, var(--brand-press), var(--brand) 55%, var(--brand-hover))",
@@ -47,7 +47,7 @@ export function AuthLayout({
           </div>
           <div className="flex flex-col leading-tight">
             <span className="text-lg font-semibold">{instanceName}</span>
-            <span className="text-xs text-white/60">Effortless deploys.</span>
+            <span className="text-xs text-brand-fg/60">Effortless deploys.</span>
           </div>
         </div>
 
@@ -59,7 +59,7 @@ export function AuthLayout({
             {HIGHLIGHTS.map(({ Icon, text }) => (
               <li
                 key={text}
-                className="flex items-center gap-3 text-sm text-white/90"
+                className="flex items-center gap-3 text-sm text-brand-fg/90"
               >
                 <Icon aria-hidden="true" className="size-4 shrink-0" />
                 {text}
@@ -68,7 +68,7 @@ export function AuthLayout({
           </ul>
         </div>
 
-        <p className="font-mono text-xs text-white/60">
+        <p className="font-mono text-xs text-brand-fg/60">
           {BRAND.name}
           {version && ` • ${version}`}
         </p>
@@ -80,7 +80,7 @@ export function AuthLayout({
           {/* Mobile brand lockup */}
           <div className="mb-8 flex items-center gap-2.5 lg:hidden">
             <div
-              className="grid size-9 place-items-center rounded-lg text-white"
+              className="grid size-9 place-items-center rounded-lg text-brand-fg"
               style={{
                 background:
                   "linear-gradient(140deg, var(--brand), var(--brand-press))",

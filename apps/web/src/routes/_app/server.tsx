@@ -1,3 +1,4 @@
+import { useDialogBody } from "@/lib/hooks/use-dialog-body";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import {
   Activity,
@@ -20,9 +21,12 @@ import { RouteError } from "@/lib/components/route-error";
 import { UpdateSection } from "@/components/server/update-section";
 import { PageTabs, type PageTab } from "@/components/ui/page-tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { LiveIndicator } from "@/components/ui/live-indicator";
 import { Button } from "@/components/ui/button";
+import { Field, FieldError, FieldLabel } from "@/components/ui/field";
+import { fieldError } from "@/lib/utils/field-error";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { StatusPill } from "@/components/ui/status-pill";
@@ -50,6 +54,8 @@ import {
 } from "@/lib/hooks/use-metrics";
 import { useSettings, useUpdateSettings } from "@/lib/hooks/use-settings";
 import { toast } from "sonner";
+import { useForm } from "@tanstack/react-form";
+import { z } from "zod";
 import { useMemo, useState, type ReactNode } from "react";
 import type { HostMetricPoint, SettingEntry } from "@/lib/types";
 import { UPlotAreaChart } from "@/components/ui/uplot-area-chart";
@@ -81,6 +87,142 @@ export const Route = createFileRoute("/_app/server")({
         : undefined,
   }),
 });
+
+function InstanceNameField({
+  currentValue,
+  updateSettings,
+}: {
+  currentValue: string;
+  updateSettings: ReturnType<typeof useUpdateSettings>;
+}) {
+  const form = useForm({
+    defaultValues: { value: currentValue },
+    onSubmit: ({ value }) => {
+      toast.promise(
+        updateSettings.mutateAsync([
+          { key: "instance_name", value: value.value.trim() },
+        ]),
+        {
+          loading: "Saving...",
+          success: "Instance name saved",
+          error: "Failed to save instance name",
+        },
+      );
+    },
+  });
+
+  return (
+    <form.Field
+      name="value"
+      children={(field) => (
+        <>
+          <Label htmlFor="instance-name">Instance name</Label>
+          <div className="flex max-w-md items-center gap-2">
+            <Input
+              id="instance-name"
+              value={field.state.value}
+              onChange={(e) => field.handleChange(e.target.value)}
+              placeholder="Belune"
+            />
+            <Button
+              onClick={() => form.handleSubmit()}
+              disabled={
+                updateSettings.isPending ||
+                field.state.value.trim() === currentValue.trim()
+              }
+            >
+              Save
+            </Button>
+          </div>
+          <p className="text-muted-foreground text-xs">
+            Shown in the sidebar and used as the default GitHub App name when
+            connecting a provider.
+          </p>
+        </>
+      )}
+    />
+  );
+}
+
+const IP_REGEX = /^(\d{1,3}\.){3}\d{1,3}$|^[0-9a-fA-F:]+$/;
+
+function ServerIpField({
+  currentValue,
+  placeholder,
+  updateSettings,
+}: {
+  currentValue: string;
+  placeholder: string;
+  updateSettings: ReturnType<typeof useUpdateSettings>;
+}) {
+  const form = useForm({
+    defaultValues: { value: currentValue },
+    onSubmit: ({ value }) => {
+      const trimmed = value.value.trim();
+      toast.promise(
+        updateSettings.mutateAsync([{ key: "public_ip", value: trimmed }]),
+        {
+          loading: "Saving...",
+          success: trimmed
+            ? "Server IP saved"
+            : "Server IP cleared (auto-detect)",
+          error: (err) => (err as Error).message,
+        },
+      );
+    },
+  });
+
+  return (
+    <form.Field
+      name="value"
+      validators={{
+        onChange: z
+          .string()
+          .refine(
+            (v) => v.trim() === "" || IP_REGEX.test(v.trim()),
+            "Enter a valid IP address",
+          ),
+      }}
+      children={(field) => {
+        const error = fieldError(field.state.meta.errors);
+        return (
+          <Field data-invalid={!!error}>
+            <FieldLabel htmlFor="server-ip" className="pt-2">
+              Server IP
+            </FieldLabel>
+            <div className="flex max-w-md items-center gap-2">
+              <Input
+                id="server-ip"
+                value={field.state.value}
+                onChange={(e) => field.handleChange(e.target.value)}
+                placeholder={placeholder}
+                aria-invalid={!!error}
+              />
+              <Button
+                onClick={() => form.handleSubmit()}
+                disabled={
+                  updateSettings.isPending ||
+                  field.state.value.trim() === currentValue.trim()
+                }
+              >
+                Save
+              </Button>
+            </div>
+            {error ? (
+              <FieldError>{error}</FieldError>
+            ) : (
+              <p className="text-muted-foreground text-xs">
+                The public address domains must point at for a certificate.
+                Leave blank to auto-detect; set it explicitly when the box is
+                behind NAT.
+              </p>
+            )}
+          </Field>
+        );
+      }}
+    />
+  );
+}
 
 function formatTime(iso: string, range: string) {
   const d = new Date(iso);
@@ -236,7 +378,7 @@ function ServerSettingsPage() {
     [liveMetrics],
   );
 
-  const { data: settings } = useSettings();
+  const { data: settings, isLoading: settingsLoading } = useSettings();
   const updateSettings = useUpdateSettings();
 
   const handleSaveRetention = (key: string, value: string) => {
@@ -249,25 +391,6 @@ function ServerSettingsPage() {
 
   const currentInstanceName =
     settings?.find((s) => s.key === "instance_name")?.value ?? "";
-  const [instanceNameDraft, setInstanceNameDraft] = useState<string | null>(
-    null,
-  );
-  const instanceNameValue = instanceNameDraft ?? currentInstanceName;
-
-  const handleSaveInstanceName = () => {
-    toast.promise(
-      updateSettings
-        .mutateAsync([
-          { key: "instance_name", value: instanceNameValue.trim() },
-        ])
-        .then(() => setInstanceNameDraft(null)),
-      {
-        loading: "Saving...",
-        success: "Instance name saved",
-        error: "Failed to save instance name",
-      },
-    );
-  };
 
   // Server IP: an override for the address domains must point at (the DNS/TLS
   // precheck baseline). Blank falls back to autodetect; the detected value is
@@ -275,23 +398,6 @@ function ServerSettingsPage() {
   const { data: serverIP } = useServerIP();
   const currentServerIp =
     settings?.find((s) => s.key === "public_ip")?.value ?? "";
-  const [serverIpDraft, setServerIpDraft] = useState<string | null>(null);
-  const serverIpValue = serverIpDraft ?? currentServerIp;
-
-  const handleSaveServerIp = () => {
-    toast.promise(
-      updateSettings
-        .mutateAsync([{ key: "public_ip", value: serverIpValue.trim() }])
-        .then(() => setServerIpDraft(null)),
-      {
-        loading: "Saving...",
-        success: serverIpValue.trim()
-          ? "Server IP saved"
-          : "Server IP cleared (auto-detect)",
-        error: (err) => (err as Error).message,
-      },
-    );
-  };
 
   // In a custom window, format x-axis labels with date+time when the span exceeds
   // a day; otherwise time-only keeps short windows readable.
@@ -323,142 +429,131 @@ function ServerSettingsPage() {
       {activeTab === "backups" ? (
         <SystemBackupsPanel />
       ) : activeTab === "configuration" ? (
-        <div className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <DownloadIcon aria-hidden="true" className="size-4" />
-                Updates
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <UpdateSection />
-            </CardContent>
-          </Card>
+        <div className="space-y-8">
+          <div className="space-y-4">
+            <p className="text-text-faint text-[10.5px] font-semibold tracking-wider uppercase">
+              Platform
+            </p>
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <ServerIcon aria-hidden="true" className="size-4" />
-                Instance
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              <Label htmlFor="instance-name">Instance name</Label>
-              <div className="flex max-w-md items-center gap-2">
-                <Input
-                  id="instance-name"
-                  value={instanceNameValue}
-                  onChange={(e) => setInstanceNameDraft(e.target.value)}
-                  placeholder="Belune"
-                />
-                <Button
-                  onClick={handleSaveInstanceName}
-                  disabled={
-                    updateSettings.isPending ||
-                    instanceNameValue.trim() === currentInstanceName.trim()
-                  }
-                >
-                  Save
-                </Button>
-              </div>
-              <p className="text-muted-foreground text-xs">
-                Shown in the sidebar and used as the default GitHub App name
-                when connecting a provider.
-              </p>
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <DownloadIcon aria-hidden="true" className="size-4" />
+                  Updates
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <UpdateSection />
+              </CardContent>
+            </Card>
 
-              <Label htmlFor="server-ip" className="pt-2">
-                Server IP
-              </Label>
-              <div className="flex max-w-md items-center gap-2">
-                <Input
-                  id="server-ip"
-                  value={serverIpValue}
-                  onChange={(e) => setServerIpDraft(e.target.value)}
-                  placeholder={serverIP?.effective || "Auto-detect"}
-                />
-                <Button
-                  onClick={handleSaveServerIp}
-                  disabled={
-                    updateSettings.isPending ||
-                    serverIpValue.trim() === currentServerIp.trim()
-                  }
-                >
-                  Save
-                </Button>
-              </div>
-              <p className="text-muted-foreground text-xs">
-                The public address domains must point at for a certificate.
-                Leave blank to auto-detect; set it explicitly when the box is
-                behind NAT.
-              </p>
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <ServerIcon aria-hidden="true" className="size-4" />
+                  Instance
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                {settingsLoading ? (
+                  <div className="max-w-md space-y-3">
+                    <Skeleton className="h-9 w-full" />
+                    <Skeleton className="h-9 w-full" />
+                  </div>
+                ) : (
+                  // Keyed on the loaded value, not a pre-load placeholder —
+                  // mounting before settings resolves would key on "" first,
+                  // then remount when the real value arrives.
+                  <>
+                    <InstanceNameField
+                      key={currentInstanceName}
+                      currentValue={currentInstanceName}
+                      updateSettings={updateSettings}
+                    />
+                    <ServerIpField
+                      key={currentServerIp}
+                      currentValue={currentServerIp}
+                      placeholder={serverIP?.effective || "Auto-detect"}
+                      updateSettings={updateSettings}
+                    />
+                  </>
+                )}
 
-              <div className="border-t pt-4">
-                <DashboardDomainSection />
-              </div>
-            </CardContent>
-          </Card>
+                <div className="border-t pt-4">
+                  <DashboardDomainSection />
+                </div>
+              </CardContent>
+            </Card>
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <ClockIcon aria-hidden="true" className="size-4" />
-                Metrics Retention
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <RetentionRow
-                field={{
-                  key: "host_metrics_retention_hours",
-                  label: "Host metrics (1-second)",
-                  desc: "CPU / memory / disk time-series",
-                  fallback: "24",
-                }}
-                presets={HOST_METRICS_PRESETS}
-                settings={settings}
-                disabled={updateSettings.isPending}
-                onSave={handleSaveRetention}
-              />
-              {RETENTION_FIELDS.map((field) => (
-                <RetentionRow
-                  key={field.key}
-                  field={field}
-                  presets={RETENTION_PRESETS}
-                  settings={settings}
-                  disabled={updateSettings.isPending}
-                  onSave={handleSaveRetention}
-                />
-              ))}
-              <p className="text-muted-foreground border-t pt-3 text-xs">
-                Host metrics are stored at 1-second granularity and pruned
-                hourly to the selected window. Logs are pruned daily.
-              </p>
-            </CardContent>
-          </Card>
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <ClockIcon aria-hidden="true" className="size-4" />
+                  Metrics Retention
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <RetentionRow
+                    field={{
+                      key: "host_metrics_retention_hours",
+                      label: "Host metrics (1-second)",
+                      desc: "CPU / memory / disk time-series",
+                      fallback: "24",
+                    }}
+                    presets={HOST_METRICS_PRESETS}
+                    settings={settings}
+                    disabled={updateSettings.isPending}
+                    onSave={handleSaveRetention}
+                  />
+                  {RETENTION_FIELDS.map((field) => (
+                    <RetentionRow
+                      key={field.key}
+                      field={field}
+                      presets={RETENTION_PRESETS}
+                      settings={settings}
+                      disabled={updateSettings.isPending}
+                      onSave={handleSaveRetention}
+                    />
+                  ))}
+                </div>
+                <p className="text-muted-foreground border-t pt-3 text-xs">
+                  Host metrics are stored at 1-second granularity and pruned
+                  hourly to the selected window. Logs are pruned daily.
+                </p>
+              </CardContent>
+            </Card>
+          </div>
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <MailIcon aria-hidden="true" className="size-4" />
-                Email (SMTP)
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <SmtpSection />
-            </CardContent>
-          </Card>
+          <div className="space-y-4">
+            <p className="text-text-faint text-[10.5px] font-semibold tracking-wider uppercase">
+              Operations
+            </p>
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <WrenchIcon aria-hidden="true" className="size-4" />
-                Maintenance
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <MaintenanceSection />
-            </CardContent>
-          </Card>
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <MailIcon aria-hidden="true" className="size-4" />
+                  Email (SMTP)
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <SmtpSection />
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <WrenchIcon aria-hidden="true" className="size-4" />
+                  Maintenance
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <MaintenanceSection />
+              </CardContent>
+            </Card>
+          </div>
         </div>
       ) : isLoading ? (
         <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
@@ -760,41 +855,11 @@ function HostRangeControl({
   onChange: (next: CustomRange | null) => void;
 }) {
   const [open, setOpen] = useState(false);
-  const [from, setFrom] = useState("");
-  const [to, setTo] = useState("");
 
-  const handleOpenChange = (next: boolean) => {
-    if (next) {
-      const now = new Date();
-      const start = value
-        ? new Date(value.from)
-        : new Date(now.getTime() - TEN_MIN_MS);
-      const end = value ? new Date(value.to) : now;
-      setFrom(toLocalInputValue(start));
-      setTo(toLocalInputValue(end));
-    }
-    setOpen(next);
-  };
-
-  const apply = () => {
-    if (!from || !to) return;
-    const fromIso = new Date(from).toISOString();
-    const toIso = new Date(to).toISOString();
-    if (new Date(fromIso) >= new Date(toIso)) {
-      toast.error("Start time must be before end time");
-      return;
-    }
-    onChange({ from: fromIso, to: toIso });
-    setOpen(false);
-  };
-
-  const goLive = () => {
-    onChange(null);
-    setOpen(false);
-  };
+  const body = useDialogBody(open, value);
 
   return (
-    <Popover open={open} onOpenChange={handleOpenChange}>
+    <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger
         render={<Button variant="outline" size="sm" className="gap-1.5" />}
       >
@@ -805,39 +870,136 @@ function HostRangeControl({
             : "Live (10m)"}
         </span>
       </PopoverTrigger>
-      <PopoverContent align="end" className="w-72 space-y-3">
-        <div className="space-y-1.5">
-          <Label htmlFor="metric-from" className="text-xs">
-            Start
-          </Label>
-          <Input
-            id="metric-from"
-            type="datetime-local"
-            value={from}
-            onChange={(e) => setFrom(e.target.value)}
-          />
-        </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="metric-to" className="text-xs">
-            End
-          </Label>
-          <Input
-            id="metric-to"
-            type="datetime-local"
-            value={to}
-            onChange={(e) => setTo(e.target.value)}
-          />
-        </div>
+      {/* Rendered fresh each time the popover opens, so its form picks up
+          `value` as-of that moment without needing an imperative reset — and
+          kept through the close animation; see useDialogBody. */}
+      <RangeForm
+        key={body.key}
+        value={body.target}
+        onApply={(next) => {
+          onChange(next);
+          setOpen(false);
+        }}
+        onLive={() => {
+          onChange(null);
+          setOpen(false);
+        }}
+      />
+    </Popover>
+  );
+}
+
+function RangeForm({
+  value,
+  onApply,
+  onLive,
+}: {
+  value: CustomRange | null;
+  onApply: (next: CustomRange) => void;
+  onLive: () => void;
+}) {
+  const now = new Date();
+  const start = value
+    ? new Date(value.from)
+    : new Date(now.getTime() - TEN_MIN_MS);
+  const end = value ? new Date(value.to) : now;
+
+  const form = useForm({
+    defaultValues: {
+      from: toLocalInputValue(start),
+      to: toLocalInputValue(end),
+    },
+    onSubmit: ({ value: v }) => {
+      onApply({
+        from: new Date(v.from).toISOString(),
+        to: new Date(v.to).toISOString(),
+      });
+    },
+  });
+
+  return (
+    <PopoverContent align="end" className="w-72 space-y-3">
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          form.handleSubmit();
+        }}
+        className="contents"
+      >
+        <form.Field
+          name="from"
+          validators={{
+            onChange: ({ value }) =>
+              value ? undefined : "Start time is required",
+          }}
+          children={(field) => {
+            const error = fieldError(field.state.meta.errors);
+            return (
+              <Field data-invalid={!!error} className="gap-1.5">
+                <FieldLabel htmlFor="metric-from" className="text-xs">
+                  Start
+                </FieldLabel>
+                <Input
+                  id="metric-from"
+                  type="datetime-local"
+                  value={field.state.value}
+                  onChange={(e) => field.handleChange(e.target.value)}
+                  aria-invalid={!!error}
+                />
+                {error && <FieldError>{error}</FieldError>}
+              </Field>
+            );
+          }}
+        />
+        <form.Field
+          name="to"
+          validators={{
+            onChangeListenTo: ["from"],
+            onChange: ({ value: v, fieldApi }) => {
+              if (!v) return "End time is required";
+              const fromVal = fieldApi.form.state.values.from;
+              if (fromVal && new Date(fromVal) >= new Date(v)) {
+                return "Start time must be before end time";
+              }
+              return undefined;
+            },
+          }}
+          children={(field) => {
+            const error = fieldError(field.state.meta.errors);
+            return (
+              <Field data-invalid={!!error} className="gap-1.5">
+                <FieldLabel htmlFor="metric-to" className="text-xs">
+                  End
+                </FieldLabel>
+                <Input
+                  id="metric-to"
+                  type="datetime-local"
+                  value={field.state.value}
+                  onChange={(e) => field.handleChange(e.target.value)}
+                  aria-invalid={!!error}
+                />
+                {error && <FieldError>{error}</FieldError>}
+              </Field>
+            );
+          }}
+        />
         <div className="flex items-center justify-between gap-2 pt-1">
-          <Button variant="ghost" size="sm" onClick={goLive} disabled={!value}>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={onLive}
+            disabled={!value}
+          >
             Live
           </Button>
-          <Button size="sm" onClick={apply}>
+          <Button type="submit" size="sm">
             Apply
           </Button>
         </div>
-      </PopoverContent>
-    </Popover>
+      </form>
+    </PopoverContent>
   );
 }
 

@@ -47,7 +47,7 @@ const TONE_BY_STATUS: Record<string, StatusTone> = {
 // pills and badges read as one system. `building` and `neutral` keep their own
 // hues but follow the same border+fill structure.
 const TONE_CLASSES: Record<StatusTone, string> = {
-  ready: "border-primary/20 bg-primary/10 text-primary",
+  ready: "border-primary/20 bg-primary/10 text-brand-text",
   building:
     "border-status-building/20 bg-status-building/10 text-status-building",
   error: "border-destructive/20 bg-destructive/10 text-destructive",
