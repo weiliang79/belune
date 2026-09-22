@@ -1,3 +1,4 @@
+import { useDialogBody } from "@/lib/hooks/use-dialog-body";
 import { useForm } from "@tanstack/react-form";
 import { toast } from "sonner";
 import { CloudIcon } from "lucide-react";
@@ -52,18 +53,18 @@ export function DestinationFormDialog({
   open,
   onOpenChange,
 }: Props) {
+  // Fields initialise from props on each open; see useDialogBody.
+  const body = useDialogBody(open, destination);
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
-        {/* Remount per open/target so fields initialise from props without an effect. */}
-        {open && (
-          <DestinationForm
-            key={destination?.id ?? "new"}
-            projectId={projectId}
-            destination={destination}
-            onDone={() => onOpenChange(false)}
-          />
-        )}
+        <DestinationForm
+          key={body.key}
+          projectId={projectId}
+          destination={body.target}
+          onDone={() => onOpenChange(false)}
+        />
       </DialogContent>
     </Dialog>
   );

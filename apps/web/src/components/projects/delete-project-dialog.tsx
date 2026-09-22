@@ -1,3 +1,4 @@
+import { useDialogBody } from "@/lib/hooks/use-dialog-body";
 import { useId, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { toast } from "sonner";
@@ -35,24 +36,16 @@ export function DeleteProjectDialog({
   open,
   onOpenChange,
 }: Props) {
-  // Remount on every open so confirmText always starts blank without an
-  // effect — a user who typed the name, cancelled, then reopened would
-  // otherwise find the confirmation already satisfied. Bumped only on the
-  // false→true transition (React's adjust-state-while-rendering pattern, no
-  // effect needed): gating the mount on `open` directly did the same thing
-  // but also unmounted the body the instant `open` went false, so the
-  // dialog animated closed as an empty box instead of fading out its actual
-  // content.
-  const [track, setTrack] = useState({ key: 0, open });
-  if (open !== track.open) {
-    setTrack({ key: open ? track.key + 1 : track.key, open });
-  }
+  // Remount on every open so confirmText always starts blank — a user who
+  // typed the name, cancelled, then reopened would otherwise find the
+  // confirmation already satisfied. See useDialogBody.
+  const body = useDialogBody(open, null);
 
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
       <AlertDialogContent>
         <DeleteProjectDialogBody
-          key={track.key}
+          key={body.key}
           projectId={projectId}
           projectName={projectName}
           onDone={() => onOpenChange(false)}

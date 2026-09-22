@@ -1,3 +1,4 @@
+import { useDialogBody } from "@/lib/hooks/use-dialog-body";
 import { useState, type ComponentType } from "react";
 import { useForm } from "@tanstack/react-form";
 import {
@@ -72,17 +73,17 @@ interface Props {
 }
 
 export function DatabaseFormDialog({ projectId, open, onOpenChange }: Props) {
+  // Fields start blank on each open; see useDialogBody.
+  const body = useDialogBody(open, null);
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[85vh] grid-rows-[auto_minmax(0,1fr)_auto]">
-        {/* Remount on every open so fields always start blank without an effect. */}
-        {open && (
-          <DatabaseForm
-            key="new"
-            projectId={projectId}
-            onDone={() => onOpenChange(false)}
-          />
-        )}
+        <DatabaseForm
+          key={body.key}
+          projectId={projectId}
+          onDone={() => onOpenChange(false)}
+        />
       </DialogContent>
     </Dialog>
   );

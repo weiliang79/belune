@@ -1,3 +1,4 @@
+import { useDialogBody } from "@/lib/hooks/use-dialog-body";
 import { useMemo, useState } from "react";
 import { useForm } from "@tanstack/react-form";
 import { toast } from "sonner";
@@ -170,19 +171,21 @@ const SMTP_TLS_MODES = [
 ];
 
 export function ChannelFormDialog({ channel, open, onOpenChange }: Props) {
+  // Fields initialise from props on each open, and the target is held
+  // through the close animation (the page clears it on close); see
+  // useDialogBody.
+  const body = useDialogBody(open, channel);
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       {/* Flex column with a capped height: header and footer stay put, only the
           fields between them scroll. */}
       <DialogContent className="flex max-h-[calc(100dvh-4rem)] flex-col sm:max-w-lg">
-        {/* Remount per open/target so fields initialise from props without an effect. */}
-        {open && (
-          <ChannelForm
-            key={channel?.id ?? "new"}
-            channel={channel}
-            onDone={() => onOpenChange(false)}
-          />
-        )}
+        <ChannelForm
+          key={body.key}
+          channel={body.target}
+          onDone={() => onOpenChange(false)}
+        />
       </DialogContent>
     </Dialog>
   );

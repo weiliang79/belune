@@ -1,3 +1,4 @@
+import { useDialogBody } from "@/lib/hooks/use-dialog-body";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import {
   Activity,
@@ -855,6 +856,8 @@ function HostRangeControl({
 }) {
   const [open, setOpen] = useState(false);
 
+  const body = useDialogBody(open, value);
+
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger
@@ -868,20 +871,20 @@ function HostRangeControl({
         </span>
       </PopoverTrigger>
       {/* Rendered fresh each time the popover opens, so its form picks up
-          `value` as-of that moment without needing an imperative reset. */}
-      {open && (
-        <RangeForm
-          value={value}
-          onApply={(next) => {
-            onChange(next);
-            setOpen(false);
-          }}
-          onLive={() => {
-            onChange(null);
-            setOpen(false);
-          }}
-        />
-      )}
+          `value` as-of that moment without needing an imperative reset — and
+          kept through the close animation; see useDialogBody. */}
+      <RangeForm
+        key={body.key}
+        value={body.target}
+        onApply={(next) => {
+          onChange(next);
+          setOpen(false);
+        }}
+        onLive={() => {
+          onChange(null);
+          setOpen(false);
+        }}
+      />
     </Popover>
   );
 }

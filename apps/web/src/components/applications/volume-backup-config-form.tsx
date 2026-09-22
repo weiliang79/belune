@@ -1,3 +1,4 @@
+import { useDialogBody } from "@/lib/hooks/use-dialog-body";
 import { useState } from "react";
 import { useForm, useStore } from "@tanstack/react-form";
 import { toast } from "sonner";
@@ -54,19 +55,19 @@ export function VolumeBackupConfigForm({
   open,
   onOpenChange,
 }: Props) {
+  // Fields initialise from props on each open; see useDialogBody.
+  const body = useDialogBody(open, config);
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
-        {/* Remount per open/target so fields initialise from props without an effect. */}
-        {open && (
-          <ConfigForm
-            key={config?.id ?? "new"}
-            projectId={projectId}
-            applicationId={applicationId}
-            config={config}
-            onDone={() => onOpenChange(false)}
-          />
-        )}
+        <ConfigForm
+          key={body.key}
+          projectId={projectId}
+          applicationId={applicationId}
+          config={body.target}
+          onDone={() => onOpenChange(false)}
+        />
       </DialogContent>
     </Dialog>
   );

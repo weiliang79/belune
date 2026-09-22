@@ -1,3 +1,4 @@
+import { useDialogBody } from "@/lib/hooks/use-dialog-body";
 import { useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { useForm } from "@tanstack/react-form";
@@ -45,20 +46,21 @@ export function ApplicationFormDialog({
   onOpenChange,
   onCreated,
 }: Props) {
+  // The form resets on each open; see useDialogBody.
+  const body = useDialogBody(open, null);
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       {/* Cap the height and let only the body scroll (grid rows pin the header
           and footer): connected-account mode adds account + repo + branch fields,
           which otherwise grew the dialog past the viewport with no way to scroll. */}
       <DialogContent className="max-h-[85vh] grid-rows-[auto_minmax(0,1fr)_auto]">
-        {/* Remounted per open, so the form resets without an effect. */}
-        {open && (
-          <FormBody
-            projectId={projectId}
-            onOpenChange={onOpenChange}
-            onCreated={onCreated}
-          />
-        )}
+        <FormBody
+          key={body.key}
+          projectId={projectId}
+          onOpenChange={onOpenChange}
+          onCreated={onCreated}
+        />
       </DialogContent>
     </Dialog>
   );
