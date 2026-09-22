@@ -18,6 +18,7 @@ import { useBreadcrumbLabel } from "@/lib/hooks/use-breadcrumb";
 import { ProjectHeader } from "@/components/projects/project-header";
 import { RouteError } from "@/lib/components/route-error";
 import { RouteSkeleton } from "@/lib/components/route-skeleton";
+import { projectLayoutMode } from "@/lib/utils/project-layout-mode";
 
 export const Route = createFileRoute("/_app/projects/$projectId")({
   component: ProjectLayout,
@@ -60,25 +61,15 @@ function ProjectLayout() {
   // load. This only guards the forward direction (arriving at a child-detail
   // page); leaving one, the incoming project header is already correct and
   // any stale content beneath it is the same brief, everywhere-normal
-  // pending-route flash every other transition in the app has.
-  const isChildDetail =
-    currentPath.includes("/applications/") ||
-    currentPath.includes("/databases/");
+  // pending-route flash every other transition in the app has. See
+  // projectLayoutMode's own doc comment for what each outcome means — it's
+  // extracted so this predicate is unit-tested rather than only
+  // click-through-verified.
+  const resolvedPath = routerState.resolvedLocation?.pathname ?? currentPath;
+  const mode = projectLayoutMode(currentPath, resolvedPath);
 
-  if (isChildDetail) {
-    // Freshly crossing in from project overview/settings/etc: the child
-    // route hasn't mounted yet, so render a plain skeleton instead of
-    // <Outlet/>, which would otherwise keep showing this project's
-    // now-unrelated previous match until the new route resolves. Once
-    // already inside child-detail territory (switching tabs within one app,
-    // or jumping straight to a different app/database), defer to <Outlet/>
-    // and let that layout's own loading state handle it — guarding on exact
-    // pathname equality here would flash its header away on every tab click.
-    const resolvedPath = routerState.resolvedLocation?.pathname ?? currentPath;
-    const wasChildDetail =
-      resolvedPath.includes("/applications/") ||
-      resolvedPath.includes("/databases/");
-    return wasChildDetail ? <Outlet /> : <RouteSkeleton />;
+  if (mode !== "chrome") {
+    return mode === "outlet" ? <Outlet /> : <RouteSkeleton />;
   }
 
   const tabs: PageTabLink[] = [
