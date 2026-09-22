@@ -24,6 +24,62 @@ Belune is pre-1.0. The versioning contract while it stays there:
 Release notes for each version are also published on the
 [Releases page](https://github.com/weiliang79/belune/releases).
 
+## [0.1.9]
+
+### Forms tell you what is wrong before you submit
+
+Every form in the dashboard — twenty-one of them, from creating an application
+to configuring SMTP — now validates as you type. A required field you left
+blank, a port out of range, a mount path that is not absolute, a repository URL
+that is neither `https://` nor `git@`: the field turns red, the message sits
+under it, and the submit button does nothing until it is fixed. Before this,
+most forms sent whatever you typed and let the API's error come back as a
+toast.
+
+The two-factor, host-shell and update step-up dialogs validate the same way, so
+a mistyped code is caught on the spot instead of after a round trip.
+
+### The dashboard reloads itself after an update
+
+**Updating from the dashboard (new in 0.1.8) left the open tab running the old
+version until you refreshed.** It now notices the new version within thirty
+seconds — immediately on pages with a live connection — tells you, and reloads.
+Every open tab reloads on its own. A manual `update.sh` with the dashboard open
+is covered too.
+
+### The accent colour is easier to read
+
+**Emerald is one shade in both light and dark mode now** — a deeper green than
+before, chosen so white text on it is legible everywhere (it was not in light
+mode). Links, status text and the running-service dot use a separate shade of
+whichever accent you picked, tuned to read against the page rather than to
+carry text; in dark mode that is noticeably brighter than the buttons. Violet
+keeps its colours and gets the same treatment for text.
+
+### Smaller things
+
+- Moving between pages shows a loading placeholder instead of the previous page
+  lingering until the next one arrives; opening an application or database from
+  a project no longer flashes the project header first.
+- Closing any dialog fades out what you were looking at instead of an empty
+  box, and reopening it always starts fresh.
+- The **Configuration** tab on the Server page groups its cards under
+  **Platform** (Updates, Instance, Metrics Retention) and **Operations**
+  (Email, Maintenance), and the retention settings sit side by side instead
+  of stacked.
+- The Instance name and Server IP fields no longer appear twice after a cold
+  load of the Configuration tab.
+
+### Upgrading
+
+No migrations, no changes to how Belune is deployed, no host action. Apply it
+from **Server → Configuration → Updates**, or run `update.sh` as before.
+
+**One thing to know about this particular update:** the tab you trigger it
+from will still be on 0.1.8 when the update lands, because 0.1.8 does not yet
+have the reload described above. Refresh once. From 0.1.9 on, the dashboard
+handles it.
+
 ## [0.1.8]
 
 ### Belune can now update itself from the dashboard
@@ -512,6 +568,7 @@ iterations; this is what Belune _is_ at launch, not a list of what changed.
 - Registry credentials for private images, monorepo subdirectory builds, and
   custom start commands are not yet configurable.
 
+[0.1.9]: https://github.com/weiliang79/belune/releases/tag/v0.1.9
 [0.1.8]: https://github.com/weiliang79/belune/releases/tag/v0.1.8
 [0.1.7]: https://github.com/weiliang79/belune/releases/tag/v0.1.7
 [0.1.6]: https://github.com/weiliang79/belune/releases/tag/v0.1.6
