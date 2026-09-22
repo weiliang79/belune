@@ -159,7 +159,7 @@ func New(
 		serverSvc:         service.NewServerService(queries),
 		totpSvc:           service.NewTOTPService(db, queries, cfg.Keyring),
 		tokenSvc:          tokenSvc,
-		mcpHandler:        mcpserver.New(queries),
+		mcpHandler:        mcpserver.New(queries, rts),
 	}
 }
 

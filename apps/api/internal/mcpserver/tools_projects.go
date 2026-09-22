@@ -2,10 +2,7 @@ package mcpserver
 
 import (
 	"context"
-	"encoding/json"
-	"time"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
@@ -35,16 +32,33 @@ func registerProjectTools(srv *mcp.Server, queries *generated.Queries) {
 		if err != nil {
 			return nil, nil, err
 		}
+		return textResult(projects)
+	})
 
-		body, err := json.Marshal(projects)
+	mcp.AddTool(srv, &mcp.Tool{
+		Name:        "get_project",
+		Description: "Get one project by id, including whether it is shared with other Members.",
+	}, func(ctx context.Context, _ *mcp.CallToolRequest, in projectIDInput) (*mcp.CallToolResult, any, error) {
+		id, err := parseUUID(in.ProjectID)
 		if err != nil {
 			return nil, nil, err
 		}
-
-		return &mcp.CallToolResult{
-			Content: []mcp.Content{&mcp.TextContent{Text: string(body)}},
-		}, nil, nil
+		p, err := authorizeProject(ctx, queries, id)
+		if err != nil {
+			return nil, nil, err
+		}
+		return textResult(toProject(p.ID, p.Name, p.Slug, p.Shared, p.CreatedAt))
 	})
+}
+
+func toProject(id pgtype.UUID, name, slug string, shared bool, createdAt pgtype.Timestamptz) project {
+	return project{
+		ID:        uuidToString(id),
+		Name:      name,
+		Slug:      slug,
+		Shared:    shared,
+		CreatedAt: formatTimestamp(createdAt),
+	}
 }
 
 // listProjectsForCaller mirrors handler.Handler.ListProjects: an admin sees
@@ -94,17 +108,7 @@ func mapProjects[T any](rows []T, pinned string, fields func(T) (pgtype.UUID, st
 		if pinned != "" && idStr != pinned {
 			continue
 		}
-		out = append(out, project{
-			ID:        idStr,
-			Name:      name,
-			Slug:      slug,
-			Shared:    shared,
-			CreatedAt: createdAt.Time.Format(time.RFC3339),
-		})
+		out = append(out, toProject(id, name, slug, shared, createdAt))
 	}
 	return out
-}
-
-func uuidToString(u pgtype.UUID) string {
-	return uuid.UUID(u.Bytes).String()
 }

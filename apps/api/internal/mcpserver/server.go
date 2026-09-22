@@ -18,6 +18,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/weiliang79/belune/internal/runtime"
 	"github.com/weiliang79/belune/internal/store/generated"
 	"github.com/weiliang79/belune/internal/version"
 )
@@ -28,13 +29,19 @@ import (
 // no session store, and nothing lost on a control-plane restart — each
 // request stands alone, authenticated by its own Bearer token exactly like
 // REST.
-func New(queries *generated.Queries) http.Handler {
+func New(queries *generated.Queries, runtimes runtime.Runtimes) http.Handler {
 	srv := mcp.NewServer(&mcp.Implementation{
 		Name:    "belune",
 		Version: version.Version,
 	}, nil)
 
 	registerProjectTools(srv, queries)
+	registerApplicationTools(srv, queries)
+	registerDatabaseTools(srv, queries)
+	registerDeploymentTools(srv, queries)
+	registerLogTools(srv, queries, runtimes)
+	registerDomainTools(srv, queries)
+	registerBackupTools(srv, queries)
 
 	return mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server {
 		return srv
