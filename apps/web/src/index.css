@@ -106,8 +106,9 @@
 .light,
 .dark,
 [data-accent="emerald"] {
-  /* Status: ready / running (= brand) */
-  --status-ready: var(--brand);
+  /* Status: ready / running. The brand as it appears ON a surface — a dot, a
+     pill's text, an audit badge — so it follows --brand-text, not the fill. */
+  --status-ready: var(--brand-text);
   --status-ready-soft: var(--brand-soft);
   --status-ready-line: var(--brand-line);
 
@@ -129,9 +130,9 @@
   --destructive: var(--status-error);
   --border: var(--border-subtle);
   --input: var(--border-subtle);
-  --ring: var(--brand);
+  --ring: var(--brand-text);
 
-  --chart-1: var(--brand);
+  --chart-1: var(--brand-text);
   --chart-2: var(--terminal-info);
   --chart-3: var(--status-building);
   --chart-4: var(--terminal-ok);
@@ -145,7 +146,7 @@
   --sidebar-primary-foreground: var(--brand-fg);
   --sidebar-accent-foreground: var(--text);
   --sidebar-border: var(--border-subtle);
-  --sidebar-ring: var(--brand);
+  --sidebar-ring: var(--brand-text);
 }
 
 .dark {
@@ -200,9 +201,11 @@
    fill is emerald-700: 5.48:1 with white on it, 5.25:1 as text on the light
    page. Hover/press keep violet's lighter/darker relationship (#059669 is
    3.77:1 — above the 3:1 UI floor, and hover is transient, not resting).
-   --brand-soft/--brand-line and the status/ring/chart pins stay on the bright
-   #10b981 they were tuned for; a dot, a ring and a line were never the thing
-   failing contrast, and the soft fill under a darker brand would undershoot. */
+   --brand-soft/--brand-line stay on the bright #10b981 they were tuned for:
+   the soft fill under a darker brand would undershoot. The status dot, focus
+   ring and chart line follow --brand-text (see the alias block), so they are
+   emerald-700 in light and the bright emerald in dark, like every other
+   brand-on-a-surface use. */
 [data-accent="emerald"] {
   --brand: #047857;
   --brand-hover: #059669;
@@ -211,11 +214,6 @@
   --brand-text: var(--brand);
   --brand-soft: rgba(16, 185, 129, 0.16);
   --brand-line: rgba(16, 185, 129, 0.4);
-
-  --status-ready: #10b981;
-  --ring: #10b981;
-  --sidebar-ring: #10b981;
-  --chart-1: #10b981;
 }
 
 /* The fill is the same in dark mode, but emerald-700 reads at only 3.63:1 as
