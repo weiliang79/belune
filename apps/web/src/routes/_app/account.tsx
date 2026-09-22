@@ -36,6 +36,7 @@ import {
 import { formatDateTimeShort } from "@/lib/utils/format";
 import { TwoFactorCard } from "@/components/account/two-factor-card";
 import { ApiTokensCard } from "@/components/account/api-tokens-card";
+import { ConnectAIAssistantCard } from "@/components/account/connect-ai-assistant-card";
 
 export const Route = createFileRoute("/_app/account")({
   component: SettingsPage,
@@ -88,6 +89,7 @@ function SettingsPage() {
       <ChangePasswordCard />
       <TwoFactorCard />
       <ApiTokensCard />
+      <ConnectAIAssistantCard />
       <AlertPreferencesCard />
       <AppearanceCard />
     </div>
