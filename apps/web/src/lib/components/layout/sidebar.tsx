@@ -122,7 +122,7 @@ export function Sidebar({ mobileOpen, onMobileClose }: SidebarProps) {
           className={cn(
             "h-[18px] w-[18px] shrink-0 transition-colors",
             active
-              ? "text-primary"
+              ? "text-brand-text"
               : "text-muted-foreground group-hover:text-foreground",
           )}
         />
@@ -170,7 +170,7 @@ export function Sidebar({ mobileOpen, onMobileClose }: SidebarProps) {
         <Link
           to="/about"
           aria-label="About Belune"
-          className="grid size-8 shrink-0 place-items-center rounded-lg text-brand-fg shadow-sm transition-opacity hover:opacity-90"
+          className="text-brand-fg grid size-8 shrink-0 place-items-center rounded-lg shadow-sm transition-opacity hover:opacity-90"
           style={{
             background:
               "linear-gradient(140deg, var(--brand), var(--brand-press))",

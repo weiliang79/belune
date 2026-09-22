@@ -86,7 +86,7 @@ function methodClass(method: string) {
     case "GET":
       return "bg-status-ready-soft text-status-ready";
     case "POST":
-      return "bg-brand-soft text-brand";
+      return "bg-brand-soft text-brand-text";
     case "PUT":
     case "PATCH":
       return "bg-status-building-soft text-status-building";

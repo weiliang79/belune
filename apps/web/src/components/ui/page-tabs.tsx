@@ -28,7 +28,7 @@ const tabInactive =
 // TanStack's data-status="active" on the anchor; controlled mode sets
 // data-active on the button. The tab is a `group`, so the icon keys off either.
 const tabIcon =
-  "size-4 shrink-0 transition-colors group-data-[status=active]:text-primary group-data-[active]:text-primary";
+  "size-4 shrink-0 transition-colors group-data-[status=active]:text-brand-text group-data-[active]:text-brand-text";
 
 /** Pulsing dot for "something is happening on this tab" (e.g. a live deploy). */
 function LiveDot({ label }: { label: string }) {

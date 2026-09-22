@@ -62,7 +62,7 @@ export function DockerImagesTab({ enabled }: { enabled: boolean }) {
                   projectId: owner.project_id,
                   applicationId: owner.id,
                 }}
-                className="text-primary text-sm hover:underline"
+                className="text-brand-text text-sm hover:underline"
               >
                 {owner.name}
               </Link>

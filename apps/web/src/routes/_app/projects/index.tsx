@@ -118,7 +118,7 @@ function ProjectCard({ project }: { project: Project }) {
               </div>
               <div className="flex min-w-0 flex-col">
                 <div className="flex min-w-0 items-center gap-1.5">
-                  <CardTitle className="group-hover:text-primary truncate text-sm font-semibold transition-colors">
+                  <CardTitle className="group-hover:text-brand-text truncate text-sm font-semibold transition-colors">
                     {project.name}
                   </CardTitle>
                   {project.shared && (
@@ -172,7 +172,7 @@ function ProjectsOnboarding() {
     <div className="mx-auto max-w-2xl py-10 text-center">
       <div
         aria-hidden="true"
-        className="mx-auto grid size-14 place-items-center rounded-2xl text-brand-fg shadow-sm"
+        className="text-brand-fg mx-auto grid size-14 place-items-center rounded-2xl shadow-sm"
         style={{
           background:
             "linear-gradient(140deg, var(--brand), var(--brand-press))",
@@ -192,7 +192,7 @@ function ProjectsOnboarding() {
         {steps.map((step, i) => (
           <Card key={step.title}>
             <CardContent className="pt-5">
-              <div className="bg-brand-soft text-brand mb-3 grid size-7 place-items-center rounded-full font-mono text-xs font-semibold">
+              <div className="bg-brand-soft text-brand-text mb-3 grid size-7 place-items-center rounded-full font-mono text-xs font-semibold">
                 {i + 1}
               </div>
               <p className="text-sm font-medium">{step.title}</p>

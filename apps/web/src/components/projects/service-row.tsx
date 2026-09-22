@@ -577,7 +577,7 @@ function NameCell({
             <Link
               to="/projects/$projectId/applications/$applicationId"
               params={{ projectId, applicationId: item.data.id }}
-              className="hover:text-primary truncate text-sm font-medium transition-colors"
+              className="hover:text-brand-text truncate text-sm font-medium transition-colors"
             >
               {item.data.name}
             </Link>
@@ -585,7 +585,7 @@ function NameCell({
             <Link
               to="/projects/$projectId/databases/$databaseId"
               params={{ projectId, databaseId: item.data.id }}
-              className="hover:text-primary truncate text-sm font-medium transition-colors"
+              className="hover:text-brand-text truncate text-sm font-medium transition-colors"
             >
               {item.data.name}
             </Link>
