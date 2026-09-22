@@ -113,11 +113,23 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build \
     -ldflags="-s -w -X github.com/weiliang79/belune/internal/version.Version=${VERSION}" \
     -o /belune ./cmd/server
 
+# The host-side remote-backup helper. install.sh/update.sh cat it out of this
+# image to ${INSTALL_DIR}/bin/ so scripts/backup.sh can upload the control
+# plane's own dump offsite — it runs on the HOST, outside Docker, which is why
+# CGO_ENABLED=0 matters here as well: the binary must not depend on the host's
+# glibc. Missing from this stage since v0.0.10-alpha, so the extraction in
+# install.sh has always silently taken its "not found in image" branch and
+# every install has been without an offsite copy of its own database.
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build \
+    -ldflags="-s -w" \
+    -o /belune-backup-upload ./cmd/backup-upload
+
 # ── Stage: prod runtime ──────────────────────────────────────────────────────
 # Inherits the pinned build toolchain from build-base and adds the belune binary.
 FROM build-base AS prod
 RUN groupadd -r belune && useradd -r -g belune -m -d /home/belune belune
 COPY --from=backend /belune /usr/local/bin/belune
+COPY --from=backend /belune-backup-upload /usr/local/bin/belune-backup-upload
 # Writable, persistable location for managed-database logical dumps. The default
 # DatabaseBackupDir (/opt/belune/backups/databases) is not creatable by the non-root
 # belune user, so point it at a dir we own here. Mount a volume on /data in
