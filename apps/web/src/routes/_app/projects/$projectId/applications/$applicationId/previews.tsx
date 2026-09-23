@@ -21,6 +21,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { StatusBadge } from "@/lib/components/status-badge";
 import { formatDateTimeShort } from "@/lib/utils/format";
+import { RouteError } from "@/lib/components/route-error";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -37,6 +38,7 @@ export const Route = createFileRoute(
   "/_app/projects/$projectId/applications/$applicationId/previews",
 )({
   component: PreviewsPage,
+  errorComponent: RouteError,
 });
 
 function PreviewsPage() {

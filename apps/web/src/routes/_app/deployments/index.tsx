@@ -36,9 +36,11 @@ import { timeRangeToDates, type TimeRange } from "@/lib/utils/time-range";
 import { formatDateTime, formatDuration } from "@/lib/utils/format";
 import type { GlobalDeployment } from "@/lib/types";
 import * as applicationsApi from "@/lib/api/applications";
+import { RouteError } from "@/lib/components/route-error";
 
 export const Route = createFileRoute("/_app/deployments/")({
   component: GlobalDeploymentsPage,
+  errorComponent: RouteError,
 });
 
 const STATUSES = [

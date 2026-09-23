@@ -43,9 +43,11 @@ import { cn } from "@/lib/utils";
 import type { RequestLog } from "@/lib/types";
 import type { RequestSummary } from "@/lib/api/request-logs";
 import * as applicationsApi from "@/lib/api/applications";
+import { RouteError } from "@/lib/components/route-error";
 
 export const Route = createFileRoute("/_app/requests/")({
   component: GlobalRequestsPage,
+  errorComponent: RouteError,
 });
 
 const PAGE_SIZE = 100;

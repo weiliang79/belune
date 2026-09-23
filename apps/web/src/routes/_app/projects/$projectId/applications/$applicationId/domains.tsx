@@ -18,11 +18,13 @@ import { DomainsTable } from "@/components/domains/domains-table";
 import { DomainEmptyState } from "@/components/domains/domain-empty-state";
 import { DomainListSkeleton } from "@/components/domains/domain-list-skeleton";
 import type { DomainExpanded } from "@/lib/types";
+import { RouteError } from "@/lib/components/route-error";
 
 export const Route = createFileRoute(
   "/_app/projects/$projectId/applications/$applicationId/domains",
 )({
   component: DomainsPage,
+  errorComponent: RouteError,
 });
 
 function DomainsPage() {
