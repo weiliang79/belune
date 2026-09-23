@@ -3,6 +3,8 @@ package mcpserver
 import (
 	"bytes"
 	"context"
+	"log/slog"
+	"strings"
 
 	"github.com/docker/docker/pkg/stdcopy"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -44,12 +46,19 @@ func registerLogTools(srv *mcp.Server, queries *generated.Queries, runtimes runt
 		if err != nil {
 			return nil, nil, err
 		}
-		row, err := queries.GetApplicationWithProjectSlug(ctx, appID)
+		// Not authorizeApplication: that would re-join applications to
+		// projects a second time via GetApplicationOwnerUserID for data this
+		// query's own join to projects (for project_slug/server_id) already
+		// has. Same pin + ownership check, inlined against this row instead.
+		row, err := queries.GetApplicationLogAccess(ctx, appID)
 		if err != nil {
 			return nil, nil, notFoundOr(ctx, "application not found")
 		}
-		if err := authorizeApplication(ctx, queries, row.ID, row.ProjectID); err != nil {
-			return nil, nil, err
+		if !pinAllows(ctx, uuidToString(row.ProjectID)) {
+			return nil, nil, errAccessDenied
+		}
+		if !canAccessOwned(ctx, row.ProjectUserID, row.ProjectShared) {
+			return nil, nil, errAccessDenied
 		}
 
 		tail := in.Tail
@@ -82,12 +91,29 @@ func registerLogTools(srv *mcp.Server, queries *generated.Queries, runtimes runt
 		// but an assistant reading this text has only what's in it, and "when
 		// did this happen" is exactly the kind of thing worth keeping.
 		var buf bytes.Buffer
-		if _, err := stdcopy.StdCopy(&buf, &buf, rc); err != nil && buf.Len() == 0 {
-			return nil, nil, internalError("failed to read container logs", err)
+		_, copyErr := stdcopy.StdCopy(&buf, &buf, rc)
+		if copyErr != nil && buf.Len() == 0 {
+			return nil, nil, internalError("failed to read container logs", copyErr)
+		}
+
+		// Container output is arbitrary bytes, not guaranteed valid UTF-8 — a
+		// binary crash dump, or a multi-byte sequence cut off at the tail
+		// boundary. json.Marshal would silently substitute U+FFFD for any
+		// invalid byte anyway; doing it explicitly here makes that a
+		// documented choice instead of an implicit side effect.
+		text := strings.ToValidUTF8(buf.String(), "�")
+		if copyErr != nil {
+			// Some bytes were captured before the stream ended abnormally —
+			// still worth returning, but silently presenting a partial read
+			// as a complete one would be worse than flagging it. Logged
+			// server-side (see internalError's own reasoning) rather than
+			// embedding copyErr's raw text in what's otherwise log content.
+			slog.Warn("mcpserver: container log stream ended before EOF, returning a truncated tail", "error", copyErr)
+			text += "\n[... log read ended early; output may be truncated]"
 		}
 
 		return &mcp.CallToolResult{
-			Content: []mcp.Content{&mcp.TextContent{Text: buf.String()}},
+			Content: []mcp.Content{&mcp.TextContent{Text: text}},
 		}, nil, nil
 	})
 }

@@ -3,6 +3,7 @@ package handler
 import (
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/weiliang79/belune/internal/service"
 	"github.com/weiliang79/belune/internal/store/generated"
 )
 
@@ -75,31 +76,6 @@ type applicationResponse struct {
 	SourceChangedAt pgtype.Timestamptz `json:"source_changed_at"`
 }
 
-// pendingChange reports what it would take to make the running container match
-// the saved configuration.
-//
-// Source outranks config because it subsumes it: a deploy applies config too,
-// so reporting both would offer a "Reload to apply" that cannot actually
-// finish the job.
-//
-// Suppressed entirely until the application has deployed at least once.
-// Without that, an app configured before its first deploy would read "needs
-// redeploy" from birth — the false positive that teaches people to ignore the
-// indicator. Note this cannot key off last_activity_at, which is NOT NULL
-// DEFAULT NOW() and so is already set at creation.
-func pendingChange(a generated.Application) string {
-	if !a.LastDeployedAt.Valid {
-		return ""
-	}
-	switch {
-	case a.SourceChangedAt.Valid:
-		return "source"
-	case a.ConfigChangedAt.Valid:
-		return "config"
-	}
-	return ""
-}
-
 // toApplicationResponse masks an application row for the wire.
 func toApplicationResponse(a generated.Application) applicationResponse {
 	return applicationResponse{
@@ -149,7 +125,7 @@ func toApplicationResponse(a generated.Application) applicationResponse {
 		DeployHookEnabled: len(a.DeployHookTokenHash) > 0,
 
 		LastDeployedAt:  a.LastDeployedAt,
-		PendingChange:   pendingChange(a),
+		PendingChange:   service.ApplicationPendingChange(a),
 		ConfigChangedAt: a.ConfigChangedAt,
 		SourceChangedAt: a.SourceChangedAt,
 	}

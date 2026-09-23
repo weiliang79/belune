@@ -5,6 +5,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/weiliang79/belune/internal/service"
 	"github.com/weiliang79/belune/internal/store/generated"
 )
 
@@ -25,10 +26,10 @@ type application struct {
 	SourceImage     string `json:"source_image,omitempty"`
 	Branch          string `json:"branch,omitempty"`
 	HealthCheckPath string `json:"health_check_path,omitempty"`
-	// PendingChange mirrors handler.pendingChange: "source" outranks
-	// "config" (a deploy applies both), and it's suppressed before the
-	// application's first deploy so a fresh app doesn't read "needs
-	// redeploy" from birth.
+	// PendingChange is service.ApplicationPendingChange, the same rule the
+	// REST wire shape uses: "source" outranks "config" (a deploy applies
+	// both), and it's suppressed before the application's first deploy so a
+	// fresh app doesn't read "needs redeploy" from birth.
 	PendingChange  string `json:"pending_change,omitempty"`
 	LastDeployedAt string `json:"last_deployed_at,omitempty"`
 	CreatedAt      string `json:"created_at"`
@@ -49,14 +50,7 @@ func toApplication(a generated.Application) application {
 		HealthCheckPath: a.HealthCheckPath.String,
 		LastDeployedAt:  formatTimestamp(a.LastDeployedAt),
 		CreatedAt:       formatTimestamp(a.CreatedAt),
-	}
-	switch {
-	case !a.LastDeployedAt.Valid:
-		// no deploy yet — leave PendingChange empty
-	case a.SourceChangedAt.Valid:
-		out.PendingChange = "source"
-	case a.ConfigChangedAt.Valid:
-		out.PendingChange = "config"
+		PendingChange:   service.ApplicationPendingChange(a),
 	}
 	return out
 }

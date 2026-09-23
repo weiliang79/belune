@@ -14,6 +14,22 @@ FROM applications a
 JOIN projects p ON p.id = a.project_id
 WHERE a.id = $1;
 
+-- name: GetApplicationLogAccess :one
+-- Everything get_application_logs (internal/mcpserver) needs in one query:
+-- the container-naming/placement fields GetApplicationWithProjectSlug
+-- returns, plus the owning project's user_id/shared for authorization —
+-- sparing a second round trip through GetApplicationOwnerUserID for the one
+-- tool in that package that reaches outside the database, and the most
+-- likely to be polled repeatedly. Selects only what's needed rather than
+-- `a.*`, so the application's secret-adjacent columns (webhook secret,
+-- encrypted git credentials, deploy-hook token) never enter process memory
+-- for a call that has no use for them.
+SELECT a.id, a.project_id, a.slug, p.slug as project_slug, p.server_id as server_id,
+       p.user_id as project_user_id, p.shared as project_shared
+FROM applications a
+JOIN projects p ON p.id = a.project_id
+WHERE a.id = $1;
+
 -- name: CreateApplication :one
 -- branch: the ref to build. NULL means the repository's default ref, which is
 -- what every application did before branch selection existed.

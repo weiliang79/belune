@@ -43,7 +43,17 @@ func notFoundOr(ctx context.Context, notFoundMsg string) error {
 	return errAccessDenied
 }
 
+// uuidToString renders a nullable UUID as its string form, or "" (which
+// callers pair with an `omitempty` json tag, like formatTimestamp) when the
+// column was never set. Every current caller passes a NOT NULL column, so
+// this branch is dead today — but it is the one shared id-to-string
+// conversion used across every tool file, and the alternative is a future
+// nullable-UUID field silently rendering as the all-zeros id instead of
+// omitting itself.
 func uuidToString(u pgtype.UUID) string {
+	if !u.Valid {
+		return ""
+	}
 	return uuid.UUID(u.Bytes).String()
 }
 
@@ -97,15 +107,13 @@ func canAccessOwned(ctx context.Context, ownerID pgtype.UUID, shared bool) bool 
 	return ownerID == userID
 }
 
-// pinAllows reports whether a project-pinned token may reach projectID —
-// true for an unpinned token or one pinned to exactly this project. Every
-// tool that resolves a project id must call this: unlike a REST route, an
-// MCP tool call has no {projectId} URL param for
-// middleware.RequireProjectAccess to enforce the pin against, so each tool
-// does it itself.
+// pinAllows is middleware.PinAllows under the name every call site in this
+// package already uses. Every tool that resolves a project id must call
+// this: unlike a REST route, an MCP tool call has no {projectId} URL param
+// for middleware.RequireProjectAccess to enforce the pin against, so each
+// tool does it itself, once per call.
 func pinAllows(ctx context.Context, projectID string) bool {
-	pinned := middleware.TokenProjectFromContext(ctx)
-	return pinned == "" || pinned == projectID
+	return middleware.PinAllows(ctx, projectID)
 }
 
 // authorizeProject checks pin + ownership for a project id supplied

@@ -23,7 +23,7 @@ import {
 import { Field, FieldError, FieldLabel } from "@/components/ui/field";
 import { fieldError } from "@/lib/utils/field-error";
 import { Input } from "@/components/ui/input";
-import { CopyButton } from "@/lib/components/copy-button";
+import { CopyRow } from "@/lib/components/copy-row";
 import { useCreateToken } from "@/lib/hooks/use-tokens";
 import type { TokenScope } from "@/lib/types";
 
@@ -87,14 +87,7 @@ export function ConnectAIAssistantCard() {
               shown only this once — copy the whole command now.
             </DialogDescription>
           </DialogHeader>
-          {command && (
-            <div className="bg-muted flex items-start gap-2 rounded-md px-3 py-2">
-              <code className="min-w-0 flex-1 font-mono text-sm break-all whitespace-pre-wrap">
-                {command}
-              </code>
-              <CopyButton value={command} />
-            </div>
-          )}
+          {command && <CopyRow value={command} multiline />}
           <DialogFooter>
             <Button onClick={() => setCommand(null)}>Done</Button>
           </DialogFooter>

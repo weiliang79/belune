@@ -31,6 +31,7 @@ import {
   useUpdateWebhook,
 } from "@/lib/hooks/use-applications";
 import { CopyButton } from "@/lib/components/copy-button";
+import { CopyRow } from "@/lib/components/copy-row";
 import type { Application } from "@/lib/types";
 
 interface Props {
@@ -132,16 +133,6 @@ function ToggleRow({
   );
 }
 
-/** A read-only URL/value row with a copy button, used for both mechanisms. */
-function CopyRow({ value, children }: { value: string; children?: ReactNode }) {
-  return (
-    <div className="bg-muted flex items-center gap-2 rounded-md px-3 py-2">
-      <code className="min-w-0 flex-1 font-mono text-sm break-all">{value}</code>
-      <CopyButton value={value} />
-      {children}
-    </div>
-  );
-}
 
 /**
  * Git-only. "On" means a webhook secret exists — that is what the push endpoint
