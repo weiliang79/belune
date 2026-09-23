@@ -61,8 +61,7 @@ export function ConnectAIAssistantCard() {
         </CardTitle>
         <CardDescription>
           Give an MCP-compatible client read-only access to your projects,
-          deployments, and logs through a personal access token scoped to
-          Read.
+          deployments, and logs through a personal access token scoped to Read.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -160,9 +159,9 @@ function ConnectDialog({
               <ShieldAlertIcon aria-hidden="true" />
               <AlertTitle>Logs are sent to your client, verbatim</AlertTitle>
               <AlertDescription>
-                Tools that read container logs send them to whichever AI
-                client you connect. Logs often contain connection strings and
-                API keys — only connect a client you trust with that.
+                Tools that read container logs send them to whichever AI client
+                you connect. Logs often contain connection strings and API keys
+                — only connect a client you trust with that.
               </AlertDescription>
             </Alert>
             <form.Field
@@ -174,9 +173,7 @@ function ConnectDialog({
                 const error = fieldError(field.state.meta.errors);
                 return (
                   <Field data-invalid={!!error}>
-                    <FieldLabel htmlFor="mcp-token-name">
-                      Token name
-                    </FieldLabel>
+                    <FieldLabel htmlFor="mcp-token-name">Token name</FieldLabel>
                     <Input
                       id="mcp-token-name"
                       autoFocus

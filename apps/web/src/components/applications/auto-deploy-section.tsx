@@ -133,7 +133,6 @@ function ToggleRow({
   );
 }
 
-
 /**
  * Git-only. "On" means a webhook secret exists — that is what the push endpoint
  * requires to verify a delivery, and what makes the app eligible for matching.
@@ -171,7 +170,9 @@ function PushWebhookRow({ projectId, applicationId, application }: Props) {
       // Shown straight away: enabling exists to get the secret into the
       // provider, so making the user click Show first is pure friction.
       setSecret(fresh);
-      toast.success("Push webhook enabled — add the URL and secret to your repository");
+      toast.success(
+        "Push webhook enabled — add the URL and secret to your repository",
+      );
     },
     [updateWebhook],
   );
@@ -207,7 +208,6 @@ function PushWebhookRow({ projectId, applicationId, application }: Props) {
             ? trackedBranch
               ? `Deploys when you push to ${trackedBranch}.`
               : "Deploys when you push to the repository's default branch."
-
             : "Deploy automatically when your git provider reports a push."
         }
         checked={enabled}
@@ -268,7 +268,6 @@ function PushWebhookRow({ projectId, applicationId, application }: Props) {
                 really came from them — it does not identify this application.
               </p>
             </div>
-
           </div>
         )}
       </ToggleRow>

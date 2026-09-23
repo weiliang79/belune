@@ -51,13 +51,7 @@ func registerBackupTools(srv *mcp.Server, queries *generated.Queries) {
 			return nil, nil, err
 		}
 
-		limit := in.Limit
-		if limit <= 0 {
-			limit = defaultBackupsLimit
-		}
-		if limit > maxBackupsLimit {
-			limit = maxBackupsLimit
-		}
+		limit := clampLimit(in.Limit, defaultBackupsLimit, maxBackupsLimit)
 
 		rows, err := queries.ListProjectBackupActivity(ctx, generated.ListProjectBackupActivityParams{
 			ProjectID: projectID,

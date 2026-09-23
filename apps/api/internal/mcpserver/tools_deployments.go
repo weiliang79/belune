@@ -78,13 +78,7 @@ func registerDeploymentTools(srv *mcp.Server, queries *generated.Queries) {
 			return nil, nil, err
 		}
 
-		limit := in.Limit
-		if limit <= 0 {
-			limit = defaultDeploymentsLimit
-		}
-		if limit > maxDeploymentsLimit {
-			limit = maxDeploymentsLimit
-		}
+		limit := clampLimit(in.Limit, defaultDeploymentsLimit, maxDeploymentsLimit)
 
 		rows, err := queries.ListRecentDeploymentsByApplication(ctx, generated.ListRecentDeploymentsByApplicationParams{
 			ApplicationID: appID,

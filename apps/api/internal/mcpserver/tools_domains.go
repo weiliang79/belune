@@ -10,6 +10,11 @@ import (
 	"github.com/weiliang79/belune/internal/store/generated"
 )
 
+const (
+	defaultDomainsLimit = 50
+	maxDomainsLimit     = 200
+)
+
 // domainTLSStatus is the tool-facing shape of one row of the central TLS
 // view: what the server last observed for a domain, not what its
 // configuration claims should happen. Mirrors handler.domainTLSStatus.
@@ -32,6 +37,10 @@ type domainTLSStatus struct {
 	ProjectID       string `json:"project_id"`
 }
 
+type listDomainTLSStatusInput struct {
+	Limit int `json:"limit,omitempty" jsonschema:"maximum number of domains to return, alphabetical by hostname (default 50, max 200)"`
+}
+
 // registerDomainTools registers the differentiator tool: unlike a status
 // check that can only report "unknown", this surfaces the SAME failure
 // reason (TLSError) and suspicion (TLSAdvisory) the dashboard's own TLS page
@@ -41,14 +50,15 @@ func registerDomainTools(srv *mcp.Server, queries *generated.Queries) {
 		Name: "list_domain_tls_status",
 		Description: "List every domain's observed TLS state, with the certificate it serves and " +
 			"why a pending or failed certificate hasn't issued. An admin sees every domain on the " +
-			"install; a member sees only domains in their own projects and any shared with them.",
-	}, func(ctx context.Context, _ *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, any, error) {
+			"install; a member sees only domains in their own projects and any shared with them. " +
+			"Bounded — defaults to 50, capped at 200.",
+	}, func(ctx context.Context, _ *mcp.CallToolRequest, in listDomainTLSStatusInput) (*mcp.CallToolResult, any, error) {
 		// Same scope + pin construction as handler.ListDomainTLSStatus: a NULL
 		// user_id asks the query for every domain (what an admin gets), and
 		// this route has no project_id argument for a per-tool pin check to
 		// compare against, so the pin is passed straight into the query
-		// instead — see ListDomainsWithTLSStatus's own NULL-means-unfiltered
-		// handling.
+		// instead — see ListDomainsWithTLSStatusLimit's own NULL-means-
+		// unfiltered handling.
 		var scope pgtype.UUID
 		if middleware.RoleFromContext(ctx) != "admin" {
 			if err := scope.Scan(middleware.UserIDFromContext(ctx)); err != nil {
@@ -56,16 +66,16 @@ func registerDomainTools(srv *mcp.Server, queries *generated.Queries) {
 			}
 		}
 
-		var pinnedProject pgtype.UUID
-		if pinned := middleware.TokenProjectFromContext(ctx); pinned != "" {
-			if err := pinnedProject.Scan(pinned); err != nil {
-				return nil, nil, internalError("failed to list domain TLS status", err)
-			}
+		pinnedID, err := pinnedProjectUUID(ctx)
+		if err != nil {
+			return nil, nil, internalError("failed to list domain TLS status", err)
 		}
 
-		rows, err := queries.ListDomainsWithTLSStatus(ctx, generated.ListDomainsWithTLSStatusParams{
+		limit := clampLimit(in.Limit, defaultDomainsLimit, maxDomainsLimit)
+		rows, err := queries.ListDomainsWithTLSStatusLimit(ctx, generated.ListDomainsWithTLSStatusLimitParams{
 			UserID:    scope,
-			ProjectID: pinnedProject,
+			ProjectID: pinnedID,
+			RowLimit:  int32(limit),
 		})
 		if err != nil {
 			return nil, nil, internalError("failed to list domain TLS status", err)

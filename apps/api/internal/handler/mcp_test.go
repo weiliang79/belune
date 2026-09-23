@@ -315,6 +315,32 @@ func TestMCP_DomainTLSStatus(t *testing.T) {
 	assert.Equal(t, projectID, rows[0]["project_id"])
 }
 
+// TestMCP_DomainTLSStatusIsBounded proves the limit argument actually
+// truncates the SQL query rather than being accepted and ignored — the
+// install-wide response list_domain_tls_status has no other bound.
+func TestMCP_DomainTLSStatusIsBounded(t *testing.T) {
+	resetDB(t)
+	adminToken := env.SetupAdmin(t, "mcp-tls-limit@test.com", "password123")
+	project := env.CreateProject(t, adminToken, "MCP Project", "mcp-project")
+	projectID := extractID(project["id"])
+	app := minimalApp(t, adminToken, projectID)
+	appID := extractID(app["id"])
+
+	for _, host := range []string{"a.example.com", "b.example.com", "c.example.com"} {
+		resp := env.DoRequest(t, "POST", fmt.Sprintf("/api/projects/%s/applications/%s/domains", projectID, appID),
+			map[string]any{"hostname": host}, testutil.AuthHeader(adminToken))
+		require.Equal(t, http.StatusCreated, resp.StatusCode)
+		resp.Body.Close()
+	}
+
+	readToken := mintScoped(t, adminToken, []string{"read"})
+	var rows []map[string]any
+	decodeToolResult(t, callToolArgs(t, readToken, "list_domain_tls_status", map[string]any{
+		"limit": 1,
+	}), &rows)
+	require.Len(t, rows, 1)
+}
+
 // TestMCP_ListProjectBackups is a wiring check: an empty project reports an
 // empty (never null) backup activity feed.
 func TestMCP_ListProjectBackups(t *testing.T) {
@@ -372,6 +398,36 @@ func TestMCP_ProjectPinBlocksOtherProjects(t *testing.T) {
 		"project_id": ownProjectID,
 	}), &got)
 	assert.Equal(t, ownProjectID, got["id"])
+}
+
+// TestMCP_ListProjectsPinSurvivesLimit is the regression test for a bug this
+// package avoided rather than shipped: list_projects pushes the pin into the
+// SQL query (see pinnedProjectUUID) instead of applying it as a post-query
+// Go-side filter. If it filtered in Go instead, a small limit could truncate
+// the row set to the newest projects BEFORE the pin ever got a chance to
+// narrow it — silently returning an empty list for a pinned token whose one
+// visible project isn't among the newest few.
+func TestMCP_ListProjectsPinSurvivesLimit(t *testing.T) {
+	resetDB(t)
+	adminToken := env.SetupAdmin(t, "mcp-pin-limit@test.com", "password123")
+
+	// Created first, so it is NOT among the most-recently-created projects.
+	pinnedProject := env.CreateProject(t, adminToken, "Pinned Project", "pinned-project")
+	pinnedProjectID := extractID(pinnedProject["id"])
+	// Created after it, so a naive "LIMIT then filter" would return these
+	// instead of the pinned project.
+	env.CreateProject(t, adminToken, "Newer Project 1", "newer-project-1")
+	env.CreateProject(t, adminToken, "Newer Project 2", "newer-project-2")
+
+	adminUserID := extractID(mustAuthMe(t, adminToken)["id"])
+	pinnedToken := createPinnedAPIToken(t, adminUserID, pinnedProjectID, []string{"read"})
+
+	var projects []map[string]any
+	decodeToolResult(t, callToolArgs(t, pinnedToken, "list_projects", map[string]any{
+		"limit": 1,
+	}), &projects)
+	require.Len(t, projects, 1)
+	assert.Equal(t, pinnedProjectID, projects[0]["id"])
 }
 
 // TestMCP_ToolsListing_NoDestructiveTools structurally asserts the read-only

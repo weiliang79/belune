@@ -116,6 +116,39 @@ func pinAllows(ctx context.Context, projectID string) bool {
 	return middleware.PinAllows(ctx, projectID)
 }
 
+// pinnedProjectUUID resolves the caller's pin, if any, to a pgtype.UUID
+// suitable for a query's sqlc.narg('project_id') — a zero-value (Invalid)
+// UUID passes through as SQL NULL, meaning "unpinned, don't filter." Used by
+// tools whose pin-filtering is pushed into SQL alongside a LIMIT
+// (list_projects, list_domain_tls_status) rather than applied as a
+// post-query Go-side narrowing: doing it in SQL means LIMIT can never
+// truncate away the one row a pinned token is allowed to see before the pin
+// gets a chance to narrow the result to it.
+func pinnedProjectUUID(ctx context.Context) (pgtype.UUID, error) {
+	var pinnedID pgtype.UUID
+	if pinned := middleware.TokenProjectFromContext(ctx); pinned != "" {
+		if err := pinnedID.Scan(pinned); err != nil {
+			return pgtype.UUID{}, err
+		}
+	}
+	return pinnedID, nil
+}
+
+// clampLimit normalizes a caller-supplied limit argument: <= 0 falls back to
+// def, and anything over max is capped to it. Shared by every bounded list
+// tool (list_projects, list_domain_tls_status, list_deployments,
+// list_project_backups) so "bounded" means the same thing everywhere in
+// this package.
+func clampLimit(requested, def, max int) int {
+	if requested <= 0 {
+		return def
+	}
+	if requested > max {
+		return max
+	}
+	return requested
+}
+
 // authorizeProject checks pin + ownership for a project id supplied
 // directly as a tool argument, and returns the fetched row so callers
 // building a project DTO (get_project) don't fetch it twice.

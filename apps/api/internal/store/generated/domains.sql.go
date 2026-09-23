@@ -633,6 +633,85 @@ func (q *Queries) ListDomainsWithTLSStatus(ctx context.Context, arg ListDomainsW
 	return items, nil
 }
 
+const listDomainsWithTLSStatusLimit = `-- name: ListDomainsWithTLSStatusLimit :many
+SELECT d.id, d.hostname, d.ssl_mode, d.tls_status, d.tls_issuer, d.tls_not_after,
+       d.tls_last_checked_at, d.tls_error, d.tls_advisory, c.name AS certificate_name,
+       a.name AS application_name, a.id AS application_id, p.id AS project_id
+FROM domains d
+JOIN applications a ON a.id = d.application_id
+JOIN projects p ON p.id = a.project_id
+LEFT JOIN certificates c ON c.id = d.certificate_id
+WHERE ($1::uuid IS NULL
+       OR p.user_id = $1
+       OR p.shared)
+  AND ($2::uuid IS NULL OR p.id = $2)
+ORDER BY d.hostname
+LIMIT $3
+`
+
+type ListDomainsWithTLSStatusLimitParams struct {
+	UserID    pgtype.UUID `json:"user_id"`
+	ProjectID pgtype.UUID `json:"project_id"`
+	RowLimit  int32       `json:"row_limit"`
+}
+
+type ListDomainsWithTLSStatusLimitRow struct {
+	ID               pgtype.UUID        `json:"id"`
+	Hostname         string             `json:"hostname"`
+	SslMode          string             `json:"ssl_mode"`
+	TlsStatus        string             `json:"tls_status"`
+	TlsIssuer        pgtype.Text        `json:"tls_issuer"`
+	TlsNotAfter      pgtype.Timestamptz `json:"tls_not_after"`
+	TlsLastCheckedAt pgtype.Timestamptz `json:"tls_last_checked_at"`
+	TlsError         pgtype.Text        `json:"tls_error"`
+	TlsAdvisory      pgtype.Text        `json:"tls_advisory"`
+	CertificateName  pgtype.Text        `json:"certificate_name"`
+	ApplicationName  string             `json:"application_name"`
+	ApplicationID    pgtype.UUID        `json:"application_id"`
+	ProjectID        pgtype.UUID        `json:"project_id"`
+}
+
+// Bounded sibling of ListDomainsWithTLSStatus for the MCP
+// list_domain_tls_status tool: same NULL-means-unfiltered user_id/project_id
+// handling (the pin is already applied in SQL here, same as the query
+// above), plus a LIMIT so a large install's entire domain table isn't the
+// single largest response this server can produce. Additive: REST's
+// ListDomainTLSStatus handler keeps using the unbounded query above
+// unchanged.
+func (q *Queries) ListDomainsWithTLSStatusLimit(ctx context.Context, arg ListDomainsWithTLSStatusLimitParams) ([]ListDomainsWithTLSStatusLimitRow, error) {
+	rows, err := q.db.Query(ctx, listDomainsWithTLSStatusLimit, arg.UserID, arg.ProjectID, arg.RowLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListDomainsWithTLSStatusLimitRow{}
+	for rows.Next() {
+		var i ListDomainsWithTLSStatusLimitRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Hostname,
+			&i.SslMode,
+			&i.TlsStatus,
+			&i.TlsIssuer,
+			&i.TlsNotAfter,
+			&i.TlsLastCheckedAt,
+			&i.TlsError,
+			&i.TlsAdvisory,
+			&i.CertificateName,
+			&i.ApplicationName,
+			&i.ApplicationID,
+			&i.ProjectID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listProjectAppPrimaryDomain = `-- name: ListProjectAppPrimaryDomain :many
 SELECT DISTINCT ON (a.id) a.id AS application_id, d.hostname, d.container_port
 FROM applications a

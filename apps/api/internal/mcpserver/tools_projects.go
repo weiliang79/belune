@@ -10,6 +10,11 @@ import (
 	"github.com/weiliang79/belune/internal/store/generated"
 )
 
+const (
+	defaultProjectsLimit = 50
+	maxProjectsLimit     = 200
+)
+
 // project is the tool-facing shape of a project row — narrower than the
 // generated row, which carries server_id and other fields with no reader
 // value here.
@@ -21,14 +26,20 @@ type project struct {
 	CreatedAt string `json:"created_at"`
 }
 
+type listProjectsInput struct {
+	Limit int `json:"limit,omitempty" jsonschema:"maximum number of projects to return, newest first (default 50, max 200)"`
+}
+
 func registerProjectTools(srv *mcp.Server, queries *generated.Queries) {
 	mcp.AddTool(srv, &mcp.Tool{
 		Name: "list_projects",
 		Description: "List every project the caller's token can reach: every project on the " +
 			"install for an admin token, or the token owner's own projects plus any shared with " +
-			"them otherwise. A project-pinned token sees only its pinned project.",
-	}, func(ctx context.Context, _ *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, any, error) {
-		projects, err := listProjectsForCaller(ctx, queries)
+			"them otherwise. A project-pinned token sees only its pinned project. Bounded — " +
+			"defaults to 50, capped at 200.",
+	}, func(ctx context.Context, _ *mcp.CallToolRequest, in listProjectsInput) (*mcp.CallToolResult, any, error) {
+		limit := clampLimit(in.Limit, defaultProjectsLimit, maxProjectsLimit)
+		projects, err := listProjectsForCaller(ctx, queries, limit)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -68,16 +79,27 @@ func toProject(id pgtype.UUID, name, slug string, shared bool, createdAt pgtype.
 // call has no http.ResponseWriter to hand a handler method — and because
 // internal/handler will need to import this package to wire the route,
 // so the reverse import isn't available.
-func listProjectsForCaller(ctx context.Context, queries *generated.Queries) ([]project, error) {
-	role := middleware.RoleFromContext(ctx)
-	pinned := middleware.TokenProjectFromContext(ctx)
+//
+// The pin is pushed into SQL (via pinnedProjectUUID/sqlc.narg), not applied
+// as a post-query Go-side filter: doing it after LIMIT already truncated the
+// row set would risk silently dropping the one project a pinned token is
+// entitled to see, if it isn't among the `limit` most-recently-created rows.
+func listProjectsForCaller(ctx context.Context, queries *generated.Queries, limit int) ([]project, error) {
+	pinnedID, err := pinnedProjectUUID(ctx)
+	if err != nil {
+		return nil, internalError("failed to list projects", err)
+	}
 
+	role := middleware.RoleFromContext(ctx)
 	if role == "admin" {
-		rows, err := queries.ListAllProjects(ctx)
+		rows, err := queries.ListAllProjectsLimit(ctx, generated.ListAllProjectsLimitParams{
+			ProjectID: pinnedID,
+			RowLimit:  int32(limit),
+		})
 		if err != nil {
 			return nil, internalError("failed to list projects", err)
 		}
-		return mapProjects(rows, pinned, func(p generated.ListAllProjectsRow) (pgtype.UUID, string, string, bool, pgtype.Timestamptz) {
+		return mapProjects(rows, func(p generated.ListAllProjectsLimitRow) (pgtype.UUID, string, string, bool, pgtype.Timestamptz) {
 			return p.ID, p.Name, p.Slug, p.Shared, p.CreatedAt
 		}), nil
 	}
@@ -87,27 +109,26 @@ func listProjectsForCaller(ctx context.Context, queries *generated.Queries) ([]p
 		return nil, internalError("failed to list projects", err)
 	}
 
-	rows, err := queries.ListProjectsByUser(ctx, userID)
+	rows, err := queries.ListProjectsByUserLimit(ctx, generated.ListProjectsByUserLimitParams{
+		UserID:    userID,
+		ProjectID: pinnedID,
+		RowLimit:  int32(limit),
+	})
 	if err != nil {
 		return nil, internalError("failed to list projects", err)
 	}
-	return mapProjects(rows, pinned, func(p generated.ListProjectsByUserRow) (pgtype.UUID, string, string, bool, pgtype.Timestamptz) {
+	return mapProjects(rows, func(p generated.ListProjectsByUserLimitRow) (pgtype.UUID, string, string, bool, pgtype.Timestamptz) {
 		return p.ID, p.Name, p.Slug, p.Shared, p.CreatedAt
 	}), nil
 }
 
-// mapProjects narrows rows to the pinned project id (when pinned is
-// non-empty) and converts each to the tool-facing shape. Always returns a
-// non-nil slice so the tool's JSON output is "[]", never "null", when
-// nothing matches.
-func mapProjects[T any](rows []T, pinned string, fields func(T) (pgtype.UUID, string, string, bool, pgtype.Timestamptz)) []project {
+// mapProjects converts a slice of rows to the tool-facing shape. Always
+// returns a non-nil slice so the tool's JSON output is "[]", never "null",
+// when nothing matches.
+func mapProjects[T any](rows []T, fields func(T) (pgtype.UUID, string, string, bool, pgtype.Timestamptz)) []project {
 	out := make([]project, 0, len(rows))
 	for _, r := range rows {
 		id, name, slug, shared, createdAt := fields(r)
-		idStr := uuidToString(id)
-		if pinned != "" && idStr != pinned {
-			continue
-		}
 		out = append(out, toProject(id, name, slug, shared, createdAt))
 	}
 	return out
