@@ -12,6 +12,7 @@ import (
 	"github.com/redis/go-redis/v9"
 
 	"github.com/weiliang79/belune/internal/config"
+	"github.com/weiliang79/belune/internal/mcpserver"
 	"github.com/weiliang79/belune/internal/proxy"
 	"github.com/weiliang79/belune/internal/quota"
 	"github.com/weiliang79/belune/internal/runtime"
@@ -98,6 +99,10 @@ type Handler struct {
 	// same instance is also wired into middleware.Auth (in server.go) for the
 	// Bearer PAT branch — one TokenService, two callers.
 	tokenSvc *service.TokenService
+	// mcpHandler serves the read-only MCP server at POST /mcp. Built once
+	// here (like certSvc) from queries alone — its tools resolve identity
+	// per-call from the request context, not from anything held on Handler.
+	mcpHandler http.Handler
 }
 
 func New(
@@ -154,6 +159,7 @@ func New(
 		serverSvc:         service.NewServerService(queries),
 		totpSvc:           service.NewTOTPService(db, queries, cfg.Keyring),
 		tokenSvc:          tokenSvc,
+		mcpHandler:        mcpserver.New(queries, rts),
 	}
 }
 

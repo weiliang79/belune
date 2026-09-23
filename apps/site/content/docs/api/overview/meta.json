@@ -1,4 +1,4 @@
 {
   "title": "Overview",
-  "pages": ["websockets", "server-sent-events"]
+  "pages": ["websockets", "server-sent-events", "mcp"]
 }

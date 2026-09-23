@@ -1,0 +1,69 @@
+---
+title: MCP Server
+description: Give an AI assistant read-only access to your projects, deployments, and logs through the Model Context Protocol.
+---
+
+Belune has a [Model Context Protocol](https://modelcontextprotocol.io) server at `/mcp` — one endpoint an MCP-compatible client (Claude, and others as they add support) can call to inspect your projects, applications, deployments, and infrastructure state. It authenticates with the same personal access tokens as the rest of the API, and today it is **read-only**: nothing it exposes can change, deploy, restart, delete, or restore anything.
+
+## Connecting
+
+The fastest way is **Account → Connect an AI Assistant**, which mints a `read`-scoped token and gives you a ready-to-paste command:
+
+```bash
+claude mcp add --transport http belune https://belune.example.com/mcp \
+  --header "Authorization: Bearer belune_pat_..."
+```
+
+<Callout type="warn">
+Tools that read container logs send them to whichever client you connect. Logs often contain connection strings and API keys — only connect a client you trust with that. This is the same warning the dialog shows, at the moment you actually connect something, rather than on every token you ever create.
+</Callout>
+
+To connect a different client, or build the command by hand, mint any token with at least `read` scope from **Account → Personal Access Tokens** and point your client at `https://belune.example.com/mcp` with `Authorization: Bearer <token>`.
+
+## Authentication
+
+`/mcp` uses the [same bearer tokens](/docs/api#authenticating) as everything else, with two differences from an ordinary endpoint:
+
+- **No session.** A dashboard session cookie is never accepted here, even though it works on every REST route — an MCP client is a machine, not a person at a browser, and the two credentials are kept apart. Mint a personal access token instead.
+- **`read` scope or wider.** `deploy` and `write` tokens work too — the scope ladder is unchanged — but a `metrics`-only token cannot connect at all, since it sits below `read` in the ladder and every tool here needs at least that much.
+
+Everything else about a token — the [100 req/min rate limit](/docs/api#limits-and-errors), audit attribution, expiry — applies exactly as it does to the REST API. One difference: read-only tools produce no audit log entries, the same way a `GET` never does — only a mutation is audited, and MCP has none to log.
+
+## What It Can See
+
+Reach is identical to what the same token could do through the REST API: an admin token sees every project on the install, a Member's token sees their own projects and any [shared](/docs/core/project/overview#sharing) with them, and a [project-pinned](/docs/api#scopes) token is narrowed to that one project — enforced on every tool call, not just the ones that look project-scoped.
+
+## The Tools
+
+| Tool | Returns |
+| --- | --- |
+| `list_projects` | Every project the token can reach |
+| `get_project` | One project by id |
+| `list_applications` | Every application in a project |
+| `get_application` | One application by id, including a pending source/config change |
+| `list_databases` | Every managed database in a project (never credentials) |
+| `get_database` | One database by id (never credentials) |
+| `list_deployments` | An application's deployments, newest first — status, build outcome, commit info, health-check result |
+| `get_application_logs` | The last N lines of an application's live container output |
+| `list_domain_tls_status` | Every domain's observed TLS state, **with why a pending or failed certificate hasn't issued** |
+| `list_project_backups` | Recent backup runs across a project's databases and application volumes |
+
+Every list and log tool is bounded — a default and a hard maximum, never "everything." `get_application_logs` defaults to 200 lines (capped at 1000); `list_deployments` and `list_project_backups` default to 20 (capped at 100).
+
+## What It Cannot Do
+
+MCP goes further than the REST API's own [token boundaries](/docs/api#what-a-token-can-never-do): every tool is read-only structurally, regardless of the token's actual scope. A `write`-scoped token gains nothing by going through MCP instead of the REST API — there is no deploy, restart, delete, or restore tool to call, full stop. Mutating tools are planned for a later phase; when they arrive, they will need `write` or `deploy` scope the same way the equivalent REST endpoint does today.
+
+## Calling a Tool Directly
+
+A client library handles the JSON-RPC envelope for you, but it's plain HTTP if you want to see it:
+
+```bash
+curl -X POST https://belune.example.com/mcp \
+  -H "Authorization: Bearer $BELUNE_TOKEN" \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"list_projects","arguments":{}}}'
+```
+
+The `Accept` header must list both `application/json` and `text/event-stream` — that's the streamable HTTP transport's own requirement, not a Belune-specific one. The server always answers with a single JSON response here: the connection is stateless, so there is no session to open first and no stream to keep alive.

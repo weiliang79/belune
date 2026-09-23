@@ -34,6 +34,15 @@ export default defineConfig({
           });
         },
       },
+      // The production binary serves /mcp from the same origin as the SPA,
+      // which is what "Connect an AI Assistant" assumes when it builds its
+      // command from window.location.origin. Without this, that command
+      // points at the Vite dev server (5173) instead of the API (8080) and
+      // 404s the moment someone actually runs it in dev.
+      "/mcp": {
+        target: "http://localhost:8080",
+        changeOrigin: true,
+      },
     },
   },
   build: {

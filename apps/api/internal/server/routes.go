@@ -456,6 +456,17 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService,
 				r.Post("/api/projects/{projectId}/databases/{databaseId}/reload", h.ReloadDatabase)
 			})
 
+			// Read-only MCP server (0.1.x #4): a stateless JSON-RPC POST, not
+			// a REST resource, so RequireScopeByMethod would demand "write"
+			// for it — the exact inverse of a read-only server. Given its
+			// own explicit "read" scope instead, the same carve-out shape as
+			// the metrics/deploy groups above. RequireToken — the mirror
+			// image of RequireSession — additionally shuts out a session JWT
+			// entirely: MCP clients are machines, and CSRF already exempts
+			// the Bearer branch, so a JWT reaching this route would skip
+			// CSRF with no compensating control.
+			r.With(middleware.RequireToken(), middleware.RequireScope("read")).Post("/mcp", h.HandleMCP)
+
 			// Admin-only: metrics snapshots, settings, cleanup, audit
 			r.Group(func(r chi.Router) {
 				r.Use(middleware.RequireRole("admin"))

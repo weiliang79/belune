@@ -31,6 +31,7 @@ import {
   useUpdateWebhook,
 } from "@/lib/hooks/use-applications";
 import { CopyButton } from "@/lib/components/copy-button";
+import { CopyRow } from "@/lib/components/copy-row";
 import type { Application } from "@/lib/types";
 
 interface Props {
@@ -132,17 +133,6 @@ function ToggleRow({
   );
 }
 
-/** A read-only URL/value row with a copy button, used for both mechanisms. */
-function CopyRow({ value, children }: { value: string; children?: ReactNode }) {
-  return (
-    <div className="bg-muted flex items-center gap-2 rounded-md px-3 py-2">
-      <code className="min-w-0 flex-1 font-mono text-sm break-all">{value}</code>
-      <CopyButton value={value} />
-      {children}
-    </div>
-  );
-}
-
 /**
  * Git-only. "On" means a webhook secret exists — that is what the push endpoint
  * requires to verify a delivery, and what makes the app eligible for matching.
@@ -180,7 +170,9 @@ function PushWebhookRow({ projectId, applicationId, application }: Props) {
       // Shown straight away: enabling exists to get the secret into the
       // provider, so making the user click Show first is pure friction.
       setSecret(fresh);
-      toast.success("Push webhook enabled — add the URL and secret to your repository");
+      toast.success(
+        "Push webhook enabled — add the URL and secret to your repository",
+      );
     },
     [updateWebhook],
   );
@@ -216,7 +208,6 @@ function PushWebhookRow({ projectId, applicationId, application }: Props) {
             ? trackedBranch
               ? `Deploys when you push to ${trackedBranch}.`
               : "Deploys when you push to the repository's default branch."
-
             : "Deploy automatically when your git provider reports a push."
         }
         checked={enabled}
@@ -277,7 +268,6 @@ function PushWebhookRow({ projectId, applicationId, application }: Props) {
                 really came from them — it does not identify this application.
               </p>
             </div>
-
           </div>
         )}
       </ToggleRow>
