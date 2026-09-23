@@ -2,7 +2,6 @@ package mcpserver
 
 import (
 	"context"
-	"errors"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
@@ -58,7 +57,7 @@ func registerDatabaseTools(srv *mcp.Server, queries *generated.Queries) {
 
 		rows, err := queries.ListDatabasesByProject(ctx, projectID)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, internalError("failed to list databases", err)
 		}
 		out := make([]database, 0, len(rows))
 		for _, d := range rows {
@@ -77,7 +76,7 @@ func registerDatabaseTools(srv *mcp.Server, queries *generated.Queries) {
 		}
 		db, err := queries.GetDatabase(ctx, id)
 		if err != nil {
-			return nil, nil, errors.New("database not found")
+			return nil, nil, notFoundOr(ctx, "database not found")
 		}
 		if err := authorizeDatabase(ctx, queries, db.ID, db.ProjectID); err != nil {
 			return nil, nil, err

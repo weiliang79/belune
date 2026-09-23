@@ -2,7 +2,6 @@ package mcpserver
 
 import (
 	"context"
-	"errors"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
@@ -77,7 +76,7 @@ func registerApplicationTools(srv *mcp.Server, queries *generated.Queries) {
 
 		rows, err := queries.ListApplicationsByProject(ctx, projectID)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, internalError("failed to list applications", err)
 		}
 		out := make([]application, 0, len(rows))
 		for _, a := range rows {
@@ -96,7 +95,7 @@ func registerApplicationTools(srv *mcp.Server, queries *generated.Queries) {
 		}
 		app, err := queries.GetApplication(ctx, id)
 		if err != nil {
-			return nil, nil, errors.New("application not found")
+			return nil, nil, notFoundOr(ctx, "application not found")
 		}
 		if err := authorizeApplication(ctx, queries, app.ID, app.ProjectID); err != nil {
 			return nil, nil, err

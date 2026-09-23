@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"time"
 
 	"github.com/google/uuid"
@@ -15,6 +16,32 @@ import (
 )
 
 var errAccessDenied = errors.New("access denied")
+
+// internalError logs the real cause server-side and returns a generic
+// message as the tool's error. Returning err directly would embed its text
+// — a raw DB error can name a table, column or constraint — verbatim in
+// CallToolResult's content, sent to whichever client is connected. This is
+// the same boundary handler.writeError already draws for the REST API;
+// nothing in this package logged failures before this existed, so an
+// operator had no server-side signal either.
+func internalError(msg string, err error) error {
+	slog.Error("mcpserver: "+msg, "error", err)
+	return errors.New(msg)
+}
+
+// notFoundOr reports a resource lookup failure as errAccessDenied for a
+// non-admin caller, and as the real notFoundMsg for an admin — mirroring
+// handler.canAccessOwned, which treats an owner-lookup failure as a plain
+// access failure for anyone but an admin. Collapsing "doesn't exist" into
+// "access denied" for a non-admin is deliberate: distinguishing the two
+// would let a token use a resource's mere existence as a cross-tenant
+// oracle, which canAccessOwned was built to prevent on the REST side.
+func notFoundOr(ctx context.Context, notFoundMsg string) error {
+	if middleware.RoleFromContext(ctx) == "admin" {
+		return errors.New(notFoundMsg)
+	}
+	return errAccessDenied
+}
 
 func uuidToString(u pgtype.UUID) string {
 	return uuid.UUID(u.Bytes).String()
@@ -46,7 +73,7 @@ func formatTimestamp(t pgtype.Timestamptz) string {
 func textResult(v any) (*mcp.CallToolResult, any, error) {
 	body, err := json.Marshal(v)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, internalError("failed to encode result", err)
 	}
 	return &mcp.CallToolResult{
 		Content: []mcp.Content{&mcp.TextContent{Text: string(body)}},
@@ -90,7 +117,7 @@ func authorizeProject(ctx context.Context, queries *generated.Queries, projectID
 	}
 	project, err := queries.GetProject(ctx, projectID)
 	if err != nil {
-		return generated.Project{}, errors.New("project not found")
+		return generated.Project{}, notFoundOr(ctx, "project not found")
 	}
 	if !canAccessOwned(ctx, project.UserID, project.Shared) {
 		return generated.Project{}, errAccessDenied
@@ -108,7 +135,7 @@ func authorizeApplication(ctx context.Context, queries *generated.Queries, appli
 	}
 	owner, err := queries.GetApplicationOwnerUserID(ctx, applicationID)
 	if err != nil {
-		return errors.New("application not found")
+		return notFoundOr(ctx, "application not found")
 	}
 	if !canAccessOwned(ctx, owner.UserID, owner.Shared) {
 		return errAccessDenied
@@ -123,7 +150,7 @@ func authorizeDatabase(ctx context.Context, queries *generated.Queries, database
 	}
 	owner, err := queries.GetDatabaseOwnerUserID(ctx, databaseID)
 	if err != nil {
-		return errors.New("database not found")
+		return notFoundOr(ctx, "database not found")
 	}
 	if !canAccessOwned(ctx, owner.UserID, owner.Shared) {
 		return errAccessDenied

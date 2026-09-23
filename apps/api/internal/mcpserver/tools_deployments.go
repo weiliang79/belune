@@ -2,7 +2,6 @@ package mcpserver
 
 import (
 	"context"
-	"errors"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
@@ -73,14 +72,9 @@ func registerDeploymentTools(srv *mcp.Server, queries *generated.Queries) {
 		}
 		app, err := queries.GetApplication(ctx, appID)
 		if err != nil {
-			return nil, nil, errors.New("application not found")
+			return nil, nil, notFoundOr(ctx, "application not found")
 		}
 		if err := authorizeApplication(ctx, queries, app.ID, app.ProjectID); err != nil {
-			return nil, nil, err
-		}
-
-		rows, err := queries.ListDeploymentsByApplication(ctx, appID)
-		if err != nil {
 			return nil, nil, err
 		}
 
@@ -91,8 +85,13 @@ func registerDeploymentTools(srv *mcp.Server, queries *generated.Queries) {
 		if limit > maxDeploymentsLimit {
 			limit = maxDeploymentsLimit
 		}
-		if len(rows) > limit {
-			rows = rows[:limit]
+
+		rows, err := queries.ListRecentDeploymentsByApplication(ctx, generated.ListRecentDeploymentsByApplicationParams{
+			ApplicationID: appID,
+			Limit:         int32(limit),
+		})
+		if err != nil {
+			return nil, nil, internalError("failed to list deployments", err)
 		}
 
 		out := make([]deployment, 0, len(rows))

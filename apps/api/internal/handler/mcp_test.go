@@ -419,3 +419,53 @@ func TestMCP_ToolsListing_NoDestructiveTools(t *testing.T) {
 			"tool %q does not read as read-only — every phase 1 tool name must start with list_ or get_", name)
 	}
 }
+
+// TestMCP_NonAdminCannotDistinguishNotFoundFromForbidden is the regression
+// test for the existence-oracle bug: a non-admin token must get the exact
+// same "access denied" whether a resource is a genuine nonexistent id or one
+// that exists but belongs to someone else, the same way handler.canAccessOwned
+// collapses the two on the REST side. Needs a real member — every other MCP
+// test in this file uses an admin-owned token, which never exercises the
+// non-admin branch that had the bug.
+func TestMCP_NonAdminCannotDistinguishNotFoundFromForbidden(t *testing.T) {
+	resetDB(t)
+	adminToken := env.SetupAdmin(t, "mcp-oracle-admin@test.com", "password123")
+
+	// A project and application the member does not own and that is not shared.
+	project := env.CreateProject(t, adminToken, "Admins Only", "admins-only")
+	projectID := extractID(project["id"])
+	app := minimalApp(t, adminToken, projectID)
+	appID := extractID(app["id"])
+
+	env.DoRequest(t, "POST", "/api/users", map[string]string{
+		"email": "mcp-oracle-member@test.com", "password": "password123", "role": "member",
+	}, testutil.AuthHeader(adminToken)).Body.Close()
+	memberToken := env.LoginAs(t, "mcp-oracle-member@test.com", "password123")
+	memberReadToken := mintScoped(t, memberToken, []string{"read"})
+
+	const nonexistentID = "00000000-0000-0000-0000-000000000000"
+
+	// get_project: existing-but-inaccessible vs. genuinely nonexistent.
+	assert.Equal(t, "access denied", toolErrorText(t, callToolArgs(t, memberReadToken, "get_project", map[string]any{
+		"project_id": projectID,
+	})), "existing project the member doesn't own")
+	assert.Equal(t, "access denied", toolErrorText(t, callToolArgs(t, memberReadToken, "get_project", map[string]any{
+		"project_id": nonexistentID,
+	})), "nonexistent project must read identically, not \"project not found\"")
+
+	// get_application: same pair, exercising the "fetch it yourself, then
+	// authorize" shape rather than authorizeProject's own internal fetch.
+	assert.Equal(t, "access denied", toolErrorText(t, callToolArgs(t, memberReadToken, "get_application", map[string]any{
+		"application_id": appID,
+	})), "existing application the member doesn't own")
+	assert.Equal(t, "access denied", toolErrorText(t, callToolArgs(t, memberReadToken, "get_application", map[string]any{
+		"application_id": nonexistentID,
+	})), "nonexistent application must read identically, not \"application not found\"")
+
+	// An admin token, by contrast, still gets the real "not found" — only a
+	// non-admin's view collapses the two.
+	adminReadToken := mintScoped(t, adminToken, []string{"read"})
+	assert.Equal(t, "project not found", toolErrorText(t, callToolArgs(t, adminReadToken, "get_project", map[string]any{
+		"project_id": nonexistentID,
+	})))
+}

@@ -52,14 +52,14 @@ func registerDomainTools(srv *mcp.Server, queries *generated.Queries) {
 		var scope pgtype.UUID
 		if middleware.RoleFromContext(ctx) != "admin" {
 			if err := scope.Scan(middleware.UserIDFromContext(ctx)); err != nil {
-				return nil, nil, err
+				return nil, nil, internalError("failed to list domain TLS status", err)
 			}
 		}
 
 		var pinnedProject pgtype.UUID
 		if pinned := middleware.TokenProjectFromContext(ctx); pinned != "" {
 			if err := pinnedProject.Scan(pinned); err != nil {
-				return nil, nil, err
+				return nil, nil, internalError("failed to list domain TLS status", err)
 			}
 		}
 
@@ -68,7 +68,7 @@ func registerDomainTools(srv *mcp.Server, queries *generated.Queries) {
 			ProjectID: pinnedProject,
 		})
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, internalError("failed to list domain TLS status", err)
 		}
 
 		out := make([]domainTLSStatus, 0, len(rows))

@@ -75,7 +75,7 @@ func listProjectsForCaller(ctx context.Context, queries *generated.Queries) ([]p
 	if role == "admin" {
 		rows, err := queries.ListAllProjects(ctx)
 		if err != nil {
-			return nil, err
+			return nil, internalError("failed to list projects", err)
 		}
 		return mapProjects(rows, pinned, func(p generated.ListAllProjectsRow) (pgtype.UUID, string, string, bool, pgtype.Timestamptz) {
 			return p.ID, p.Name, p.Slug, p.Shared, p.CreatedAt
@@ -84,12 +84,12 @@ func listProjectsForCaller(ctx context.Context, queries *generated.Queries) ([]p
 
 	var userID pgtype.UUID
 	if err := userID.Scan(middleware.UserIDFromContext(ctx)); err != nil {
-		return nil, err
+		return nil, internalError("failed to list projects", err)
 	}
 
 	rows, err := queries.ListProjectsByUser(ctx, userID)
 	if err != nil {
-		return nil, err
+		return nil, internalError("failed to list projects", err)
 	}
 	return mapProjects(rows, pinned, func(p generated.ListProjectsByUserRow) (pgtype.UUID, string, string, bool, pgtype.Timestamptz) {
 		return p.ID, p.Name, p.Slug, p.Shared, p.CreatedAt

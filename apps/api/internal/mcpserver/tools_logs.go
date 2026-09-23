@@ -3,8 +3,6 @@ package mcpserver
 import (
 	"bytes"
 	"context"
-	"errors"
-	"fmt"
 
 	"github.com/docker/docker/pkg/stdcopy"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -48,7 +46,7 @@ func registerLogTools(srv *mcp.Server, queries *generated.Queries, runtimes runt
 		}
 		row, err := queries.GetApplicationWithProjectSlug(ctx, appID)
 		if err != nil {
-			return nil, nil, errors.New("application not found")
+			return nil, nil, notFoundOr(ctx, "application not found")
 		}
 		if err := authorizeApplication(ctx, queries, row.ID, row.ProjectID); err != nil {
 			return nil, nil, err
@@ -64,13 +62,13 @@ func registerLogTools(srv *mcp.Server, queries *generated.Queries, runtimes runt
 
 		rt, err := runtimes.For(ctx, row.ServerID)
 		if err != nil {
-			return nil, nil, fmt.Errorf("reaching the application's server: %w", err)
+			return nil, nil, internalError("failed to reach the application's server", err)
 		}
 
 		containerName := naming.ContainerName(row.ProjectSlug, row.Slug, uuidToString(row.ID))
 		rc, err := rt.ContainerLogsTail(ctx, containerName, tail)
 		if err != nil {
-			return nil, nil, fmt.Errorf("reading container logs: %w", err)
+			return nil, nil, internalError("failed to read container logs", err)
 		}
 		defer rc.Close()
 
@@ -85,7 +83,7 @@ func registerLogTools(srv *mcp.Server, queries *generated.Queries, runtimes runt
 		// did this happen" is exactly the kind of thing worth keeping.
 		var buf bytes.Buffer
 		if _, err := stdcopy.StdCopy(&buf, &buf, rc); err != nil && buf.Len() == 0 {
-			return nil, nil, fmt.Errorf("reading container logs: %w", err)
+			return nil, nil, internalError("failed to read container logs", err)
 		}
 
 		return &mcp.CallToolResult{

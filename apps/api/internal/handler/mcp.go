@@ -3,9 +3,13 @@ package handler
 import "net/http"
 
 // HandleMCP serves the read-only MCP (Model Context Protocol) server. The
-// route (POST /mcp) gates identity and access — RequireToken, RequireScope,
-// and RequireProjectAccess all run before this is reached — the transport
-// and tools themselves live in internal/mcpserver.
+// route (POST /mcp) gates identity and scope — RequireToken and
+// RequireScope both run before this is reached — but NOT
+// RequireProjectAccess: this route has no {projectId} URL param for it to
+// compare a pin against. Project-pin enforcement instead happens inside
+// internal/mcpserver, per tool call, via pinAllows/authorizeProject/
+// authorizeApplication/authorizeDatabase (see access.go). The transport and
+// tools themselves live in internal/mcpserver.
 //
 // Deliberately excluded from the generated OpenAPI reference: it is a single
 // stateless JSON-RPC endpoint, not a REST resource, so documenting it as one

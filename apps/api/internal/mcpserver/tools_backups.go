@@ -64,7 +64,7 @@ func registerBackupTools(srv *mcp.Server, queries *generated.Queries) {
 			Limit:     int32(limit),
 		})
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, internalError("failed to list backups", err)
 		}
 
 		out := make([]backupRun, 0, len(rows))
