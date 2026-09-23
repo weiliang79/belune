@@ -12,9 +12,11 @@ import { useAuthStore } from "@/lib/stores/auth";
 import { formatBytes, formatDateTimeShort } from "@/lib/utils/format";
 import { cn } from "@/lib/utils";
 import type { ProjectBackupActivity } from "@/lib/types";
+import { RouteError } from "@/lib/components/route-error";
 
 export const Route = createFileRoute("/_app/projects/$projectId/backups")({
   component: ProjectBackupsPage,
+  errorComponent: RouteError,
 });
 
 function statusTone(status: ProjectBackupActivity["status"]): string {

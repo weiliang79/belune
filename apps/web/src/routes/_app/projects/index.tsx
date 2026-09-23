@@ -33,9 +33,11 @@ import { cn } from "@/lib/utils";
 import { ConfigWarningsBanner } from "@/lib/components/stats/config-warnings-banner";
 import { OperatorHealthStrip } from "@/lib/components/stats/operator-health-strip";
 import type { Project } from "@/lib/types";
+import { RouteError } from "@/lib/components/route-error";
 
 export const Route = createFileRoute("/_app/projects/")({
   component: ProjectsPage,
+  errorComponent: RouteError,
 });
 
 type SortKey = "recent" | "name";

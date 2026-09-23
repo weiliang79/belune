@@ -31,11 +31,13 @@ import { useChannel } from "@/lib/hooks/use-websocket";
 import { BlobLogViewer } from "@/components/logs/blob-log-viewer";
 import { parseLogBlob, stripAnsi, type LogEntry } from "@/components/logs/parse";
 import { normalizeLevel } from "@/lib/logs/level";
+import { RouteError } from "@/lib/components/route-error";
 
 export const Route = createFileRoute(
   "/_app/projects/$projectId/applications/$applicationId/deployments",
 )({
   component: DeploymentsPage,
+  errorComponent: RouteError,
 });
 
 const statusVariant: Record<
