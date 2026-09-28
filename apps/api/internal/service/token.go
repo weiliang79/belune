@@ -135,14 +135,19 @@ func (s *TokenService) Authenticate(ctx context.Context, plain string) (*Authent
 
 // CreateTokenParams collects what Create persists. Validation (name
 // non-empty, expiry one of the offered choices, scopes non-empty and each one
-// a member of AllScopes) is the handler's job — this is the point past which
-// a token unconditionally gets minted with exactly the scopes given.
+// a member of AllScopes, and — for ProjectID — that the caller can actually
+// reach the project) is the handler's job — this is the point past which a
+// token unconditionally gets minted with exactly the scopes and pin given.
 type CreateTokenParams struct {
 	UserID      pgtype.UUID
 	Name        string
 	RoleAtIssue string
 	ExpiresAt   pgtype.Timestamptz
 	Scopes      []string
+	// ProjectID pins the token to one project — a zero-value (Invalid) UUID
+	// persists as SQL NULL, meaning unpinned (every project the owner can
+	// reach, evaluated at use time). Opt-in; NULL stays the default.
+	ProjectID pgtype.UUID
 }
 
 // CreatedToken carries the plaintext alongside the stored row. Plain exists
@@ -153,9 +158,8 @@ type CreatedToken struct {
 	Plain string
 }
 
-// Create mints a new personal access token with exactly p.Scopes. It is
-// always unpinned (ProjectID left zero/NULL — every project the owner can
-// reach, evaluated at use time); narrowing by project has no UI yet.
+// Create mints a new personal access token with exactly p.Scopes, pinned to
+// p.ProjectID if set.
 func (s *TokenService) Create(ctx context.Context, p CreateTokenParams) (*CreatedToken, error) {
 	plain, hash, err := GenerateToken()
 	if err != nil {
@@ -164,6 +168,7 @@ func (s *TokenService) Create(ctx context.Context, p CreateTokenParams) (*Create
 	row, err := s.queries.CreateAPIToken(ctx, generated.CreateAPITokenParams{
 		UserID:      p.UserID,
 		Name:        p.Name,
+		ProjectID:   p.ProjectID,
 		TokenHash:   hash,
 		Scopes:      p.Scopes,
 		RoleAtIssue: p.RoleAtIssue,

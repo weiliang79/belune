@@ -12774,6 +12774,13 @@
                     "name": {
                       "type": "string"
                     },
+                    "project_id": {
+                      "format": "uuid",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
                     "role_at_issue": {
                       "type": "string"
                     },
@@ -15322,6 +15329,13 @@
           "name": {
             "type": "string"
           },
+          "project_id": {
+            "format": "uuid",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "role_at_issue": {
             "type": "string"
           },
@@ -16162,6 +16176,12 @@
           },
           "name": {
             "type": "string"
+          },
+          "project_id": {
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "scopes": {
             "items": {

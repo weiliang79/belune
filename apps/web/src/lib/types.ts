@@ -594,6 +594,9 @@ export interface ApiToken {
   name: string;
   scopes: TokenScope[];
   role_at_issue: "admin" | "member";
+  /** The project this token is pinned to, or null for unpinned (every
+   *  project the owner can reach, evaluated at use time). */
+  project_id: string | null;
   expires_at: string | null;
   last_used_at: string | null;
   created_at: string;

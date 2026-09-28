@@ -24,13 +24,17 @@ var validTokenExpiryDays = map[int]bool{1: true, 7: true, 14: true, 30: true, 60
 // apiTokenDTO is what a token looks like everywhere except the moment it is
 // created — never the hash, never the plaintext.
 type apiTokenDTO struct {
-	ID          string             `json:"id"`
-	Name        string             `json:"name"`
-	Scopes      []string           `json:"scopes"`
-	RoleAtIssue string             `json:"role_at_issue"`
-	ExpiresAt   pgtype.Timestamptz `json:"expires_at"`
-	LastUsedAt  pgtype.Timestamptz `json:"last_used_at"`
-	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	ID          string   `json:"id"`
+	Name        string   `json:"name"`
+	Scopes      []string `json:"scopes"`
+	RoleAtIssue string   `json:"role_at_issue"`
+	// ProjectID is the pin, marshaling to null when the token is unpinned
+	// (pgtype.UUID's own MarshalJSON already does this) — every project the
+	// owner can reach, evaluated at use time.
+	ProjectID  pgtype.UUID        `json:"project_id"`
+	ExpiresAt  pgtype.Timestamptz `json:"expires_at"`
+	LastUsedAt pgtype.Timestamptz `json:"last_used_at"`
+	CreatedAt  pgtype.Timestamptz `json:"created_at"`
 }
 
 func tokenDTOFromRow(row generated.ListAPITokensByUserRow) apiTokenDTO {
@@ -39,6 +43,7 @@ func tokenDTOFromRow(row generated.ListAPITokensByUserRow) apiTokenDTO {
 		Name:        row.Name,
 		Scopes:      row.Scopes,
 		RoleAtIssue: row.RoleAtIssue,
+		ProjectID:   row.ProjectID,
 		ExpiresAt:   row.ExpiresAt,
 		LastUsedAt:  row.LastUsedAt,
 		CreatedAt:   row.CreatedAt,
@@ -74,6 +79,11 @@ type createTokenRequest struct {
 	Name          string   `json:"name"`
 	ExpiresInDays *int     `json:"expires_in_days"`
 	Scopes        []string `json:"scopes"`
+	// ProjectID is a pointer so an omitted field reads as "unpinned" (nil)
+	// distinctly from an empty string, matching ExpiresInDays's own
+	// omitted-vs-zero distinction. Validated below with canAccessProject —
+	// a Member can pin to a project shared with them, not just one they own.
+	ProjectID *string `json:"project_id"`
 }
 
 // validScopes indexes service.AllScopes for membership checks below.
@@ -107,9 +117,9 @@ func normalizeScopes(requested []string) ([]string, bool) {
 
 // CreateAPIToken mints a token for the current user with exactly the scopes
 // it requests — validated against service.AllScopes, so a client cannot smuggle
-// in a value PR4's enforcement doesn't know about. Unpinned to any project
-// (every project the owner can reach, evaluated at use time); narrowing by
-// project has no UI yet.
+// in a value PR4's enforcement doesn't know about. Optionally pinned to one
+// project the caller can already reach; omitted, it is unpinned (every
+// project the owner can reach, evaluated at use time).
 // POST /api/tokens
 //
 //apidoc:tag tokens
@@ -149,21 +159,45 @@ func (h *Handler) CreateAPIToken(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// canAccessProject, not isProjectOwner: a Member must be able to pin to a
+	// project shared with them, or the feature is useless to exactly the
+	// people who need it. This check is UX, not the security boundary — a
+	// token's actual reach is owner's role ∩ project access ∩ scope,
+	// evaluated at use time, so pinning can never grant access the owner
+	// doesn't independently have. project_id is ON DELETE CASCADE: deleting
+	// the pinned project silently deletes this token too.
+	var pinnedProjectID pgtype.UUID
+	if req.ProjectID != nil {
+		if err := pinnedProjectID.Scan(*req.ProjectID); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid project id")
+			return
+		}
+		if !h.canAccessProject(r, pinnedProjectID) {
+			writeError(w, http.StatusForbidden, "access denied")
+			return
+		}
+	}
+
 	created, err := h.tokenSvc.Create(r.Context(), service.CreateTokenParams{
 		UserID:      userUUID,
 		Name:        req.Name,
 		RoleAtIssue: middleware.RoleFromContext(r.Context()),
 		ExpiresAt:   expiresAt,
 		Scopes:      scopes,
+		ProjectID:   pinnedProjectID,
 	})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to create token")
 		return
 	}
 
-	h.audit(r, "token_created", "api_token", uuidToString(created.ID), map[string]any{
+	auditDetails := map[string]any{
 		"name": created.Name,
-	})
+	}
+	if created.ProjectID.Valid {
+		auditDetails["project_id"] = uuidToString(created.ProjectID)
+	}
+	h.audit(r, "token_created", "api_token", uuidToString(created.ID), auditDetails)
 
 	// The only response that ever carries the plaintext — shown once, never
 	// stored or logged past this point.
@@ -173,6 +207,7 @@ func (h *Handler) CreateAPIToken(w http.ResponseWriter, r *http.Request) {
 		"token":         created.Plain,
 		"scopes":        created.Scopes,
 		"role_at_issue": created.RoleAtIssue,
+		"project_id":    created.ProjectID,
 		"expires_at":    created.ExpiresAt,
 		"created_at":    created.CreatedAt,
 	})
