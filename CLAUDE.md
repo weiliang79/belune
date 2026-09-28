@@ -18,7 +18,7 @@ Run `task` from the repo root; `Taskfile.yml` loads `.env`.
 | `task db:migrate:up`, `task generate:sqlc` | Apply migrations, regenerate query code |
 
 Single Go test: `cd apps/api && go test -count=1 -timeout=300s ./internal/handler/ -run TestName`.
-Handler/worker tests are **integration tests using testcontainers — Docker must be running**. Use `-short` to skip them. Always pass `-count=1`; the cache silently replays passes for tests that read files outside the module.
+Handler/worker tests are **integration tests using testcontainers — Docker must be running**. ⚠️ **`-short` does not skip them** — nothing in this module calls `testing.Short()`, so the flag is inert even though CI passes it. `internal/handler`, `internal/service`, `internal/worker`, `internal/logcollector` and `internal/store` each start Postgres in `TestMain` unconditionally and `log.Fatal` without Docker, so they fail at setup rather than skipping; `internal/service/backup` starts a LocalStack container per test. The heavier drills are gated by env var instead: `BELUNE_DOCKER_INTEGRATION=1` for the worker's S3/restore tests, `BELUNE_CADDY_INTEGRATION=1` for the proxy ones. Always pass `-count=1`; the cache silently replays passes for tests that read files outside the module.
 
 ## Architecture
 
