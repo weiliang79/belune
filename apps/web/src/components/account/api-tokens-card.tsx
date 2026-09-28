@@ -4,9 +4,9 @@ import { z } from "zod";
 import { toast } from "sonner";
 import { KeyIcon, Trash2Icon } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { CopyButton } from "@/lib/components/copy-button";
 import { Field, FieldError, FieldLabel } from "@/components/ui/field";
 import { fieldError } from "@/lib/utils/field-error";
+import { CopyRow } from "@/lib/components/copy-row";
 import {
   Card,
   CardContent,
@@ -199,14 +199,7 @@ export function ApiTokensCard() {
               dialog does not revoke it, but there is no way to see it again.
             </DialogDescription>
           </DialogHeader>
-          {issued && (
-            <div className="bg-muted flex items-center gap-2 rounded-md px-3 py-2">
-              <code className="min-w-0 flex-1 font-mono text-sm break-all">
-                {issued}
-              </code>
-              <CopyButton value={issued} />
-            </div>
-          )}
+          {issued && <CopyRow value={issued} />}
           <DialogFooter>
             <Button onClick={() => setIssued(null)}>Done</Button>
           </DialogFooter>

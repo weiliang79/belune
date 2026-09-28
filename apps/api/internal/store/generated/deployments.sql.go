@@ -552,6 +552,59 @@ func (q *Queries) ListOldDeployments(ctx context.Context, arg ListOldDeployments
 	return items, nil
 }
 
+const listRecentDeploymentsByApplication = `-- name: ListRecentDeploymentsByApplication :many
+SELECT id, application_id, status, triggered_by, commit_sha, image_tag, build_logs, error_message, started_at, build_started_at, build_ended_at, deploy_started_at, finished_at, idempotency_key, health_status, health_message, health_checked_at, commit_message, commit_author FROM deployments WHERE application_id = $1 ORDER BY started_at DESC LIMIT $2
+`
+
+type ListRecentDeploymentsByApplicationParams struct {
+	ApplicationID pgtype.UUID `json:"application_id"`
+	Limit         int32       `json:"limit"`
+}
+
+// Bounded sibling of ListDeploymentsByApplication for a caller that wants a
+// capped page rather than the whole history (the MCP list_deployments tool
+// — see internal/mcpserver/tools_deployments.go). Additive: the REST
+// endpoint keeps using the unbounded query above unchanged.
+func (q *Queries) ListRecentDeploymentsByApplication(ctx context.Context, arg ListRecentDeploymentsByApplicationParams) ([]Deployment, error) {
+	rows, err := q.db.Query(ctx, listRecentDeploymentsByApplication, arg.ApplicationID, arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Deployment{}
+	for rows.Next() {
+		var i Deployment
+		if err := rows.Scan(
+			&i.ID,
+			&i.ApplicationID,
+			&i.Status,
+			&i.TriggeredBy,
+			&i.CommitSha,
+			&i.ImageTag,
+			&i.BuildLogs,
+			&i.ErrorMessage,
+			&i.StartedAt,
+			&i.BuildStartedAt,
+			&i.BuildEndedAt,
+			&i.DeployStartedAt,
+			&i.FinishedAt,
+			&i.IdempotencyKey,
+			&i.HealthStatus,
+			&i.HealthMessage,
+			&i.HealthCheckedAt,
+			&i.CommitMessage,
+			&i.CommitAuthor,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listUserDeployments = `-- name: ListUserDeployments :many
 SELECT d.id, d.application_id, d.status, d.triggered_by, d.commit_sha, d.commit_message, d.commit_author, d.build_logs, d.error_message, d.started_at, d.finished_at, d.image_tag,
        a.name AS application_name, a.slug AS application_slug,

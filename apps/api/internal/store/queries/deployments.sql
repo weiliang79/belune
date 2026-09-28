@@ -1,6 +1,13 @@
 -- name: ListDeploymentsByApplication :many
 SELECT * FROM deployments WHERE application_id = $1 ORDER BY started_at DESC;
 
+-- name: ListRecentDeploymentsByApplication :many
+-- Bounded sibling of ListDeploymentsByApplication for a caller that wants a
+-- capped page rather than the whole history (the MCP list_deployments tool
+-- — see internal/mcpserver/tools_deployments.go). Additive: the REST
+-- endpoint keeps using the unbounded query above unchanged.
+SELECT * FROM deployments WHERE application_id = $1 ORDER BY started_at DESC LIMIT $2;
+
 -- name: ListImageTagOwners :many
 -- Maps each built image tag to its owning application, so the admin Docker
 -- page can attribute images regardless of which builder produced them (labels

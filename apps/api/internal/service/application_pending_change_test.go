@@ -1,4 +1,4 @@
-package handler
+package service_test
 
 import (
 	"testing"
@@ -6,14 +6,15 @@ import (
 
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/weiliang79/belune/internal/service"
 	"github.com/weiliang79/belune/internal/store/generated"
 )
 
-func ts(t time.Time) pgtype.Timestamptz {
+func pendingChangeTS(t time.Time) pgtype.Timestamptz {
 	return pgtype.Timestamptz{Time: t, Valid: true}
 }
 
-func TestPendingChange(t *testing.T) {
+func TestApplicationPendingChange(t *testing.T) {
 	now := time.Now()
 
 	cases := []struct {
@@ -23,17 +24,17 @@ func TestPendingChange(t *testing.T) {
 	}{
 		{
 			name: "nothing changed",
-			app:  generated.Application{LastDeployedAt: ts(now)},
+			app:  generated.Application{LastDeployedAt: pendingChangeTS(now)},
 			want: "",
 		},
 		{
 			name: "config marker set",
-			app:  generated.Application{LastDeployedAt: ts(now), ConfigChangedAt: ts(now)},
+			app:  generated.Application{LastDeployedAt: pendingChangeTS(now), ConfigChangedAt: pendingChangeTS(now)},
 			want: "config",
 		},
 		{
 			name: "source marker set",
-			app:  generated.Application{LastDeployedAt: ts(now), SourceChangedAt: ts(now)},
+			app:  generated.Application{LastDeployedAt: pendingChangeTS(now), SourceChangedAt: pendingChangeTS(now)},
 			want: "source",
 		},
 		{
@@ -42,9 +43,9 @@ func TestPendingChange(t *testing.T) {
 			// the job.
 			name: "both set reports the stronger one",
 			app: generated.Application{
-				LastDeployedAt:  ts(now),
-				ConfigChangedAt: ts(now),
-				SourceChangedAt: ts(now),
+				LastDeployedAt:  pendingChangeTS(now),
+				ConfigChangedAt: pendingChangeTS(now),
+				SourceChangedAt: pendingChangeTS(now),
 			},
 			want: "source",
 		},
@@ -54,8 +55,8 @@ func TestPendingChange(t *testing.T) {
 			// "needs redeploy" from birth.
 			name: "suppressed until the first successful deploy",
 			app: generated.Application{
-				ConfigChangedAt: ts(now),
-				SourceChangedAt: ts(now),
+				ConfigChangedAt: pendingChangeTS(now),
+				SourceChangedAt: pendingChangeTS(now),
 			},
 			want: "",
 		},
@@ -63,8 +64,8 @@ func TestPendingChange(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			if got := pendingChange(c.app); got != c.want {
-				t.Errorf("pendingChange() = %q, want %q", got, c.want)
+			if got := service.ApplicationPendingChange(c.app); got != c.want {
+				t.Errorf("ApplicationPendingChange() = %q, want %q", got, c.want)
 			}
 		})
 	}
