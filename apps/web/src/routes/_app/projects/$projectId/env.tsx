@@ -34,9 +34,11 @@ import {
 } from "@/components/ui/dialog";
 import { copyToClipboard } from "@/lib/utils/clipboard";
 import { parseEnvContent } from "@/lib/utils/parse-env";
+import { RouteError } from "@/lib/components/route-error";
 
 export const Route = createFileRoute("/_app/projects/$projectId/env")({
   component: ProjectEnvVarsPage,
+  errorComponent: RouteError,
 });
 
 const ENV_KEY_REGEX = /^[A-Za-z_][A-Za-z0-9_]*$/;

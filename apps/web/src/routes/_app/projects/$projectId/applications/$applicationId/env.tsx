@@ -41,11 +41,13 @@ import {
 import { copyToClipboard } from "@/lib/utils/clipboard";
 import { parseEnvContent } from "@/lib/utils/parse-env";
 import type { EnvVar } from "@/lib/types";
+import { RouteError } from "@/lib/components/route-error";
 
 export const Route = createFileRoute(
   "/_app/projects/$projectId/applications/$applicationId/env",
 )({
   component: EnvVarsPage,
+  errorComponent: RouteError,
 });
 
 const ENV_KEY_REGEX = /^[A-Za-z_][A-Za-z0-9_]*$/;

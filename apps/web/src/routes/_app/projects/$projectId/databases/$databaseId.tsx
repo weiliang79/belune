@@ -96,6 +96,7 @@ import {
   FieldLabel,
 } from "@/components/ui/field";
 import { fieldError } from "@/lib/utils/field-error";
+import { RouteError } from "@/lib/components/route-error";
 
 // Engines with an in-image logical-dump tool (pg_dump/mysqldump/mongodump).
 // redis (cache) has no logical backup. "other" is backed up when a backup mode
@@ -130,6 +131,7 @@ export const Route = createFileRoute(
   "/_app/projects/$projectId/databases/$databaseId",
 )({
   component: DatabaseDetailPage,
+  errorComponent: RouteError,
   validateSearch: (search: Record<string, unknown>): { tab?: DbTab } =>
     search.tab === "logs" ||
     search.tab === "backups" ||

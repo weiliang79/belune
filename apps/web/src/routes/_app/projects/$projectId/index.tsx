@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/segmented-control";
 import { ApplicationFormDialog } from "@/components/applications/application-form-dialog";
 import { DatabaseFormDialog } from "@/components/databases/database-form-dialog";
+import { RouteError } from "@/lib/components/route-error";
 import {
   ServicesTable,
   type ServiceRowItem,
@@ -27,6 +28,7 @@ import {
 
 export const Route = createFileRoute("/_app/projects/$projectId/")({
   component: ProjectOverview,
+  errorComponent: RouteError,
 });
 
 type TypeFilter = "all" | "application" | "database";

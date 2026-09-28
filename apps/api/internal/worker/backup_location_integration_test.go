@@ -11,7 +11,8 @@ import (
 	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
-	tcminio "github.com/testcontainers/testcontainers-go/modules/minio"
+	"github.com/testcontainers/testcontainers-go"
+	"github.com/testcontainers/testcontainers-go/modules/localstack"
 
 	"github.com/weiliang79/belune/internal/config"
 	"github.com/weiliang79/belune/internal/pkg/crypto"
@@ -21,25 +22,30 @@ import (
 	"github.com/weiliang79/belune/internal/testutil"
 )
 
-// minioEndpoint starts a MinIO container and returns its host:port.
-func minioEndpoint(t *testing.T) string {
+// s3Endpoint starts a LocalStack (S3-only) container and returns its
+// host:port. MinIO used to serve this role, but its image is no longer
+// anonymously pullable from either quay.io or Docker Hub — see startS3 in
+// internal/service/backup/service_test.go for the fuller reasoning.
+func s3Endpoint(t *testing.T) string {
 	t.Helper()
 	ctx := context.Background()
-	// quay.io: minio/minio was removed from Docker Hub. Pinned, not :latest —
-	// the moving tag is why that removal reached CI as a surprise.
-	container, err := tcminio.Run(ctx, "quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z",
-		tcminio.WithUsername("minioadmin"), tcminio.WithPassword("minioadmin"))
+	// Pinned, not :latest — a moving tag is exactly how the MinIO removal
+	// reached CI as a surprise in the first place.
+	container, err := localstack.Run(ctx, "localstack/localstack:4.14.0",
+		testcontainers.WithEnv(map[string]string{"SERVICES": "s3"}),
+	)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = container.Terminate(context.Background()) })
 
-	endpoint, err := container.ConnectionString(ctx)
+	endpoint, err := container.PortEndpoint(ctx, "4566/tcp", "http")
 	require.NoError(t, err)
 	return strings.TrimPrefix(strings.TrimPrefix(endpoint, "http://"), "https://")
 }
 
-// makeBucket creates bucket on the MinIO at endpoint. The DestinationClient has
-// no create-bucket call (destinations are expected to pre-exist), so this
-// borrows the global backup service's EnsureBucket to set the fixture up.
+// makeBucket creates bucket on the S3-compatible endpoint. The
+// DestinationClient has no create-bucket call (destinations are expected to
+// pre-exist), so this borrows the global backup service's EnsureBucket to
+// set the fixture up.
 func makeBucket(t *testing.T, endpoint, bucket string) {
 	t.Helper()
 	svc := backup.New(&config.Config{
@@ -47,21 +53,21 @@ func makeBucket(t *testing.T, endpoint, bucket string) {
 		BackupS3Endpoint:    endpoint,
 		BackupS3Region:      "us-east-1",
 		BackupS3Bucket:      bucket,
-		BackupS3AccessKey:   "minioadmin",
-		BackupS3SecretKey:   "minioadmin",
+		BackupS3AccessKey:   "test",
+		BackupS3SecretKey:   "test",
 		BackupS3UseSSL:      false,
 	})
 	require.NoError(t, svc.EnsureBucket(context.Background()))
 }
 
-// seedDestination inserts a backup destination pointing at bucket on the MinIO
-// at endpoint, with the test keyring's encrypted credentials.
+// seedDestination inserts a backup destination pointing at bucket on the
+// S3-compatible endpoint, with the test keyring's encrypted credentials.
 func seedDestination(t *testing.T, projectID pgtype.UUID, name, endpoint, bucket string) generated.BackupDestination {
 	t.Helper()
 	keyring, err := crypto.ParseKeyringEnv("", testutil.TestEncryptionKey, "")
 	require.NoError(t, err)
 	credsJSON, err := json.Marshal(map[string]string{
-		"access_key": "minioadmin", "secret_key": "minioadmin",
+		"access_key": "test", "secret_key": "test",
 	})
 	require.NoError(t, err)
 	enc, err := keyring.Encrypt(credsJSON)
@@ -87,11 +93,11 @@ func seedDestination(t *testing.T, projectID pgtype.UUID, name, endpoint, bucket
 // resolving through it sends the download at a bucket the object was never in.
 func TestRestoreFollowsRecordedLocation_NotRepointedConfig(t *testing.T) {
 	if os.Getenv("BELUNE_DOCKER_INTEGRATION") == "" {
-		t.Skip("set BELUNE_DOCKER_INTEGRATION=1 to run the backup-location test (needs MinIO)")
+		t.Skip("set BELUNE_DOCKER_INTEGRATION=1 to run the backup-location test (needs Docker)")
 	}
 	ctx := context.Background()
 
-	endpoint := minioEndpoint(t)
+	endpoint := s3Endpoint(t)
 	makeBucket(t, endpoint, "bucket-a")
 	makeBucket(t, endpoint, "bucket-b")
 
@@ -170,11 +176,11 @@ func TestRestoreFollowsRecordedLocation_NotRepointedConfig(t *testing.T) {
 // the destination unknowable. The recorded location outlives the config.
 func TestRestoreSurvivesDeletedConfig(t *testing.T) {
 	if os.Getenv("BELUNE_DOCKER_INTEGRATION") == "" {
-		t.Skip("set BELUNE_DOCKER_INTEGRATION=1 to run the backup-location test (needs MinIO)")
+		t.Skip("set BELUNE_DOCKER_INTEGRATION=1 to run the backup-location test (needs Docker)")
 	}
 	ctx := context.Background()
 
-	endpoint := minioEndpoint(t)
+	endpoint := s3Endpoint(t)
 	makeBucket(t, endpoint, "orphan-bucket")
 
 	var restoredLen int
