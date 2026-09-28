@@ -11,7 +11,8 @@ import (
 	"github.com/hibiken/asynq"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	tcminio "github.com/testcontainers/testcontainers-go/modules/minio"
+	"github.com/testcontainers/testcontainers-go"
+	"github.com/testcontainers/testcontainers-go/modules/localstack"
 
 	"github.com/weiliang79/belune/internal/config"
 	"github.com/weiliang79/belune/internal/service/backup"
@@ -19,22 +20,26 @@ import (
 )
 
 // TestRestoreFromS3_RealDocker verifies the resolveBackupFile remote branch: a
-// backup is uploaded to (MinIO) S3, its local copy is deleted, and the restore
-// then downloads it from S3 and feeds it to the restore client.
+// backup is uploaded to S3, its local copy is deleted, and the restore then
+// downloads it from S3 and feeds it to the restore client.
 func TestRestoreFromS3_RealDocker(t *testing.T) {
 	if os.Getenv("BELUNE_DOCKER_INTEGRATION") == "" {
-		t.Skip("set BELUNE_DOCKER_INTEGRATION=1 to run the restore-from-S3 test (needs MinIO)")
+		t.Skip("set BELUNE_DOCKER_INTEGRATION=1 to run the restore-from-S3 test (needs Docker)")
 	}
 	ctx := context.Background()
 
-	// quay.io: minio/minio was removed from Docker Hub. Pinned, not :latest —
-	// the moving tag is why that removal reached CI as a surprise.
-	container, err := tcminio.Run(ctx, "quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z",
-		tcminio.WithUsername("minioadmin"), tcminio.WithPassword("minioadmin"))
+	// LocalStack, not MinIO: MinIO's image is no longer anonymously pullable
+	// from either quay.io or Docker Hub — see startS3 in
+	// internal/service/backup/service_test.go for the fuller reasoning.
+	// Pinned, not :latest — a moving tag is exactly how the MinIO removal
+	// reached CI as a surprise in the first place.
+	container, err := localstack.Run(ctx, "localstack/localstack:4.14.0",
+		testcontainers.WithEnv(map[string]string{"SERVICES": "s3"}),
+	)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = container.Terminate(ctx) })
 
-	endpoint, err := container.ConnectionString(ctx)
+	endpoint, err := container.PortEndpoint(ctx, "4566/tcp", "http")
 	require.NoError(t, err)
 	endpoint = strings.TrimPrefix(strings.TrimPrefix(endpoint, "http://"), "https://")
 
@@ -43,8 +48,8 @@ func TestRestoreFromS3_RealDocker(t *testing.T) {
 		BackupS3Endpoint:    endpoint,
 		BackupS3Region:      "us-east-1",
 		BackupS3Bucket:      "test-backups",
-		BackupS3AccessKey:   "minioadmin",
-		BackupS3SecretKey:   "minioadmin",
+		BackupS3AccessKey:   "test",
+		BackupS3SecretKey:   "test",
 		BackupS3Prefix:      "belune/",
 		BackupS3UseSSL:      false,
 	})
