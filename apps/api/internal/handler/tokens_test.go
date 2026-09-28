@@ -339,6 +339,29 @@ func TestCreateAPIToken_RejectsMalformedProjectID(t *testing.T) {
 	resp.Body.Close()
 }
 
+// TestCreateAPIToken_AdminRejectsNonexistentProject pins the admin-specific
+// path a Member never reaches: canAccessOwned (authz.go) short-circuits to
+// true for an admin before ever looking the project up, so a well-formed
+// but nonexistent project_id would otherwise sail past canAccessProject and
+// surface as a 500 from the project_id foreign key at INSERT time instead
+// of a 4xx. A Member gets 403 for the identical request (canAccessOwned's
+// own lookup fails first), which TestCreateAPIToken_RejectsUnreachableProject
+// already covers with an existing project a Member merely cannot reach —
+// this one is the "doesn't exist at all" case, admin-only because that's
+// the only role for which the distinction is even reachable.
+func TestCreateAPIToken_AdminRejectsNonexistentProject(t *testing.T) {
+	resetDB(t)
+	adminToken := env.SetupAdmin(t, "admin@test.com", "password123")
+
+	resp := env.DoRequest(t, "POST", "/api/tokens", map[string]any{
+		"name":       "nonexistent-project",
+		"scopes":     service.AllScopes,
+		"project_id": "00000000-0000-0000-0000-000000000000",
+	}, testutil.AuthHeader(adminToken))
+	assert.Equal(t, http.StatusNotFound, resp.StatusCode)
+	resp.Body.Close()
+}
+
 // TestCreateAPIToken_PinnedTokenEnforcesItsPin creates a pinned token
 // through the real endpoint (not a direct DB insert) and proves
 // middleware.RequireProjectAccess actually enforces the pin it stored — the

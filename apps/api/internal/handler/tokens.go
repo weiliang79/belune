@@ -176,6 +176,18 @@ func (h *Handler) CreateAPIToken(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusForbidden, "access denied")
 			return
 		}
+		// canAccessOwned short-circuits to true for an admin before it ever
+		// looks the project up, so a well-formed but nonexistent id sails
+		// past the check above and would otherwise surface as a 500 from
+		// the project_id foreign key at INSERT time. For a non-admin this
+		// is a no-op: canAccessProject already required a successful
+		// lookup to pass, so it never fails here — a nonexistent id was
+		// already turned into "access denied" above, the same collapse
+		// that avoids a cross-tenant existence oracle for that caller.
+		if _, err := h.queries.GetProject(r.Context(), pinnedProjectID); err != nil {
+			writeError(w, http.StatusNotFound, "project not found")
+			return
+		}
 	}
 
 	created, err := h.tokenSvc.Create(r.Context(), service.CreateTokenParams{
