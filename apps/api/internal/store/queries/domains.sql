@@ -167,6 +167,28 @@ WHERE (sqlc.narg('user_id')::uuid IS NULL
   AND (sqlc.narg('project_id')::uuid IS NULL OR p.id = sqlc.narg('project_id'))
 ORDER BY d.hostname;
 
+-- name: ListDomainsWithTLSStatusLimit :many
+-- Bounded sibling of ListDomainsWithTLSStatus for the MCP
+-- list_domain_tls_status tool: same NULL-means-unfiltered user_id/project_id
+-- handling (the pin is already applied in SQL here, same as the query
+-- above), plus a LIMIT so a large install's entire domain table isn't the
+-- single largest response this server can produce. Additive: REST's
+-- ListDomainTLSStatus handler keeps using the unbounded query above
+-- unchanged.
+SELECT d.id, d.hostname, d.ssl_mode, d.tls_status, d.tls_issuer, d.tls_not_after,
+       d.tls_last_checked_at, d.tls_error, d.tls_advisory, c.name AS certificate_name,
+       a.name AS application_name, a.id AS application_id, p.id AS project_id
+FROM domains d
+JOIN applications a ON a.id = d.application_id
+JOIN projects p ON p.id = a.project_id
+LEFT JOIN certificates c ON c.id = d.certificate_id
+WHERE (sqlc.narg('user_id')::uuid IS NULL
+       OR p.user_id = sqlc.narg('user_id')
+       OR p.shared)
+  AND (sqlc.narg('project_id')::uuid IS NULL OR p.id = sqlc.narg('project_id'))
+ORDER BY d.hostname
+LIMIT sqlc.arg('row_limit');
+
 -- name: ListDomainsByHostname :many
 -- Every row serving a hostname — one per path since migration 000039.
 -- Used to enforce that they agree about TLS: they share a single certificate,

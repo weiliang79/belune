@@ -260,6 +260,32 @@ func apidocIsPublic(path string) bool {
 	return false
 }
 
+// apidocSkipNonRESTPrefixes are authenticated routes deliberately excluded
+// from the generated reference because they are not REST resources — unlike
+// apidocSkipPublicPrefixes, these are NOT unauthenticated, so they must not
+// be added there (that list's meaning is specifically "no Auth() at all",
+// and apidocSecurity derives real security documentation from it elsewhere).
+//
+// /mcp is a single stateless JSON-RPC-over-HTTP endpoint (see
+// internal/mcpserver): its handler has no json.Decode/writeJSON call for the
+// static type extractor to resolve (the request/response shape is per-tool,
+// decided at the JSON-RPC layer, not a fixed Go struct), so documenting it
+// as one POST operation would show an opaque, meaningless body. Its tools,
+// not this route, are what need documenting — and MCP tool descriptions
+// aren't OpenAPI operations.
+var apidocSkipNonRESTPrefixes = []string{
+	"/mcp",
+}
+
+func apidocIsNonREST(path string) bool {
+	for _, p := range apidocSkipNonRESTPrefixes {
+		if path == p || strings.HasPrefix(path, p) {
+			return true
+		}
+	}
+	return false
+}
+
 // apidocFuncName returns the short name of the function a value wraps —
 // reliable for this because Go compiles one machine-code body per closure
 // literal in the source, shared across every instantiation; the returned
@@ -363,7 +389,7 @@ func TestGenerateAPIReference(t *testing.T) {
 		// "/*" is chi's own internal NotFound/MethodNotAllowed fallback, not
 		// an application route — it never reaches Auth() at all, which is
 		// exactly why it shows up 200 for every method with no scope check.
-		if route == "/*" || apidocIsPublic(route) {
+		if route == "/*" || apidocIsPublic(route) || apidocIsNonREST(route) {
 			return nil
 		}
 

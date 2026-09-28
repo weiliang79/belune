@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"context"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -101,6 +102,16 @@ func RequireScopeByMethod() func(http.Handler) http.Handler {
 	}
 }
 
+// PinAllows reports whether a project-pinned token may reach projectID —
+// true for an unpinned token or one pinned to exactly this project. Shared
+// by RequireProjectAccess below (which compares against a {projectId} URL
+// param) and internal/mcpserver's tools, which have no URL param to compare
+// against and call this directly, once per tool call, instead.
+func PinAllows(ctx context.Context, projectID string) bool {
+	pinned := TokenProjectFromContext(ctx)
+	return pinned == "" || pinned == projectID
+}
+
 // RequireProjectAccess returns a middleware that rejects a request whose
 // {projectId} URL param does not match a project-pinned PAT's pin. A route
 // with no projectId param, or a token that isn't pinned (every existing
@@ -110,12 +121,12 @@ func RequireScopeByMethod() func(http.Handler) http.Handler {
 func RequireProjectAccess() func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			pinned := TokenProjectFromContext(r.Context())
-			if pinned == "" {
+			requested := chi.URLParam(r, "projectId")
+			if requested == "" {
 				next.ServeHTTP(w, r)
 				return
 			}
-			if requested := chi.URLParam(r, "projectId"); requested != "" && requested != pinned {
+			if !PinAllows(r.Context(), requested) {
 				http.Error(w, `{"error":"token is pinned to a different project"}`, http.StatusForbidden)
 				return
 			}

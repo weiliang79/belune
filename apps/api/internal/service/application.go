@@ -379,3 +379,31 @@ func (s *ApplicationService) FindOrCreatePreview(
 	}
 	return created, true, nil
 }
+
+// ApplicationPendingChange reports what it would take to make the running
+// container match the saved configuration: "source", "config", or "" for
+// nothing pending. Shared by the REST wire shape (handler.applicationResponse)
+// and the MCP tool-facing shape (internal/mcpserver) so the two can't drift
+// on what the same three states mean — the rule itself doesn't belong to
+// either presentation.
+//
+// Source outranks config because it subsumes it: a deploy applies config too,
+// so reporting both would offer a "Reload to apply" that cannot actually
+// finish the job.
+//
+// Suppressed entirely until the application has deployed at least once.
+// Without that, an app configured before its first deploy would read "needs
+// redeploy" from birth — the false positive that teaches people to ignore the
+// indicator. Note this cannot key off last_activity_at, which is NOT NULL
+// DEFAULT NOW() and so is already set at creation.
+func ApplicationPendingChange(a generated.Application) string {
+	switch {
+	case !a.LastDeployedAt.Valid:
+		return ""
+	case a.SourceChangedAt.Valid:
+		return "source"
+	case a.ConfigChangedAt.Valid:
+		return "config"
+	}
+	return ""
+}

@@ -138,6 +138,72 @@ func (q *Queries) ListAllProjects(ctx context.Context) ([]ListAllProjectsRow, er
 	return items, nil
 }
 
+const listAllProjectsLimit = `-- name: ListAllProjectsLimit :many
+SELECT p.id, p.name, p.slug, p.user_id, p.created_at, p.updated_at, p.server_id, p.shared, (
+    SELECT max(d.started_at)
+    FROM deployments d
+    JOIN applications a ON a.id = d.application_id
+    WHERE a.project_id = p.id
+) AS last_deployed_at
+FROM projects p
+WHERE ($1::uuid IS NULL OR p.id = $1)
+ORDER BY p.created_at DESC
+LIMIT $2
+`
+
+type ListAllProjectsLimitParams struct {
+	ProjectID pgtype.UUID `json:"project_id"`
+	RowLimit  int32       `json:"row_limit"`
+}
+
+type ListAllProjectsLimitRow struct {
+	ID             pgtype.UUID        `json:"id"`
+	Name           string             `json:"name"`
+	Slug           string             `json:"slug"`
+	UserID         pgtype.UUID        `json:"user_id"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+	ServerID       pgtype.UUID        `json:"server_id"`
+	Shared         bool               `json:"shared"`
+	LastDeployedAt interface{}        `json:"last_deployed_at"`
+}
+
+// Bounded sibling of ListAllProjects for the MCP list_projects tool.
+// project_id is the PAT pin, applied here in SQL — not as a post-query
+// Go-side filter the way REST's ListProjects narrows it — so LIMIT can
+// never truncate away the one project a pinned token is allowed to see
+// before the pin gets a chance to narrow the result to it. Additive: REST
+// keeps using the unbounded query above unchanged.
+func (q *Queries) ListAllProjectsLimit(ctx context.Context, arg ListAllProjectsLimitParams) ([]ListAllProjectsLimitRow, error) {
+	rows, err := q.db.Query(ctx, listAllProjectsLimit, arg.ProjectID, arg.RowLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListAllProjectsLimitRow{}
+	for rows.Next() {
+		var i ListAllProjectsLimitRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Slug,
+			&i.UserID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.ServerID,
+			&i.Shared,
+			&i.LastDeployedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listProjectsByUser = `-- name: ListProjectsByUser :many
 SELECT p.id, p.name, p.slug, p.user_id, p.created_at, p.updated_at, p.server_id, p.shared, (
     SELECT max(d.started_at)
@@ -172,6 +238,70 @@ func (q *Queries) ListProjectsByUser(ctx context.Context, userID pgtype.UUID) ([
 	items := []ListProjectsByUserRow{}
 	for rows.Next() {
 		var i ListProjectsByUserRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Slug,
+			&i.UserID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.ServerID,
+			&i.Shared,
+			&i.LastDeployedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listProjectsByUserLimit = `-- name: ListProjectsByUserLimit :many
+SELECT p.id, p.name, p.slug, p.user_id, p.created_at, p.updated_at, p.server_id, p.shared, (
+    SELECT max(d.started_at)
+    FROM deployments d
+    JOIN applications a ON a.id = d.application_id
+    WHERE a.project_id = p.id
+) AS last_deployed_at
+FROM projects p
+WHERE (p.user_id = $1 OR p.shared)
+  AND ($2::uuid IS NULL OR p.id = $2)
+ORDER BY p.created_at DESC
+LIMIT $3
+`
+
+type ListProjectsByUserLimitParams struct {
+	UserID    pgtype.UUID `json:"user_id"`
+	ProjectID pgtype.UUID `json:"project_id"`
+	RowLimit  int32       `json:"row_limit"`
+}
+
+type ListProjectsByUserLimitRow struct {
+	ID             pgtype.UUID        `json:"id"`
+	Name           string             `json:"name"`
+	Slug           string             `json:"slug"`
+	UserID         pgtype.UUID        `json:"user_id"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+	ServerID       pgtype.UUID        `json:"server_id"`
+	Shared         bool               `json:"shared"`
+	LastDeployedAt interface{}        `json:"last_deployed_at"`
+}
+
+// Bounded sibling of ListProjectsByUser — see ListAllProjectsLimit for why
+// the pin is applied in SQL here rather than post-query in Go.
+func (q *Queries) ListProjectsByUserLimit(ctx context.Context, arg ListProjectsByUserLimitParams) ([]ListProjectsByUserLimitRow, error) {
+	rows, err := q.db.Query(ctx, listProjectsByUserLimit, arg.UserID, arg.ProjectID, arg.RowLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListProjectsByUserLimitRow{}
+	for rows.Next() {
+		var i ListProjectsByUserLimitRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.Name,
