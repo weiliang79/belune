@@ -9,7 +9,8 @@ import (
 	"testing"
 	"time"
 
-	tcminio "github.com/testcontainers/testcontainers-go/modules/minio"
+	"github.com/testcontainers/testcontainers-go"
+	"github.com/testcontainers/testcontainers-go/modules/localstack"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -18,24 +19,31 @@ import (
 	"github.com/weiliang79/belune/internal/service/backup"
 )
 
-// startMinio spins up a MinIO testcontainer and returns a configured Service.
-func startMinio(t *testing.T) (*backup.Service, func()) {
+// startS3 spins up a LocalStack (S3-only) testcontainer and returns a
+// configured Service. MinIO used to serve this role, but its image is no
+// longer anonymously pullable from either quay.io or Docker Hub — both now
+// require authentication for even a `docker pull`, which a public CI runner
+// cannot do. LocalStack's S3 emulation is a drop-in replacement here: the
+// application code (backup.Service, DestinationClient) never depended on
+// anything MinIO-specific — minio-go is a generic S3 client, and its
+// bucket-lookup auto-detection already falls back to path-style addressing
+// for any non-AWS endpoint, exactly as it did against MinIO.
+func startS3(t *testing.T) (*backup.Service, func()) {
 	t.Helper()
 	ctx := context.Background()
 
-	const accessKey = "minioadmin"
-	const secretKey = "minioadmin"
+	const accessKey = "test"
+	const secretKey = "test"
 	const bucket = "test-backups"
 
-	// quay.io: minio/minio was removed from Docker Hub. Pinned, not :latest —
-	// the moving tag is why that removal reached CI as a surprise.
-	container, err := tcminio.Run(ctx, "quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z",
-		tcminio.WithUsername(accessKey),
-		tcminio.WithPassword(secretKey),
+	// Pinned, not :latest — a moving tag is exactly how the MinIO removal
+	// reached CI as a surprise in the first place.
+	container, err := localstack.Run(ctx, "localstack/localstack:4.14.0",
+		testcontainers.WithEnv(map[string]string{"SERVICES": "s3"}),
 	)
-	require.NoError(t, err, "start minio container")
+	require.NoError(t, err, "start localstack container")
 
-	endpoint, err := container.ConnectionString(ctx)
+	endpoint, err := container.PortEndpoint(ctx, "4566/tcp", "http")
 	require.NoError(t, err)
 	// endpoint includes "http://" prefix — strip it for minio-go
 	endpoint = strings.TrimPrefix(endpoint, "http://")
@@ -56,12 +64,12 @@ func startMinio(t *testing.T) (*backup.Service, func()) {
 
 	svc := backup.New(cfg)
 
-	// Create the bucket — MinIO starts empty.
+	// Create the bucket — LocalStack starts empty.
 	require.NoError(t, svc.EnsureBucket(ctx))
 
 	teardown := func() {
 		if err := container.Terminate(ctx); err != nil {
-			t.Logf("minio container terminate: %v", err)
+			t.Logf("localstack container terminate: %v", err)
 		}
 	}
 	return svc, teardown
@@ -76,7 +84,7 @@ func tempBackupFile(t *testing.T, name, content string) string {
 }
 
 func TestBackupService_UploadListDelete(t *testing.T) {
-	svc, teardown := startMinio(t)
+	svc, teardown := startS3(t)
 	defer teardown()
 	ctx := context.Background()
 
@@ -104,7 +112,7 @@ func TestBackupService_UploadListDelete(t *testing.T) {
 }
 
 func TestBackupService_LatestKey(t *testing.T) {
-	svc, teardown := startMinio(t)
+	svc, teardown := startS3(t)
 	defer teardown()
 	ctx := context.Background()
 
@@ -132,7 +140,7 @@ func TestBackupService_LatestKey(t *testing.T) {
 }
 
 func TestBackupService_AgeFileContentType(t *testing.T) {
-	svc, teardown := startMinio(t)
+	svc, teardown := startS3(t)
 	defer teardown()
 	ctx := context.Background()
 
@@ -153,7 +161,7 @@ func TestBackupService_Disabled(t *testing.T) {
 }
 
 func TestBackupService_DeleteMissingKeyIsNoError(t *testing.T) {
-	svc, teardown := startMinio(t)
+	svc, teardown := startS3(t)
 	defer teardown()
 	ctx := context.Background()
 
