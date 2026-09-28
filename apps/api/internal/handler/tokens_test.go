@@ -362,6 +362,35 @@ func TestCreateAPIToken_AdminRejectsNonexistentProject(t *testing.T) {
 	resp.Body.Close()
 }
 
+// TestCreateAPIToken_MemberNonexistentProjectStaysForbidden is the other half
+// of the test above, and it guards a property that rests entirely on the ORDER
+// of two checks inside CreateAPIToken: canAccessProject runs first, the
+// existence check second. Because of that order a non-admin never reaches the
+// 404 — a nonexistent id is already collapsed into "access denied" by the
+// access check, the same collapse that stops a token using a resource's mere
+// existence as a cross-tenant oracle.
+//
+// Nothing about that is enforced by a type or a signature; hoist the existence
+// check above the access check during some future refactor and Members start
+// learning which project ids are real, while every other test in this file
+// still passes. Hence this one: it fails the moment the order flips.
+func TestCreateAPIToken_MemberNonexistentProjectStaysForbidden(t *testing.T) {
+	resetDB(t)
+	adminToken := env.SetupAdmin(t, "admin@test.com", "password123")
+	_, memberToken := createMember(t, adminToken, "member@test.com")
+
+	resp := env.DoRequest(t, "POST", "/api/tokens", map[string]any{
+		"name":       "member-nonexistent-project",
+		"scopes":     service.AllScopes,
+		"project_id": "00000000-0000-0000-0000-000000000000",
+	}, testutil.AuthHeader(memberToken))
+	defer resp.Body.Close()
+	// Deliberately asserting the exact status, not merely "an error": a 404
+	// here would be the leak, and it is the plausible regression.
+	assert.Equal(t, http.StatusForbidden, resp.StatusCode,
+		"a Member must not be able to tell a nonexistent project from one they cannot reach")
+}
+
 // TestCreateAPIToken_PinnedTokenEnforcesItsPin creates a pinned token
 // through the real endpoint (not a direct DB insert) and proves
 // middleware.RequireProjectAccess actually enforces the pin it stored — the
