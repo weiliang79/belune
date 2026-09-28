@@ -24,6 +24,7 @@ import { Field, FieldError, FieldLabel } from "@/components/ui/field";
 import { fieldError } from "@/lib/utils/field-error";
 import { Input } from "@/components/ui/input";
 import { CopyRow } from "@/lib/components/copy-row";
+import { ProjectPinSelect } from "@/lib/components/project-pin-select";
 import { useCreateToken } from "@/lib/hooks/use-tokens";
 import type { TokenScope } from "@/lib/types";
 
@@ -108,7 +109,14 @@ function ConnectDialog({
   const createToken = useCreateToken();
 
   const form = useForm({
-    defaultValues: { name: "AI Assistant" },
+    defaultValues: {
+      name: "AI Assistant",
+      // Unpinned by default — every project the owner can reach, matching
+      // the general Create Token dialog's default. This flow used to mint
+      // unconditionally unpinned tokens with no way to narrow them; the
+      // picker below is the fix, not a new capability the backend lacked.
+      projectIds: [] as string[],
+    },
     onSubmit: async ({ value }) => {
       try {
         const result = await createToken.mutateAsync({
@@ -119,6 +127,8 @@ function ConnectDialog({
           // the general dialog's 30-day default would silently break it
           // until someone noticed the client stopped working.
           expiresInDays: undefined,
+          projectIds:
+            value.projectIds.length === 0 ? undefined : value.projectIds,
         });
         form.reset();
         onOpenChange(false);
@@ -193,6 +203,16 @@ function ConnectDialog({
                   </Field>
                 );
               }}
+            />
+            <form.Field
+              name="projectIds"
+              children={(field) => (
+                <ProjectPinSelect
+                  value={field.state.value}
+                  onValueChange={(v) => field.handleChange(v)}
+                  helperText="Narrows what this client can see to exactly these projects instead of everything you can reach. Leave empty for every project."
+                />
+              )}
             />
           </div>
           <DialogFooter>
