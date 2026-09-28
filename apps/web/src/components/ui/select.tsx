@@ -45,11 +45,10 @@ function collectSelectItems(
   return acc;
 }
 
-function Select<Value = string>({
-  items,
-  children,
-  ...props
-}: SelectPrimitive.Root.Props<Value>) {
+function Select<
+  Value = string,
+  Multiple extends boolean | undefined = false,
+>({ items, children, ...props }: SelectPrimitive.Root.Props<Value, Multiple>) {
   const data = React.useMemo(
     () => collectSelectItems(children, {}),
     [children],

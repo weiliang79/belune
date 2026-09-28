@@ -203,6 +203,26 @@ func writeError(w http.ResponseWriter, status int, message string) {
 	writeJSON(w, status, map[string]string{"error": message})
 }
 
+// pinnedProjectUUIDs resolves the request's token pin set, if any, to
+// []pgtype.UUID for a query's project_ids array param. nil means unpinned
+// (don't filter, passes through as SQL NULL); a non-nil (even empty) slice
+// means "match exactly these ids" via ANY(), which correctly matches nothing
+// when every project the token was pinned to is no longer reachable — see
+// middleware.TokenProjectsFromContext.
+func pinnedProjectUUIDs(ctx context.Context) ([]pgtype.UUID, error) {
+	ids := middleware.TokenProjectsFromContext(ctx)
+	if ids == nil {
+		return nil, nil
+	}
+	out := make([]pgtype.UUID, len(ids))
+	for i, id := range ids {
+		if err := out[i].Scan(id); err != nil {
+			return nil, err
+		}
+	}
+	return out, nil
+}
+
 // notImplemented returns a 501 stub response.
 func notImplemented(w http.ResponseWriter, r *http.Request) {
 	writeError(w, http.StatusNotImplemented, "not implemented")

@@ -160,21 +160,25 @@ LEFT JOIN certificates c ON c.id = d.certificate_id
 WHERE (sqlc.narg('user_id')::uuid IS NULL
        OR p.user_id = sqlc.narg('user_id')
        OR p.shared)
-  -- project_id is the PAT pin, not a user-facing filter. This route has no
-  -- {projectId} param, so middleware.RequireProjectAccess never fires on it and
-  -- a pinned token would otherwise read every domain its owner can reach —
-  -- the same hole GetGlobalDeployments closes in its own handler.
-  AND (sqlc.narg('project_id')::uuid IS NULL OR p.id = sqlc.narg('project_id'))
+  -- project_ids is the PAT pin set, not a user-facing filter. This route has
+  -- no {projectId} param, so middleware.RequireProjectAccess never fires on
+  -- it and a pinned token would otherwise read every domain its owner can
+  -- reach — the same hole GetGlobalDeployments closes in its own handler. A
+  -- non-NULL, even empty, array matches nothing (see ListAllProjectsLimit).
+  AND (sqlc.narg('project_ids')::uuid[] IS NULL OR p.id = ANY(sqlc.narg('project_ids')))
 ORDER BY d.hostname;
 
 -- name: ListDomainsWithTLSStatusLimit :many
 -- Bounded sibling of ListDomainsWithTLSStatus for the MCP
--- list_domain_tls_status tool: same NULL-means-unfiltered user_id/project_id
--- handling (the pin is already applied in SQL here, same as the query
--- above), plus a LIMIT so a large install's entire domain table isn't the
--- single largest response this server can produce. Additive: REST's
--- ListDomainTLSStatus handler keeps using the unbounded query above
--- unchanged.
+-- list_domain_tls_status tool: same NULL-means-unfiltered user_id handling,
+-- plus a LIMIT so a large install's entire domain table isn't the single
+-- largest response this server can produce. project_ids is the PAT pin set
+-- (see ListAllProjectsLimit for why a non-NULL, even empty, array must match
+-- nothing rather than everything), applied here in SQL for the same reason:
+-- this route has no {projectId} param, so middleware.RequireProjectAccess
+-- never fires on it and a pinned token would otherwise read every domain its
+-- owner can reach. Additive: REST's ListDomainTLSStatus handler keeps using
+-- the unbounded query above unchanged.
 SELECT d.id, d.hostname, d.ssl_mode, d.tls_status, d.tls_issuer, d.tls_not_after,
        d.tls_last_checked_at, d.tls_error, d.tls_advisory, c.name AS certificate_name,
        a.name AS application_name, a.id AS application_id, p.id AS project_id
@@ -185,7 +189,7 @@ LEFT JOIN certificates c ON c.id = d.certificate_id
 WHERE (sqlc.narg('user_id')::uuid IS NULL
        OR p.user_id = sqlc.narg('user_id')
        OR p.shared)
-  AND (sqlc.narg('project_id')::uuid IS NULL OR p.id = sqlc.narg('project_id'))
+  AND (sqlc.narg('project_ids')::uuid[] IS NULL OR p.id = ANY(sqlc.narg('project_ids')))
 ORDER BY d.hostname
 LIMIT sqlc.arg('row_limit');
 

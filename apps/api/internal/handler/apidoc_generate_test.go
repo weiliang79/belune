@@ -1259,7 +1259,7 @@ func apidocAssertBehaviourExtracted(t *testing.T, routes []apidocRoute) {
 // project pin itself.
 type apidocBehaviour struct {
 	Query  []string // query parameter names, sorted
-	Pinned bool     // calls middleware.TokenProjectFromContext
+	Pinned bool     // calls middleware.TokenProjectsFromContext/TokenPinnedFromContext/PinAllows
 }
 
 // apidocExtractBehaviour walks every function in the package — not only route
@@ -1314,7 +1314,7 @@ func apidocExtractBehaviour(pkg *packages.Package, handlerMethods map[string]boo
 					if lit, ok := apidocStringLit(call.Args[0]); ok {
 						n.query[lit] = true
 					}
-				case sel.Sel.Name == "TokenProjectFromContext":
+				case sel.Sel.Name == "TokenProjectsFromContext", sel.Sel.Name == "TokenPinnedFromContext", sel.Sel.Name == "PinAllows":
 					n.pinned = true
 				}
 				// h.someOtherHandler(...) — the delegate edge the response
@@ -1812,7 +1812,7 @@ func apidocOperationDescription(r apidocRoute, directive apidocDirective) string
 	// Either kind of pin: the middleware's, or the handler's own for a route
 	// with no {projectId} param for that middleware to compare against.
 	if r.Pinned || r.HandlerPinned {
-		notes = append(notes, "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.")
+		notes = append(notes, "Scoped to a project-pinned token's pin set — a project outside it is rejected, regardless of scope.")
 	}
 	if len(r.Roles) > 0 {
 		notes = append(notes, apidocRoleNote(r.Roles))
@@ -1824,7 +1824,7 @@ const apidocSpecDescription = `Generated from the running API by probing every r
 
 **"required" is intentionally omitted from every request schema.** Field optionality in this codebase is enforced imperatively (e.g. ` + "`if req.Name == \"\" { ... }`" + `), not type-encoded — most optional fields aren't even pointers. Inferring "required" from arbitrary validation code is a fundamentally fuzzier problem than the static type resolution the rest of this spec relies on, so it is left honestly unspecified rather than risked wrong.
 
-**Project-pinning has no OpenAPI representation** — a token pinned to one project rejected outside it is noted in the affected operations' descriptions, not encoded structurally.`
+**Project-pinning has no OpenAPI representation** — a token pinned to a set of projects, rejected on any project outside that set, is noted in the affected operations' descriptions, not encoded structurally.`
 
 func apidocSecuritySchemes() map[string]oasSecurityScheme {
 	return map[string]oasSecurityScheme{

@@ -146,14 +146,14 @@ SELECT p.id, p.name, p.slug, p.user_id, p.created_at, p.updated_at, p.server_id,
     WHERE a.project_id = p.id
 ) AS last_deployed_at
 FROM projects p
-WHERE ($1::uuid IS NULL OR p.id = $1)
+WHERE ($1::uuid[] IS NULL OR p.id = ANY($1))
 ORDER BY p.created_at DESC
 LIMIT $2
 `
 
 type ListAllProjectsLimitParams struct {
-	ProjectID pgtype.UUID `json:"project_id"`
-	RowLimit  int32       `json:"row_limit"`
+	ProjectIds []pgtype.UUID `json:"project_ids"`
+	RowLimit   int32         `json:"row_limit"`
 }
 
 type ListAllProjectsLimitRow struct {
@@ -169,13 +169,16 @@ type ListAllProjectsLimitRow struct {
 }
 
 // Bounded sibling of ListAllProjects for the MCP list_projects tool.
-// project_id is the PAT pin, applied here in SQL — not as a post-query
+// project_ids is the PAT pin set, applied here in SQL — not as a post-query
 // Go-side filter the way REST's ListProjects narrows it — so LIMIT can
-// never truncate away the one project a pinned token is allowed to see
-// before the pin gets a chance to narrow the result to it. Additive: REST
-// keeps using the unbounded query above unchanged.
+// never truncate away a project a pinned token is allowed to see before the
+// pin gets a chance to narrow the result to it. A NULL array (unpinned
+// token) matches everything; a non-NULL array, even empty, matches nothing —
+// ANY() over an empty array is never true, which is exactly the "pinned to
+// projects that no longer exist" case reaching nothing rather than
+// everything. Additive: REST keeps using the unbounded query above unchanged.
 func (q *Queries) ListAllProjectsLimit(ctx context.Context, arg ListAllProjectsLimitParams) ([]ListAllProjectsLimitRow, error) {
-	rows, err := q.db.Query(ctx, listAllProjectsLimit, arg.ProjectID, arg.RowLimit)
+	rows, err := q.db.Query(ctx, listAllProjectsLimit, arg.ProjectIds, arg.RowLimit)
 	if err != nil {
 		return nil, err
 	}
@@ -268,15 +271,15 @@ SELECT p.id, p.name, p.slug, p.user_id, p.created_at, p.updated_at, p.server_id,
 ) AS last_deployed_at
 FROM projects p
 WHERE (p.user_id = $1 OR p.shared)
-  AND ($2::uuid IS NULL OR p.id = $2)
+  AND ($2::uuid[] IS NULL OR p.id = ANY($2))
 ORDER BY p.created_at DESC
 LIMIT $3
 `
 
 type ListProjectsByUserLimitParams struct {
-	UserID    pgtype.UUID `json:"user_id"`
-	ProjectID pgtype.UUID `json:"project_id"`
-	RowLimit  int32       `json:"row_limit"`
+	UserID     pgtype.UUID   `json:"user_id"`
+	ProjectIds []pgtype.UUID `json:"project_ids"`
+	RowLimit   int32         `json:"row_limit"`
 }
 
 type ListProjectsByUserLimitRow struct {
@@ -294,7 +297,7 @@ type ListProjectsByUserLimitRow struct {
 // Bounded sibling of ListProjectsByUser — see ListAllProjectsLimit for why
 // the pin is applied in SQL here rather than post-query in Go.
 func (q *Queries) ListProjectsByUserLimit(ctx context.Context, arg ListProjectsByUserLimitParams) ([]ListProjectsByUserLimitRow, error) {
-	rows, err := q.db.Query(ctx, listProjectsByUserLimit, arg.UserID, arg.ProjectID, arg.RowLimit)
+	rows, err := q.db.Query(ctx, listProjectsByUserLimit, arg.UserID, arg.ProjectIds, arg.RowLimit)
 	if err != nil {
 		return nil, err
 	}

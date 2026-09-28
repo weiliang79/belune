@@ -18,16 +18,23 @@ type AlertPreference struct {
 }
 
 type ApiToken struct {
-	ID          pgtype.UUID        `json:"id"`
-	UserID      pgtype.UUID        `json:"user_id"`
-	Name        string             `json:"name"`
-	TokenHash   []byte             `json:"token_hash"`
-	Scopes      []string           `json:"scopes"`
+	ID        pgtype.UUID `json:"id"`
+	UserID    pgtype.UUID `json:"user_id"`
+	Name      string      `json:"name"`
+	TokenHash []byte      `json:"token_hash"`
+	Scopes    []string    `json:"scopes"`
+	// Superseded by api_token_projects + api_tokens.pinned (migration 000067). Never read, never written.
 	ProjectID   pgtype.UUID        `json:"project_id"`
 	RoleAtIssue string             `json:"role_at_issue"`
 	ExpiresAt   pgtype.Timestamptz `json:"expires_at"`
 	LastUsedAt  pgtype.Timestamptz `json:"last_used_at"`
 	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	Pinned      bool               `json:"pinned"`
+}
+
+type ApiTokenProject struct {
+	TokenID   pgtype.UUID `json:"token_id"`
+	ProjectID pgtype.UUID `json:"project_id"`
 }
 
 type Application struct {

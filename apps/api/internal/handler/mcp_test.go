@@ -402,32 +402,37 @@ func TestMCP_ProjectPinBlocksOtherProjects(t *testing.T) {
 
 // TestMCP_ListProjectsPinSurvivesLimit is the regression test for a bug this
 // package avoided rather than shipped: list_projects pushes the pin into the
-// SQL query (see pinnedProjectUUID) instead of applying it as a post-query
+// SQL query (see pinnedProjectUUIDs) instead of applying it as a post-query
 // Go-side filter. If it filtered in Go instead, a small limit could truncate
 // the row set to the newest projects BEFORE the pin ever got a chance to
-// narrow it — silently returning an empty list for a pinned token whose one
-// visible project isn't among the newest few.
+// narrow it — silently returning an empty (or incomplete) list for a pinned
+// token whose visible projects aren't among the newest few. Pinned to TWO
+// projects, both older than the limit-truncated newer ones, so the same bug
+// class would also be caught if it only dropped one of the two.
 func TestMCP_ListProjectsPinSurvivesLimit(t *testing.T) {
 	resetDB(t)
 	adminToken := env.SetupAdmin(t, "mcp-pin-limit@test.com", "password123")
 
-	// Created first, so it is NOT among the most-recently-created projects.
-	pinnedProject := env.CreateProject(t, adminToken, "Pinned Project", "pinned-project")
-	pinnedProjectID := extractID(pinnedProject["id"])
-	// Created after it, so a naive "LIMIT then filter" would return these
-	// instead of the pinned project.
+	// Created first, so neither is among the most-recently-created projects.
+	pinnedProjectA := env.CreateProject(t, adminToken, "Pinned Project A", "pinned-project-a")
+	pinnedProjectAID := extractID(pinnedProjectA["id"])
+	pinnedProjectB := env.CreateProject(t, adminToken, "Pinned Project B", "pinned-project-b")
+	pinnedProjectBID := extractID(pinnedProjectB["id"])
+	// Created after them, so a naive "LIMIT then filter" would return these
+	// instead of the pinned projects.
 	env.CreateProject(t, adminToken, "Newer Project 1", "newer-project-1")
 	env.CreateProject(t, adminToken, "Newer Project 2", "newer-project-2")
 
 	adminUserID := extractID(mustAuthMe(t, adminToken)["id"])
-	pinnedToken := createPinnedAPIToken(t, adminUserID, pinnedProjectID, []string{"read"})
+	pinnedToken := createMultiPinnedAPIToken(t, adminUserID, []string{pinnedProjectAID, pinnedProjectBID}, []string{"read"})
 
 	var projects []map[string]any
 	decodeToolResult(t, callToolArgs(t, pinnedToken, "list_projects", map[string]any{
-		"limit": 1,
+		"limit": 2,
 	}), &projects)
-	require.Len(t, projects, 1)
-	assert.Equal(t, pinnedProjectID, projects[0]["id"])
+	require.Len(t, projects, 2)
+	gotIDs := []string{projects[0]["id"].(string), projects[1]["id"].(string)}
+	assert.ElementsMatch(t, []string{pinnedProjectAID, pinnedProjectBID}, gotIDs)
 }
 
 // TestMCP_ToolsListing_NoDestructiveTools structurally asserts the read-only

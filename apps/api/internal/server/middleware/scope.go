@@ -3,6 +3,7 @@ package middleware
 import (
 	"context"
 	"net/http"
+	"slices"
 
 	"github.com/go-chi/chi/v5"
 )
@@ -103,13 +104,19 @@ func RequireScopeByMethod() func(http.Handler) http.Handler {
 }
 
 // PinAllows reports whether a project-pinned token may reach projectID —
-// true for an unpinned token or one pinned to exactly this project. Shared
-// by RequireProjectAccess below (which compares against a {projectId} URL
-// param) and internal/mcpserver's tools, which have no URL param to compare
-// against and call this directly, once per tool call, instead.
+// true for an unpinned token or one pinned to a set that includes projectID.
+// A pinned token whose set is empty (every project it was pinned to has
+// since become unreachable) allows nothing — an empty intersection, never a
+// fallback to unrestricted. Shared by RequireProjectAccess below (which
+// compares against a {projectId} URL param) and internal/mcpserver's tools,
+// which have no URL param to compare against and call this directly, once
+// per tool call, instead.
 func PinAllows(ctx context.Context, projectID string) bool {
-	pinned := TokenProjectFromContext(ctx)
-	return pinned == "" || pinned == projectID
+	ids := TokenProjectsFromContext(ctx)
+	if ids == nil {
+		return true
+	}
+	return slices.Contains(ids, projectID)
 }
 
 // RequireProjectAccess returns a middleware that rejects a request whose

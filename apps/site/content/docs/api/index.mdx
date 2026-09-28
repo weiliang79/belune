@@ -41,19 +41,19 @@ A token's reach also follows its owner: it can see and do whatever the owner's r
 
 ## Project-Pinning
 
-By default a token reaches every project its owner can. Pinning it to one project at creation narrows that further: every other project returns `403`, including ones the owner could otherwise reach.
+By default a token reaches every project its owner can. Pinning it to one or more projects at creation narrows that further: every project outside the pin returns `403`, including ones the owner could otherwise reach.
 
-Create a pinned token from **Account → Personal Access Tokens → Create token**, choosing a project from the picker instead of "All projects." The picker only ever offers projects you can already reach — a Member sees their own and any [shared](/docs/core/project/overview#sharing) with them — because pinning can only narrow a token below what its owner already has. It can never grant reach the owner doesn't independently have; that boundary is enforced at every request, not just at creation.
+Create a pinned token from **Account → Personal Access Tokens → Create token**, choosing one or more projects from the picker instead of leaving it on "All projects." The picker only ever offers projects you can already reach — a Member sees their own and any [shared](/docs/core/project/overview#sharing) with them — because pinning can only narrow a token below what its owner already has. It can never grant reach the owner doesn't independently have; that boundary is enforced at every request, not just at creation.
 
 <Callout type="warn">
-The pin is set once, at creation, and cannot be edited afterward. To re-scope a token, create a new one pinned the way you want and delete the old one — the same rotate-don't-edit pattern as changing a token's scope.
+The pin set is fixed at creation and cannot be edited afterward. To re-scope a token, create a new one pinned the way you want and delete the old one — the same rotate-don't-edit pattern as changing a token's scope.
 </Callout>
 
-<Callout type="warn" title="Deleting the Project Deletes the Token">
-The pin is a foreign key with `ON DELETE CASCADE`: deleting the project a token is pinned to deletes the token with it immediately, with no separate warning. This is deliberate — a pin to a project that no longer exists has nothing left to reach — but it means removing a project can silently take a working integration's credential down with it.
+<Callout type="warn" title="Deleting a Pinned Project Narrows the Token, Never Deletes It">
+Deleting a project the token is pinned to removes that project from the token's reach — it does **not** delete the token itself. If every project a token was pinned to is deleted, the token is left reaching **nothing**, not "every project its owner can reach." Pinning only ever narrows; losing every pin narrows a token all the way down to empty, it never widens back out.
 </Callout>
 
-Pinning has no representation in the OpenAPI spec — see [The Endpoint Reference](#the-endpoint-reference) below — so this section is the only place it's documented; every affected operation's own description just notes that it rejects a pinned token outside its pin.
+Pinning has no representation in the OpenAPI spec — see [The Endpoint Reference](#the-endpoint-reference) below — so this section is the only place it's documented; every affected operation's own description just notes that it rejects a project outside a pinned token's pin set.
 
 ## What a Token Can Never Do
 
@@ -103,7 +103,7 @@ The underlying [OpenAPI 3.1 spec](/openapi.json) is served at a stable public UR
 Two things are deliberately absent rather than guessed at. 
 
 - **`required` is omitted** from every request schema: field optionality here is enforced imperatively, not encoded in the types, and inferring it from validation code would be far fuzzier than the static resolution the rest of the spec rests on. 
-- **[Project-pinning](#project-pinning)** — a token pinned to one project being rejected outside it — has no OpenAPI representation at all, so it is called out in the description of each affected operation instead.
+- **[Project-pinning](#project-pinning)** — a project outside a pinned token's pin set being rejected — has no OpenAPI representation at all, so it is called out in the description of each affected operation instead.
 
 ## Common Tasks
 

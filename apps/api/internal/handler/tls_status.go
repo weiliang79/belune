@@ -64,17 +64,16 @@ func (h *Handler) ListDomainTLSStatus(w http.ResponseWriter, r *http.Request) {
 	// never sees one — enforce the token's pin here or a pinned token would read
 	// every domain its owner can reach, which is the escape the pin exists to
 	// prevent. Same treatment GetGlobalDeployments gives its own query filter.
-	var pinnedProject pgtype.UUID
-	if pinned := middleware.TokenProjectFromContext(r.Context()); pinned != "" {
-		if err := pinnedProject.Scan(pinned); err != nil {
-			writeError(w, http.StatusInternalServerError, "invalid pinned project")
-			return
-		}
+	// nil means unpinned; non-nil (even empty) means "only these ids."
+	pinnedIDs, err := pinnedProjectUUIDs(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "invalid pinned project")
+		return
 	}
 
 	rows, err := h.queries.ListDomainsWithTLSStatus(r.Context(), generated.ListDomainsWithTLSStatusParams{
-		UserID:    scope,
-		ProjectID: pinnedProject,
+		UserID:     scope,
+		ProjectIds: pinnedIDs,
 	})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to list domain TLS status")

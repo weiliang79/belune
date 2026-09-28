@@ -40,7 +40,7 @@ type Server struct {
 
 func New(cfg *config.Config, db *pgxpool.Pool, queries *generated.Queries, asynqClient handler.TaskEnqueuer, inspector handler.QueueInspector, rts runtime.Runtimes, pm proxy.ProxyManager, reconciler handler.ReconcilerStatusProvider, rdb *redis.Client, hub *ws.Hub, auditSvc *service.AuditService, notifySvc *service.NotificationService, termMgr *terminal.Manager, emailSvc *email.Service) *Server {
 	auth := service.NewAuthService(queries, cfg.JWTSecret, cfg.JWTExpiryHours, cfg.JWTRefreshHours, rdb)
-	tokens := service.NewTokenService(queries)
+	tokens := service.NewTokenService(db, queries)
 	backupDestSvc := service.NewBackupDestinationService(queries, cfg.Keyring)
 	// appSvc needs backupDestSvc to erase volume-backup objects on delete, so it
 	// is built after it.

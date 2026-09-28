@@ -93,13 +93,12 @@ func (h *Handler) GetGlobalDeployments(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Optional filters
+	var explicitProjectID pgtype.UUID
 	if v := r.URL.Query().Get("project_id"); v != "" {
-		var uuid pgtype.UUID
-		if err := uuid.Scan(v); err != nil {
+		if err := explicitProjectID.Scan(v); err != nil {
 			writeError(w, http.StatusBadRequest, "invalid project_id format")
 			return
 		}
-		params.ProjectID = uuid
 	}
 	if v := r.URL.Query().Get("application_id"); v != "" {
 		var uuid pgtype.UUID
@@ -134,20 +133,27 @@ func (h *Handler) GetGlobalDeployments(w http.ResponseWriter, r *http.Request) {
 
 	// project_id here is a query filter, not a {projectId} URL param, so
 	// middleware.RequireProjectAccess never sees it — enforce the pin
-	// directly. A mismatched explicit filter is rejected; an absent one is
-	// silently narrowed to the pin rather than left to fall through to every
-	// project the token's owner can otherwise reach.
-	if pinned := middleware.TokenProjectFromContext(r.Context()); pinned != "" {
-		var pinnedUUID pgtype.UUID
-		if err := pinnedUUID.Scan(pinned); err != nil {
-			writeError(w, http.StatusInternalServerError, "invalid pinned project")
-			return
+	// directly. An explicit filter outside the pin set is rejected; an
+	// absent one is narrowed to the whole pin set rather than left to fall
+	// through to every project the token's owner can otherwise reach.
+	pinnedIDs, err := pinnedProjectUUIDs(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "invalid pinned project")
+		return
+	}
+	switch {
+	case pinnedIDs == nil:
+		if explicitProjectID.Valid {
+			params.ProjectIds = []pgtype.UUID{explicitProjectID}
 		}
-		if params.ProjectID.Valid && params.ProjectID != pinnedUUID {
+	case explicitProjectID.Valid:
+		if !middleware.PinAllows(r.Context(), uuidToString(explicitProjectID)) {
 			writeError(w, http.StatusForbidden, "token is pinned to a different project")
 			return
 		}
-		params.ProjectID = pinnedUUID
+		params.ProjectIds = []pgtype.UUID{explicitProjectID}
+	default:
+		params.ProjectIds = pinnedIDs
 	}
 
 	// Non-admins are scoped to their own projects

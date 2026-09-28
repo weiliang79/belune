@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Field, FieldError, FieldLabel } from "@/components/ui/field";
 import { fieldError } from "@/lib/utils/field-error";
 import { CopyRow } from "@/lib/components/copy-row";
+import { ProjectPinSelect } from "@/lib/components/project-pin-select";
 import {
   Card,
   CardContent,
@@ -142,8 +143,8 @@ export function ApiTokensCard() {
   // Held here, not inside CreateTokenDialog: the dialog closes on success, and
   // the plaintext is shown exactly once — unmounting the dialog must not lose it.
   const [issued, setIssued] = useState<string | null>(null);
-  // Named for the pin badge below — a token only stores project_id, not the
-  // project's name, and this list is already fetched for the create dialog's
+  // Named for the pin badge below — a token only stores project_ids, not
+  // project names, and this list is already fetched for the create dialog's
   // own picker, so resolving it here costs nothing extra (react-query shares
   // the cached result).
   const { data: projects } = useProjects();
@@ -175,6 +176,7 @@ export function ApiTokensCard() {
                 key={token.id}
                 token={token}
                 projectNames={projectNames}
+                projectsLoaded={projects !== undefined}
               />
             ))}
           </div>
@@ -212,9 +214,15 @@ export function ApiTokensCard() {
 function TokenRow({
   token,
   projectNames,
+  projectsLoaded,
 }: {
   token: ApiToken;
   projectNames: Map<string, string>;
+  // Distinguishes "the project list hasn't loaded yet" from "it loaded and
+  // resolved to zero names" — without this, a pinned token briefly reads as
+  // "Pinned: none" (normally reserved for every pinned project having been
+  // deleted) on every cold load, before projectNames has anything in it.
+  projectsLoaded: boolean;
 }) {
   const deleteToken = useDeleteToken();
 
@@ -245,16 +253,25 @@ function TokenRow({
               Never expires
             </Badge>
           )}
-          {token.project_id && (
+          {token.pinned && (
             <Badge variant="outline" className="text-xs">
-              {/* Falls back to a bare "Pinned" if the project is gone —
-                  unreachable in practice, since project_id is ON DELETE
-                  CASCADE and deletes the token with it, but a display
-                  fallback costs nothing and is safer than assuming. */}
+              {/* Zero names resolved (every pinned project deleted, or the
+                  owner lost access to all of them) reads as "Pinned: none" —
+                  distinct from "Pinned" alone, so a token that reaches
+                  nothing doesn't look identical to one with a single,
+                  merely-unresolved pin. Gated on projectsLoaded so the SAME
+                  "zero names" state during the project list's own loading
+                  window doesn't show that same "none" before there was
+                  anything to resolve against. */}
               Pinned
-              {projectNames.get(token.project_id)
-                ? `: ${projectNames.get(token.project_id)}`
-                : ""}
+              {projectsLoaded &&
+                (() => {
+                  const names = token.project_ids
+                    .map((id) => projectNames.get(id))
+                    .filter((name): name is string => !!name);
+                  if (names.length === 0) return ": none";
+                  return `: ${names.join(", ")}`;
+                })()}
             </Badge>
           )}
         </div>
@@ -315,10 +332,6 @@ function TokenRow({
   );
 }
 
-// "" means unpinned ("All projects") — base-ui's Select treats an empty
-// string as "no selection", so ALL_PROJECTS is a distinct sentinel value
-// translated back to "" at the form boundary.
-const ALL_PROJECTS = "all";
 
 function CreateTokenDialog({
   onIssued,
@@ -326,7 +339,6 @@ function CreateTokenDialog({
   onIssued: (token: string) => void;
 }) {
   const [open, setOpen] = useState(false);
-  const { data: projects } = useProjects();
   const createToken = useCreateToken();
 
   const form = useForm({
@@ -338,7 +350,10 @@ function CreateTokenDialog({
       // SCOPE_GRANTS), so there is exactly one value here, not a set.
       scope: "write" as TokenScope,
       // Unpinned by default — pinning is opt-in, never the assumed choice.
-      projectId: ALL_PROJECTS,
+      // Empty is the unpinned state itself now, not a sentinel translated
+      // into one: a multi-select's natural "nothing checked" already means
+      // exactly that.
+      projectIds: [] as string[],
     },
     onSubmit: async ({ value }) => {
       try {
@@ -347,8 +362,8 @@ function CreateTokenDialog({
           scopes: [value.scope],
           expiresInDays:
             value.expiry === "never" ? undefined : Number(value.expiry),
-          projectId:
-            value.projectId === ALL_PROJECTS ? undefined : value.projectId,
+          projectIds:
+            value.projectIds.length === 0 ? undefined : value.projectIds,
         });
         onIssued(result.token);
         form.reset();
@@ -463,35 +478,13 @@ function CreateTokenDialog({
                 )}
               />
               <form.Field
-                name="projectId"
+                name="projectIds"
                 children={(field) => (
-                  <div className="space-y-2">
-                    <Label>Project</Label>
-                    <Select
-                      value={field.state.value}
-                      onValueChange={(v) => v && field.handleChange(v)}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value={ALL_PROJECTS}>
-                          All projects
-                        </SelectItem>
-                        {(projects ?? []).map((p) => (
-                          <SelectItem key={p.id} value={p.id}>
-                            {p.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <p className="text-muted-foreground text-xs">
-                      Narrows the token to one project instead of everything you
-                      can reach. Deleting that project deletes this token too —
-                      a pin to a project that no longer exists has nothing left
-                      to reach anyway.
-                    </p>
-                  </div>
+                  <ProjectPinSelect
+                    value={field.state.value}
+                    onValueChange={(v) => field.handleChange(v)}
+                    helperText='Narrows the token to exactly these projects instead of everything you can reach. Leave empty for every project. If every project a pinned token holds is later deleted, the token reaches nothing — it is never widened back to "every project."'
+                  />
                 )}
               />
             </div>

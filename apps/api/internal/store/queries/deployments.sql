@@ -115,7 +115,7 @@ SELECT d.id, d.application_id, d.status, d.triggered_by, d.commit_sha, d.commit_
 FROM deployments d
 JOIN applications a ON a.id = d.application_id
 JOIN projects p ON p.id = a.project_id
-WHERE (sqlc.narg('project_id')::uuid IS NULL OR p.id = sqlc.narg('project_id'))
+WHERE (sqlc.narg('project_ids')::uuid[] IS NULL OR p.id = ANY(sqlc.narg('project_ids')))
   AND (sqlc.narg('application_id')::uuid IS NULL OR d.application_id = sqlc.narg('application_id'))
   AND (sqlc.narg('status')::text IS NULL OR d.status = sqlc.narg('status'))
   AND (sqlc.narg('from')::timestamptz IS NULL OR d.started_at >= sqlc.narg('from'))

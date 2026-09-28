@@ -594,9 +594,15 @@ export interface ApiToken {
   name: string;
   scopes: TokenScope[];
   role_at_issue: "admin" | "member";
-  /** The project this token is pinned to, or null for unpinned (every
-   *  project the owner can reach, evaluated at use time). */
-  project_id: string | null;
+  /** True when this token is narrowed to project_ids. Never derive this from
+   *  project_ids.length — a pinned token can legitimately end up with zero
+   *  reachable projects (every one it was pinned to got deleted), and that
+   *  must read as "pinned to nothing," not "unpinned." */
+  pinned: boolean;
+  /** Every project this token is pinned to. Always present (never null),
+   *  empty when pinned is false. Unpinned reaches every project the owner
+   *  can reach, evaluated at use time. */
+  project_ids: string[];
   expires_at: string | null;
   last_used_at: string | null;
   created_at: string;

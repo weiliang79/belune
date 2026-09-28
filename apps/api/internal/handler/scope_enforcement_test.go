@@ -27,27 +27,48 @@ func mintScoped(t *testing.T, sessionToken string, scopes []string) string {
 	return testutil.ReadJSON(t, resp)["token"].(string)
 }
 
-// createPinnedAPIToken inserts a token directly, pinned to projectID — there
-// is no create-endpoint field for this yet (project narrowing has no UI),
-// but the enforcement side must still honor a pin however the row got it.
+// createPinnedAPIToken inserts a token directly, pinned to exactly projectID
+// — the enforcement side must honor a pin however the row got it, and going
+// through the real endpoint here would couple every scope-enforcement test to
+// its own request validation. Two statements (token, then its one pin row),
+// not a transaction: test setup, not the create path the escalation trap
+// applies to.
 func createPinnedAPIToken(t *testing.T, userID, projectID string, scopes []string) (plain string) {
 	t.Helper()
-	var uid, pid pgtype.UUID
+	return createMultiPinnedAPIToken(t, userID, []string{projectID}, scopes)
+}
+
+// createMultiPinnedAPIToken is createPinnedAPIToken's variadic-pin sibling,
+// for tests that need a token narrowed to more than one project (or, with an
+// empty projectIDs, a pinned token that already reaches nothing).
+func createMultiPinnedAPIToken(t *testing.T, userID string, projectIDs []string, scopes []string) (plain string) {
+	t.Helper()
+	var uid pgtype.UUID
 	require.NoError(t, uid.Scan(userID))
-	require.NoError(t, pid.Scan(projectID))
 
 	plainTok, hash, err := service.GenerateToken()
 	require.NoError(t, err)
 
-	_, err = env.Queries.CreateAPIToken(context.Background(), generated.CreateAPITokenParams{
+	tok, err := env.Queries.CreateAPIToken(context.Background(), generated.CreateAPITokenParams{
 		UserID:      uid,
 		Name:        "pinned",
 		TokenHash:   hash,
 		Scopes:      scopes,
-		ProjectID:   pid,
+		Pinned:      true,
 		RoleAtIssue: "admin",
 	})
 	require.NoError(t, err)
+
+	if len(projectIDs) > 0 {
+		pids := make([]pgtype.UUID, len(projectIDs))
+		for i, p := range projectIDs {
+			require.NoError(t, pids[i].Scan(p))
+		}
+		require.NoError(t, env.Queries.CreateAPITokenProjectPins(context.Background(), generated.CreateAPITokenProjectPinsParams{
+			TokenID:    tok.ID,
+			ProjectIds: pids,
+		}))
+	}
 	return plainTok
 }
 
