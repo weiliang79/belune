@@ -24,6 +24,74 @@ Belune is pre-1.0. The versioning contract while it stays there:
 Release notes for each version are also published on the
 [Releases page](https://github.com/weiliang79/belune/releases).
 
+## [0.1.11]
+
+### An update no longer stops because a backup could not be uploaded
+
+**If remote backup storage was configured but unreachable, updating from the
+dashboard would stop and tell you nothing useful.** The update takes a backup
+first, that backup tried to upload offsite, the upload failed, and the update
+gave up — with a message asking a question nobody could answer, because there
+is no terminal behind the dashboard's update button.
+
+Two things changed. The pre-update backup is a **local** rollback point, so a
+failed upload is now a warning rather than a failure: the archive is written,
+the update continues, and the backup is recorded as local-only so it cannot be
+mistaken for an offsite copy. A backup that fails for a real reason — no disk,
+no database — still stops the update, but now says what went wrong and what to
+do about it.
+
+Manual and scheduled host backups are unchanged: if you asked for offsite and
+did not get it, that is still an error.
+
+### Remote storage can be tested before you save it
+
+**"Test connection" used to refuse to run until you had already saved and
+enabled the settings** — so the only way to find out whether your credentials
+worked was to commit them first. It now tests what is in the form.
+
+The old behaviour was also the reason some installs hit the update problem
+above: the form pushed you to enable remote storage before you could check it.
+
+### An AI assistant can read build logs
+
+The [MCP server](https://belune.dev/docs/api/overview/mcp) (new in 0.1.10)
+gains **`get_deployment_logs`**, so an assistant asked why a deployment failed
+can read the build output instead of seeing only "failed". It returns the last
+200 lines by default, capped at 1000.
+
+Log output is also cleaner: terminal colour codes are stripped before they
+reach the client, and build logs arrive as `<timestamp> <level> <message>`
+rather than raw JSON. Both log tools still return the text itself verbatim —
+**container and build logs routinely contain connection strings and API keys**,
+and nothing here redacts them.
+
+### Smaller things
+
+- A deployment that was still building reported a finish time equal to its
+  start, so anything reading it mid-build — the dashboard, the API, an AI
+  assistant — saw a build that had apparently finished instantly. The finish
+  time is now recorded only when a deployment actually finishes.
+
+### Upgrading
+
+No changes to how Belune is deployed, no host action, and no migrations. Apply
+it from **Server → Configuration → Updates**, or run `update.sh` as before.
+
+**⚠️ If you have remote backup storage enabled, read this before updating.**
+The fix at the top of these notes protects updates that _start_ from 0.1.11 —
+it cannot help the update that installs it, because the copy of `update.sh`
+running is the one you already have. So updating **to** 0.1.11 can still stop
+with `belune-backup-upload not found` or `Backup failed`. If that happens:
+
+1. **Server → Backups** → turn **off** remote storage
+2. Apply the update
+3. Turn remote storage back **on**
+
+Nothing is changed or lost when it stops. Running `scripts/update.sh` on the
+host also works — there it can ask whether to continue, which it cannot do from
+the dashboard. From 0.1.11 onward this stops happening.
+
 ## [0.1.10]
 
 ### Connect an AI assistant to your install
@@ -659,6 +727,7 @@ iterations; this is what Belune _is_ at launch, not a list of what changed.
 - Registry credentials for private images, monorepo subdirectory builds, and
   custom start commands are not yet configurable.
 
+[0.1.11]: https://github.com/weiliang79/belune/releases/tag/v0.1.11
 [0.1.10]: https://github.com/weiliang79/belune/releases/tag/v0.1.10
 [0.1.9]: https://github.com/weiliang79/belune/releases/tag/v0.1.9
 [0.1.8]: https://github.com/weiliang79/belune/releases/tag/v0.1.8
