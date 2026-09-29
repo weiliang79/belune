@@ -24,6 +24,97 @@ Belune is pre-1.0. The versioning contract while it stays there:
 Release notes for each version are also published on the
 [Releases page](https://github.com/weiliang79/belune/releases).
 
+## [0.1.10]
+
+### Connect an AI assistant to your install
+
+Belune now speaks the [Model Context Protocol](https://modelcontextprotocol.io).
+An MCP-compatible client — Claude, and others as they add support — can ask
+about your projects, applications, databases, deployments, TLS state and
+backups, and read a running container's logs.
+
+Set it up from **Account → Connect an AI Assistant**. It mints a token scoped
+to Read and hands you the command to paste into your client; there is nothing
+to install on either side.
+
+**It is read-only, and not merely by permission.** There is no deploy,
+restart, delete or restore tool for a client to call — the tools do not exist,
+so a token with full write scope gains nothing by going through MCP. Anything
+that changes your install still goes through the dashboard or the API.
+
+⚠️ **Tools that read container logs send those logs to whichever client you
+connect, exactly as written.** Logs routinely contain connection strings and
+API keys printed at startup. The dialog says so before it issues the token.
+Only connect a client you would trust with that.
+
+### Tokens can be limited to specific projects
+
+A personal access token used to reach every project its owner can. When you
+create one — under **Account → Personal Access Tokens**, or through the AI
+assistant dialog — you can now pin it to one or more projects instead. Every
+other project returns `403`, including ones you could otherwise reach yourself.
+
+Pinning only ever narrows a token; it can never grant access its owner does
+not already have, and the picker only offers projects you can reach. The pin
+is fixed when the token is created, so re-scoping means creating a new token
+and deleting the old one — the same pattern as changing a token's scope.
+
+Deleting a project removes it from any token pinned to it. A token pinned to
+nothing but deleted projects reaches nothing, rather than falling back to
+reaching everything.
+
+### Host backups were never reaching remote storage
+
+**If you turned on remote storage for host backups, it has never worked — on
+any version.** The helper that performs the upload was not included in the
+Belune image, so `install.sh` reported success while quietly leaving it out,
+and the upload was skipped every time. It is in the image now.
+
+This affects the **host/CLI backup path only**: manual runs
+(`systemctl start belune-backup.service`) and the safety backup `update.sh`
+takes before moving versions. Those archives were still written locally, so
+nothing was lost — they just never left the machine.
+
+**Your daily automatic backups were not affected.** Those run in-app and
+upload through a different path that has always worked, as do application and
+database backups.
+
+⚠️ **Check this after updating.** If you rely on host backups going offsite,
+open **Server → Backups**, confirm remote storage is configured, and run a
+backup to see the archive arrive at your destination. Until now that
+confirmation would have been the first honest signal you had.
+
+### A failed request no longer looks like missing data
+
+**If the API was briefly unreachable, the dashboard would tell you the thing
+you were looking at did not exist** — a project page reading "Project not
+found", the project list appearing empty. Nothing was ever wrong with your
+data; the page simply could not tell a failed request apart from an empty
+answer.
+
+This mattered most during an update, when the API restarts and you are most
+likely to be watching. Every page now distinguishes the two: a failure says so
+and offers to retry, and only a genuine 404 says the thing is gone.
+
+### Smaller things
+
+- The generated [API reference](https://belune.dev/docs/api) documents project
+  pinning, and token responses carry the projects a token is pinned to.
+- Creating a token validates as you type, like the rest of the dashboard's
+  forms.
+
+### Upgrading
+
+No changes to how Belune is deployed and no host action. Apply it from
+**Server → Configuration → Updates**, or run `update.sh` as before.
+
+This release adds a database migration. It only adds a table and a column —
+nothing existing is changed or removed — and `update.sh` takes its usual
+backup first.
+
+**Read the host-backup note above before you update**, since the safety backup
+`update.sh` takes will itself be the first one that can reach remote storage.
+
 ## [0.1.9]
 
 ### Forms tell you what is wrong before you submit
@@ -568,6 +659,7 @@ iterations; this is what Belune _is_ at launch, not a list of what changed.
 - Registry credentials for private images, monorepo subdirectory builds, and
   custom start commands are not yet configurable.
 
+[0.1.10]: https://github.com/weiliang79/belune/releases/tag/v0.1.10
 [0.1.9]: https://github.com/weiliang79/belune/releases/tag/v0.1.9
 [0.1.8]: https://github.com/weiliang79/belune/releases/tag/v0.1.8
 [0.1.7]: https://github.com/weiliang79/belune/releases/tag/v0.1.7
