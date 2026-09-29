@@ -1077,6 +1077,65 @@
         ]
       }
     },
+    "/api/backups/remote/test": {
+      "post": {
+        "operationId": "TestBackupRemoteParams",
+        "summary": "Test Remote Configs",
+        "description": "Requires the Admin role.",
+        "tags": [
+          "Backups (Admin)"
+        ],
+        "x-belune-order": 6,
+        "x-belune-roles": [
+          "admin"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/updateBackupRemoteRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  },
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "write": []
+          },
+          {
+            "session": []
+          }
+        ]
+      }
+    },
     "/api/backups/run": {
       "post": {
         "operationId": "TriggerBackupRun",

@@ -249,6 +249,66 @@ type updateBackupRemoteRequest struct {
 	SecretKey string `json:"secret_key"`
 }
 
+// TestBackupRemoteParams tests the remote-storage values POSTED from the
+// Remote Storage form, before they are saved and without requiring Enabled —
+// TestBackupRemote can only report on what is already stored, which forced an
+// operator to save and enable unvalidated credentials just to find out whether
+// they work. Nothing is written, so no audit entry.
+//
+// Blank credentials fall back to the stored ones (same convention as
+// UpdateBackupRemote and the project-level destination test), so editing a
+// bucket or endpoint doesn't require re-typing a secret the UI never
+// redisplays.
+//
+//apidoc:tag platform/backups
+//apidoc:title Test Remote Configs
+//apidoc:order 6
+func (h *Handler) TestBackupRemoteParams(w http.ResponseWriter, r *http.Request) {
+	var req updateBackupRemoteRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	bucket := strings.TrimSpace(req.Bucket)
+	if bucket == "" {
+		writeError(w, http.StatusBadRequest, "bucket is required")
+		return
+	}
+
+	current := backup.LoadRemoteConfig(h.cfg)
+	// Provider is left unset: the control-plane remote has no provider concept
+	// (it is always S3-compatible) and NewDestinationClient reads only the
+	// transport fields. Enabled is ignored on purpose — testing a draft is the
+	// point.
+	dest := backup.Destination{
+		Endpoint:  strings.TrimSpace(req.Endpoint),
+		Region:    strings.TrimSpace(req.Region),
+		Bucket:    bucket,
+		Prefix:    strings.TrimSpace(req.Prefix),
+		AccessKey: current.AccessKey,
+		SecretKey: current.SecretKey,
+		UseSSL:    req.UseSSL == nil || *req.UseSSL,
+	}
+	if req.AccessKey != "" {
+		dest.AccessKey = req.AccessKey
+	}
+	if req.SecretKey != "" {
+		dest.SecretKey = req.SecretKey
+	}
+
+	client, err := backup.NewDestinationClient(dest)
+	if err != nil {
+		writeJSON(w, http.StatusOK, map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
+	if err := client.Test(r.Context()); err != nil {
+		writeJSON(w, http.StatusOK, map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
 // UpdateBackupRemote saves the dashboard-managed control-plane remote-storage
 // config to cfg.BackupRemoteConfigPath (mode 0600), read fresh by the worker's
 // S3 client and by scripts/backup.sh/belune-backup-upload on the next backup —

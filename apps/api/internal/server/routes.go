@@ -202,6 +202,10 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService,
 				r.Post("/api/backups/run", h.TriggerBackupRun)
 				r.Post("/api/backups/test", h.TestBackupRemote)
 				r.Put("/api/backups/remote", h.UpdateBackupRemote)
+				// Tests posted form values instead of the saved config, so the
+				// Remote Storage card can validate credentials before they are
+				// committed. Writes nothing despite the POST.
+				r.Post("/api/backups/remote/test", h.TestBackupRemoteParams)
 			})
 
 			// The bulk of the authenticated surface: scope defaults to "read"

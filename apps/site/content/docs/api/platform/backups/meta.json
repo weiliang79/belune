@@ -5,6 +5,7 @@
     "get-backup-status",
     "trigger-backup-run",
     "test-backup-remote",
-    "update-backup-remote"
+    "update-backup-remote",
+    "test-backup-remote-params"
   ]
 }
