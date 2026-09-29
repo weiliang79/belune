@@ -15,12 +15,13 @@ import (
 type contextKey string
 
 const (
-	ctxUserID    contextKey = "user_id"
-	ctxEmail     contextKey = "email"
-	ctxRole      contextKey = "role"
-	ctxTokenID   contextKey = "token_id"
-	ctxScopes    contextKey = "scopes"
-	ctxProjectID contextKey = "token_project_id"
+	ctxUserID     contextKey = "user_id"
+	ctxEmail      contextKey = "email"
+	ctxRole       contextKey = "role"
+	ctxTokenID    contextKey = "token_id"
+	ctxScopes     contextKey = "scopes"
+	ctxPinned     contextKey = "token_pinned"
+	ctxProjectIDs contextKey = "token_project_ids"
 )
 
 // Auth returns a middleware that authenticates a session JWT or a personal
@@ -55,8 +56,9 @@ func Auth(authService *service.AuthService, tokenService *service.TokenService) 
 				ctx = context.WithValue(ctx, ctxRole, tok.EffectiveRole)
 				ctx = context.WithValue(ctx, ctxTokenID, uuid.UUID(tok.TokenID.Bytes).String())
 				ctx = context.WithValue(ctx, ctxScopes, tok.Scopes)
-				if tok.ProjectID.Valid {
-					ctx = context.WithValue(ctx, ctxProjectID, uuid.UUID(tok.ProjectID.Bytes).String())
+				ctx = context.WithValue(ctx, ctxPinned, tok.Pinned)
+				if tok.Pinned {
+					ctx = context.WithValue(ctx, ctxProjectIDs, tok.ProjectIDs)
 				}
 				next.ServeHTTP(w, r.WithContext(ctx))
 				return
@@ -207,12 +209,30 @@ func ScopesFromContext(ctx context.Context) []string {
 	return v
 }
 
-// TokenProjectFromContext returns the id of the project the authenticating
-// PAT is pinned to, or "" when the token is unpinned (reaches every project
-// its owner can access) or the request is session-authenticated. Project
-// reach follows current access, evaluated at use time — this is read fresh
-// from the token row on every request, never cached past it.
-func TokenProjectFromContext(ctx context.Context) string {
-	v, _ := ctx.Value(ctxProjectID).(string)
+// TokenPinnedFromContext reports whether the authenticating PAT is
+// project-pinned — false for an unpinned token (reaches every project its
+// owner can access) and for a session, which is never pinned.
+func TokenPinnedFromContext(ctx context.Context) bool {
+	v, _ := ctx.Value(ctxPinned).(bool)
+	return v
+}
+
+// TokenProjectsFromContext returns nil when the request is unpinned (no
+// filtering: every project the owner can reach), or the authenticating PAT's
+// pinned project ids otherwise — non-nil but possibly empty, when every
+// project it was pinned to has since become unreachable (deleted, or the
+// owner lost access). Callers must treat nil and "non-nil, empty" as
+// different answers: nil means "don't filter," empty means "filter to
+// nothing." Project reach follows current access, evaluated at use time —
+// this is read fresh from the token row on every request, never cached past
+// it.
+func TokenProjectsFromContext(ctx context.Context) []string {
+	if !TokenPinnedFromContext(ctx) {
+		return nil
+	}
+	v, _ := ctx.Value(ctxProjectIDs).([]string)
+	if v == nil {
+		return []string{}
+	}
 	return v
 }

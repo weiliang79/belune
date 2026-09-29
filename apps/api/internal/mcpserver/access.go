@@ -116,22 +116,28 @@ func pinAllows(ctx context.Context, projectID string) bool {
 	return middleware.PinAllows(ctx, projectID)
 }
 
-// pinnedProjectUUID resolves the caller's pin, if any, to a pgtype.UUID
-// suitable for a query's sqlc.narg('project_id') — a zero-value (Invalid)
-// UUID passes through as SQL NULL, meaning "unpinned, don't filter." Used by
-// tools whose pin-filtering is pushed into SQL alongside a LIMIT
-// (list_projects, list_domain_tls_status) rather than applied as a
-// post-query Go-side narrowing: doing it in SQL means LIMIT can never
-// truncate away the one row a pinned token is allowed to see before the pin
-// gets a chance to narrow the result to it.
-func pinnedProjectUUID(ctx context.Context) (pgtype.UUID, error) {
-	var pinnedID pgtype.UUID
-	if pinned := middleware.TokenProjectFromContext(ctx); pinned != "" {
-		if err := pinnedID.Scan(pinned); err != nil {
-			return pgtype.UUID{}, err
+// pinnedProjectUUIDs resolves the caller's pin set, if any, to []pgtype.UUID
+// suitable for a query's sqlc.narg('project_ids')::uuid[] — nil means
+// "unpinned, don't filter" and passes through as SQL NULL; a non-nil (even
+// empty) slice means "match exactly these ids, or nothing" via ANY(), which
+// is how a token pinned to since-deleted projects correctly sees nothing
+// rather than falling back to everything. Used by tools whose pin-filtering
+// is pushed into SQL alongside a LIMIT (list_projects, list_domain_tls_status)
+// rather than applied as a post-query Go-side narrowing: doing it in SQL
+// means LIMIT can never truncate away a row a pinned token is allowed to see
+// before the pin gets a chance to narrow the result to it.
+func pinnedProjectUUIDs(ctx context.Context) ([]pgtype.UUID, error) {
+	ids := middleware.TokenProjectsFromContext(ctx)
+	if ids == nil {
+		return nil, nil
+	}
+	out := make([]pgtype.UUID, len(ids))
+	for i, id := range ids {
+		if err := out[i].Scan(id); err != nil {
+			return nil, err
 		}
 	}
-	return pinnedID, nil
+	return out, nil
 }
 
 // clampLimit normalizes a caller-supplied limit argument: <= 0 falls back to

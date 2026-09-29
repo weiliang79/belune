@@ -17,11 +17,13 @@ export function useCreateToken() {
       name,
       scopes,
       expiresInDays,
+      projectIds,
     }: {
       name: string;
       scopes: TokenScope[];
       expiresInDays?: number;
-    }) => createToken(name, scopes, expiresInDays),
+      projectIds?: string[];
+    }) => createToken(name, scopes, expiresInDays, projectIds),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.tokens });
     },

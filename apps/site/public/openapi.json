@@ -3,7 +3,7 @@
   "info": {
     "title": "Belune API",
     "version": "1.0.0",
-    "description": "Generated from the running API by probing every registered route with a personal access token and statically resolving every request/response Go type — not hand-written, and not a reading of routes.go. See the API Access guide for how to authenticate and the scope model.\n\n**\"required\" is intentionally omitted from every request schema.** Field optionality in this codebase is enforced imperatively (e.g. `if req.Name == \"\" { ... }`), not type-encoded — most optional fields aren't even pointers. Inferring \"required\" from arbitrary validation code is a fundamentally fuzzier problem than the static type resolution the rest of this spec relies on, so it is left honestly unspecified rather than risked wrong.\n\n**Project-pinning has no OpenAPI representation** — a token pinned to one project rejected outside it is noted in the affected operations' descriptions, not encoded structurally."
+    "description": "Generated from the running API by probing every registered route with a personal access token and statically resolving every request/response Go type — not hand-written, and not a reading of routes.go. See the API Access guide for how to authenticate and the scope model.\n\n**\"required\" is intentionally omitted from every request schema.** Field optionality in this codebase is enforced imperatively (e.g. `if req.Name == \"\" { ... }`), not type-encoded — most optional fields aren't even pointers. Inferring \"required\" from arbitrary validation code is a fundamentally fuzzier problem than the static type resolution the rest of this spec relies on, so it is left honestly unspecified rather than risked wrong.\n\n**Project-pinning has no OpenAPI representation** — a token pinned to a set of projects, rejected on any project outside that set, is noted in the affected operations' descriptions, not encoded structurally."
   },
   "servers": [
     {
@@ -1424,7 +1424,7 @@
       "get": {
         "operationId": "GetGlobalDeployments",
         "summary": "Get All Deployments",
-        "description": "Deployments across every application. An admin sees all of them; a member sees only their own projects and any shared with them. Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
+        "description": "Deployments across every application. An admin sees all of them; a member sees only their own projects and any shared with them. Scoped to a project-pinned token's pin set — a project outside it is rejected, regardless of scope.",
         "tags": [
           "Platform"
         ],
@@ -1766,7 +1766,7 @@
       "get": {
         "operationId": "ListDomainTLSStatus",
         "summary": "Get Domain TLS Status",
-        "description": "Every domain's observed TLS state, with the name of the certificate it serves. An admin sees every domain on the install; a member sees only domains in their own projects and any shared with them. Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
+        "description": "Every domain's observed TLS state, with the name of the certificate it serves. An admin sees every domain on the install; a member sees only domains in their own projects and any shared with them. Scoped to a project-pinned token's pin set — a project outside it is rejected, regardless of scope.",
         "tags": [
           "Platform"
         ],
@@ -3819,7 +3819,7 @@
       "get": {
         "operationId": "ListProjects",
         "summary": "Get Projects",
-        "description": "An admin sees every project on the install; a member sees only their own projects and any shared with them. Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
+        "description": "An admin sees every project on the install; a member sees only their own projects and any shared with them. Scoped to a project-pinned token's pin set — a project outside it is rejected, regardless of scope.",
         "tags": [
           "Projects"
         ],
@@ -3861,7 +3861,7 @@
       "post": {
         "operationId": "CreateProject",
         "summary": "Create Project",
-        "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
+        "description": "Scoped to a project-pinned token's pin set — a project outside it is rejected, regardless of scope.",
         "tags": [
           "Projects"
         ],
@@ -3912,7 +3912,7 @@
       "delete": {
         "operationId": "DeleteProject",
         "summary": "Delete Project",
-        "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
+        "description": "Scoped to a project-pinned token's pin set — a project outside it is rejected, regardless of scope.",
         "tags": [
           "Projects"
         ],
@@ -3963,7 +3963,7 @@
       "get": {
         "operationId": "GetProject",
         "summary": "Get Project",
-        "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
+        "description": "Scoped to a project-pinned token's pin set — a project outside it is rejected, regardless of scope.",
         "tags": [
           "Projects"
         ],
@@ -4013,7 +4013,7 @@
       "put": {
         "operationId": "UpdateProject",
         "summary": "Update Project",
-        "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
+        "description": "Scoped to a project-pinned token's pin set — a project outside it is rejected, regardless of scope.",
         "tags": [
           "Projects"
         ],
@@ -4075,7 +4075,7 @@
       "get": {
         "operationId": "ListApplications",
         "summary": "Get Applications",
-        "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
+        "description": "Scoped to a project-pinned token's pin set — a project outside it is rejected, regardless of scope.",
         "tags": [
           "Applications"
         ],
@@ -4128,7 +4128,7 @@
       "post": {
         "operationId": "CreateApplication",
         "summary": "Create Application",
-        "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
+        "description": "Scoped to a project-pinned token's pin set — a project outside it is rejected, regardless of scope.",
         "tags": [
           "Applications"
         ],
@@ -4190,7 +4190,7 @@
       "delete": {
         "operationId": "DeleteApplication",
         "summary": "Delete Application",
-        "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
+        "description": "Scoped to a project-pinned token's pin set — a project outside it is rejected, regardless of scope.",
         "tags": [
           "Applications"
         ],
@@ -4250,7 +4250,7 @@
       "get": {
         "operationId": "GetApplication",
         "summary": "Get Application",
-        "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
+        "description": "Scoped to a project-pinned token's pin set — a project outside it is rejected, regardless of scope.",
         "tags": [
           "Applications"
         ],
@@ -4309,7 +4309,7 @@
       "put": {
         "operationId": "UpdateApplication",
         "summary": "Update Application",
-        "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
+        "description": "Scoped to a project-pinned token's pin set — a project outside it is rejected, regardless of scope.",
         "tags": [
           "Applications"
         ],
@@ -4380,7 +4380,7 @@
       "post": {
         "operationId": "BuildApplication",
         "summary": "Build App",
-        "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
+        "description": "Scoped to a project-pinned token's pin set — a project outside it is rejected, regardless of scope.",
         "tags": [
           "Application Actions"
         ],
@@ -4441,7 +4441,7 @@
       "delete": {
         "operationId": "ClearBuildCache",
         "summary": "Clear Build Cache",
-        "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
+        "description": "Scoped to a project-pinned token's pin set — a project outside it is rejected, regardless of scope.",
         "tags": [
           "Application Resources"
         ],
@@ -4505,7 +4505,7 @@
       "get": {
         "operationId": "GetBuildCache",
         "summary": "Get Build Cache",
-        "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
+        "description": "Scoped to a project-pinned token's pin set — a project outside it is rejected, regardless of scope.",
         "tags": [
           "Application Resources"
         ],
@@ -4577,7 +4577,7 @@
       "post": {
         "operationId": "ChangeApplicationSource",
         "summary": "Change Application Source",
-        "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
+        "description": "Scoped to a project-pinned token's pin set — a project outside it is rejected, regardless of scope.",
         "tags": [
           "Applications"
         ],
@@ -4647,7 +4647,7 @@
       "post": {
         "operationId": "DeployApplication",
         "summary": "Deploy App",
-        "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
+        "description": "Scoped to a project-pinned token's pin set — a project outside it is rejected, regardless of scope.",
         "tags": [
           "Application Deployments"
         ],
@@ -4708,7 +4708,7 @@
       "delete": {
         "operationId": "DeleteDeployHook",
         "summary": "Delete Deploy Hook",
-        "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
+        "description": "Scoped to a project-pinned token's pin set — a project outside it is rejected, regardless of scope.",
         "tags": [
           "Application Deployments"
         ],
@@ -4767,7 +4767,7 @@
       "get": {
         "operationId": "GetDeployHook",
         "summary": "Get Deploy Hook",
-        "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
+        "description": "Scoped to a project-pinned token's pin set — a project outside it is rejected, regardless of scope.",
         "tags": [
           "Application Deployments"
         ],
@@ -4826,7 +4826,7 @@
       "post": {
         "operationId": "GenerateDeployHook",
         "summary": "Generate Deploy Hook",
-        "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
+        "description": "Scoped to a project-pinned token's pin set — a project outside it is rejected, regardless of scope.",
         "tags": [
           "Application Deployments"
         ],
@@ -4887,7 +4887,7 @@
       "get": {
         "operationId": "RevealDeployHook",
         "summary": "Reveal Deploy Hook",
-        "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
+        "description": "Scoped to a project-pinned token's pin set — a project outside it is rejected, regardless of scope.",
         "tags": [
           "Application Deployments"
         ],
@@ -4944,7 +4944,7 @@
       "get": {
         "operationId": "ListDeployments",
         "summary": "Get Deployments",
-        "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
+        "description": "Scoped to a project-pinned token's pin set — a project outside it is rejected, regardless of scope.",
         "tags": [
           "Application Deployments"
         ],
@@ -5008,7 +5008,7 @@
       "get": {
         "operationId": "GetDeployment",
         "summary": "Get Deployment",
-        "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
+        "description": "Scoped to a project-pinned token's pin set — a project outside it is rejected, regardless of scope.",
         "tags": [
           "Application Deployments"
         ],
@@ -5078,7 +5078,7 @@
       "get": {
         "operationId": "StreamBuildLogs",
         "summary": "Stream Build Logs",
-        "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
+        "description": "Scoped to a project-pinned token's pin set — a project outside it is rejected, regardless of scope.",
         "tags": [
           "Application Deployments"
         ],
@@ -5141,7 +5141,7 @@
       "get": {
         "operationId": "ListDomains",
         "summary": "Get Domains",
-        "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
+        "description": "Scoped to a project-pinned token's pin set — a project outside it is rejected, regardless of scope.",
         "tags": [
           "Application Domains \u0026 TLS"
         ],
@@ -5203,7 +5203,7 @@
       "post": {
         "operationId": "AddDomain",
         "summary": "Create Domain",
-        "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
+        "description": "Scoped to a project-pinned token's pin set — a project outside it is rejected, regardless of scope.",
         "tags": [
           "Application Domains \u0026 TLS"
         ],
@@ -5274,7 +5274,7 @@
       "delete": {
         "operationId": "RemoveDomain",
         "summary": "Remove Domain",
-        "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
+        "description": "Scoped to a project-pinned token's pin set — a project outside it is rejected, regardless of scope.",
         "tags": [
           "Application Domains \u0026 TLS"
         ],
@@ -5343,7 +5343,7 @@
       "get": {
         "operationId": "GetDomain",
         "summary": "Get Domain",
-        "description": "One domain, in the shape the list returns. Useful for polling `tls_status`, which moves from `pending` to `active` on its own once a certificate issues. Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
+        "description": "One domain, in the shape the list returns. Useful for polling `tls_status`, which moves from `pending` to `active` on its own once a certificate issues. Scoped to a project-pinned token's pin set — a project outside it is rejected, regardless of scope.",
         "tags": [
           "Application Domains \u0026 TLS"
         ],
@@ -5411,7 +5411,7 @@
       "put": {
         "operationId": "UpdateDomain",
         "summary": "Update Domain",
-        "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
+        "description": "Scoped to a project-pinned token's pin set — a project outside it is rejected, regardless of scope.",
         "tags": [
           "Application Domains \u0026 TLS"
         ],
@@ -5491,7 +5491,7 @@
       "get": {
         "operationId": "ListRouteFeatures",
         "summary": "Get Route Features",
-        "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
+        "description": "Scoped to a project-pinned token's pin set — a project outside it is rejected, regardless of scope.",
         "tags": [
           "Application Domains \u0026 TLS"
         ],
@@ -5562,7 +5562,7 @@
       "put": {
         "operationId": "UpsertRouteFeature",
         "summary": "Upsert Route Feature",
-        "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
+        "description": "Scoped to a project-pinned token's pin set — a project outside it is rejected, regardless of scope.",
         "tags": [
           "Application Domains \u0026 TLS"
         ],
@@ -5642,7 +5642,7 @@
       "delete": {
         "operationId": "DeleteRouteFeature",
         "summary": "Delete Route Feature",
-        "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
+        "description": "Scoped to a project-pinned token's pin set — a project outside it is rejected, regardless of scope.",
         "tags": [
           "Application Domains \u0026 TLS"
         ],
@@ -5726,7 +5726,7 @@
       "post": {
         "operationId": "RecheckDomainTLS",
         "summary": "Recheck Domain TLS",
-        "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
+        "description": "Scoped to a project-pinned token's pin set — a project outside it is rejected, regardless of scope.",
         "tags": [
           "Application Domains \u0026 TLS"
         ],
@@ -5789,7 +5789,7 @@
       "get": {
         "operationId": "ListEnvVars",
         "summary": "Get Variables",
-        "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
+        "description": "Scoped to a project-pinned token's pin set — a project outside it is rejected, regardless of scope.",
         "tags": [
           "Application Environment Variables"
         ],
@@ -5851,7 +5851,7 @@
       "put": {
         "operationId": "UpdateEnvVars",
         "summary": "Update Variables",
-        "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
+        "description": "Scoped to a project-pinned token's pin set — a project outside it is rejected, regardless of scope.",
         "tags": [
           "Application Environment Variables"
         ],
@@ -5927,7 +5927,7 @@
       "get": {
         "operationId": "RevealEnvVar",
         "summary": "Reveal Env Var",
-        "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
+        "description": "Scoped to a project-pinned token's pin set — a project outside it is rejected, regardless of scope.",
         "tags": [
           "Application Environment Variables"
         ],
@@ -5998,7 +5998,7 @@
       "get": {
         "operationId": "ListFileMounts",
         "summary": "Get Mounts",
-        "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
+        "description": "Scoped to a project-pinned token's pin set — a project outside it is rejected, regardless of scope.",
         "tags": [
           "Application File Mounts"
         ],
@@ -6060,7 +6060,7 @@
       "post": {
         "operationId": "CreateFileMount",
         "summary": "Create Mount",
-        "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
+        "description": "Scoped to a project-pinned token's pin set — a project outside it is rejected, regardless of scope.",
         "tags": [
           "Application File Mounts"
         ],
@@ -6131,7 +6131,7 @@
       "delete": {
         "operationId": "DeleteFileMount",
         "summary": "Delete Mount",
-        "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
+        "description": "Scoped to a project-pinned token's pin set — a project outside it is rejected, regardless of scope.",
         "tags": [
           "Application File Mounts"
         ],
@@ -6204,7 +6204,7 @@
       "put": {
         "operationId": "UpdateFileMount",
         "summary": "Update Mount",
-        "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
+        "description": "Scoped to a project-pinned token's pin set — a project outside it is rejected, regardless of scope.",
         "tags": [
           "Application File Mounts"
         ],
@@ -6284,7 +6284,7 @@
       "get": {
         "operationId": "RevealFileMount",
         "summary": "Reveal File Mount",
-        "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
+        "description": "Scoped to a project-pinned token's pin set — a project outside it is rejected, regardless of scope.",
         "tags": [
           "Application File Mounts"
         ],
@@ -6355,7 +6355,7 @@
       "get": {
         "operationId": "GetApplicationHealth",
         "summary": "Get Health",
-        "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
+        "description": "Scoped to a project-pinned token's pin set — a project outside it is rejected, regardless of scope.",
         "tags": [
           "Application Resources"
         ],
@@ -6417,7 +6417,7 @@
       "put": {
         "operationId": "SetHealthCheck",
         "summary": "Set Health Check",
-        "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
+        "description": "Scoped to a project-pinned token's pin set — a project outside it is rejected, regardless of scope.",
         "tags": [
           "Application Resources"
         ],
@@ -6488,7 +6488,7 @@
       "get": {
         "operationId": "StreamLogs",
         "summary": "Stream Logs",
-        "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
+        "description": "Scoped to a project-pinned token's pin set — a project outside it is rejected, regardless of scope.",
         "tags": [
           "Application Metrics \u0026 Logs"
         ],
@@ -6550,7 +6550,7 @@
       "get": {
         "operationId": "ListApplicationLogs",
         "summary": "Get Logs",
-        "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
+        "description": "Scoped to a project-pinned token's pin set — a project outside it is rejected, regardless of scope.",
         "tags": [
           "Application Metrics \u0026 Logs"
         ],
@@ -6678,7 +6678,7 @@
       "get": {
         "operationId": "ListApplicationLogSessions",
         "summary": "Get Sessions",
-        "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
+        "description": "Scoped to a project-pinned token's pin set — a project outside it is rejected, regardless of scope.",
         "tags": [
           "Application Metrics \u0026 Logs"
         ],
@@ -6742,7 +6742,7 @@
       "get": {
         "operationId": "StreamApplicationMetrics",
         "summary": "Stream Metrics",
-        "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
+        "description": "Scoped to a project-pinned token's pin set — a project outside it is rejected, regardless of scope.",
         "tags": [
           "Application Metrics \u0026 Logs"
         ],
@@ -6796,7 +6796,7 @@
       "get": {
         "operationId": "ListPreviews",
         "summary": "Get Previews",
-        "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
+        "description": "Scoped to a project-pinned token's pin set — a project outside it is rejected, regardless of scope.",
         "tags": [
           "Application Preview Environments"
         ],
@@ -6865,7 +6865,7 @@
       "put": {
         "operationId": "UpdatePreviewConfig",
         "summary": "Update Config",
-        "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
+        "description": "Scoped to a project-pinned token's pin set — a project outside it is rejected, regardless of scope.",
         "tags": [
           "Application Preview Environments"
         ],
@@ -6936,7 +6936,7 @@
       "delete": {
         "operationId": "DeletePreview",
         "summary": "Delete Preview",
-        "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
+        "description": "Scoped to a project-pinned token's pin set — a project outside it is rejected, regardless of scope.",
         "tags": [
           "Application Preview Environments"
         ],
@@ -7009,7 +7009,7 @@
       "get": {
         "operationId": "GetPreview",
         "summary": "Get Preview",
-        "description": "One preview environment. Useful for polling `status` while a preview builds. Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
+        "description": "One preview environment. Useful for polling `status` while a preview builds. Scoped to a project-pinned token's pin set — a project outside it is rejected, regardless of scope.",
         "tags": [
           "Application Preview Environments"
         ],
@@ -7079,7 +7079,7 @@
       "post": {
         "operationId": "RebuildApplication",
         "summary": "Rebuild App",
-        "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
+        "description": "Scoped to a project-pinned token's pin set — a project outside it is rejected, regardless of scope.",
         "tags": [
           "Application Actions"
         ],
@@ -7140,7 +7140,7 @@
       "post": {
         "operationId": "ReloadApplication",
         "summary": "Reload App",
-        "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
+        "description": "Scoped to a project-pinned token's pin set — a project outside it is rejected, regardless of scope.",
         "tags": [
           "Application Actions"
         ],
@@ -7201,7 +7201,7 @@
       "get": {
         "operationId": "ListRequestLogs",
         "summary": "Get Request Logs",
-        "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
+        "description": "Scoped to a project-pinned token's pin set — a project outside it is rejected, regardless of scope.",
         "tags": [
           "Application Metrics \u0026 Logs"
         ],
@@ -7280,7 +7280,7 @@
       "get": {
         "operationId": "StreamRequestLogs",
         "summary": "Stream Request Logs",
-        "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
+        "description": "Scoped to a project-pinned token's pin set — a project outside it is rejected, regardless of scope.",
         "tags": [
           "Application Metrics \u0026 Logs"
         ],
@@ -7333,7 +7333,7 @@
       "put": {
         "operationId": "SetResources",
         "summary": "Set Resources",
-        "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
+        "description": "Scoped to a project-pinned token's pin set — a project outside it is rejected, regardless of scope.",
         "tags": [
           "Application Resources"
         ],
@@ -7404,7 +7404,7 @@
       "post": {
         "operationId": "RestartApplication",
         "summary": "Restart App",
-        "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
+        "description": "Scoped to a project-pinned token's pin set — a project outside it is rejected, regardless of scope.",
         "tags": [
           "Application Actions"
         ],
@@ -7465,7 +7465,7 @@
       "post": {
         "operationId": "RollbackDeployment",
         "summary": "Rollback Deployment",
-        "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
+        "description": "Scoped to a project-pinned token's pin set — a project outside it is rejected, regardless of scope.",
         "tags": [
           "Application Deployments"
         ],
@@ -7536,7 +7536,7 @@
       "put": {
         "operationId": "UpdateApplicationRuntime",
         "summary": "Update Runtime",
-        "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
+        "description": "Scoped to a project-pinned token's pin set — a project outside it is rejected, regardless of scope.",
         "tags": [
           "Application Resources"
         ],
@@ -7615,7 +7615,7 @@
       "post": {
         "operationId": "StartApplication",
         "summary": "Start App",
-        "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
+        "description": "Scoped to a project-pinned token's pin set — a project outside it is rejected, regardless of scope.",
         "tags": [
           "Application Actions"
         ],
@@ -7676,7 +7676,7 @@
       "post": {
         "operationId": "StopApplication",
         "summary": "Stop App",
-        "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
+        "description": "Scoped to a project-pinned token's pin set — a project outside it is rejected, regardless of scope.",
         "tags": [
           "Application Actions"
         ],
@@ -7737,7 +7737,7 @@
       "post": {
         "operationId": "CreateTerminalSession",
         "summary": "Create Terminal Session",
-        "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
+        "description": "Scoped to a project-pinned token's pin set — a project outside it is rejected, regardless of scope.",
         "tags": [
           "Terminal Access"
         ],
@@ -7814,7 +7814,7 @@
       "get": {
         "operationId": "ListBackupConfigsForApplication",
         "summary": "Get Configs for an App",
-        "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
+        "description": "Scoped to a project-pinned token's pin set — a project outside it is rejected, regardless of scope.",
         "tags": [
           "Application Volumes \u0026 Backups"
         ],
@@ -7878,7 +7878,7 @@
       "get": {
         "operationId": "ListApplicationVolumes",
         "summary": "Get Volumes",
-        "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
+        "description": "Scoped to a project-pinned token's pin set — a project outside it is rejected, regardless of scope.",
         "tags": [
           "Application Volumes \u0026 Backups"
         ],
@@ -7940,7 +7940,7 @@
       "post": {
         "operationId": "CreateApplicationVolume",
         "summary": "Create Volume",
-        "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
+        "description": "Scoped to a project-pinned token's pin set — a project outside it is rejected, regardless of scope.",
         "tags": [
           "Application Volumes \u0026 Backups"
         ],
@@ -8011,7 +8011,7 @@
       "delete": {
         "operationId": "DeleteApplicationVolume",
         "summary": "Delete Application Volume",
-        "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
+        "description": "Scoped to a project-pinned token's pin set — a project outside it is rejected, regardless of scope.",
         "tags": [
           "Application Volumes \u0026 Backups"
         ],
@@ -8088,7 +8088,7 @@
       "get": {
         "operationId": "ListBackupConfigsForVolume",
         "summary": "Get Configs for a Volume",
-        "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
+        "description": "Scoped to a project-pinned token's pin set — a project outside it is rejected, regardless of scope.",
         "tags": [
           "Application Volumes \u0026 Backups"
         ],
@@ -8159,7 +8159,7 @@
       "post": {
         "operationId": "CreateVolumeBackupConfig",
         "summary": "Create Config",
-        "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
+        "description": "Scoped to a project-pinned token's pin set — a project outside it is rejected, regardless of scope.",
         "tags": [
           "Application Volumes \u0026 Backups"
         ],
@@ -8239,7 +8239,7 @@
       "delete": {
         "operationId": "DeleteVolumeBackupConfig",
         "summary": "Delete Config",
-        "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
+        "description": "Scoped to a project-pinned token's pin set — a project outside it is rejected, regardless of scope.",
         "tags": [
           "Application Volumes \u0026 Backups"
         ],
@@ -8321,7 +8321,7 @@
       "put": {
         "operationId": "UpdateVolumeBackupConfig",
         "summary": "Update Config",
-        "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
+        "description": "Scoped to a project-pinned token's pin set — a project outside it is rejected, regardless of scope.",
         "tags": [
           "Application Volumes \u0026 Backups"
         ],
@@ -8410,7 +8410,7 @@
       "post": {
         "operationId": "RunVolumeBackupConfig",
         "summary": "Run Config Backup",
-        "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
+        "description": "Scoped to a project-pinned token's pin set — a project outside it is rejected, regardless of scope.",
         "tags": [
           "Application Volumes \u0026 Backups"
         ],
@@ -8494,7 +8494,7 @@
       "get": {
         "operationId": "ListVolumeBackups",
         "summary": "Get Backups",
-        "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
+        "description": "Scoped to a project-pinned token's pin set — a project outside it is rejected, regardless of scope.",
         "tags": [
           "Application Volumes \u0026 Backups"
         ],
@@ -8567,7 +8567,7 @@
       "post": {
         "operationId": "RestoreVolumeBackup",
         "summary": "Restore Volume Backup",
-        "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
+        "description": "Scoped to a project-pinned token's pin set — a project outside it is rejected, regardless of scope.",
         "tags": [
           "Application Volumes \u0026 Backups"
         ],
@@ -8647,7 +8647,7 @@
       "get": {
         "operationId": "ListVolumeRestores",
         "summary": "Get Restores",
-        "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
+        "description": "Scoped to a project-pinned token's pin set — a project outside it is rejected, regardless of scope.",
         "tags": [
           "Application Volumes \u0026 Backups"
         ],
@@ -8720,7 +8720,7 @@
       "put": {
         "operationId": "UpdateApplicationWebhook",
         "summary": "Update Webhook",
-        "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
+        "description": "Scoped to a project-pinned token's pin set — a project outside it is rejected, regardless of scope.",
         "tags": [
           "Application Deployments"
         ],
@@ -8791,7 +8791,7 @@
       "get": {
         "operationId": "RevealWebhookSecret",
         "summary": "Reveal Webhook Secret",
-        "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
+        "description": "Scoped to a project-pinned token's pin set — a project outside it is rejected, regardless of scope.",
         "tags": [
           "Application Deployments"
         ],
@@ -8853,7 +8853,7 @@
       "get": {
         "operationId": "ListBackupDestinations",
         "summary": "Get Destinations",
-        "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
+        "description": "Scoped to a project-pinned token's pin set — a project outside it is rejected, regardless of scope.",
         "tags": [
           "Backup Destinations"
         ],
@@ -8906,7 +8906,7 @@
       "post": {
         "operationId": "CreateBackupDestination",
         "summary": "Create Destination",
-        "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
+        "description": "Scoped to a project-pinned token's pin set — a project outside it is rejected, regardless of scope.",
         "tags": [
           "Backup Destinations"
         ],
@@ -8968,7 +8968,7 @@
       "post": {
         "operationId": "TestBackupDestinationParams",
         "summary": "Test Configs",
-        "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
+        "description": "Scoped to a project-pinned token's pin set — a project outside it is rejected, regardless of scope.",
         "tags": [
           "Backup Destinations"
         ],
@@ -9035,7 +9035,7 @@
       "delete": {
         "operationId": "DeleteBackupDestination",
         "summary": "Delete Destination",
-        "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
+        "description": "Scoped to a project-pinned token's pin set — a project outside it is rejected, regardless of scope.",
         "tags": [
           "Backup Destinations"
         ],
@@ -9099,7 +9099,7 @@
       "put": {
         "operationId": "UpdateBackupDestination",
         "summary": "Update Destination",
-        "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
+        "description": "Scoped to a project-pinned token's pin set — a project outside it is rejected, regardless of scope.",
         "tags": [
           "Backup Destinations"
         ],
@@ -9170,7 +9170,7 @@
       "post": {
         "operationId": "TestBackupDestination",
         "summary": "Test Destination",
-        "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
+        "description": "Scoped to a project-pinned token's pin set — a project outside it is rejected, regardless of scope.",
         "tags": [
           "Backup Destinations"
         ],
@@ -9236,7 +9236,7 @@
       "get": {
         "operationId": "ListProjectBackups",
         "summary": "Get Recent Backups",
-        "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
+        "description": "Scoped to a project-pinned token's pin set — a project outside it is rejected, regardless of scope.",
         "tags": [
           "Backup Destinations"
         ],
@@ -9291,7 +9291,7 @@
       "get": {
         "operationId": "ListDatabases",
         "summary": "Get Databases",
-        "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
+        "description": "Scoped to a project-pinned token's pin set — a project outside it is rejected, regardless of scope.",
         "tags": [
           "Databases"
         ],
@@ -9344,7 +9344,7 @@
       "post": {
         "operationId": "CreateDatabase",
         "summary": "Create Database",
-        "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
+        "description": "Scoped to a project-pinned token's pin set — a project outside it is rejected, regardless of scope.",
         "tags": [
           "Databases"
         ],
@@ -9406,7 +9406,7 @@
       "delete": {
         "operationId": "DeleteDatabase",
         "summary": "Delete Database",
-        "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
+        "description": "Scoped to a project-pinned token's pin set — a project outside it is rejected, regardless of scope.",
         "tags": [
           "Databases"
         ],
@@ -9474,7 +9474,7 @@
       "get": {
         "operationId": "GetDatabase",
         "summary": "Get Database",
-        "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
+        "description": "Scoped to a project-pinned token's pin set — a project outside it is rejected, regardless of scope.",
         "tags": [
           "Databases"
         ],
@@ -9533,7 +9533,7 @@
       "put": {
         "operationId": "UpdateDatabase",
         "summary": "Update Database",
-        "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
+        "description": "Scoped to a project-pinned token's pin set — a project outside it is rejected, regardless of scope.",
         "tags": [
           "Databases"
         ],
@@ -9604,7 +9604,7 @@
       "get": {
         "operationId": "ListDatabaseBackupConfigs",
         "summary": "Get Configs",
-        "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
+        "description": "Scoped to a project-pinned token's pin set — a project outside it is rejected, regardless of scope.",
         "tags": [
           "Database Volumes \u0026 Backups"
         ],
@@ -9666,7 +9666,7 @@
       "post": {
         "operationId": "CreateDatabaseBackupConfig",
         "summary": "Create Config",
-        "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
+        "description": "Scoped to a project-pinned token's pin set — a project outside it is rejected, regardless of scope.",
         "tags": [
           "Database Volumes \u0026 Backups"
         ],
@@ -9737,7 +9737,7 @@
       "delete": {
         "operationId": "DeleteDatabaseBackupConfig",
         "summary": "Delete Config",
-        "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
+        "description": "Scoped to a project-pinned token's pin set — a project outside it is rejected, regardless of scope.",
         "tags": [
           "Database Volumes \u0026 Backups"
         ],
@@ -9810,7 +9810,7 @@
       "put": {
         "operationId": "UpdateDatabaseBackupConfig",
         "summary": "Update Config",
-        "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
+        "description": "Scoped to a project-pinned token's pin set — a project outside it is rejected, regardless of scope.",
         "tags": [
           "Database Volumes \u0026 Backups"
         ],
@@ -9890,7 +9890,7 @@
       "post": {
         "operationId": "RunDatabaseBackupConfig",
         "summary": "Run Config Backup",
-        "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
+        "description": "Scoped to a project-pinned token's pin set — a project outside it is rejected, regardless of scope.",
         "tags": [
           "Database Volumes \u0026 Backups"
         ],
@@ -9965,7 +9965,7 @@
       "get": {
         "operationId": "ListDatabaseBackups",
         "summary": "Get Backups",
-        "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
+        "description": "Scoped to a project-pinned token's pin set — a project outside it is rejected, regardless of scope.",
         "tags": [
           "Database Volumes \u0026 Backups"
         ],
@@ -10027,7 +10027,7 @@
       "post": {
         "operationId": "BackupDatabase",
         "summary": "Backup Database",
-        "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
+        "description": "Scoped to a project-pinned token's pin set — a project outside it is rejected, regardless of scope.",
         "tags": [
           "Database Volumes \u0026 Backups"
         ],
@@ -10092,7 +10092,7 @@
       "delete": {
         "operationId": "DeleteDatabaseBackup",
         "summary": "Delete Database Backup",
-        "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
+        "description": "Scoped to a project-pinned token's pin set — a project outside it is rejected, regardless of scope.",
         "tags": [
           "Database Volumes \u0026 Backups"
         ],
@@ -10163,7 +10163,7 @@
       "get": {
         "operationId": "RevealDatabaseCredentials",
         "summary": "Reveal Database Credentials",
-        "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
+        "description": "Scoped to a project-pinned token's pin set — a project outside it is rejected, regardless of scope.",
         "tags": [
           "Databases"
         ],
@@ -10220,7 +10220,7 @@
       "get": {
         "operationId": "GetDatabaseDeletionImpact",
         "summary": "Get Deletion Impact",
-        "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
+        "description": "Scoped to a project-pinned token's pin set — a project outside it is rejected, regardless of scope.",
         "tags": [
           "Databases"
         ],
@@ -10292,7 +10292,7 @@
       "post": {
         "operationId": "SetDatabaseExternalAccess",
         "summary": "Set External Access",
-        "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
+        "description": "Scoped to a project-pinned token's pin set — a project outside it is rejected, regardless of scope.",
         "tags": [
           "Databases"
         ],
@@ -10383,7 +10383,7 @@
       "get": {
         "operationId": "ListDatabaseLogs",
         "summary": "Get Logs",
-        "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
+        "description": "Scoped to a project-pinned token's pin set — a project outside it is rejected, regardless of scope.",
         "tags": [
           "Database Logs"
         ],
@@ -10511,7 +10511,7 @@
       "get": {
         "operationId": "ListDatabaseLogSessions",
         "summary": "Get Sessions",
-        "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
+        "description": "Scoped to a project-pinned token's pin set — a project outside it is rejected, regardless of scope.",
         "tags": [
           "Database Logs"
         ],
@@ -10575,7 +10575,7 @@
       "post": {
         "operationId": "ReloadDatabase",
         "summary": "Reload Database",
-        "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
+        "description": "Scoped to a project-pinned token's pin set — a project outside it is rejected, regardless of scope.",
         "tags": [
           "Database Actions"
         ],
@@ -10641,7 +10641,7 @@
       "post": {
         "operationId": "RestartDatabase",
         "summary": "Restart Database",
-        "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
+        "description": "Scoped to a project-pinned token's pin set — a project outside it is rejected, regardless of scope.",
         "tags": [
           "Database Actions"
         ],
@@ -10702,7 +10702,7 @@
       "post": {
         "operationId": "RestoreDatabase",
         "summary": "Restore Database",
-        "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
+        "description": "Scoped to a project-pinned token's pin set — a project outside it is rejected, regardless of scope.",
         "tags": [
           "Database Volumes \u0026 Backups"
         ],
@@ -10774,7 +10774,7 @@
       "get": {
         "operationId": "ListDatabaseRestores",
         "summary": "Get Restores",
-        "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
+        "description": "Scoped to a project-pinned token's pin set — a project outside it is rejected, regardless of scope.",
         "tags": [
           "Database Volumes \u0026 Backups"
         ],
@@ -10838,7 +10838,7 @@
       "post": {
         "operationId": "StartDatabase",
         "summary": "Start Database",
-        "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
+        "description": "Scoped to a project-pinned token's pin set — a project outside it is rejected, regardless of scope.",
         "tags": [
           "Database Actions"
         ],
@@ -10899,7 +10899,7 @@
       "post": {
         "operationId": "StopDatabase",
         "summary": "Stop Database",
-        "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
+        "description": "Scoped to a project-pinned token's pin set — a project outside it is rejected, regardless of scope.",
         "tags": [
           "Database Actions"
         ],
@@ -10960,7 +10960,7 @@
       "post": {
         "operationId": "UpgradeDatabase",
         "summary": "Upgrade Version",
-        "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
+        "description": "Scoped to a project-pinned token's pin set — a project outside it is rejected, regardless of scope.",
         "tags": [
           "Databases"
         ],
@@ -11036,7 +11036,7 @@
       "get": {
         "operationId": "GetDatabaseVolume",
         "summary": "Get Volume",
-        "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
+        "description": "Scoped to a project-pinned token's pin set — a project outside it is rejected, regardless of scope.",
         "tags": [
           "Database Volumes \u0026 Backups"
         ],
@@ -11097,7 +11097,7 @@
       "get": {
         "operationId": "ListProjectEnvVars",
         "summary": "Get Variables",
-        "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
+        "description": "Scoped to a project-pinned token's pin set — a project outside it is rejected, regardless of scope.",
         "tags": [
           "Project Environment Variables"
         ],
@@ -11150,7 +11150,7 @@
       "put": {
         "operationId": "UpdateProjectEnvVars",
         "summary": "Update Variables",
-        "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
+        "description": "Scoped to a project-pinned token's pin set — a project outside it is rejected, regardless of scope.",
         "tags": [
           "Project Environment Variables"
         ],
@@ -11217,7 +11217,7 @@
       "get": {
         "operationId": "RevealProjectEnvVar",
         "summary": "Reveal Project Env Var",
-        "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
+        "description": "Scoped to a project-pinned token's pin set — a project outside it is rejected, regardless of scope.",
         "tags": [
           "Project Environment Variables"
         ],
@@ -11279,7 +11279,7 @@
       "get": {
         "operationId": "GetProjectMetrics",
         "summary": "Get Metrics",
-        "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
+        "description": "Scoped to a project-pinned token's pin set — a project outside it is rejected, regardless of scope.",
         "tags": [
           "Projects"
         ],
@@ -11334,7 +11334,7 @@
       "get": {
         "operationId": "ListProjectOrphanedDatabaseBackups",
         "summary": "Get Orphaned Database Backups",
-        "description": "Backups whose database has been deleted but which were kept, listed against the tombstone that now parents them. Database backups only — an application's volume backups are erased with the application and can never reach this state. Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
+        "description": "Backups whose database has been deleted but which were kept, listed against the tombstone that now parents them. Database backups only — an application's volume backups are erased with the application and can never reach this state. Scoped to a project-pinned token's pin set — a project outside it is rejected, regardless of scope.",
         "tags": [
           "Database Volumes \u0026 Backups"
         ],
@@ -11389,7 +11389,7 @@
       "delete": {
         "operationId": "DeleteOrphanedDatabaseBackup",
         "summary": "Delete Orphaned Database Backup",
-        "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
+        "description": "Scoped to a project-pinned token's pin set — a project outside it is rejected, regardless of scope.",
         "tags": [
           "Database Volumes \u0026 Backups"
         ],
@@ -11451,7 +11451,7 @@
       "post": {
         "operationId": "RestoreDatabaseFromTombstone",
         "summary": "Restore Database From Tombstone",
-        "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
+        "description": "Scoped to a project-pinned token's pin set — a project outside it is rejected, regardless of scope.",
         "tags": [
           "Database Volumes \u0026 Backups"
         ],
@@ -11508,7 +11508,7 @@
       "put": {
         "operationId": "UpdateProjectSharing",
         "summary": "Update Project Sharing",
-        "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
+        "description": "Scoped to a project-pinned token's pin set — a project outside it is rejected, regardless of scope.",
         "tags": [
           "Projects"
         ],
@@ -11566,7 +11566,7 @@
       "put": {
         "operationId": "TransferProject",
         "summary": "Transfer Project",
-        "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope. Requires the Admin role.",
+        "description": "Scoped to a project-pinned token's pin set — a project outside it is rejected, regardless of scope. Requires the Admin role.",
         "tags": [
           "Projects"
         ],
@@ -12635,7 +12635,7 @@
       "post": {
         "operationId": "InstantiateTemplate",
         "summary": "Init Template",
-        "description": "Scoped to one project — a token pinned to a different project is rejected outside it, regardless of scope.",
+        "description": "Scoped to a project-pinned token's pin set — a project outside it is rejected, regardless of scope.",
         "tags": [
           "App Templates"
         ],
@@ -12773,6 +12773,15 @@
                     },
                     "name": {
                       "type": "string"
+                    },
+                    "pinned": {
+                      "type": "boolean"
+                    },
+                    "project_ids": {
+                      "items": {
+                        "type": "string"
+                      },
+                      "type": "array"
                     },
                     "role_at_issue": {
                       "type": "string"
@@ -15322,6 +15331,15 @@
           "name": {
             "type": "string"
           },
+          "pinned": {
+            "type": "boolean"
+          },
+          "project_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
           "role_at_issue": {
             "type": "string"
           },
@@ -16162,6 +16180,12 @@
           },
           "name": {
             "type": "string"
+          },
+          "project_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
           },
           "scopes": {
             "items": {

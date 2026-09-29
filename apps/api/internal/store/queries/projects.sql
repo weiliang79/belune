@@ -21,7 +21,7 @@ SELECT p.*, (
 ) AS last_deployed_at
 FROM projects p
 WHERE (p.user_id = sqlc.arg('user_id') OR p.shared)
-  AND (sqlc.narg('project_id')::uuid IS NULL OR p.id = sqlc.narg('project_id'))
+  AND (sqlc.narg('project_ids')::uuid[] IS NULL OR p.id = ANY(sqlc.narg('project_ids')))
 ORDER BY p.created_at DESC
 LIMIT sqlc.arg('row_limit');
 
@@ -56,11 +56,14 @@ ORDER BY p.created_at DESC;
 
 -- name: ListAllProjectsLimit :many
 -- Bounded sibling of ListAllProjects for the MCP list_projects tool.
--- project_id is the PAT pin, applied here in SQL — not as a post-query
+-- project_ids is the PAT pin set, applied here in SQL — not as a post-query
 -- Go-side filter the way REST's ListProjects narrows it — so LIMIT can
--- never truncate away the one project a pinned token is allowed to see
--- before the pin gets a chance to narrow the result to it. Additive: REST
--- keeps using the unbounded query above unchanged.
+-- never truncate away a project a pinned token is allowed to see before the
+-- pin gets a chance to narrow the result to it. A NULL array (unpinned
+-- token) matches everything; a non-NULL array, even empty, matches nothing —
+-- ANY() over an empty array is never true, which is exactly the "pinned to
+-- projects that no longer exist" case reaching nothing rather than
+-- everything. Additive: REST keeps using the unbounded query above unchanged.
 SELECT p.*, (
     SELECT max(d.started_at)
     FROM deployments d
@@ -68,7 +71,7 @@ SELECT p.*, (
     WHERE a.project_id = p.id
 ) AS last_deployed_at
 FROM projects p
-WHERE (sqlc.narg('project_id')::uuid IS NULL OR p.id = sqlc.narg('project_id'))
+WHERE (sqlc.narg('project_ids')::uuid[] IS NULL OR p.id = ANY(sqlc.narg('project_ids')))
 ORDER BY p.created_at DESC
 LIMIT sqlc.arg('row_limit');
 

@@ -28,7 +28,7 @@ func (h *Handler) CreateProject(w http.ResponseWriter, r *http.Request) {
 	// definition not the one a pinned token was narrowed to. Reject
 	// explicitly rather than let a pinned token escape its pin by creating
 	// somewhere new to work.
-	if middleware.TokenProjectFromContext(r.Context()) != "" {
+	if middleware.TokenPinnedFromContext(r.Context()) {
 		writeError(w, http.StatusForbidden, "token is pinned to a different project")
 		return
 	}
@@ -129,7 +129,9 @@ func (h *Handler) ListProjects(w http.ResponseWriter, r *http.Request) {
 	// This list has no {projectId} URL param for middleware.RequireProjectAccess
 	// to check, so a pinned token would otherwise see every project's
 	// name/slug it could enumerate before the pin — narrow the result here.
-	pinned := middleware.TokenProjectFromContext(r.Context())
+	// nil means unpinned (no filtering); non-nil (even empty) means "only
+	// these ids, or none at all" — see middleware.TokenProjectsFromContext.
+	pinnedIDs := middleware.TokenProjectsFromContext(r.Context())
 
 	if role == "admin" {
 		projects, err := h.queries.ListAllProjects(r.Context())
@@ -137,7 +139,7 @@ func (h *Handler) ListProjects(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusInternalServerError, "failed to list projects")
 			return
 		}
-		writeJSON(w, http.StatusOK, filterProjectsByPin(projects, pinned, func(p generated.ListAllProjectsRow) pgtype.UUID { return p.ID }))
+		writeJSON(w, http.StatusOK, filterProjectsByPin(projects, pinnedIDs, func(p generated.ListAllProjectsRow) pgtype.UUID { return p.ID }))
 		return
 	}
 
@@ -150,23 +152,28 @@ func (h *Handler) ListProjects(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, filterProjectsByPin(projects, pinned, func(p generated.ListProjectsByUserRow) pgtype.UUID { return p.ID }))
+	writeJSON(w, http.StatusOK, filterProjectsByPin(projects, pinnedIDs, func(p generated.ListProjectsByUserRow) pgtype.UUID { return p.ID }))
 }
 
-// filterProjectsByPin narrows rows to the pinned project id when pinned is
-// non-empty, and returns rows unchanged (never nil) otherwise. Generic over
-// the two list rows' near-identical but distinct sqlc-generated types.
-func filterProjectsByPin[T any](rows []T, pinned string, id func(T) pgtype.UUID) []T {
-	if pinned == "" {
+// filterProjectsByPin narrows rows to the pinned project id set when
+// pinnedIDs is non-nil (even if empty, in which case every row is dropped —
+// a token pinned to since-deleted projects reaches nothing), and returns
+// rows unchanged when pinnedIDs is nil (unpinned). Generic over the two list
+// rows' near-identical but distinct sqlc-generated types.
+func filterProjectsByPin[T any](rows []T, pinnedIDs []string, id func(T) pgtype.UUID) []T {
+	if pinnedIDs == nil {
 		return rows
 	}
-	var pinnedUUID pgtype.UUID
-	if err := pinnedUUID.Scan(pinned); err != nil {
-		return []T{}
+	pinnedSet := make(map[pgtype.UUID]bool, len(pinnedIDs))
+	for _, p := range pinnedIDs {
+		var u pgtype.UUID
+		if err := u.Scan(p); err == nil {
+			pinnedSet[u] = true
+		}
 	}
 	out := make([]T, 0, len(rows))
 	for _, row := range rows {
-		if id(row) == pinnedUUID {
+		if pinnedSet[id(row)] {
 			out = append(out, row)
 		}
 	}

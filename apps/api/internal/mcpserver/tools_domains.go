@@ -66,16 +66,16 @@ func registerDomainTools(srv *mcp.Server, queries *generated.Queries) {
 			}
 		}
 
-		pinnedID, err := pinnedProjectUUID(ctx)
+		pinnedIDs, err := pinnedProjectUUIDs(ctx)
 		if err != nil {
 			return nil, nil, internalError("failed to list domain TLS status", err)
 		}
 
 		limit := clampLimit(in.Limit, defaultDomainsLimit, maxDomainsLimit)
 		rows, err := queries.ListDomainsWithTLSStatusLimit(ctx, generated.ListDomainsWithTLSStatusLimitParams{
-			UserID:    scope,
-			ProjectID: pinnedID,
-			RowLimit:  int32(limit),
+			UserID:     scope,
+			ProjectIds: pinnedIDs,
+			RowLimit:   int32(limit),
 		})
 		if err != nil {
 			return nil, nil, internalError("failed to list domain TLS status", err)

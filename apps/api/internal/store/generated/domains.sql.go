@@ -558,17 +558,18 @@ LEFT JOIN certificates c ON c.id = d.certificate_id
 WHERE ($1::uuid IS NULL
        OR p.user_id = $1
        OR p.shared)
-  -- project_id is the PAT pin, not a user-facing filter. This route has no
-  -- {projectId} param, so middleware.RequireProjectAccess never fires on it and
-  -- a pinned token would otherwise read every domain its owner can reach —
-  -- the same hole GetGlobalDeployments closes in its own handler.
-  AND ($2::uuid IS NULL OR p.id = $2)
+  -- project_ids is the PAT pin set, not a user-facing filter. This route has
+  -- no {projectId} param, so middleware.RequireProjectAccess never fires on
+  -- it and a pinned token would otherwise read every domain its owner can
+  -- reach — the same hole GetGlobalDeployments closes in its own handler. A
+  -- non-NULL, even empty, array matches nothing (see ListAllProjectsLimit).
+  AND ($2::uuid[] IS NULL OR p.id = ANY($2))
 ORDER BY d.hostname
 `
 
 type ListDomainsWithTLSStatusParams struct {
-	UserID    pgtype.UUID `json:"user_id"`
-	ProjectID pgtype.UUID `json:"project_id"`
+	UserID     pgtype.UUID   `json:"user_id"`
+	ProjectIds []pgtype.UUID `json:"project_ids"`
 }
 
 type ListDomainsWithTLSStatusRow struct {
@@ -600,7 +601,7 @@ type ListDomainsWithTLSStatusRow struct {
 // is SELECT * FROM domains, so it returns certificate_id as a bare UUID with nothing
 // to resolve it against — this is the only query that turns that into a name.
 func (q *Queries) ListDomainsWithTLSStatus(ctx context.Context, arg ListDomainsWithTLSStatusParams) ([]ListDomainsWithTLSStatusRow, error) {
-	rows, err := q.db.Query(ctx, listDomainsWithTLSStatus, arg.UserID, arg.ProjectID)
+	rows, err := q.db.Query(ctx, listDomainsWithTLSStatus, arg.UserID, arg.ProjectIds)
 	if err != nil {
 		return nil, err
 	}
@@ -644,15 +645,15 @@ LEFT JOIN certificates c ON c.id = d.certificate_id
 WHERE ($1::uuid IS NULL
        OR p.user_id = $1
        OR p.shared)
-  AND ($2::uuid IS NULL OR p.id = $2)
+  AND ($2::uuid[] IS NULL OR p.id = ANY($2))
 ORDER BY d.hostname
 LIMIT $3
 `
 
 type ListDomainsWithTLSStatusLimitParams struct {
-	UserID    pgtype.UUID `json:"user_id"`
-	ProjectID pgtype.UUID `json:"project_id"`
-	RowLimit  int32       `json:"row_limit"`
+	UserID     pgtype.UUID   `json:"user_id"`
+	ProjectIds []pgtype.UUID `json:"project_ids"`
+	RowLimit   int32         `json:"row_limit"`
 }
 
 type ListDomainsWithTLSStatusLimitRow struct {
@@ -672,14 +673,17 @@ type ListDomainsWithTLSStatusLimitRow struct {
 }
 
 // Bounded sibling of ListDomainsWithTLSStatus for the MCP
-// list_domain_tls_status tool: same NULL-means-unfiltered user_id/project_id
-// handling (the pin is already applied in SQL here, same as the query
-// above), plus a LIMIT so a large install's entire domain table isn't the
-// single largest response this server can produce. Additive: REST's
-// ListDomainTLSStatus handler keeps using the unbounded query above
-// unchanged.
+// list_domain_tls_status tool: same NULL-means-unfiltered user_id handling,
+// plus a LIMIT so a large install's entire domain table isn't the single
+// largest response this server can produce. project_ids is the PAT pin set
+// (see ListAllProjectsLimit for why a non-NULL, even empty, array must match
+// nothing rather than everything), applied here in SQL for the same reason:
+// this route has no {projectId} param, so middleware.RequireProjectAccess
+// never fires on it and a pinned token would otherwise read every domain its
+// owner can reach. Additive: REST's ListDomainTLSStatus handler keeps using
+// the unbounded query above unchanged.
 func (q *Queries) ListDomainsWithTLSStatusLimit(ctx context.Context, arg ListDomainsWithTLSStatusLimitParams) ([]ListDomainsWithTLSStatusLimitRow, error) {
-	rows, err := q.db.Query(ctx, listDomainsWithTLSStatusLimit, arg.UserID, arg.ProjectID, arg.RowLimit)
+	rows, err := q.db.Query(ctx, listDomainsWithTLSStatusLimit, arg.UserID, arg.ProjectIds, arg.RowLimit)
 	if err != nil {
 		return nil, err
 	}

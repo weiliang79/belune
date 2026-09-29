@@ -458,10 +458,9 @@ var errForbidden = errors.New("forbidden")
 func (h *Handler) resolveTemplateProject(r *http.Request, m *template.Manifest, req instantiateTemplateRequest) (generated.Project, bool, error) {
 	// The target project arrives in the body here, not a {projectId} URL
 	// param, so middleware.RequireProjectAccess never sees it — check the pin
-	// directly. A pinned token targeting a DIFFERENT existing project, or
+	// directly. A pinned token targeting a project OUTSIDE its pin set, or
 	// creating a brand new one (project_id empty), are both a reach outside
 	// the pin.
-	pinned := middleware.TokenProjectFromContext(r.Context())
 	if strings.TrimSpace(req.ProjectID) != "" {
 		var id pgtype.UUID
 		if err := id.Scan(req.ProjectID); err != nil {
@@ -470,7 +469,7 @@ func (h *Handler) resolveTemplateProject(r *http.Request, m *template.Manifest, 
 		if !h.canAccessProject(r, id) {
 			return generated.Project{}, false, errForbidden
 		}
-		if pinned != "" && pinned != req.ProjectID {
+		if !middleware.PinAllows(r.Context(), req.ProjectID) {
 			return generated.Project{}, false, errForbidden
 		}
 		p, err := h.queries.GetProject(r.Context(), id)
@@ -480,7 +479,7 @@ func (h *Handler) resolveTemplateProject(r *http.Request, m *template.Manifest, 
 		return p, false, nil
 	}
 
-	if pinned != "" {
+	if middleware.TokenPinnedFromContext(r.Context()) {
 		return generated.Project{}, false, errForbidden
 	}
 

@@ -3,7 +3,9 @@ package handler_test
 import (
 	"context"
 	"crypto/sha256"
+	"fmt"
 	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgtype"
@@ -213,9 +215,9 @@ func TestCreateAPIToken_DeduplicatesScopes(t *testing.T) {
 	assert.Len(t, gotScopes, 2)
 }
 
-// TestCreateAPIToken_UnpinnedByDefault pins that a PR3-minted token has no
-// project_id — every project the owner can reach, evaluated at use time —
-// since PR3 ships no project picker either.
+// TestCreateAPIToken_UnpinnedByDefault pins that a token minted without any
+// project_ids is unpinned — every project the owner can reach, evaluated at
+// use time — with no pin rows recorded for it.
 func TestCreateAPIToken_UnpinnedByDefault(t *testing.T) {
 	resetDB(t)
 	adminToken := env.SetupAdmin(t, "admin@test.com", "password123")
@@ -226,14 +228,288 @@ func TestCreateAPIToken_UnpinnedByDefault(t *testing.T) {
 	}, testutil.AuthHeader(adminToken))
 	require.Equal(t, http.StatusCreated, resp.StatusCode)
 	body := testutil.ReadJSON(t, resp)
+	assert.Equal(t, false, body["pinned"])
+	assert.Empty(t, body["project_ids"])
 	id := body["id"].(string)
 
 	var idUUID pgtype.UUID
 	require.NoError(t, idUUID.Scan(id))
-	var projectID pgtype.UUID
+	var pinned bool
 	require.NoError(t, env.Pool.QueryRow(context.Background(),
-		"SELECT project_id FROM api_tokens WHERE id = $1", idUUID).Scan(&projectID))
-	assert.False(t, projectID.Valid)
+		"SELECT pinned FROM api_tokens WHERE id = $1", idUUID).Scan(&pinned))
+	assert.False(t, pinned)
+	var pinRows int
+	require.NoError(t, env.Pool.QueryRow(context.Background(),
+		"SELECT count(*) FROM api_token_projects WHERE token_id = $1", idUUID).Scan(&pinRows))
+	assert.Zero(t, pinRows)
+}
+
+// TestCreateAPIToken_PinsToReachableProject pins the create endpoint's other
+// half: a project_ids entry the caller can reach is stored and echoed back,
+// not silently dropped the way it was before this test existed (every token
+// ever minted through the product was unpinned regardless of what, if
+// anything, the caller might have wanted to pin — the service and handler
+// simply never carried the field through).
+func TestCreateAPIToken_PinsToReachableProject(t *testing.T) {
+	resetDB(t)
+	adminToken := env.SetupAdmin(t, "admin@test.com", "password123")
+	project := env.CreateProject(t, adminToken, "Pin Target", "pin-target")
+	projectID := extractID(project["id"])
+
+	resp := env.DoRequest(t, "POST", "/api/tokens", map[string]any{
+		"name":        "pinned",
+		"scopes":      service.AllScopes,
+		"project_ids": []string{projectID},
+	}, testutil.AuthHeader(adminToken))
+	require.Equal(t, http.StatusCreated, resp.StatusCode)
+	body := testutil.ReadJSON(t, resp)
+	assert.Equal(t, true, body["pinned"])
+	assert.ElementsMatch(t, []string{projectID}, body["project_ids"])
+
+	var idUUID pgtype.UUID
+	require.NoError(t, idUUID.Scan(body["id"].(string)))
+	var storedProjectID string
+	require.NoError(t, env.Pool.QueryRow(context.Background(),
+		"SELECT project_id::text FROM api_token_projects WHERE token_id = $1", idUUID).Scan(&storedProjectID))
+	assert.Equal(t, projectID, storedProjectID)
+
+	// The list endpoint must carry the pin too — apiTokenDTO used to drop
+	// project_id even though the query underneath it already selected it.
+	listResp := env.DoRequest(t, "GET", "/api/tokens", nil, testutil.AuthHeader(adminToken))
+	require.Equal(t, http.StatusOK, listResp.StatusCode)
+	items := testutil.ReadJSONArray(t, listResp)
+	require.Len(t, items, 1)
+	assert.ElementsMatch(t, []string{projectID}, items[0].(map[string]any)["project_ids"])
+}
+
+// TestCreateAPIToken_PinsToMultipleReachableProjects pins the actual point of
+// this rework: a token can narrow to MORE than one project, each checked
+// independently, and every one of them is enforced afterward (a third,
+// unlisted project is rejected by RequireProjectAccess).
+func TestCreateAPIToken_PinsToMultipleReachableProjects(t *testing.T) {
+	resetDB(t)
+	adminToken := env.SetupAdmin(t, "admin@test.com", "password123")
+	projectA := env.CreateProject(t, adminToken, "Project A", "project-a")
+	projectAID := extractID(projectA["id"])
+	projectB := env.CreateProject(t, adminToken, "Project B", "project-b")
+	projectBID := extractID(projectB["id"])
+	projectC := env.CreateProject(t, adminToken, "Project C", "project-c")
+	projectCID := extractID(projectC["id"])
+
+	resp := env.DoRequest(t, "POST", "/api/tokens", map[string]any{
+		"name":        "multi-pinned",
+		"scopes":      []string{"read"},
+		"project_ids": []string{projectAID, projectBID},
+	}, testutil.AuthHeader(adminToken))
+	require.Equal(t, http.StatusCreated, resp.StatusCode)
+	body := testutil.ReadJSON(t, resp)
+	assert.Equal(t, true, body["pinned"])
+	assert.ElementsMatch(t, []string{projectAID, projectBID}, body["project_ids"])
+	plain := body["token"].(string)
+
+	aResp := env.DoRequest(t, "GET", "/api/projects/"+projectAID, nil, testutil.AuthHeader(plain))
+	assert.Equal(t, http.StatusOK, aResp.StatusCode, "the first pinned project must be reachable")
+	aResp.Body.Close()
+
+	bResp := env.DoRequest(t, "GET", "/api/projects/"+projectBID, nil, testutil.AuthHeader(plain))
+	assert.Equal(t, http.StatusOK, bResp.StatusCode, "the second pinned project must be reachable")
+	bResp.Body.Close()
+
+	cResp := env.DoRequest(t, "GET", "/api/projects/"+projectCID, nil, testutil.AuthHeader(plain))
+	assert.Equal(t, http.StatusForbidden, cResp.StatusCode, "a project outside the pin set must stay forbidden")
+	cResp.Body.Close()
+}
+
+// TestCreateAPIToken_DeduplicatesCaseInsensitiveProjectID is a regression
+// test for a review finding: deduplicating project_ids on the raw request
+// string (before UUID parsing) let two differently-cased strings for the
+// SAME project both survive into the pin insert, which failed on its own
+// primary key and turned a harmless repeat into a 500 instead of a single
+// pin. Dedup now happens on the parsed id.
+func TestCreateAPIToken_DeduplicatesCaseInsensitiveProjectID(t *testing.T) {
+	resetDB(t)
+	adminToken := env.SetupAdmin(t, "admin@test.com", "password123")
+	project := env.CreateProject(t, adminToken, "Dup Case", "dup-case")
+	projectID := extractID(project["id"])
+
+	resp := env.DoRequest(t, "POST", "/api/tokens", map[string]any{
+		"name":        "dup-case-ids",
+		"scopes":      service.AllScopes,
+		"project_ids": []string{projectID, strings.ToUpper(projectID)},
+	}, testutil.AuthHeader(adminToken))
+	require.Equal(t, http.StatusCreated, resp.StatusCode)
+	body := testutil.ReadJSON(t, resp)
+	assert.ElementsMatch(t, []string{projectID}, body["project_ids"],
+		"the two case variants of the same id must collapse to one pin, not two")
+}
+
+// TestCreateAPIToken_RejectsTooManyPinnedProjects pins the bound that stops
+// an authenticated caller from turning one create request into hundreds of
+// serial canAccessProject/GetProject round trips.
+func TestCreateAPIToken_RejectsTooManyPinnedProjects(t *testing.T) {
+	resetDB(t)
+	adminToken := env.SetupAdmin(t, "admin@test.com", "password123")
+
+	tooMany := make([]string, 101)
+	for i := range tooMany {
+		tooMany[i] = "00000000-0000-0000-0000-" + fmt.Sprintf("%012d", i)
+	}
+
+	resp := env.DoRequest(t, "POST", "/api/tokens", map[string]any{
+		"name":        "too-many-pins",
+		"scopes":      service.AllScopes,
+		"project_ids": tooMany,
+	}, testutil.AuthHeader(adminToken))
+	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+	resp.Body.Close()
+}
+
+// TestCreateAPIToken_RejectsUnreachableProject pins the validation half: a
+// Member cannot pin a token to a project they cannot otherwise reach — the
+// creation-time check is UX (fail fast with a clear error), not the security
+// boundary, but it must still fail here rather than silently minting a token
+// pinned to something its owner can never use.
+func TestCreateAPIToken_RejectsUnreachableProject(t *testing.T) {
+	resetDB(t)
+	adminToken := env.SetupAdmin(t, "admin@test.com", "password123")
+	adminProject := env.CreateProject(t, adminToken, "Admin Only", "admin-only")
+	adminProjectID := extractID(adminProject["id"])
+	_, memberToken := createMember(t, adminToken, "member@test.com")
+
+	resp := env.DoRequest(t, "POST", "/api/tokens", map[string]any{
+		"name":        "reaches-too-far",
+		"scopes":      service.AllScopes,
+		"project_ids": []string{adminProjectID},
+	}, testutil.AuthHeader(memberToken))
+	assert.Equal(t, http.StatusForbidden, resp.StatusCode)
+	resp.Body.Close()
+}
+
+// TestCreateAPIToken_MemberCanPinToSharedProject is the case
+// canAccessProject (rather than isProjectOwner) exists for: a Member must be
+// able to pin a token to a project shared with them, not only one they own,
+// or the feature is useless to exactly the people most likely to want a
+// narrower token than their own account-wide reach.
+func TestCreateAPIToken_MemberCanPinToSharedProject(t *testing.T) {
+	resetDB(t)
+	adminToken := env.SetupAdmin(t, "admin@test.com", "password123")
+	project := env.CreateProject(t, adminToken, "Shared Project", "shared-project")
+	projectID := extractID(project["id"])
+	_, memberToken := createMember(t, adminToken, "member@test.com")
+
+	shareResp := env.DoRequest(t, "PUT", fmt.Sprintf("/api/projects/%s/sharing", projectID),
+		map[string]bool{"shared": true}, testutil.AuthHeader(adminToken))
+	require.Equal(t, http.StatusOK, shareResp.StatusCode)
+	shareResp.Body.Close()
+
+	resp := env.DoRequest(t, "POST", "/api/tokens", map[string]any{
+		"name":        "pinned-to-shared",
+		"scopes":      []string{"read"},
+		"project_ids": []string{projectID},
+	}, testutil.AuthHeader(memberToken))
+	require.Equal(t, http.StatusCreated, resp.StatusCode)
+	body := testutil.ReadJSON(t, resp)
+	assert.ElementsMatch(t, []string{projectID}, body["project_ids"])
+}
+
+// TestCreateAPIToken_RejectsMalformedProjectID pins that an unparseable
+// project_id is a 400, distinct from the 403 an unreachable-but-valid id
+// gets — a client sending garbage should not be told "access denied" for a
+// project id that was never going to resolve to anything.
+func TestCreateAPIToken_RejectsMalformedProjectID(t *testing.T) {
+	resetDB(t)
+	adminToken := env.SetupAdmin(t, "admin@test.com", "password123")
+
+	resp := env.DoRequest(t, "POST", "/api/tokens", map[string]any{
+		"name":        "bad-project-id",
+		"scopes":      service.AllScopes,
+		"project_ids": []string{"not-a-uuid"},
+	}, testutil.AuthHeader(adminToken))
+	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+	resp.Body.Close()
+}
+
+// TestCreateAPIToken_AdminRejectsNonexistentProject pins the admin-specific
+// path a Member never reaches: canAccessOwned (authz.go) short-circuits to
+// true for an admin before ever looking the project up, so a well-formed
+// but nonexistent project_id would otherwise sail past canAccessProject and
+// surface as a 500 from the project_id foreign key at INSERT time instead
+// of a 4xx. A Member gets 403 for the identical request (canAccessOwned's
+// own lookup fails first), which TestCreateAPIToken_RejectsUnreachableProject
+// already covers with an existing project a Member merely cannot reach —
+// this one is the "doesn't exist at all" case, admin-only because that's
+// the only role for which the distinction is even reachable.
+func TestCreateAPIToken_AdminRejectsNonexistentProject(t *testing.T) {
+	resetDB(t)
+	adminToken := env.SetupAdmin(t, "admin@test.com", "password123")
+
+	resp := env.DoRequest(t, "POST", "/api/tokens", map[string]any{
+		"name":        "nonexistent-project",
+		"scopes":      service.AllScopes,
+		"project_ids": []string{"00000000-0000-0000-0000-000000000000"},
+	}, testutil.AuthHeader(adminToken))
+	assert.Equal(t, http.StatusNotFound, resp.StatusCode)
+	resp.Body.Close()
+}
+
+// TestCreateAPIToken_MemberNonexistentProjectStaysForbidden is the other half
+// of the test above, and it guards a property that rests entirely on the ORDER
+// of two checks inside CreateAPIToken: canAccessProject runs first, the
+// existence check second. Because of that order a non-admin never reaches the
+// 404 — a nonexistent id is already collapsed into "access denied" by the
+// access check, the same collapse that stops a token using a resource's mere
+// existence as a cross-tenant oracle.
+//
+// Nothing about that is enforced by a type or a signature; hoist the existence
+// check above the access check during some future refactor and Members start
+// learning which project ids are real, while every other test in this file
+// still passes. Hence this one: it fails the moment the order flips.
+func TestCreateAPIToken_MemberNonexistentProjectStaysForbidden(t *testing.T) {
+	resetDB(t)
+	adminToken := env.SetupAdmin(t, "admin@test.com", "password123")
+	_, memberToken := createMember(t, adminToken, "member@test.com")
+
+	resp := env.DoRequest(t, "POST", "/api/tokens", map[string]any{
+		"name":        "member-nonexistent-project",
+		"scopes":      service.AllScopes,
+		"project_ids": []string{"00000000-0000-0000-0000-000000000000"},
+	}, testutil.AuthHeader(memberToken))
+	defer resp.Body.Close()
+	// Deliberately asserting the exact status, not merely "an error": a 404
+	// here would be the leak, and it is the plausible regression.
+	assert.Equal(t, http.StatusForbidden, resp.StatusCode,
+		"a Member must not be able to tell a nonexistent project from one they cannot reach")
+}
+
+// TestCreateAPIToken_PinnedTokenEnforcesItsPin creates a pinned token
+// through the real endpoint (not a direct DB insert) and proves
+// middleware.RequireProjectAccess actually enforces the pin it stored — the
+// end-to-end path that a direct-insert test helper would never exercise,
+// which is exactly why this gap survived undetected.
+func TestCreateAPIToken_PinnedTokenEnforcesItsPin(t *testing.T) {
+	resetDB(t)
+	adminToken := env.SetupAdmin(t, "admin@test.com", "password123")
+	ownProject := env.CreateProject(t, adminToken, "Own Project", "own-project")
+	ownProjectID := extractID(ownProject["id"])
+	otherProject := env.CreateProject(t, adminToken, "Other Project", "other-project")
+	otherProjectID := extractID(otherProject["id"])
+
+	createResp := env.DoRequest(t, "POST", "/api/tokens", map[string]any{
+		"name":        "pin-enforced",
+		"scopes":      []string{"read"},
+		"project_ids": []string{ownProjectID},
+	}, testutil.AuthHeader(adminToken))
+	require.Equal(t, http.StatusCreated, createResp.StatusCode)
+	plain := testutil.ReadJSON(t, createResp)["token"].(string)
+
+	ownResp := env.DoRequest(t, "GET", "/api/projects/"+ownProjectID, nil, testutil.AuthHeader(plain))
+	assert.Equal(t, http.StatusOK, ownResp.StatusCode, "the pinned project itself must still work")
+	ownResp.Body.Close()
+
+	otherResp := env.DoRequest(t, "GET", "/api/projects/"+otherProjectID, nil, testutil.AuthHeader(plain))
+	assert.Equal(t, http.StatusForbidden, otherResp.StatusCode, "a pin created through the real endpoint must be enforced, not just stored")
+	otherBody := testutil.ReadJSON(t, otherResp)
+	assert.Equal(t, "token is pinned to a different project", otherBody["error"])
 }
 
 // TestListAPITokens_ScopedToCallingUser pins per-user isolation: there is no

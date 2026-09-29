@@ -363,7 +363,7 @@ SELECT d.id, d.application_id, d.status, d.triggered_by, d.commit_sha, d.commit_
 FROM deployments d
 JOIN applications a ON a.id = d.application_id
 JOIN projects p ON p.id = a.project_id
-WHERE ($3::uuid IS NULL OR p.id = $3)
+WHERE ($3::uuid[] IS NULL OR p.id = ANY($3))
   AND ($4::uuid IS NULL OR d.application_id = $4)
   AND ($5::text IS NULL OR d.status = $5)
   AND ($6::timestamptz IS NULL OR d.started_at >= $6)
@@ -380,7 +380,7 @@ LIMIT $1 OFFSET $2
 type ListGlobalDeploymentsFilteredParams struct {
 	Limit         int32              `json:"limit"`
 	Offset        int32              `json:"offset"`
-	ProjectID     pgtype.UUID        `json:"project_id"`
+	ProjectIds    []pgtype.UUID      `json:"project_ids"`
 	ApplicationID pgtype.UUID        `json:"application_id"`
 	Status        pgtype.Text        `json:"status"`
 	From          pgtype.Timestamptz `json:"from"`
@@ -412,7 +412,7 @@ func (q *Queries) ListGlobalDeploymentsFiltered(ctx context.Context, arg ListGlo
 	rows, err := q.db.Query(ctx, listGlobalDeploymentsFiltered,
 		arg.Limit,
 		arg.Offset,
-		arg.ProjectID,
+		arg.ProjectIds,
 		arg.ApplicationID,
 		arg.Status,
 		arg.From,

@@ -2,6 +2,7 @@ package handler_test
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"testing"
@@ -218,18 +219,17 @@ func TestAuditLog_SessionActionLeavesTokenIDNull(t *testing.T) {
 	assert.False(t, gotTokenID.Valid, "a session-authenticated action must leave token_id NULL")
 }
 
-// TestDeleteProject_CascadesPinnedTokenAndAuditStillWrites is a regression
-// test for a bug a code review caught: audit_logs.token_id must NOT be a
-// foreign key. Audit writes are async, so "delete a project (which CASCADEs
-// away any token pinned to it), then audit the delete" would insert a
-// token_id that no longer exists by the time the async writer drains it —
-// with an FK in place, that INSERT fails and the entire audit row silently
-// vanishes (not just its attribution), which is exactly the "must never
-// disappear" guarantee AuditService.Log documents for itself. This asserts
-// both halves: the token really is gone (proving CASCADE, not SET NULL —
-// the whole point of that choice), and the audit write for the same action
-// still succeeds with the dangling id intact.
-func TestDeleteProject_CascadesPinnedTokenAndAuditStillWrites(t *testing.T) {
+// TestDeleteProject_NarrowsPinnedTokenAndAuditStillWrites replaces what used
+// to be TestDeleteProject_CascadesPinnedTokenAndAuditStillWrites. Migration
+// 000067 moved the pin's ON DELETE CASCADE off api_tokens itself and onto the
+// join table api_token_projects, specifically so deleting a project no
+// longer destroys every token pinned to it — it only narrows their reach.
+// This asserts the new contract (token survives, its pin row for the deleted
+// project is gone) and keeps the still-relevant half of the old test: audit
+// writes must never depend on a token still existing — audit_logs.token_id
+// is deliberately NOT a foreign key (see migration 000066), because audit
+// writes are async and a dangling token_id must never make one vanish.
+func TestDeleteProject_NarrowsPinnedTokenAndAuditStillWrites(t *testing.T) {
 	resetDB(t)
 	adminToken := env.SetupAdmin(t, "admin@test.com", "password123")
 	memberID, _ := createMember(t, adminToken, "member@test.com")
@@ -247,24 +247,33 @@ func TestDeleteProject_CascadesPinnedTokenAndAuditStillWrites(t *testing.T) {
 		Name:        "pinned token",
 		TokenHash:   hash,
 		Scopes:      []string{"read"},
-		ProjectID:   pid,
+		Pinned:      true,
 		RoleAtIssue: "member",
 	})
 	require.NoError(t, err)
+	require.NoError(t, env.Queries.CreateAPITokenProjectPins(context.Background(), generated.CreateAPITokenProjectPinsParams{
+		TokenID:    tok.ID,
+		ProjectIds: []pgtype.UUID{pid},
+	}))
 	_ = plainTok
 
 	resp := env.DoRequest(t, "DELETE", "/api/projects/"+projectID, nil, testutil.AuthHeader(adminToken))
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 	resp.Body.Close()
 
-	// The pinned token is really gone (CASCADE), not just unpinned.
+	// The token survives deleting the project it was pinned to — only its
+	// pin row for that project is gone.
 	var count int
 	require.NoError(t, env.Pool.QueryRow(context.Background(),
 		"SELECT count(*) FROM api_tokens WHERE id = $1", tok.ID).Scan(&count))
-	assert.Equal(t, 0, count, "a token pinned to a deleted project must be gone, not merely unpinned")
+	assert.Equal(t, 1, count, "deleting a pinned project must narrow the token's reach, not delete the token")
 
-	// An audit write naming that now-gone token as the actor must still
-	// succeed — this is what an FK on token_id would have broken.
+	require.NoError(t, env.Pool.QueryRow(context.Background(),
+		"SELECT count(*) FROM api_token_projects WHERE token_id = $1", tok.ID).Scan(&count))
+	assert.Equal(t, 0, count, "the pin row for the deleted project must be gone (ON DELETE CASCADE on the join table)")
+
+	// An audit write naming this token as the actor must still succeed
+	// regardless of what happened to it above.
 	auditSvc := service.NewAuditService(env.Queries)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -276,5 +285,50 @@ func TestDeleteProject_CascadesPinnedTokenAndAuditStillWrites(t *testing.T) {
 		_ = env.Pool.QueryRow(context.Background(),
 			"SELECT count(*) FROM audit_logs WHERE action = 'delete_project' AND resource_id = $1", projectID).Scan(&n)
 		return n == 1
-	}, 2*time.Second, 10*time.Millisecond, "the audit row for the delete must not be dropped just because its token is gone")
+	}, 2*time.Second, 10*time.Millisecond, "the audit row for the delete must be written")
+}
+
+// TestTokenPinnedToOnlyProjectReachesNothingAfterDelete is the escalation
+// regression migration 000067 exists to prevent. The naive design — a join
+// table alone, "zero pin rows" read as unpinned — has a silent privilege
+// escalation: deleting a token's LAST pinned project would leave it with zero
+// rows, and under that reading it would suddenly reach every project its
+// owner can see. pinned is recorded on the token itself specifically so this
+// can't happen: a pinned token with zero surviving pins must reach NOTHING.
+func TestTokenPinnedToOnlyProjectReachesNothingAfterDelete(t *testing.T) {
+	resetDB(t)
+	adminToken := env.SetupAdmin(t, "admin@test.com", "password123")
+	memberID, memberToken := createMember(t, adminToken, "member@test.com")
+
+	// Both owned by the member directly (not the admin): a token's reach is
+	// owner's role ∩ project access ∩ scope, so pinning to a project the
+	// member could not otherwise reach would prove nothing about the pin —
+	// it would already be forbidden regardless. Both must be independently
+	// reachable by the member for the assertions below to isolate what the
+	// pin itself is doing.
+	pinTarget := env.CreateProject(t, memberToken, "Solo Pin", "solo-pin")
+	pinTargetID := extractID(pinTarget["id"])
+	otherOwned := env.CreateProject(t, memberToken, "Other Owned", "other-owned")
+	_ = otherOwned
+
+	plain := createPinnedAPIToken(t, memberID, pinTargetID, service.AllScopes)
+
+	// Before deletion: the pinned project is reachable, the other is not.
+	resp := env.DoRequest(t, "GET", "/api/projects/"+pinTargetID, nil, testutil.AuthHeader(plain))
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	resp.Body.Close()
+
+	resp = env.DoRequest(t, "DELETE", "/api/projects/"+pinTargetID, nil, testutil.AuthHeader(adminToken))
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	resp.Body.Close()
+
+	// After its only pin is gone: the token must reach NOTHING, not every
+	// project its owner (a member who independently owns another project)
+	// can otherwise see.
+	resp = env.DoRequest(t, "GET", "/api/projects", nil, testutil.AuthHeader(plain))
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	var projects []map[string]any
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&projects))
+	resp.Body.Close()
+	assert.Empty(t, projects, "a token whose only pin was deleted must reach nothing, not every project its owner can see")
 }

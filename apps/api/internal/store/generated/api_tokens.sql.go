@@ -12,9 +12,9 @@ import (
 )
 
 const createAPIToken = `-- name: CreateAPIToken :one
-INSERT INTO api_tokens (user_id, name, token_hash, scopes, project_id, role_at_issue, expires_at)
+INSERT INTO api_tokens (user_id, name, token_hash, scopes, pinned, role_at_issue, expires_at)
 VALUES ($1, $2, $3, $4, $5, $6, $7)
-RETURNING id, user_id, name, token_hash, scopes, project_id, role_at_issue, expires_at, last_used_at, created_at
+RETURNING id, user_id, name, token_hash, scopes, project_id, role_at_issue, expires_at, last_used_at, created_at, pinned
 `
 
 type CreateAPITokenParams struct {
@@ -22,18 +22,21 @@ type CreateAPITokenParams struct {
 	Name        string             `json:"name"`
 	TokenHash   []byte             `json:"token_hash"`
 	Scopes      []string           `json:"scopes"`
-	ProjectID   pgtype.UUID        `json:"project_id"`
+	Pinned      bool               `json:"pinned"`
 	RoleAtIssue string             `json:"role_at_issue"`
 	ExpiresAt   pgtype.Timestamptz `json:"expires_at"`
 }
 
+// project_id is never written (see migration 000067) — a token's pins live
+// in api_token_projects, inserted separately by CreateAPITokenProjectPins in
+// the same transaction.
 func (q *Queries) CreateAPIToken(ctx context.Context, arg CreateAPITokenParams) (ApiToken, error) {
 	row := q.db.QueryRow(ctx, createAPIToken,
 		arg.UserID,
 		arg.Name,
 		arg.TokenHash,
 		arg.Scopes,
-		arg.ProjectID,
+		arg.Pinned,
 		arg.RoleAtIssue,
 		arg.ExpiresAt,
 	)
@@ -49,8 +52,31 @@ func (q *Queries) CreateAPIToken(ctx context.Context, arg CreateAPITokenParams) 
 		&i.ExpiresAt,
 		&i.LastUsedAt,
 		&i.CreatedAt,
+		&i.Pinned,
 	)
 	return i, err
+}
+
+const createAPITokenProjectPins = `-- name: CreateAPITokenProjectPins :exec
+INSERT INTO api_token_projects (token_id, project_id)
+SELECT $1::uuid, unnest($2::uuid[])
+`
+
+type CreateAPITokenProjectPinsParams struct {
+	TokenID    pgtype.UUID   `json:"token_id"`
+	ProjectIds []pgtype.UUID `json:"project_ids"`
+}
+
+// Inserts one row per id in project_ids for token_id. Called in the same
+// store.WithTx as CreateAPIToken, never on its own — a token row committed
+// without its pin rows would be pinned=true with zero pins, which is a
+// narrowed-to-nothing token, not the wide-open one a partial write for an
+// UNPINNED token would otherwise risk being mistaken for. Both directions of
+// that partial-write failure are wrong, which is why this must never run
+// outside the same transaction as the INSERT above.
+func (q *Queries) CreateAPITokenProjectPins(ctx context.Context, arg CreateAPITokenProjectPinsParams) error {
+	_, err := q.db.Exec(ctx, createAPITokenProjectPins, arg.TokenID, arg.ProjectIds)
+	return err
 }
 
 const deleteAPIToken = `-- name: DeleteAPIToken :one
@@ -66,7 +92,8 @@ type DeleteAPITokenParams struct {
 // "not found" apart from "not yours" — both must read the same to the
 // caller, so there is no separate ownership lookup to get out of sync with
 // it. RETURNING name so the audit entry for the delete can carry it, the same
-// way create's does — one statement, not a second lookup.
+// way create's does — one statement, not a second lookup. api_token_projects
+// rows for this token go with it via ON DELETE CASCADE.
 func (q *Queries) DeleteAPIToken(ctx context.Context, arg DeleteAPITokenParams) (string, error) {
 	row := q.db.QueryRow(ctx, deleteAPIToken, arg.ID, arg.UserID)
 	var name string
@@ -75,10 +102,13 @@ func (q *Queries) DeleteAPIToken(ctx context.Context, arg DeleteAPITokenParams) 
 }
 
 const getAPITokenByHash = `-- name: GetAPITokenByHash :one
-SELECT t.id, t.user_id, t.name, t.token_hash, t.scopes, t.project_id, t.role_at_issue, t.expires_at, t.last_used_at, t.created_at, u.role AS user_role
+SELECT t.id, t.user_id, t.name, t.token_hash, t.scopes, t.project_id, t.role_at_issue, t.expires_at, t.last_used_at, t.created_at, t.pinned, u.role AS user_role,
+       COALESCE(array_agg(atp.project_id) FILTER (WHERE atp.project_id IS NOT NULL), '{}')::uuid[] AS project_ids
 FROM api_tokens t
 JOIN users u ON u.id = t.user_id
+LEFT JOIN api_token_projects atp ON atp.token_id = t.id
 WHERE t.token_hash = $1
+GROUP BY t.id, u.role
 `
 
 type GetAPITokenByHashRow struct {
@@ -92,13 +122,20 @@ type GetAPITokenByHashRow struct {
 	ExpiresAt   pgtype.Timestamptz `json:"expires_at"`
 	LastUsedAt  pgtype.Timestamptz `json:"last_used_at"`
 	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	Pinned      bool               `json:"pinned"`
 	UserRole    string             `json:"user_role"`
+	ProjectIds  []pgtype.UUID      `json:"project_ids"`
 }
 
-// The auth-path lookup: the token row plus the owner's CURRENT role, so the
-// effective role (min(role_at_issue, user_role)) can be computed without a
-// second query. A revoked/deleted user cascades their tokens away (ON DELETE
-// CASCADE), so a row returned here always has a live owner.
+// The auth-path lookup: the token row, the owner's CURRENT role (so the
+// effective role can be computed without a second query), and the token's
+// full pin set via one LEFT JOIN + array_agg — this runs on EVERY request, so
+// the pin set is loaded here rather than with a second round trip. A revoked/
+// deleted user cascades their tokens away (ON DELETE CASCADE), so a row
+// returned here always has a live owner. project_ids is '{}' for an unpinned
+// token (pinned=false) exactly as often as for a pinned token with no
+// reachable projects left — the caller distinguishes those by pinned, never
+// by array length.
 func (q *Queries) GetAPITokenByHash(ctx context.Context, tokenHash []byte) (GetAPITokenByHashRow, error) {
 	row := q.db.QueryRow(ctx, getAPITokenByHash, tokenHash)
 	var i GetAPITokenByHashRow
@@ -113,31 +150,38 @@ func (q *Queries) GetAPITokenByHash(ctx context.Context, tokenHash []byte) (GetA
 		&i.ExpiresAt,
 		&i.LastUsedAt,
 		&i.CreatedAt,
+		&i.Pinned,
 		&i.UserRole,
+		&i.ProjectIds,
 	)
 	return i, err
 }
 
 const listAPITokensByUser = `-- name: ListAPITokensByUser :many
-SELECT id, name, scopes, project_id, role_at_issue, expires_at, last_used_at, created_at
-FROM api_tokens
-WHERE user_id = $1
-ORDER BY created_at DESC
+SELECT t.id, t.name, t.scopes, t.pinned, t.role_at_issue, t.expires_at, t.last_used_at, t.created_at,
+       COALESCE(array_agg(atp.project_id) FILTER (WHERE atp.project_id IS NOT NULL), '{}')::uuid[] AS project_ids
+FROM api_tokens t
+LEFT JOIN api_token_projects atp ON atp.token_id = t.id
+WHERE t.user_id = $1
+GROUP BY t.id
+ORDER BY t.created_at DESC
 `
 
 type ListAPITokensByUserRow struct {
 	ID          pgtype.UUID        `json:"id"`
 	Name        string             `json:"name"`
 	Scopes      []string           `json:"scopes"`
-	ProjectID   pgtype.UUID        `json:"project_id"`
+	Pinned      bool               `json:"pinned"`
 	RoleAtIssue string             `json:"role_at_issue"`
 	ExpiresAt   pgtype.Timestamptz `json:"expires_at"`
 	LastUsedAt  pgtype.Timestamptz `json:"last_used_at"`
 	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	ProjectIds  []pgtype.UUID      `json:"project_ids"`
 }
 
 // The settings-page list: newest first, token_hash never selected — nothing
-// past the create response ever needs anything derived from it.
+// past the create response ever needs anything derived from it. project_ids
+// is every project this token is pinned to ('{}' when pinned is false).
 func (q *Queries) ListAPITokensByUser(ctx context.Context, userID pgtype.UUID) ([]ListAPITokensByUserRow, error) {
 	rows, err := q.db.Query(ctx, listAPITokensByUser, userID)
 	if err != nil {
@@ -151,11 +195,12 @@ func (q *Queries) ListAPITokensByUser(ctx context.Context, userID pgtype.UUID) (
 			&i.ID,
 			&i.Name,
 			&i.Scopes,
-			&i.ProjectID,
+			&i.Pinned,
 			&i.RoleAtIssue,
 			&i.ExpiresAt,
 			&i.LastUsedAt,
 			&i.CreatedAt,
+			&i.ProjectIds,
 		); err != nil {
 			return nil, err
 		}

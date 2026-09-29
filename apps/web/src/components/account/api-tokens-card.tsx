@@ -1,8 +1,13 @@
 import { useState } from "react";
+import { useForm } from "@tanstack/react-form";
+import { z } from "zod";
 import { toast } from "sonner";
 import { KeyIcon, Trash2Icon } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Field, FieldError, FieldLabel } from "@/components/ui/field";
+import { fieldError } from "@/lib/utils/field-error";
 import { CopyRow } from "@/lib/components/copy-row";
+import { ProjectPinSelect } from "@/lib/components/project-pin-select";
 import {
   Card,
   CardContent,
@@ -54,6 +59,7 @@ import {
   useDeleteToken,
   useTokens,
 } from "@/lib/hooks/use-tokens";
+import { useProjects } from "@/lib/hooks/use-projects";
 import { formatDateTimeShort, formatRelativeTime } from "@/lib/utils/format";
 import type { TokenScope, ApiToken } from "@/lib/types";
 
@@ -137,6 +143,12 @@ export function ApiTokensCard() {
   // Held here, not inside CreateTokenDialog: the dialog closes on success, and
   // the plaintext is shown exactly once — unmounting the dialog must not lose it.
   const [issued, setIssued] = useState<string | null>(null);
+  // Named for the pin badge below — a token only stores project_ids, not
+  // project names, and this list is already fetched for the create dialog's
+  // own picker, so resolving it here costs nothing extra (react-query shares
+  // the cached result).
+  const { data: projects } = useProjects();
+  const projectNames = new Map((projects ?? []).map((p) => [p.id, p.name]));
 
   return (
     <Card>
@@ -160,7 +172,12 @@ export function ApiTokensCard() {
         ) : tokens && tokens.length > 0 ? (
           <div className="divide-border divide-y">
             {tokens.map((token) => (
-              <TokenRow key={token.id} token={token} />
+              <TokenRow
+                key={token.id}
+                token={token}
+                projectNames={projectNames}
+                projectsLoaded={projects !== undefined}
+              />
             ))}
           </div>
         ) : (
@@ -194,7 +211,19 @@ export function ApiTokensCard() {
   );
 }
 
-function TokenRow({ token }: { token: ApiToken }) {
+function TokenRow({
+  token,
+  projectNames,
+  projectsLoaded,
+}: {
+  token: ApiToken;
+  projectNames: Map<string, string>;
+  // Distinguishes "the project list hasn't loaded yet" from "it loaded and
+  // resolved to zero names" — without this, a pinned token briefly reads as
+  // "Pinned: none" (normally reserved for every pinned project having been
+  // deleted) on every cold load, before projectNames has anything in it.
+  projectsLoaded: boolean;
+}) {
   const deleteToken = useDeleteToken();
 
   const handleDelete = () => {
@@ -222,6 +251,27 @@ function TokenRow({ token }: { token: ApiToken }) {
           {!token.expires_at && (
             <Badge variant="outline" className="text-xs">
               Never expires
+            </Badge>
+          )}
+          {token.pinned && (
+            <Badge variant="outline" className="text-xs">
+              {/* Zero names resolved (every pinned project deleted, or the
+                  owner lost access to all of them) reads as "Pinned: none" —
+                  distinct from "Pinned" alone, so a token that reaches
+                  nothing doesn't look identical to one with a single,
+                  merely-unresolved pin. Gated on projectsLoaded so the SAME
+                  "zero names" state during the project list's own loading
+                  window doesn't show that same "none" before there was
+                  anything to resolve against. */}
+              Pinned
+              {projectsLoaded &&
+                (() => {
+                  const names = token.project_ids
+                    .map((id) => projectNames.get(id))
+                    .filter((name): name is string => !!name);
+                  if (names.length === 0) return ": none";
+                  return `: ${names.join(", ")}`;
+                })()}
             </Badge>
           )}
         </div>
@@ -282,43 +332,49 @@ function TokenRow({ token }: { token: ApiToken }) {
   );
 }
 
+
 function CreateTokenDialog({
   onIssued,
 }: {
   onIssued: (token: string) => void;
 }) {
   const [open, setOpen] = useState(false);
-  const [name, setName] = useState("");
-  const [expiry, setExpiry] = useState("30");
-  // Write by default — the full-access behavior tokens have always had.
-  // Every rung already includes everything narrower than it (see
-  // SCOPE_GRANTS), so there is exactly one value here, not a set.
-  const [scope, setScope] = useState<TokenScope>("write");
   const createToken = useCreateToken();
 
-  const close = () => {
-    setOpen(false);
-    setName("");
-    setExpiry("30");
-    setScope("write");
-  };
-
-  const submit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    try {
-      const result = await createToken.mutateAsync({
-        name,
-        scopes: [scope],
-        expiresInDays: expiry === "never" ? undefined : Number(expiry),
-      });
-      onIssued(result.token);
-      close();
-    } catch (err) {
-      toast.error(
-        err instanceof Error ? err.message : "Could not create token",
-      );
-    }
-  };
+  const form = useForm({
+    defaultValues: {
+      name: "",
+      expiry: "30",
+      // Write by default — the full-access behavior tokens have always had.
+      // Every rung already includes everything narrower than it (see
+      // SCOPE_GRANTS), so there is exactly one value here, not a set.
+      scope: "write" as TokenScope,
+      // Unpinned by default — pinning is opt-in, never the assumed choice.
+      // Empty is the unpinned state itself now, not a sentinel translated
+      // into one: a multi-select's natural "nothing checked" already means
+      // exactly that.
+      projectIds: [] as string[],
+    },
+    onSubmit: async ({ value }) => {
+      try {
+        const result = await createToken.mutateAsync({
+          name: value.name.trim(),
+          scopes: [value.scope],
+          expiresInDays:
+            value.expiry === "never" ? undefined : Number(value.expiry),
+          projectIds:
+            value.projectIds.length === 0 ? undefined : value.projectIds,
+        });
+        onIssued(result.token);
+        form.reset();
+        setOpen(false);
+      } catch (err) {
+        toast.error(
+          err instanceof Error ? err.message : "Could not create token",
+        );
+      }
+    },
+  });
 
   return (
     <>
@@ -326,10 +382,19 @@ function CreateTokenDialog({
 
       <Dialog
         open={open}
-        onOpenChange={(next) => (next ? setOpen(true) : close())}
+        onOpenChange={(next) => {
+          if (!next) form.reset();
+          setOpen(next);
+        }}
       >
         <DialogContent>
-          <form onSubmit={submit}>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              form.handleSubmit();
+            }}
+          >
             <DialogHeader>
               <DialogTitle>Create a personal access token</DialogTitle>
               <DialogDescription>
@@ -338,59 +403,113 @@ function CreateTokenDialog({
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <Label htmlFor="token-name">Name</Label>
-                <Input
-                  id="token-name"
-                  autoFocus
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="e.g. CI deploy"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Expiration</Label>
-                <Select value={expiry} onValueChange={(v) => v && setExpiry(v)}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {EXPIRY_OPTIONS.map((o) => (
-                      <SelectItem key={o.value} value={o.value}>
-                        {o.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>Scope</Label>
-                <SegmentedControl
-                  value={scope}
-                  onValueChange={(v) => setScope(v as TokenScope)}
-                  fullWidth
-                >
-                  {SCOPE_OPTIONS.map((o) => (
-                    <SegmentedControlItem key={o.value} value={o.value}>
-                      {o.label}
-                    </SegmentedControlItem>
-                  ))}
-                </SegmentedControl>
-                <p className="text-muted-foreground text-xs">
-                  {SCOPE_OPTIONS.find((o) => o.value === scope)?.description}
-                </p>
-              </div>
+              <form.Field
+                name="name"
+                validators={{
+                  onChange: z.string().min(1, "Name is required"),
+                }}
+                children={(field) => {
+                  const error = fieldError(field.state.meta.errors);
+                  return (
+                    <Field data-invalid={!!error}>
+                      <FieldLabel htmlFor="token-name">Name</FieldLabel>
+                      <Input
+                        id="token-name"
+                        autoFocus
+                        value={field.state.value}
+                        onBlur={field.handleBlur}
+                        onChange={(e) => field.handleChange(e.target.value)}
+                        placeholder="e.g. CI deploy"
+                        aria-invalid={!!error}
+                      />
+                      {error && <FieldError>{error}</FieldError>}
+                    </Field>
+                  );
+                }}
+              />
+              <form.Field
+                name="expiry"
+                children={(field) => (
+                  <div className="space-y-2">
+                    <Label>Expiration</Label>
+                    <Select
+                      value={field.state.value}
+                      onValueChange={(v) => v && field.handleChange(v)}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {EXPIRY_OPTIONS.map((o) => (
+                          <SelectItem key={o.value} value={o.value}>
+                            {o.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+              />
+              <form.Field
+                name="scope"
+                children={(field) => (
+                  <div className="space-y-2">
+                    <Label>Scope</Label>
+                    <SegmentedControl
+                      value={field.state.value}
+                      onValueChange={(v) =>
+                        v && field.handleChange(v as TokenScope)
+                      }
+                      fullWidth
+                    >
+                      {SCOPE_OPTIONS.map((o) => (
+                        <SegmentedControlItem key={o.value} value={o.value}>
+                          {o.label}
+                        </SegmentedControlItem>
+                      ))}
+                    </SegmentedControl>
+                    <p className="text-muted-foreground text-xs">
+                      {
+                        SCOPE_OPTIONS.find((o) => o.value === field.state.value)
+                          ?.description
+                      }
+                    </p>
+                  </div>
+                )}
+              />
+              <form.Field
+                name="projectIds"
+                children={(field) => (
+                  <ProjectPinSelect
+                    value={field.state.value}
+                    onValueChange={(v) => field.handleChange(v)}
+                    helperText='Narrows the token to exactly these projects instead of everything you can reach. Leave empty for every project. If every project a pinned token holds is later deleted, the token reaches nothing — it is never widened back to "every project."'
+                  />
+                )}
+              />
             </div>
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={close}>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  form.reset();
+                  setOpen(false);
+                }}
+              >
                 Cancel
               </Button>
-              <Button
-                type="submit"
-                disabled={createToken.isPending || !name.trim()}
-              >
-                {createToken.isPending ? "Creating..." : "Create"}
-              </Button>
+              <form.Subscribe
+                selector={(s) => s.canSubmit}
+                children={(canSubmit) => (
+                  <Button
+                    type="submit"
+                    disabled={createToken.isPending || !canSubmit}
+                  >
+                    {createToken.isPending ? "Creating..." : "Create"}
+                  </Button>
+                )}
+              />
             </DialogFooter>
           </form>
         </DialogContent>

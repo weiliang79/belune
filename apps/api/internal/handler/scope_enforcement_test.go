@@ -27,27 +27,48 @@ func mintScoped(t *testing.T, sessionToken string, scopes []string) string {
 	return testutil.ReadJSON(t, resp)["token"].(string)
 }
 
-// createPinnedAPIToken inserts a token directly, pinned to projectID — there
-// is no create-endpoint field for this yet (project narrowing has no UI),
-// but the enforcement side must still honor a pin however the row got it.
+// createPinnedAPIToken inserts a token directly, pinned to exactly projectID
+// — the enforcement side must honor a pin however the row got it, and going
+// through the real endpoint here would couple every scope-enforcement test to
+// its own request validation. Two statements (token, then its one pin row),
+// not a transaction: test setup, not the create path the escalation trap
+// applies to.
 func createPinnedAPIToken(t *testing.T, userID, projectID string, scopes []string) (plain string) {
 	t.Helper()
-	var uid, pid pgtype.UUID
+	return createMultiPinnedAPIToken(t, userID, []string{projectID}, scopes)
+}
+
+// createMultiPinnedAPIToken is createPinnedAPIToken's variadic-pin sibling,
+// for tests that need a token narrowed to more than one project (or, with an
+// empty projectIDs, a pinned token that already reaches nothing).
+func createMultiPinnedAPIToken(t *testing.T, userID string, projectIDs []string, scopes []string) (plain string) {
+	t.Helper()
+	var uid pgtype.UUID
 	require.NoError(t, uid.Scan(userID))
-	require.NoError(t, pid.Scan(projectID))
 
 	plainTok, hash, err := service.GenerateToken()
 	require.NoError(t, err)
 
-	_, err = env.Queries.CreateAPIToken(context.Background(), generated.CreateAPITokenParams{
+	tok, err := env.Queries.CreateAPIToken(context.Background(), generated.CreateAPITokenParams{
 		UserID:      uid,
 		Name:        "pinned",
 		TokenHash:   hash,
 		Scopes:      scopes,
-		ProjectID:   pid,
+		Pinned:      true,
 		RoleAtIssue: "admin",
 	})
 	require.NoError(t, err)
+
+	if len(projectIDs) > 0 {
+		pids := make([]pgtype.UUID, len(projectIDs))
+		for i, p := range projectIDs {
+			require.NoError(t, pids[i].Scan(p))
+		}
+		require.NoError(t, env.Queries.CreateAPITokenProjectPins(context.Background(), generated.CreateAPITokenProjectPinsParams{
+			TokenID:    tok.ID,
+			ProjectIds: pids,
+		}))
+	}
 	return plainTok
 }
 
@@ -323,6 +344,78 @@ func TestProjectPin_LostAccessReachesNothing(t *testing.T) {
 	goneResp.Body.Close()
 
 	_ = memberToken
+}
+
+// TestProjectPin_ZeroRemainingPinsReachesNothing asserts the behaviour
+// migration 000067's `pinned` column exists to produce, and it is the only
+// test that exercises it end to end through an actual request.
+//
+// Before 000067 the pin was a column on api_tokens with ON DELETE CASCADE, so
+// deleting the pinned project deleted the token — safe by construction. The
+// join table moved that cascade onto the pin row, so deleting a project now
+// only narrows a token. Delete the LAST one and the token is left pinned with
+// zero rows, and under the tempting rule "zero rows means unpinned" that would
+// read as full reach across every project its owner can see: deleting a
+// project would silently WIDEN a credential. Hence `pinned` being recorded on
+// the token rather than inferred from row count.
+//
+// TestDeleteProject_NarrowsPinnedTokenAndAuditStillWrites covers the database
+// side of the same delete (token survives, pin row gone) but never issues a
+// request with the token, so it cannot see whether the reach actually
+// narrowed. TestProjectPin_LostAccessReachesNothing covers a different path —
+// the pin row survives and the underlying access is revoked instead. Neither
+// reaches the zero-remaining-pins case.
+//
+// Scope note, so nobody over-trusts this: it pins the OBSERVABLE contract (a
+// pinned token with no pins left gets 403, never 200). It is not a proof that
+// any particular internal invariant is load-bearing — an attempt to make it
+// fail by mutating uuidsToStrings to return nil at length zero did not flip
+// the result, so the nil-versus-empty handling has more than one thing
+// holding it up. Treat a failure here as "reach widened", and go read
+// PinAllows and the auth context wiring rather than assuming which link broke.
+func TestProjectPin_ZeroRemainingPinsReachesNothing(t *testing.T) {
+	resetDB(t)
+	adminToken := env.SetupAdmin(t, "admin@test.com", "password123")
+	memberID, _ := createMember(t, adminToken, "member@test.com")
+
+	// Two shared projects: the member can reach BOTH by access, so anything
+	// blocking the second one afterwards is the pin doing it, not sharing.
+	pinnedProject := env.CreateProject(t, adminToken, "Pinned Project", "pin-zero-pinned")
+	pinnedID := extractID(pinnedProject["id"])
+	otherProject := env.CreateProject(t, adminToken, "Other Project", "pin-zero-other")
+	otherID := extractID(otherProject["id"])
+	for _, id := range []string{pinnedID, otherID} {
+		shareResp := env.DoRequest(t, "PUT", "/api/projects/"+id+"/sharing",
+			map[string]any{"shared": true}, testutil.AuthHeader(adminToken))
+		require.Equal(t, http.StatusOK, shareResp.StatusCode)
+		shareResp.Body.Close()
+	}
+
+	pinnedPlain := createPinnedAPIToken(t, memberID, pinnedID, service.AllScopes)
+
+	// Sanity, so a later failure cannot be blamed on the token never working:
+	// it reaches its pin and is already blocked from the other project.
+	okResp := env.DoRequest(t, "GET", "/api/projects/"+pinnedID, nil, testutil.AuthHeader(pinnedPlain))
+	require.Equal(t, http.StatusOK, okResp.StatusCode, "sanity: reaches its pinned project")
+	okResp.Body.Close()
+	blockedResp := env.DoRequest(t, "GET", "/api/projects/"+otherID, nil, testutil.AuthHeader(pinnedPlain))
+	require.Equal(t, http.StatusForbidden, blockedResp.StatusCode, "sanity: pinned away from the other project")
+	blockedResp.Body.Close()
+
+	delResp := env.DoRequest(t, "DELETE", "/api/projects/"+pinnedID, nil, testutil.AuthHeader(adminToken))
+	require.Equal(t, http.StatusOK, delResp.StatusCode)
+	delResp.Body.Close()
+
+	// The token is now pinned with nothing left to be pinned to.
+	var pinRows int
+	require.NoError(t, env.Pool.QueryRow(context.Background(),
+		"SELECT count(*) FROM api_token_projects").Scan(&pinRows))
+	require.Equal(t, 0, pinRows, "setup: the only pin row should be gone")
+
+	goneResp := env.DoRequest(t, "GET", "/api/projects/"+otherID, nil, testutil.AuthHeader(pinnedPlain))
+	defer goneResp.Body.Close()
+	assert.Equal(t, http.StatusForbidden, goneResp.StatusCode,
+		"a pinned token with no remaining pins must reach NOTHING — a 200 here means deleting a project widened the credential")
 }
 
 // TestTerminal_RequiresSession pins the gap a 2026-09-05 review flagged
