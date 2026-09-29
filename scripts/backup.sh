@@ -253,7 +253,10 @@ if [[ "$(read_remote_config BACKUP_REMOTE_ENABLED)" == "true" ]]; then
     if [[ "${LOCAL_ONLY_OK}" == "1" ]]; then
       echo "  [warn]  ${UPLOAD_FAILURE} Continuing: the local archive ${ARCHIVE} was written." >&2
       # The row stays "succeeded" (a local archive exists) with an empty
-      # remote_key; the note keeps it from reading as an offsite copy.
+      # remote_key; the note keeps it from reading as an offsite copy. It shows
+      # in the panel only because CLI runs leave backup_runs.log empty (the UI
+      # prefers log over error) — don't pass this flag from the worker path
+      # without moving the note somewhere that survives.
       REMOTE_NOTE="remote upload skipped: ${UPLOAD_FAILURE}"
     else
       die "${UPLOAD_FAILURE}"
