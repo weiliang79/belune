@@ -40,7 +40,11 @@ ORDER BY started_at DESC
 LIMIT 1;
 
 -- name: UpdateDeploymentStatus :one
-UPDATE deployments SET status = $2, error_message = $3, finished_at = NOW()
+-- finished_at is stamped only on a terminal status. It used to be set on every
+-- transition, so a deployment mid-build reported finished_at == build start and
+-- pollers (REST, MCP) read "done, in zero seconds".
+UPDATE deployments SET status = $2, error_message = $3,
+    finished_at = CASE WHEN $2::varchar IN ('success', 'failed') THEN NOW() ELSE NULL END
 WHERE id = $1
 RETURNING *;
 

@@ -193,3 +193,54 @@ func TestListApplicationLogs(t *testing.T) {
 	assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
 	resp.Body.Close()
 }
+
+// A deployment that is still in flight must not carry a finish time. The status
+// query used to stamp finished_at on every transition, so a poller mid-build
+// read finished_at == build start and concluded the deploy was done.
+func TestDeployment_FinishedAtOnlySetOnTerminalStatus(t *testing.T) {
+	resetDB(t)
+	adminToken := env.SetupAdmin(t, "admin@test.com", "password123")
+
+	project := env.CreateProject(t, adminToken, "Finished Project", "finished-project")
+	projectID := extractID(project["id"])
+	app := env.CreateApplication(t, adminToken, projectID, map[string]any{
+		"name": "Finished App", "type": "image", "build_type": "image",
+		"source_image": "nginx:latest",
+	})
+	appID := extractID(app["id"])
+
+	ctx := context.Background()
+	newDeployment := func() pgtype.UUID {
+		resp := env.DoRequest(t, "POST", fmt.Sprintf("/api/projects/%s/applications/%s/deploy", projectID, appID), nil, testutil.AuthHeader(adminToken))
+		require.Equal(t, http.StatusAccepted, resp.StatusCode)
+		var id pgtype.UUID
+		require.NoError(t, id.Scan(extractID(testutil.ReadJSON(t, resp)["id"])))
+		return id
+	}
+	finishedAt := func(id pgtype.UUID) pgtype.Timestamptz {
+		d, err := env.Queries.GetDeployment(ctx, id)
+		require.NoError(t, err)
+		return d.FinishedAt
+	}
+	setStatus := func(id pgtype.UUID, s string) {
+		_, err := env.Queries.UpdateDeploymentStatus(ctx, generated.UpdateDeploymentStatusParams{ID: id, Status: s})
+		require.NoError(t, err)
+	}
+
+	id := newDeployment()
+	for _, s := range []string{status.DeploymentBuilding, status.DeploymentDeploying} {
+		setStatus(id, s)
+		if s == status.DeploymentBuilding {
+			require.NoError(t, env.Queries.SetDeploymentBuildStarted(ctx, id))
+		}
+		assert.False(t, finishedAt(id).Valid, "finished_at must be unset while %s", s)
+	}
+	setStatus(id, status.DeploymentSuccess)
+	assert.True(t, finishedAt(id).Valid, "finished_at must be set once the deployment succeeds")
+
+	failed := newDeployment()
+	setStatus(failed, status.DeploymentBuilding)
+	assert.False(t, finishedAt(failed).Valid)
+	setStatus(failed, status.DeploymentFailed)
+	assert.True(t, finishedAt(failed).Valid, "finished_at must be set once the deployment fails")
+}
