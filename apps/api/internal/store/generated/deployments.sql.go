@@ -169,6 +169,43 @@ func (q *Queries) GetDeployment(ctx context.Context, id pgtype.UUID) (Deployment
 	return i, err
 }
 
+const getDeploymentLogAccess = `-- name: GetDeploymentLogAccess :one
+SELECT d.id, d.application_id, a.project_id, d.build_logs,
+       p.user_id AS project_user_id, p.shared AS project_shared
+FROM deployments d
+JOIN applications a ON a.id = d.application_id
+JOIN projects p ON p.id = a.project_id
+WHERE d.id = $1
+`
+
+type GetDeploymentLogAccessRow struct {
+	ID            pgtype.UUID `json:"id"`
+	ApplicationID pgtype.UUID `json:"application_id"`
+	ProjectID     pgtype.UUID `json:"project_id"`
+	BuildLogs     pgtype.Text `json:"build_logs"`
+	ProjectUserID pgtype.UUID `json:"project_user_id"`
+	ProjectShared bool        `json:"project_shared"`
+}
+
+// Everything get_deployment_logs (internal/mcpserver) needs in one query: the
+// build log plus the owning application/project for authorization. Selects
+// only what's needed rather than `d.*`/`a.*`, following GetApplicationLogAccess,
+// so the application's secret-adjacent columns never enter process memory for a
+// call that has no use for them.
+func (q *Queries) GetDeploymentLogAccess(ctx context.Context, id pgtype.UUID) (GetDeploymentLogAccessRow, error) {
+	row := q.db.QueryRow(ctx, getDeploymentLogAccess, id)
+	var i GetDeploymentLogAccessRow
+	err := row.Scan(
+		&i.ID,
+		&i.ApplicationID,
+		&i.ProjectID,
+		&i.BuildLogs,
+		&i.ProjectUserID,
+		&i.ProjectShared,
+	)
+	return i, err
+}
+
 const getLatestApplicationHealth = `-- name: GetLatestApplicationHealth :one
 SELECT id, status, health_status, health_message, health_checked_at, started_at, finished_at
   FROM deployments

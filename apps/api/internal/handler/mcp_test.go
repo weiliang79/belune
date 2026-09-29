@@ -1,15 +1,19 @@
 package handler_test
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
 	"testing"
 
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/weiliang79/belune/internal/store/generated"
 	"github.com/weiliang79/belune/internal/testutil"
 )
 
@@ -471,7 +475,7 @@ func TestMCP_ToolsListing_NoDestructiveTools(t *testing.T) {
 		"list_projects", "get_project",
 		"list_applications", "get_application",
 		"list_databases", "get_database",
-		"list_deployments", "get_application_logs",
+		"list_deployments", "get_application_logs", "get_deployment_logs",
 		"list_domain_tls_status", "list_project_backups",
 	}, names)
 
@@ -529,4 +533,121 @@ func TestMCP_NonAdminCannotDistinguishNotFoundFromForbidden(t *testing.T) {
 	assert.Equal(t, "project not found", toolErrorText(t, callToolArgs(t, adminReadToken, "get_project", map[string]any{
 		"project_id": nonexistentID,
 	})))
+}
+
+// seedBuildLog inserts a deployment for appID carrying the given build log.
+func seedBuildLog(t *testing.T, appID, buildLog string) string {
+	t.Helper()
+	ctx := context.Background()
+	var appUUID pgtype.UUID
+	require.NoError(t, appUUID.Scan(appID))
+	d, err := env.Queries.CreateDeployment(ctx, generated.CreateDeploymentParams{
+		ApplicationID: appUUID, Status: "failed", TriggeredBy: "manual",
+	})
+	require.NoError(t, err)
+	require.NoError(t, env.Queries.UpdateDeploymentBuildLogs(ctx, generated.UpdateDeploymentBuildLogsParams{
+		ID: d.ID, BuildLogs: pgtype.Text{String: buildLog, Valid: true},
+	}))
+	return uuid.UUID(d.ID.Bytes).String()
+}
+
+func toolText(t *testing.T, resp *http.Response) string {
+	t.Helper()
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	var rpc jsonRPCToolResult
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&rpc))
+	require.Nil(t, rpc.Error)
+	require.NotNil(t, rpc.Result)
+	require.False(t, rpc.Result.IsError, "tool call reported an error: %+v", rpc.Result.Content)
+	require.Len(t, rpc.Result.Content, 1)
+	return rpc.Result.Content[0].Text
+}
+
+// TestMCP_DeploymentLogs: a bounded tail of the stored build log, with terminal
+// colour stripped in BOTH forms — the raw ESC byte and the JSON-escaped
+// "\u001b" a NDJSON build log actually carries.
+func TestMCP_DeploymentLogs(t *testing.T) {
+	resetDB(t)
+	adminToken := env.SetupAdmin(t, "mcp-deplogs@test.com", "password123")
+	project := env.CreateProject(t, adminToken, "MCP Project", "mcp-project")
+	app := minimalApp(t, adminToken, extractID(project["id"]))
+	readToken := mintScoped(t, adminToken, []string{"read"})
+
+	logBlob := strings.Join([]string{
+		`{"ts":"2026-09-29T10:00:00Z","level":"info","msg":"step 1"}`,
+		`{"ts":"2026-09-29T10:00:01Z","level":"warn","msg":"\u001b[33mmise\u001b[0m WARN slow"}`,
+		"raw \x1b[31mred\x1b[0m line",
+		`{"ts":"2026-09-29T10:00:03Z","level":"error","msg":"build failed: exit 1"}`,
+	}, "\n")
+	depID := seedBuildLog(t, extractID(app["id"]), logBlob)
+
+	text := toolText(t, callToolArgs(t, readToken, "get_deployment_logs", map[string]any{"deployment_id": depID}))
+	assert.Contains(t, text, "build failed: exit 1")
+	assert.Contains(t, text, "mise")
+	assert.Contains(t, text, "raw red line")
+	assert.NotContains(t, text, "\x1b")
+	assert.NotContains(t, text, "\\u001b")
+	assert.NotContains(t, text, "[33m")
+
+	// tail bounds the output and says the head was dropped.
+	text = toolText(t, callToolArgs(t, readToken, "get_deployment_logs", map[string]any{"deployment_id": depID, "tail": 1}))
+	assert.Contains(t, text, "build failed: exit 1")
+	assert.NotContains(t, text, "step 1")
+	assert.Contains(t, text, "3 earlier lines omitted")
+}
+
+func TestMCP_DeploymentLogsNoLogRecorded(t *testing.T) {
+	resetDB(t)
+	adminToken := env.SetupAdmin(t, "mcp-deplogs-empty@test.com", "password123")
+	project := env.CreateProject(t, adminToken, "MCP Project", "mcp-project")
+	app := minimalApp(t, adminToken, extractID(project["id"]))
+	readToken := mintScoped(t, adminToken, []string{"read"})
+	depID := seedBuildLog(t, extractID(app["id"]), "")
+
+	text := toolText(t, callToolArgs(t, readToken, "get_deployment_logs", map[string]any{"deployment_id": depID}))
+	assert.Contains(t, text, "no build log recorded")
+}
+
+// TestMCP_DeploymentLogsAccess: a project pin and non-admin ownership both gate
+// the build log, and a non-admin cannot tell a foreign deployment from a
+// nonexistent one.
+func TestMCP_DeploymentLogsAccess(t *testing.T) {
+	resetDB(t)
+	adminToken := env.SetupAdmin(t, "mcp-deplogs-acl@test.com", "password123")
+	ownProject := env.CreateProject(t, adminToken, "Own Project", "own-project")
+	otherProject := env.CreateProject(t, adminToken, "Other Project", "other-project")
+	otherApp := minimalApp(t, adminToken, extractID(otherProject["id"]))
+	depID := seedBuildLog(t, extractID(otherApp["id"]), "secret build output")
+
+	adminUserID := extractID(mustAuthMe(t, adminToken)["id"])
+	pinned := createPinnedAPIToken(t, adminUserID, extractID(ownProject["id"]), []string{"read"})
+	assert.Equal(t, "access denied", toolErrorText(t, callToolArgs(t, pinned, "get_deployment_logs", map[string]any{"deployment_id": depID})))
+
+	env.DoRequest(t, "POST", "/api/users", map[string]string{
+		"email": "mcp-deplogs-member@test.com", "password": "password123", "role": "member",
+	}, testutil.AuthHeader(adminToken)).Body.Close()
+	memberRead := mintScoped(t, env.LoginAs(t, "mcp-deplogs-member@test.com", "password123"), []string{"read"})
+	assert.Equal(t, "access denied", toolErrorText(t, callToolArgs(t, memberRead, "get_deployment_logs", map[string]any{"deployment_id": depID})))
+	assert.Equal(t, "access denied", toolErrorText(t, callToolArgs(t, memberRead, "get_deployment_logs", map[string]any{
+		"deployment_id": "00000000-0000-0000-0000-000000000000",
+	})), "nonexistent must read identically to forbidden")
+}
+
+// The container-log tool strips terminal colour too (the dashboard already
+// does), so an assistant does not read "[33mWARN[0m".
+func TestMCP_ApplicationLogsStripsANSI(t *testing.T) {
+	resetDB(t)
+	adminToken := env.SetupAdmin(t, "mcp-logs-ansi@test.com", "password123")
+	project := env.CreateProject(t, adminToken, "MCP Project", "mcp-project")
+	app := minimalApp(t, adminToken, extractID(project["id"]))
+	readToken := mintScoped(t, adminToken, []string{"read"})
+
+	env.Runtime.ContainerLogsTail_ = dockerLogFrames("\x1b[33mmise\x1b[0m \x1b[33mWARN\x1b[0m slow")
+	t.Cleanup(func() { env.Runtime.ContainerLogsTail_ = "" })
+
+	text := toolText(t, callToolArgs(t, readToken, "get_application_logs", map[string]any{"application_id": extractID(app["id"])}))
+	assert.Contains(t, text, "mise WARN slow")
+	assert.NotContains(t, text, "\x1b")
+	assert.NotContains(t, text, "[33m")
 }
