@@ -3,7 +3,7 @@ import {
   listBackupRuns,
   getBackupStatus,
   triggerBackupRun,
-  testBackupRemote,
+  testBackupRemoteParams,
   updateBackupRemote,
 } from "@/lib/api/backups";
 import { queryKeys } from "./query-keys";
@@ -46,8 +46,8 @@ export function useTriggerBackup() {
   });
 }
 
-export function useTestBackupRemote() {
-  return useMutation({ mutationFn: testBackupRemote });
+export function useTestBackupRemoteParams() {
+  return useMutation({ mutationFn: testBackupRemoteParams });
 }
 
 export function useUpdateBackupRemote() {
