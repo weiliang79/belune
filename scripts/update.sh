@@ -124,19 +124,39 @@ success "Infra files fetched."
 # 0.x minor releases may contain breaking changes, and migrations are
 # forward-only: this backup is the rollback path for the data, while the image
 # tag below is the rollback path for the code.
+# ask_continue_without_backup prompts on a terminal; with no stdin (the
+# dashboard runs this script in a detached helper container) it aborts instead
+# of reading EOF. Aborting stays the non-interactive default: silently updating
+# with no rollback point is worse than stopping. $1 is the cause, $2 the prompt.
+ask_continue_without_backup() {
+  if [[ -t 0 ]]; then
+    warn "$1"
+    read -rp "  $2 [y/N] " reply
+    [[ "${reply}" =~ ^[Yy]$ ]] || die "Aborted. Nothing has changed."
+  else
+    die "$1 There is no terminal to ask on, so the update was stopped and nothing has changed. To be asked whether to continue without a backup, run 'bash ${INSTALL_DIR}/scripts/update.sh' on the host."
+  fi
+}
+
 if [[ -x "${INSTALL_DIR}/scripts/backup.sh" ]] || [[ -f "${INSTALL_DIR}/scripts/backup.sh" ]]; then
   info "Taking a pre-update backup..."
-  if bash "${INSTALL_DIR}/scripts/backup.sh"; then
+  # --local-only-ok: this backup is a local rollback point, so a failed remote
+  # upload is a warning here. It is fatal for a manual or scheduled backup.
+  # An older installed backup.sh would read the flag as its output directory,
+  # so only pass it when the script advertises it.
+  BACKUP_FLAGS=()
+  grep -q -- '--local-only-ok' "${INSTALL_DIR}/scripts/backup.sh" && BACKUP_FLAGS=(--local-only-ok)
+  if bash "${INSTALL_DIR}/scripts/backup.sh" ${BACKUP_FLAGS[@]+"${BACKUP_FLAGS[@]}"}; then
     success "Backup complete."
   else
-    warn "Backup failed."
-    read -rp "  Continue updating without a backup? [y/N] " reply
-    [[ "${reply}" =~ ^[Yy]$ ]] || die "Aborted. Nothing has changed."
+    ask_continue_without_backup \
+      "The pre-update backup failed (see the output above for the reason)." \
+      "Continue updating without a backup?"
   fi
 else
-  warn "scripts/backup.sh not found — no pre-update backup was taken."
-  read -rp "  Continue without a backup? [y/N] " reply
-  [[ "${reply}" =~ ^[Yy]$ ]] || die "Aborted. Nothing has changed."
+  ask_continue_without_backup \
+    "scripts/backup.sh was not found in ${INSTALL_DIR}, so no pre-update backup could be taken." \
+    "Continue without a backup?"
 fi
 
 # ── Move the pin ───────────────────────────────────────────────────────────────
