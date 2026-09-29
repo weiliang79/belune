@@ -26,6 +26,19 @@ ORDER BY d.image_tag, d.started_at DESC;
 -- name: GetDeployment :one
 SELECT * FROM deployments WHERE id = $1;
 
+-- name: GetDeploymentLogAccess :one
+-- Everything get_deployment_logs (internal/mcpserver) needs in one query: the
+-- build log plus the owning application/project for authorization. Selects
+-- only what's needed rather than `d.*`/`a.*`, following GetApplicationLogAccess,
+-- so the application's secret-adjacent columns never enter process memory for a
+-- call that has no use for them.
+SELECT d.id, d.application_id, a.project_id, d.build_logs,
+       p.user_id AS project_user_id, p.shared AS project_shared
+FROM deployments d
+JOIN applications a ON a.id = d.application_id
+JOIN projects p ON p.id = a.project_id
+WHERE d.id = $1;
+
 -- name: CreateDeployment :one
 INSERT INTO deployments (application_id, status, triggered_by, commit_sha, idempotency_key, commit_message, commit_author)
 VALUES ($1, $2, $3, $4, $5, $6, $7)

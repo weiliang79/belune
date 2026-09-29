@@ -2,6 +2,8 @@ package mcpserver
 
 import (
 	"context"
+	"encoding/json"
+	"strings"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
@@ -15,8 +17,8 @@ const (
 
 // deployment is the tool-facing shape of a deployment row. build_logs is
 // deliberately omitted — like a container log tail, a build log has no
-// bound on this row and belongs to a future tool that can apply one, not a
-// field tagging along on every list call.
+// bound on this row, so it is served by get_deployment_logs, which applies
+// one, rather than tagging along on every list call.
 type deployment struct {
 	ID              string `json:"id"`
 	Status          string `json:"status"`
@@ -60,7 +62,49 @@ type listDeploymentsInput struct {
 	Limit         int    `json:"limit,omitempty" jsonschema:"maximum number of deployments to return, newest first (default 20, max 100)"`
 }
 
+type deploymentLogsInput struct {
+	DeploymentID string `json:"deployment_id" jsonschema:"the deployment's id (from list_deployments)"`
+	Tail         int    `json:"tail,omitempty" jsonschema:"number of most recent build-log lines to return (default 200, max 1000)"`
+}
+
 func registerDeploymentTools(srv *mcp.Server, queries *generated.Queries) {
+	mcp.AddTool(srv, &mcp.Tool{
+		Name: "get_deployment_logs",
+		Description: "Tail a deployment's build log — the last N lines, not a stream. Use it to " +
+			"find out why a deployment failed. One entry per line as \"<timestamp> <level> <message>\". " +
+			"Returned verbatim apart from terminal colour codes: build output can contain secrets " +
+			"printed by build steps. Defaults to 200 lines, capped at 1000.",
+	}, func(ctx context.Context, _ *mcp.CallToolRequest, in deploymentLogsInput) (*mcp.CallToolResult, any, error) {
+		depID, err := parseUUID(in.DeploymentID)
+		if err != nil {
+			return nil, nil, err
+		}
+		row, err := queries.GetDeploymentLogAccess(ctx, depID)
+		if err != nil {
+			return nil, nil, notFoundOr(ctx, "deployment not found")
+		}
+		// Same pin + ownership check as authorizeApplication, inlined because
+		// the access query already carries the owning project (as
+		// get_application_logs does).
+		if !pinAllows(ctx, uuidToString(row.ProjectID)) {
+			return nil, nil, errAccessDenied
+		}
+		if !canAccessOwned(ctx, row.ProjectUserID, row.ProjectShared) {
+			return nil, nil, errAccessDenied
+		}
+
+		tail := clampLimit(in.Tail, defaultLogTailLines, maxLogTailLines)
+		text := "(no build log recorded for this deployment)"
+		if row.BuildLogs.Valid && row.BuildLogs.String != "" {
+			// Tail first, then reshape: the bounds apply to stored lines, and
+			// formatting only ever shrinks them.
+			text = stripANSI(formatBuildLog(tailLog(row.BuildLogs.String, tail, maxBuildLogBytes)))
+		}
+		return &mcp.CallToolResult{
+			Content: []mcp.Content{&mcp.TextContent{Text: text}},
+		}, nil, nil
+	})
+
 	mcp.AddTool(srv, &mcp.Tool{
 		Name: "list_deployments",
 		Description: "List an application's deployments, newest first: status, build outcome, " +
@@ -94,4 +138,26 @@ func registerDeploymentTools(srv *mcp.Server, queries *generated.Queries) {
 		}
 		return textResult(out)
 	})
+}
+
+// formatBuildLog renders a stored build log for an assistant. A build log is
+// NDJSON ({"ts","level","msg"} per line); the envelope is ~55 characters of
+// scaffolding per line and the context window is the budget, so each line
+// becomes "<ts> <level> <msg>" — what the dashboard shows a human. A line that
+// is not a JSON object with a msg (stray or legacy content) passes through
+// unchanged, as the frontend's parseLogBlob does.
+func formatBuildLog(s string) string {
+	lines := strings.Split(s, "\n")
+	for i, line := range lines {
+		var e struct {
+			TS    string  `json:"ts"`
+			Level string  `json:"level"`
+			Msg   *string `json:"msg"`
+		}
+		if json.Unmarshal([]byte(line), &e) != nil || e.Msg == nil {
+			continue
+		}
+		lines[i] = strings.TrimSpace(e.TS + " " + e.Level + " " + *e.Msg)
+	}
+	return strings.Join(lines, "\n")
 }

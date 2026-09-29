@@ -15,7 +15,7 @@ claude mcp add --transport http belune https://belune.example.com/mcp \
 ```
 
 <Callout type="warn">
-Tools that read container logs send them to whichever client you connect. Logs often contain connection strings and API keys — only connect a client you trust with that. This is the same warning the dialog shows, at the moment you actually connect something, rather than on every token you ever create.
+Both log tools strip terminal colour codes, as the dashboard does, and otherwise return output verbatim. Tools that read logs send them to whichever client you connect. Logs often contain connection strings and API keys — only connect a client you trust with that. This is the same warning the dialog shows, at the moment you actually connect something, rather than on every token you ever create.
 </Callout>
 
 To connect a different client, or build the command by hand, mint any token with at least `read` scope from **Account → Personal Access Tokens** and point your client at `https://belune.example.com/mcp` with `Authorization: Bearer <token>`.
@@ -45,10 +45,11 @@ Reach is identical to what the same token could do through the REST API: an admi
 | `get_database` | One database by id (never credentials) |
 | `list_deployments` | An application's deployments, newest first — status, build outcome, commit info, health-check result |
 | `get_application_logs` | The last N lines of an application's live container output |
+| `get_deployment_logs` | The last N lines of a deployment's build log — the first place to look when a deployment failed |
 | `list_domain_tls_status` | Every domain's observed TLS state, **with why a pending or failed certificate hasn't issued** |
 | `list_project_backups` | Recent backup runs across a project's databases and application volumes |
 
-Every list and log tool is bounded — a default and a hard maximum, never "everything." `get_application_logs` defaults to 200 lines (capped at 1000); `list_deployments` and `list_project_backups` default to 20 (capped at 100).
+Every list and log tool is bounded — a default and a hard maximum, never "everything." `get_application_logs` and `get_deployment_logs` default to 200 lines (capped at 1000); `list_deployments` and `list_project_backups` default to 20 (capped at 100).
 
 ## What It Cannot Do
 
