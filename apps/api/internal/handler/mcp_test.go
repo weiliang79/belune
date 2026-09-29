@@ -583,7 +583,8 @@ func TestMCP_DeploymentLogs(t *testing.T) {
 	depID := seedBuildLog(t, extractID(app["id"]), logBlob)
 
 	text := toolText(t, callToolArgs(t, readToken, "get_deployment_logs", map[string]any{"deployment_id": depID}))
-	assert.Contains(t, text, "build failed: exit 1")
+	assert.Contains(t, text, "2026-09-29T10:00:03Z error build failed: exit 1")
+	assert.NotContains(t, text, `"msg"`, "the NDJSON envelope should be rendered, not passed through")
 	assert.Contains(t, text, "mise")
 	assert.Contains(t, text, "raw red line")
 	assert.NotContains(t, text, "\x1b")

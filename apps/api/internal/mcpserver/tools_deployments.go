@@ -2,6 +2,8 @@ package mcpserver
 
 import (
 	"context"
+	"encoding/json"
+	"strings"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
@@ -69,9 +71,9 @@ func registerDeploymentTools(srv *mcp.Server, queries *generated.Queries) {
 	mcp.AddTool(srv, &mcp.Tool{
 		Name: "get_deployment_logs",
 		Description: "Tail a deployment's build log — the last N lines, not a stream. Use it to " +
-			"find out why a deployment failed. One JSON object per line ({ts, level, msg}). Returned " +
-			"verbatim apart from terminal colour codes: build output can contain secrets printed by " +
-			"build steps. Defaults to 200 lines, capped at 1000.",
+			"find out why a deployment failed. One entry per line as \"<timestamp> <level> <message>\". " +
+			"Returned verbatim apart from terminal colour codes: build output can contain secrets " +
+			"printed by build steps. Defaults to 200 lines, capped at 1000.",
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, in deploymentLogsInput) (*mcp.CallToolResult, any, error) {
 		depID, err := parseUUID(in.DeploymentID)
 		if err != nil {
@@ -94,7 +96,9 @@ func registerDeploymentTools(srv *mcp.Server, queries *generated.Queries) {
 		tail := clampLimit(in.Tail, defaultLogTailLines, maxLogTailLines)
 		text := "(no build log recorded for this deployment)"
 		if row.BuildLogs.Valid && row.BuildLogs.String != "" {
-			text = tailLog(row.BuildLogs.String, tail, maxBuildLogBytes)
+			// Tail first, then reshape: the bounds apply to stored lines, and
+			// formatting only ever shrinks them.
+			text = stripANSI(formatBuildLog(tailLog(row.BuildLogs.String, tail, maxBuildLogBytes)))
 		}
 		return &mcp.CallToolResult{
 			Content: []mcp.Content{&mcp.TextContent{Text: text}},
@@ -134,4 +138,26 @@ func registerDeploymentTools(srv *mcp.Server, queries *generated.Queries) {
 		}
 		return textResult(out)
 	})
+}
+
+// formatBuildLog renders a stored build log for an assistant. A build log is
+// NDJSON ({"ts","level","msg"} per line); the envelope is ~55 characters of
+// scaffolding per line and the context window is the budget, so each line
+// becomes "<ts> <level> <msg>" — what the dashboard shows a human. A line that
+// is not a JSON object with a msg (stray or legacy content) passes through
+// unchanged, as the frontend's parseLogBlob does.
+func formatBuildLog(s string) string {
+	lines := strings.Split(s, "\n")
+	for i, line := range lines {
+		var e struct {
+			TS    string  `json:"ts"`
+			Level string  `json:"level"`
+			Msg   *string `json:"msg"`
+		}
+		if json.Unmarshal([]byte(line), &e) != nil || e.Msg == nil {
+			continue
+		}
+		lines[i] = strings.TrimSpace(e.TS + " " + e.Level + " " + *e.Msg)
+	}
+	return strings.Join(lines, "\n")
 }

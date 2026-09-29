@@ -35,3 +35,15 @@ func TestTailLog(t *testing.T) {
 	out = tailLog(strings.Repeat("é", 100), 10, 51)
 	assert.True(t, strings.ToValidUTF8(out, "?") == out)
 }
+
+func TestFormatBuildLog(t *testing.T) {
+	in := `{"ts":"2026-09-29T10:00:00Z","level":"info","msg":"npm install"}` + "\n" +
+		"stray legacy line\n" +
+		`{"not":"a log entry"}` + "\n" +
+		`{"ts":"t","level":"error","msg":"line one\nline two"}`
+	want := "2026-09-29T10:00:00Z info npm install\n" +
+		"stray legacy line\n" +
+		`{"not":"a log entry"}` + "\n" +
+		"t error line one\nline two"
+	assert.Equal(t, want, formatBuildLog(in))
+}
