@@ -808,7 +808,8 @@ func (q *Queries) UpdateDeploymentImageTag(ctx context.Context, arg UpdateDeploy
 }
 
 const updateDeploymentStatus = `-- name: UpdateDeploymentStatus :one
-UPDATE deployments SET status = $2, error_message = $3, finished_at = NOW()
+UPDATE deployments SET status = $2, error_message = $3,
+    finished_at = CASE WHEN $2::varchar IN ('success', 'failed') THEN NOW() ELSE NULL END
 WHERE id = $1
 RETURNING id, application_id, status, triggered_by, commit_sha, image_tag, build_logs, error_message, started_at, build_started_at, build_ended_at, deploy_started_at, finished_at, idempotency_key, health_status, health_message, health_checked_at, commit_message, commit_author
 `
@@ -819,6 +820,9 @@ type UpdateDeploymentStatusParams struct {
 	ErrorMessage pgtype.Text `json:"error_message"`
 }
 
+// finished_at is stamped only on a terminal status. It used to be set on every
+// transition, so a deployment mid-build reported finished_at == build start and
+// pollers (REST, MCP) read "done, in zero seconds".
 func (q *Queries) UpdateDeploymentStatus(ctx context.Context, arg UpdateDeploymentStatusParams) (Deployment, error) {
 	row := q.db.QueryRow(ctx, updateDeploymentStatus, arg.ID, arg.Status, arg.ErrorMessage)
 	var i Deployment
