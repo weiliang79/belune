@@ -1,7 +1,17 @@
 #!/usr/bin/env bash
 # Belune — Backup
 # Creates a timestamped backup of Postgres data and Caddy TLS certs.
-# Usage: bash backup.sh [output-dir]
+# Usage: bash backup.sh [--local-only-ok] [output-dir]
+#
+#   --local-only-ok  A failed (or impossible) remote upload becomes a warning
+#                    when the local archive was written. update.sh passes it:
+#                    the pre-update backup is a LOCAL rollback point, so an
+#                    unreachable object store must not block an upgrade. It is
+#                    a flag, not an env var, because backup.sh sources .env and
+#                    a stray value there would silently turn scheduled offsite
+#                    backups into local-only ones. Without it, an upload
+#                    failure is fatal: an operator who asked for offsite and
+#                    did not get it has an error.
 #
 # This is the host/CLI backup path — used for manual runs
 # (`systemctl start belune-backup.service`) and by update.sh before a version
@@ -20,6 +30,16 @@
 # Example .env entry:
 #   BACKUP_ENCRYPTION_KEY=age1ql3z7hjy54pw...
 set -euo pipefail
+
+LOCAL_ONLY_OK=0
+POSITIONAL=()
+for arg in "$@"; do
+  case "${arg}" in
+    --local-only-ok) LOCAL_ONLY_OK=1 ;;
+    *) POSITIONAL+=("${arg}") ;;
+  esac
+done
+set -- ${POSITIONAL[@]+"${POSITIONAL[@]}"}
 
 INSTALL_DIR="${BELUNE_DIR:-/opt/belune}"
 BACKUP_DIR="${1:-${INSTALL_DIR}/backups}"
@@ -199,30 +219,53 @@ ENCRYPTED="false"
 # ── Remote upload (optional) ──────────────────────────────────────────────────
 
 REMOTE_KEY=""
+REMOTE_NOTE=""
 if [[ "$(read_remote_config BACKUP_REMOTE_ENABLED)" == "true" ]]; then
   UPLOAD_BIN="${INSTALL_DIR}/bin/belune-backup-upload"
+  UPLOAD_FAILURE=""
   if [[ ! -x "${UPLOAD_BIN}" ]]; then
-    die "belune-backup-upload not found at ${UPLOAD_BIN}. Re-run update.sh to extract it."
+    UPLOAD_FAILURE="belune-backup-upload not found at ${UPLOAD_BIN}. It ships in the Belune image and is extracted by update.sh; update to a release that includes it, or disable remote storage under Server → Backups."
+  else
+    info "Uploading ${ARCHIVE} to remote storage..."
+    # belune-backup-upload resolves BACKUP_S3_*/BACKUP_REMOTE_ENABLED itself
+    # (backup-remote.env, falling back to .env) via the same config.Load() +
+    # LoadRemoteConfig path the API uses — so it needs JWT_SECRET (required by
+    # config.Load()) from .env, and BELUNE_DIR pointed at the same install this
+    # script is running against, in case $1 overrode the *output* dir above.
+    # Sourced in a subshell so the whole of .env does not leak into the rest of
+    # this script.
+    if UPLOAD_OUTPUT=$(
+      set -a
+      # shellcheck source=/dev/null
+      [[ -f "${INSTALL_DIR}/.env" ]] && source "${INSTALL_DIR}/.env"
+      set +a
+      export BELUNE_DIR="${INSTALL_DIR}"
+      "${UPLOAD_BIN}" "${ARCHIVE}"
+    ); then
+      echo "${UPLOAD_OUTPUT}"
+      REMOTE_KEY="${UPLOAD_OUTPUT#uploaded: }"
+      success "Remote upload complete."
+    else
+      UPLOAD_FAILURE="remote upload failed (see output above)."
+    fi
   fi
-  info "Uploading ${ARCHIVE} to remote storage..."
-  # belune-backup-upload resolves BACKUP_S3_*/BACKUP_REMOTE_ENABLED itself
-  # (backup-remote.env, falling back to .env) via the same config.Load() +
-  # LoadRemoteConfig path the API uses — so it needs JWT_SECRET (required by
-  # config.Load()) from .env, and BELUNE_DIR pointed at the same install this
-  # script is running against, in case $1 overrode the *output* dir above.
-  set -a
-  # shellcheck source=/dev/null
-  [[ -f "${INSTALL_DIR}/.env" ]] && source "${INSTALL_DIR}/.env"
-  set +a
-  export BELUNE_DIR="${INSTALL_DIR}"
-  UPLOAD_OUTPUT=$("${UPLOAD_BIN}" "${ARCHIVE}")
-  echo "${UPLOAD_OUTPUT}"
-  REMOTE_KEY="${UPLOAD_OUTPUT#uploaded: }"
-  success "Remote upload complete."
+  if [[ -n "${UPLOAD_FAILURE}" ]]; then
+    if [[ "${LOCAL_ONLY_OK}" == "1" ]]; then
+      echo "  [warn]  ${UPLOAD_FAILURE} Continuing: the local archive ${ARCHIVE} was written." >&2
+      # The row stays "succeeded" (a local archive exists) with an empty
+      # remote_key; the note keeps it from reading as an offsite copy. It shows
+      # in the panel only because CLI runs leave backup_runs.log empty (the UI
+      # prefers log over error) — don't pass this flag from the worker path
+      # without moving the note somewhere that survives.
+      REMOTE_NOTE="remote upload skipped: ${UPLOAD_FAILURE}"
+    else
+      die "${UPLOAD_FAILURE}"
+    fi
+  fi
 fi
 
 SIZE_BYTES=$(stat -c%s "${ARCHIVE}" 2>/dev/null || echo 0)
-record_finish "succeeded" "${SIZE_BYTES}" "${REMOTE_KEY}" "" "${ENCRYPTED}"
+record_finish "succeeded" "${SIZE_BYTES}" "${REMOTE_KEY}" "${REMOTE_NOTE}" "${ENCRYPTED}"
 
 echo ""
 success "Backup complete: ${ARCHIVE}"
