@@ -19,7 +19,7 @@ import {
   useBackupRuns,
   useBackupStatus,
   useTriggerBackup,
-  useTestBackupRemote,
+  useTestBackupRemoteParams,
   useUpdateBackupRemote,
 } from "@/lib/hooks/use-backups";
 import { useSettings, useUpdateSettings } from "@/lib/hooks/use-settings";
@@ -812,7 +812,7 @@ function RemoteStorageSection({
   remote: BackupRemoteConfig | null;
 }) {
   const update = useUpdateBackupRemote();
-  const test = useTestBackupRemote();
+  const test = useTestBackupRemoteParams();
 
   const [enabled, setEnabled] = useState(!!remote);
 
@@ -856,12 +856,17 @@ function RemoteStorageSection({
     secret_key: value.secretKey || undefined,
   });
 
+  // Tests the values on screen, not the saved ones — otherwise the button is
+  // useless until the operator has already committed credentials they have no
+  // way to check. A blank bucket comes back as the API's 400, not a guess here.
   const handleTest = () => {
-    toast.promise(test.mutateAsync(), {
-      loading: "Testing connection…",
-      success: "Connection OK — bucket reachable",
-      error: (err) => err.message ?? "Connection failed",
-    });
+    test
+      .mutateAsync(buildData(true, form.state.values))
+      .then((res) => {
+        if (res.ok) toast.success("Connection OK — bucket reachable");
+        else toast.error(res.error ?? "Connection failed");
+      })
+      .catch((err) => toast.error(err.message ?? "Connection failed"));
   };
 
   // Turning it off is a complete, valid state on its own (no fields needed),

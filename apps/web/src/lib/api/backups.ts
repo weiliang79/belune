@@ -22,10 +22,6 @@ export function triggerBackupRun() {
   return api.post<{ status: string }>("/backups/run");
 }
 
-export function testBackupRemote() {
-  return api.post<{ status: string }>("/backups/test");
-}
-
 export interface UpdateBackupRemoteData {
   enabled: boolean;
   endpoint: string;
@@ -41,6 +37,16 @@ export interface UpdateBackupRemoteData {
 export function updateBackupRemote(data: UpdateBackupRemoteData) {
   return api.put<{ status: string; remote: BackupRemoteConfig }>(
     "/backups/remote",
+    data,
+  );
+}
+
+// testBackupRemoteParams tests the form's current values without saving them.
+// Takes the same payload as updateBackupRemote (`enabled` is ignored), so the
+// card can validate credentials before committing them.
+export function testBackupRemoteParams(data: UpdateBackupRemoteData) {
+  return api.post<{ ok: boolean; error?: string }>(
+    "/backups/remote/test",
     data,
   );
 }
