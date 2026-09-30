@@ -122,9 +122,30 @@ main() {
   # Download everything to a staging dir first: a failed fetch must abort before a
   # single file on disk is touched, so a transient network error can never leave a
   # half-updated infra set. Cleaned up on any exit.
+  # Between moving the pin and starting `docker compose up -d`, a failure would
+  # leave .env and the infra files on the new version while the containers still
+  # run the old image — and the next unrelated `up -d` would silently jump to it.
+  # So a failure in that window puts both back. Deliberately NOT extended past
+  # `up -d`: by then containers may be recreated and migrations applied, and
+  # reverting the image over a migrated schema is worse than the printed rollback.
+  REVERT_ARMED=0
+  # shellcheck disable=SC2329 # invoked by the EXIT trap
+  on_exit() {
+    local rc=$?
+    rm -rf "${STAGE_DIR:-}"
+    if [[ "${REVERT_ARMED}" == "1" && ${rc} -ne 0 ]]; then
+      REVERT_ARMED=0
+      echo "  [warn]  The update failed before the restart — restoring the previous pin and infra files." >&2
+      cp ".env.backup-${CURRENT_VERSION}" .env \
+        && { [[ ! -d "${INFRA_BACKUP:-}" ]] || cp -a "${INFRA_BACKUP}/." .; } \
+        && echo "  [warn]  Restored. Nothing has changed." >&2 \
+        || echo "  [err]   Could not restore automatically; see .env.backup-${CURRENT_VERSION} and ${INFRA_BACKUP:-the infra backup}." >&2
+    fi
+  }
+
   info "Fetching infra files for ${TARGET_VERSION}..."
   STAGE_DIR="$(mktemp -d)"
-  trap 'rm -rf "${STAGE_DIR}"' EXIT
+  trap on_exit EXIT
   for entry in "${INFRA_FILES[@]}"; do
     local_path="${entry%%|*}"
     repo_path="${entry#*|}"
@@ -178,6 +199,7 @@ main() {
   # ── Move the pin ───────────────────────────────────────────────────────────────
 
   cp .env ".env.backup-${CURRENT_VERSION}"
+  REVERT_ARMED=1
   if grep -q '^BELUNE_IMAGE=' .env; then
     # Portable in-place edit: GNU and BSD sed disagree about -i.
     sed "s|^BELUNE_IMAGE=.*|BELUNE_IMAGE=${TARGET_IMAGE}|" .env > .env.tmp && mv .env.tmp .env
@@ -259,6 +281,8 @@ main() {
   # service (a new dependency, a Caddy/Redis/BuildKit tweak), and only `up -d` over
   # the whole project applies those. Compose recreates only what actually changed,
   # so an image-only update still just replaces the belune container.
+  # Past this point a failure is handled by rollback_hint, not an automatic revert.
+  REVERT_ARMED=0
   info "Reconciling the stack (docker compose up -d)..."
   if ! docker compose up -d; then
     rollback_hint

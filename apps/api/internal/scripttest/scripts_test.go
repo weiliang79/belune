@@ -208,7 +208,8 @@ func TestUpdate_SurvivesOverwritingItselfMidRun(t *testing.T) {
 	require.NotEqual(t, len(real), len(stagedBody))
 	write(t, staged, stagedBody, 0o755)
 
-	out, code := runEnv(t, installed, install, []string{"STAGED_UPDATE=" + staged}, "v0.1.11")
+	tmp := t.TempDir()
+	out, code := runEnv(t, installed, install, []string{"STAGED_UPDATE=" + staged, "TMPDIR=" + tmp}, "v0.1.11")
 
 	require.Equal(t, 0, code, out)
 	assert.Contains(t, out, "Updated 0.1.10")
@@ -216,4 +217,40 @@ func TestUpdate_SurvivesOverwritingItselfMidRun(t *testing.T) {
 	swapped, err := os.ReadFile(installed)
 	require.NoError(t, err)
 	assert.Equal(t, stagedBody, string(swapped), "the swap must actually have replaced the running script")
+	assertNoStagingLeft(t, tmp)
+}
+
+// A failure after the pin moved but before the restart used to leave .env and
+// the compose file on the new version while the containers still ran the old
+// image, so the abort's "nothing has changed" was false. Here `infra` is a
+// regular file, so the swap loop's mkdir for infra/caddy fails AFTER
+// docker-compose.yml has already been replaced.
+func TestUpdate_FailureBeforeRestartRestoresPinAndInfra(t *testing.T) {
+	install := newInstall(t)
+	write(t, filepath.Join(install, "scripts", "backup.sh"), "#!/bin/bash\nexit 0\n", 0o755)
+	write(t, filepath.Join(install, "infra"), "not a directory\n", 0o644)
+	write(t, filepath.Join(install, "docker-compose.yml"), "services: {old: {}}\n", 0o644)
+	envBefore, err := os.ReadFile(filepath.Join(install, ".env"))
+	require.NoError(t, err)
+
+	tmp := t.TempDir()
+	out, code := runEnv(t, scriptPath(t, "update.sh"), install, []string{"TMPDIR=" + tmp}, "v0.1.11")
+
+	assert.NotEqual(t, 0, code, out)
+	assert.Contains(t, out, "restoring the previous pin")
+	envAfter, _ := os.ReadFile(filepath.Join(install, ".env"))
+	assert.Equal(t, string(envBefore), string(envAfter), "the pin must be put back")
+	compose, _ := os.ReadFile(filepath.Join(install, "docker-compose.yml"))
+	assert.Equal(t, "services: {old: {}}\n", string(compose), "the swapped compose file must be put back")
+	assertNoStagingLeft(t, tmp)
+}
+
+// assertNoStagingLeft catches a second EXIT trap replacing the one that removes
+// the staging directory (bash keeps one handler per signal): the leak would
+// otherwise only show up as disk creep, worst on failed runs.
+func assertNoStagingLeft(t *testing.T, tmp string) {
+	t.Helper()
+	entries, err := os.ReadDir(tmp)
+	require.NoError(t, err)
+	assert.Empty(t, entries, "update.sh must clean up its staging directory")
 }
