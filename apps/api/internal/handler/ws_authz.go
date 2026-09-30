@@ -39,6 +39,16 @@ var wsResourceChannels = []struct {
 	{"container-status:", (*wsChannelAuthorizer).application},
 	// The log collector publishes application AND database container logs to
 	// this one prefix, so the id can be either kind.
+	//
+	// ⚠️ It also publishes SYSTEM container logs here, under a synthetic source
+	// id (logcollector.CaddySourceID, "00000000-0000-0000-0000-0000000000ca").
+	// Those are deliberately absent: a synthetic id resolves to neither an
+	// application nor a database, so applicationOrDatabase refuses it. Nothing
+	// subscribes to them today — the log viewer is mounted only on an
+	// application and a database, and platform logs are served over REST
+	// (GET /api/maintenance/logs, admin) — so the refusal costs nothing. But a
+	// live platform-log viewer would be denied and look like a broken socket;
+	// it needs an explicit admin-only entry here, not a loosened id check.
 	{"container-logs:", (*wsChannelAuthorizer).applicationOrDatabase},
 	{"build-logs:", (*wsChannelAuthorizer).deployment}, // build-logs:{deploymentID}
 	{"database-status:", (*wsChannelAuthorizer).database},

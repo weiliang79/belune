@@ -86,7 +86,12 @@ func (c *Client) ReadPump(ctx context.Context, authz ChannelAuthorizer) {
 func (c *Client) subscribe(ctx context.Context, authz ChannelAuthorizer, channel string) {
 	if authz == nil || !authz.AuthorizeChannel(ctx, channel) {
 		c.refuse(ctx, channel)
-		slog.Warn("ws: subscription refused", "user", c.userID, "channel", clipForLog(channel))
+		// Debug, not Warn: a refusal is the expected answer to a client asking
+		// for something it may not hear, and nothing rate-limits a subscribe —
+		// a client looping them would otherwise fill the operator's logs with
+		// warnings about a system that is working correctly. The client is told
+		// on the channel; that is where the answer belongs.
+		slog.Debug("ws: subscription refused", "user", c.userID, "channel", clipForLog(channel))
 		return
 	}
 	c.hub.Subscribe(c, channel)
