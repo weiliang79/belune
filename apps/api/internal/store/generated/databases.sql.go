@@ -287,22 +287,25 @@ func (q *Queries) GetDatabase(ctx context.Context, id pgtype.UUID) (Database, er
 }
 
 const getDatabaseOwnerUserID = `-- name: GetDatabaseOwnerUserID :one
-SELECT p.user_id, p.shared FROM databases d
+SELECT p.user_id, p.shared, d.project_id FROM databases d
 JOIN projects p ON p.id = d.project_id
 WHERE d.id = $1
 `
 
 type GetDatabaseOwnerUserIDRow struct {
-	UserID pgtype.UUID `json:"user_id"`
-	Shared bool        `json:"shared"`
+	UserID    pgtype.UUID `json:"user_id"`
+	Shared    bool        `json:"shared"`
+	ProjectID pgtype.UUID `json:"project_id"`
 }
 
 // shared rides along so canAccessDatabase can grant every Member access to a
-// shared project's databases, not only its owner.
+// shared project's databases, not only its owner. project_id rides along so
+// the WebSocket channel authorizer can also check a project-pinned token's pin,
+// which is a separate axis from ownership (see internal/handler/ws_authz.go).
 func (q *Queries) GetDatabaseOwnerUserID(ctx context.Context, id pgtype.UUID) (GetDatabaseOwnerUserIDRow, error) {
 	row := q.db.QueryRow(ctx, getDatabaseOwnerUserID, id)
 	var i GetDatabaseOwnerUserIDRow
-	err := row.Scan(&i.UserID, &i.Shared)
+	err := row.Scan(&i.UserID, &i.Shared, &i.ProjectID)
 	return i, err
 }
 

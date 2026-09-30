@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
+import { requireAdmin } from "@/lib/utils/auth-guard";
 import { toast } from "sonner";
 import { useForm, useStore } from "@tanstack/react-form";
 import { z } from "zod";
@@ -61,6 +62,7 @@ import { DataTable, buildActionColumnDef } from "@/components/ui/data-table";
 import { formatBytes } from "@/lib/utils/format";
 
 export const Route = createFileRoute("/_app/quotas")({
+  beforeLoad: requireAdmin,
   component: QuotasPage,
   errorComponent: RouteError,
 });

@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { requireAdmin } from "@/lib/utils/auth-guard";
 import { useCallback, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -20,6 +21,7 @@ import {
   useRequestSummary,
 } from "@/lib/hooks/use-request-logs";
 import { useChannel } from "@/lib/hooks/use-websocket";
+import { useAuthStore } from "@/lib/stores/auth";
 import { useProjects } from "@/lib/hooks/use-projects";
 import { Input } from "@/components/ui/input";
 import {
@@ -46,6 +48,7 @@ import * as applicationsApi from "@/lib/api/applications";
 import { RouteError } from "@/lib/components/route-error";
 
 export const Route = createFileRoute("/_app/requests/")({
+  beforeLoad: requireAdmin,
   component: GlobalRequestsPage,
   errorComponent: RouteError,
 });
@@ -380,7 +383,14 @@ function GlobalRequestsPage() {
     [filters.statusRange, filters.applicationId],
   );
 
-  const { connected } = useChannel("requests:all", handleMessage);
+  // Admin-only: the server refuses requests:all to anyone else. The route guard
+  // already keeps a Member off this page; this keeps the subscription honest on
+  // its own instead of relying on that.
+  const isAdmin = useAuthStore((s) => s.user?.role === "admin");
+  const { connected } = useChannel(
+    isAdmin ? "requests:all" : null,
+    handleMessage,
+  );
 
   const handleFilterChange = useCallback((f: Filters) => {
     setFilters(f);

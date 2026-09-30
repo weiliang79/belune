@@ -169,6 +169,41 @@ func (q *Queries) GetDeployment(ctx context.Context, id pgtype.UUID) (Deployment
 	return i, err
 }
 
+const getDeploymentAccess = `-- name: GetDeploymentAccess :one
+SELECT d.id, d.application_id, a.project_id,
+       p.user_id AS project_user_id, p.shared AS project_shared
+FROM deployments d
+JOIN applications a ON a.id = d.application_id
+JOIN projects p ON p.id = a.project_id
+WHERE d.id = $1
+`
+
+type GetDeploymentAccessRow struct {
+	ID            pgtype.UUID `json:"id"`
+	ApplicationID pgtype.UUID `json:"application_id"`
+	ProjectID     pgtype.UUID `json:"project_id"`
+	ProjectUserID pgtype.UUID `json:"project_user_id"`
+	ProjectShared bool        `json:"project_shared"`
+}
+
+// The authorization half of GetDeploymentLogAccess, for a caller that never
+// reads the log: the WebSocket build-logs:{deploymentID} subscribe check runs
+// once per subscription, and d.build_logs is unbounded — a long build's whole
+// output would be pulled into memory only to be discarded. Selects only what
+// an authorization decision needs, following GetApplicationLogAccess.
+func (q *Queries) GetDeploymentAccess(ctx context.Context, id pgtype.UUID) (GetDeploymentAccessRow, error) {
+	row := q.db.QueryRow(ctx, getDeploymentAccess, id)
+	var i GetDeploymentAccessRow
+	err := row.Scan(
+		&i.ID,
+		&i.ApplicationID,
+		&i.ProjectID,
+		&i.ProjectUserID,
+		&i.ProjectShared,
+	)
+	return i, err
+}
+
 const getDeploymentLogAccess = `-- name: GetDeploymentLogAccess :one
 SELECT d.id, d.application_id, a.project_id, d.build_logs,
        p.user_id AS project_user_id, p.shared AS project_shared

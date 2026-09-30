@@ -58,6 +58,13 @@ function sendJSON(msg: InboundMessage) {
 function handleMessage(event: MessageEvent) {
   try {
     const msg: OutboundMessage = JSON.parse(event.data);
+    if (msg.event === "error") {
+      // The server answers a subscribe it will not honour on the channel it
+      // refused (ws.ChannelAuthorizer). It is not data for that channel's
+      // handler, which would parse it as a metric point or a log line.
+      console.warn(`WebSocket subscription refused: ${msg.channel}`);
+      return;
+    }
     const handlers = listeners.get(msg.channel);
     if (handlers) {
       for (const handler of handlers) {

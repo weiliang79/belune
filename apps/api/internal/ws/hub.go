@@ -133,7 +133,9 @@ func (h *Hub) Unregister(c *Client) {
 	h.unregisterCh <- c
 }
 
-// Subscribe adds a client to a channel.
+// Subscribe adds a client to a channel. It does not authorize: the hub knows
+// nothing about who may hear what, so the caller must have already passed the
+// subscription through a ChannelAuthorizer (Client.subscribe does).
 func (h *Hub) Subscribe(c *Client, channel string) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
