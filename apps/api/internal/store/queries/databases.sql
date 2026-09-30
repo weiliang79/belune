@@ -47,8 +47,10 @@ SELECT count(*) FROM databases;
 
 -- name: GetDatabaseOwnerUserID :one
 -- shared rides along so canAccessDatabase can grant every Member access to a
--- shared project's databases, not only its owner.
-SELECT p.user_id, p.shared FROM databases d
+-- shared project's databases, not only its owner. project_id rides along so
+-- the WebSocket channel authorizer can also check a project-pinned token's pin,
+-- which is a separate axis from ownership (see internal/handler/ws_authz.go).
+SELECT p.user_id, p.shared, d.project_id FROM databases d
 JOIN projects p ON p.id = d.project_id
 WHERE d.id = $1;
 

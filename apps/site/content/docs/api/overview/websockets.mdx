@@ -37,7 +37,7 @@ Every frame is JSON. You send:
 { "action": "subscribe", "channel": "metrics:host" }
 ```
 
-`action` is `subscribe` or `unsubscribe`; anything else is ignored silently, as is an empty `channel`. There is no acknowledgement — a successful subscribe is indistinguishable from an ignored one until a message arrives on that channel.
+`action` is `subscribe` or `unsubscribe`; anything else is ignored silently, as is an empty `channel`. A successful subscribe is not acknowledged — messages simply start arriving. A subscribe the server refuses *is* answered; see [Who May Subscribe](#who-may-subscribe).
 
 The server sends:
 
@@ -49,20 +49,39 @@ The server sends:
 
 ## Channels
 
-| Channel | Event | Carries |
-| --- | --- | --- |
-| `metrics:host` | `metrics` | Host CPU, memory and disk, once per second |
-| `metrics:app:{applicationId}` | `metrics` | One application's container stats, every two seconds |
-| `build-logs:{deploymentId}` | `log`, `done` | Build output, then `done` with `null` data when the build ends |
-| `container-logs:{sourceId}` | `log` | Runtime log lines; `sourceId` is the application or database id |
-| `requests:{applicationId}` | `request` | Proxy request traces for one application |
-| `requests:all` | `request` | Every application's request traces |
-| `container-status:{applicationId}` | `status` | `{ application_id, status }` when an app's container changes state |
-| `database-status:{databaseId}` | `status` | `{ database_id, status }`, the database equivalent |
+| Channel | Event | Carries | Who may subscribe |
+| --- | --- | --- | --- |
+| `metrics:host` | `metrics` | Host CPU, memory and disk, once per second | Admins |
+| `metrics:app:{applicationId}` | `metrics` | One application's container stats, every two seconds | Project access |
+| `build-logs:{deploymentId}` | `log`, `done` | Build output, then `done` with `null` data when the build ends | Project access |
+| `container-logs:{sourceId}` | `log` | Runtime log lines; `sourceId` is the application or database id | Project access |
+| `requests:{applicationId}` | `request` | Proxy request traces for one application | Project access |
+| `requests:all` | `request` | Every application's request traces | Admins |
+| `container-status:{applicationId}` | `status` | `{ application_id, status }` when an app's container changes state | Project access |
+| `database-status:{databaseId}` | `status` | `{ database_id, status }`, the database equivalent | Project access |
 
 `build-logs` is the only channel that terminates: it emits `done` with `data: null` when the build finishes. Everything else runs until you unsubscribe.
 
 `metrics:app:{applicationId}` is collected **on demand** — the poller only samples applications that currently have a subscriber, so the first message can take up to two seconds to arrive. Nothing is buffered from before you subscribed, on any channel.
+
+## Who May Subscribe
+
+Opening the socket does not entitle you to every channel. Each subscribe is checked against the same rules as the REST endpoint that serves the same data:
+
+- **`metrics:host` and `requests:all`** need an admin, exactly like `GET /api/metrics/host` and `GET /api/requests`.
+- **Every other channel** needs access to the project that owns the resource: its owner, any member when the project is shared, or an admin. For `container-logs`, the id may be an application or a database.
+- **A project-pinned token** is also limited to the projects it is pinned to. `requests:all` spans every project and cannot be narrowed to a pin, so a pinned token is never given it.
+- **Anything else is refused** — a channel not listed above, an id that does not exist, or an id that is not in the lowercase, hyphenated form the API returns.
+
+A refused subscribe is answered on the channel you asked for, and you are not subscribed to it:
+
+```json
+{ "channel": "metrics:host", "event": "error", "data": { "error": "access denied" } }
+```
+
+The message is identical whether the resource is forbidden or does not exist. The socket stays open and your other subscriptions are unaffected.
+
+Access is checked once, when you subscribe, against who you were when the connection opened. A REST call re-validates its token every time; an open socket does not, so a revoked token or a demoted user keeps a live connection until it drops. Reconnecting checks everything again.
 
 ## Example
 

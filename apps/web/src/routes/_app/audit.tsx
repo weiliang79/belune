@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { requireAdmin } from "@/lib/utils/auth-guard";
 import { useState } from "react";
 import {
   ActivityIcon,
@@ -32,6 +33,7 @@ import { cn } from "@/lib/utils";
 import type { AuditLog } from "@/lib/types";
 
 export const Route = createFileRoute("/_app/audit")({
+  beforeLoad: requireAdmin,
   component: AuditLogPage,
   errorComponent: RouteError,
 });

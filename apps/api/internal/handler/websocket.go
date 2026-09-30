@@ -64,9 +64,11 @@ func (h *Handler) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Start read and write pumps
+	// Start read and write pumps. ReadPump runs synchronously, so r.Context() —
+	// which carries the user, role and any token pin Auth resolved — lives for
+	// the whole socket, and the authorizer reads the caller straight from it.
 	go client.WritePump(r.Context())
-	client.ReadPump(r.Context())
+	client.ReadPump(r.Context(), &wsChannelAuthorizer{queries: h.queries})
 }
 
 // originAllowed reports whether a browser Origin may open a WebSocket.

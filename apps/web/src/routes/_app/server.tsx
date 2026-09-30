@@ -1,5 +1,6 @@
 import { useDialogBody } from "@/lib/hooks/use-dialog-body";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { requireAdmin } from "@/lib/utils/auth-guard";
 import {
   Activity,
   Archive,
@@ -66,6 +67,7 @@ import { DashboardDomainSection } from "@/components/server/dashboard-domain-sec
 import { SmtpSection } from "@/components/server/smtp-section";
 import { cn } from "@/lib/utils";
 import { formatDateTimeShort } from "@/lib/utils/format";
+import { useAuthStore } from "@/lib/stores/auth";
 
 type ServerTab = "metric" | "configuration" | "backups";
 type HostMetricsView = "overview" | "detail";
@@ -78,6 +80,7 @@ const SERVER_TABS: PageTab<ServerTab>[] = [
 type CustomRange = { from: string; to: string };
 
 export const Route = createFileRoute("/_app/server")({
+  beforeLoad: requireAdmin,
   component: ServerSettingsPage,
   errorComponent: RouteError,
   validateSearch: (search: Record<string, unknown>) => ({
@@ -320,8 +323,12 @@ function ServerSettingsPage() {
   // Overview is always live; only Detail honors the custom time range, so the
   // live sources stay enabled regardless of the selected window.
   const { data: historicalData } = useHostHistoricalMetrics("1h");
+  // Admin-only: the server refuses metrics:host to anyone else. The route guard
+  // already keeps a Member off this page; this keeps the subscription honest on
+  // its own instead of relying on that.
+  const isAdmin = useAuthStore((s) => s.user?.role === "admin");
   const { data: streamData, connected: streamConnected } =
-    useHostMetricsStream(true);
+    useHostMetricsStream(isAdmin);
   const { data: rangeData } = useHostMetricsRange(
     customRange?.from,
     customRange?.to,

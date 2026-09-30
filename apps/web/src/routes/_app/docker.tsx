@@ -1,4 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { requireAdmin } from "@/lib/utils/auth-guard";
 import { SiDocker } from "@icons-pack/react-simple-icons";
 import { LayoutDashboard, Box, Layers, HardDrive, Network } from "lucide-react";
 import { RouteError } from "@/lib/components/route-error";
@@ -26,6 +27,7 @@ function isTab(v: unknown): v is Exclude<DockerTab, "overview"> {
 }
 
 export const Route = createFileRoute("/_app/docker")({
+  beforeLoad: requireAdmin,
   component: DockerPage,
   errorComponent: RouteError,
   validateSearch: (search: Record<string, unknown>) => ({

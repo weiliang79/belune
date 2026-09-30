@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
+import { requireAdmin } from "@/lib/utils/auth-guard";
 import { toast } from "sonner";
 import type { ColumnDef } from "@tanstack/react-table";
 import { BellRing, Pencil, Trash2, SendHorizontal } from "lucide-react";
@@ -40,6 +41,7 @@ import {
 } from "@/components/ui/alert-dialog";
 
 export const Route = createFileRoute("/_app/notifications")({
+  beforeLoad: requireAdmin,
   component: NotificationsPage,
   errorComponent: RouteError,
 });

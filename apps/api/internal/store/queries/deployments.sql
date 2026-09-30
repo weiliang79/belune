@@ -39,6 +39,19 @@ JOIN applications a ON a.id = d.application_id
 JOIN projects p ON p.id = a.project_id
 WHERE d.id = $1;
 
+-- name: GetDeploymentAccess :one
+-- The authorization half of GetDeploymentLogAccess, for a caller that never
+-- reads the log: the WebSocket build-logs:{deploymentID} subscribe check runs
+-- once per subscription, and d.build_logs is unbounded — a long build's whole
+-- output would be pulled into memory only to be discarded. Selects only what
+-- an authorization decision needs, following GetApplicationLogAccess.
+SELECT d.id, d.application_id, a.project_id,
+       p.user_id AS project_user_id, p.shared AS project_shared
+FROM deployments d
+JOIN applications a ON a.id = d.application_id
+JOIN projects p ON p.id = a.project_id
+WHERE d.id = $1;
+
 -- name: CreateDeployment :one
 INSERT INTO deployments (application_id, status, triggered_by, commit_sha, idempotency_key, commit_message, commit_author)
 VALUES ($1, $2, $3, $4, $5, $6, $7)

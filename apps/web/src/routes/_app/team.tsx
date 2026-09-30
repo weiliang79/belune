@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
+import { requireAdmin } from "@/lib/utils/auth-guard";
 import { useForm } from "@tanstack/react-form";
 import { z } from "zod";
 import type { ColumnDef } from "@tanstack/react-table";
@@ -64,6 +65,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 export const Route = createFileRoute("/_app/team")({
+  beforeLoad: requireAdmin,
   component: TeamSettingsPage,
   errorComponent: RouteError,
 });

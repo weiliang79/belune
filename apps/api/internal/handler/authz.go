@@ -20,19 +20,33 @@ type ownerLookup func(ctx context.Context) (ownerID pgtype.UUID, shared bool, er
 // transfer, changing sharing) must use isOwnerOnly instead, since sharing
 // grants operational access but never ownership.
 func (h *Handler) canAccessOwned(r *http.Request, getOwner ownerLookup) bool {
-	role := middleware.RoleFromContext(r.Context())
-	if role == "admin" {
+	if middleware.RoleFromContext(r.Context()) == "admin" {
 		return true
 	}
 	ownerID, shared, err := getOwner(r.Context())
 	if err != nil {
 		return false
 	}
+	return ownerMayAccess(r.Context(), ownerID, shared)
+}
+
+// ownerMayAccess is the ownership/sharing rule behind canAccessOwned, on values
+// the caller has already resolved: an admin passes, a shared project passes for
+// every Member, otherwise only the owner does. It reads the caller from ctx
+// rather than an *http.Request so the WebSocket channel authorizer — which has
+// no per-message request, only the handshake's context — applies the very same
+// rule instead of a copy that can drift. Deliberately does NOT look at a
+// project-pinned token's pin: that is a separate axis (token reach, not
+// ownership), composed by each caller — see wsProjectAccess.
+func ownerMayAccess(ctx context.Context, ownerID pgtype.UUID, shared bool) bool {
+	if middleware.RoleFromContext(ctx) == "admin" {
+		return true
+	}
 	if shared {
 		return true
 	}
 	var userID pgtype.UUID
-	userID.Scan(middleware.UserIDFromContext(r.Context()))
+	userID.Scan(middleware.UserIDFromContext(ctx))
 	return ownerID == userID
 }
 
