@@ -44,6 +44,28 @@ do about it.
 Manual and scheduled host backups are unchanged: if you asked for offsite and
 did not get it, that is still an error.
 
+### An interrupted update puts itself back
+
+**Two separate ways an update could leave an install worse than it found it,
+both fixed.**
+
+`update.sh` replaced itself partway through its own run. Because the shell
+reads a script as it goes, it carried on from the same position in the _new_
+file and started executing whatever happened to be there — so an update could
+fail with a nonsense error after it had already changed things. It had been
+harmless only because the file had not changed since 0.1.8; the moment it did,
+it broke.
+
+Separately, a failure between pinning the new version and restarting left the
+install pointing at the new version while still running the old one — so a
+later, unrelated restart would have jumped it forward without warning. The pin
+and the infra files are now put back automatically if the update fails before
+the restart, which is what the "nothing has changed" message always promised.
+
+A failure _after_ the restart still leaves the recovery instructions rather
+than undoing itself: by then migrations may have run, and putting an older
+version back on a newer schema would be worse than stopping.
+
 ### Remote storage can be tested before you save it
 
 **"Test connection" used to refuse to run until you had already saved and
@@ -90,7 +112,17 @@ with `belune-backup-upload not found` or `Backup failed`. If that happens:
 
 Nothing is changed or lost when it stops. Running `scripts/update.sh` on the
 host also works — there it can ask whether to continue, which it cannot do from
-the dashboard. From 0.1.11 onward this stops happening.
+the dashboard.
+
+The same applies to the self-repair fixes above: they protect updates that
+_start_ from 0.1.11, so the update **to** 0.1.11 still runs the copy of
+`update.sh` you already have.
+
+**If you tried 0.1.11-rc1**, you are running that release candidate's updater,
+which still had the self-replacement bug — and your `.env` may name a newer
+version than the containers actually running. Check with
+`grep BELUNE_IMAGE /opt/belune/.env` against what the dashboard reports, and
+run `docker compose up -d` in the install directory if they disagree.
 
 ## [0.1.10]
 
