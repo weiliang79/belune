@@ -26,6 +26,37 @@ Release notes for each version are also published on the
 
 ## [0.1.11]
 
+### ⚠️ Updating from 0.1.10? Do this on the host, not from the dashboard
+
+**The update from 0.1.10 will fail partway through.** It is a known, one-time
+problem and nothing is lost when it happens — but it is easier to avoid than
+to recover from.
+
+**To avoid it**, SSH to the host and run the update from a copy of the script:
+
+```bash
+cp /opt/belune/scripts/update.sh /tmp/belune-update.sh
+bash /tmp/belune-update.sh v0.1.11
+```
+
+**If you already tried and it failed**, you will have seen it stop with a
+`command not found` error shortly after `Pinned to 0.1.11`. Your install is
+pinned to the new version while still running the old containers. Finish it
+with:
+
+```bash
+cd /opt/belune && docker compose up -d
+```
+
+Your data is untouched: the pre-update backup and the previous infra files
+were both written before the failure.
+
+**Why:** `update.sh` replaces itself as part of an update, and the shell reads
+a script as it goes — so when the file changes underneath it, it carries on
+from the wrong place. This release fixes that, but the fix can only help
+updates that _start_ from 0.1.11, because the script running your upgrade is
+the one you already have. **This is the last release where it happens.**
+
 ### An update no longer stops because a backup could not be uploaded
 
 **If remote backup storage was configured but unreachable, updating from the
