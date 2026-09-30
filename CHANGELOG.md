@@ -24,6 +24,75 @@ Belune is pre-1.0. The versioning contract while it stays there:
 Release notes for each version are also published on the
 [Releases page](https://github.com/weiliang79/belune/releases).
 
+## [0.1.12]
+
+### A Member could read data the dashboard refused them
+
+**On installs with more than one user account, a Member could read live data
+from projects they were never given access to** — the host's own CPU, memory
+and disk figures, the HTTP request log of every application on the box, and the
+container logs of any application or database whose id they knew.
+
+The dashboard's live-data connection handed out whatever channel a client asked
+for, without checking whether that client was allowed to hear it. Every other
+route to the same data was correct: the REST API refused all three with `403`,
+and so did MCP. Only the live connection never asked.
+
+**Single-user installs were never exposed to anyone else** — there was no
+second account to do the reading. If you are the only user of your install,
+this changed nothing about who could see your data.
+
+Reaching it took deliberate effort rather than a stray click: a client had to
+connect and ask for a channel by name, and for another project's logs it had to
+already know that application's id. Typing an admin page's URL was not enough
+on its own — those pages load data the API refuses a Member, so they collapse
+into an error almost immediately.
+
+⚠️ **Container logs are the part worth thinking about.** Application logs
+routinely contain connection strings and API keys printed at startup, so a
+Member who read another project's logs may have seen its secrets. If you run a
+multi-user install and there is anyone on it you would not hand those secrets
+to, treat what your applications print at startup as worth rotating.
+
+**Neither we nor your audit log can tell you whether it happened.**
+Subscriptions to the live connection were never recorded anywhere, so there is
+no history to go back through. Found during internal review rather than from a
+report.
+
+### What changed
+
+Every subscription is now authorized before it is registered, against the same
+ownership and sharing rules the REST API applies — the same code, not a second
+copy of it that could drift. Anything the server does not positively recognise
+is refused, so a channel added in a future release stays closed until someone
+decides who may hear it.
+
+A token limited to specific projects is now honoured here too. Previously,
+pinning a token narrowed what it could reach through the API while leaving the
+live connection open to everything — so the pin was not the boundary it
+appeared to be.
+
+The admin-only pages — Requests, Server, Docker, Notifications, Team, Quotas
+and Audit Log — now have a real access check. The sidebar had always hidden
+their links from a Member, but a hidden link is not a guard.
+
+**Upgrading from 0.1.11: breaking only if you drive the live connection with a
+token.** A script that opens `/api/ws` keeps working unchanged when it uses an
+unpinned admin token. It will now be refused when it uses a Member's token to
+read `metrics:host` or `requests:all`, when it uses a project-pinned token to
+read anything outside that pin, or when it uses any pinned token to read
+`requests:all` — which is a single stream spanning every project and cannot be
+narrowed to a pin. A refused subscription is answered on the channel it asked
+for, rather than going quiet. The
+[WebSockets guide](https://belune.dev/docs/api/overview/websockets) now lists
+who may subscribe to each channel.
+
+### Upgrading
+
+Apply this the usual way; nothing about your projects, tokens or settings
+changes, and no host action is needed. If you use only the dashboard, the API
+or MCP, there is nothing to do and nothing you were doing stops working.
+
 ## [0.1.11]
 
 ### ⚠️ Updating from 0.1.10? Do this on the host, not from the dashboard
