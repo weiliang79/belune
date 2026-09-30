@@ -37,12 +37,26 @@ func fakeBin(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
 	write(t, filepath.Join(dir, "flock"), "#!/bin/sh\nexit 0\n", 0o755)
-	// curl -o <dest>: create the file so the staged-fetch loop succeeds.
+	// curl -o <dest>: create the file so the staged-fetch loop succeeds. When
+	// STAGED_UPDATE is set, the staged scripts/update.sh is that file instead,
+	// which is how a test makes the swap replace the running script with
+	// different bytes.
 	write(t, filepath.Join(dir, "curl"), `#!/bin/sh
+url=""
 while [ $# -gt 0 ]; do
-  if [ "$1" = "-o" ]; then : > "$2"; fi
+  case "$1" in
+    -o) dest="$2"; shift ;;
+    -*) ;;
+    *) url="$1" ;;
+  esac
   shift
 done
+if [ -n "$dest" ]; then
+  case "$url" in
+    */scripts/update.sh) if [ -n "$STAGED_UPDATE" ]; then cp "$STAGED_UPDATE" "$dest"; else : > "$dest"; fi ;;
+    *) : > "$dest" ;;
+  esac
+fi
 exit 0
 `, 0o755)
 	write(t, filepath.Join(dir, "docker"), `#!/bin/sh
@@ -68,8 +82,13 @@ func newInstall(t *testing.T) string {
 
 func run(t *testing.T, script string, install string, args ...string) (string, int) {
 	t.Helper()
+	return runEnv(t, script, install, nil, args...)
+}
+
+func runEnv(t *testing.T, script string, install string, extraEnv []string, args ...string) (string, int) {
+	t.Helper()
 	cmd := exec.Command("bash", append([]string{script}, args...)...)
-	cmd.Env = append(os.Environ(), "BELUNE_DIR="+install, "PATH="+fakeBin(t)+":"+os.Getenv("PATH"))
+	cmd.Env = append(append(os.Environ(), extraEnv...), "BELUNE_DIR="+install, "PATH="+fakeBin(t)+":"+os.Getenv("PATH"))
 	cmd.Stdin = nil // /dev/null: the dashboard's detached helper has no stdin
 	var out bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &out, &out
@@ -162,4 +181,39 @@ func TestBackup_LocalOnlyOKTurnsUploadFailureIntoWarning(t *testing.T) {
 			assert.Len(t, archives, 1, "the local archive must exist")
 		})
 	}
+}
+
+// update.sh is one of its own infra files, so the swap loop overwrites the
+// script that is executing. Bash reads a script by byte offset, so a swap that
+// changes the length of anything BEFORE that point makes it resume mid-content
+// and run garbage (v0.1.11-rc1 executed a box-drawing banner as a command). The
+// old test suite could not see this: a swap of identical bytes is invisible,
+// which is exactly why it stayed hidden for three releases. So this test
+// installs the real script, stages a LONGER copy, and lets the swap replace it
+// while it runs.
+func TestUpdate_SurvivesOverwritingItselfMidRun(t *testing.T) {
+	real, err := os.ReadFile(scriptPath(t, "update.sh"))
+	require.NoError(t, err)
+
+	install := newInstall(t)
+	installed := filepath.Join(install, "scripts", "update.sh")
+	write(t, installed, string(real), 0o755)
+	write(t, filepath.Join(install, "scripts", "backup.sh"), "#!/bin/bash\nexit 0\n", 0o755)
+
+	// Same script plus a comment block right after the shebang: every byte the
+	// running shell has yet to read now sits at a different offset.
+	staged := filepath.Join(t.TempDir(), "update.sh")
+	padding := "\n# " + strings.Repeat("padding so the next release's update.sh has a different length ", 8) + "\n"
+	stagedBody := strings.Replace(string(real), "\n", padding+"\n", 1)
+	require.NotEqual(t, len(real), len(stagedBody))
+	write(t, staged, stagedBody, 0o755)
+
+	out, code := runEnv(t, installed, install, []string{"STAGED_UPDATE=" + staged}, "v0.1.11")
+
+	require.Equal(t, 0, code, out)
+	assert.Contains(t, out, "Updated 0.1.10")
+	assert.NotContains(t, out, "command not found")
+	swapped, err := os.ReadFile(installed)
+	require.NoError(t, err)
+	assert.Equal(t, stagedBody, string(swapped), "the swap must actually have replaced the running script")
 }
