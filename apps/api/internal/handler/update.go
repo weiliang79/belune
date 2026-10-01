@@ -153,6 +153,9 @@ func (h *Handler) TriggerSelfUpdate(w http.ResponseWriter, r *http.Request) {
 	h.setSetting(ctx, settingUpdateHelperTarget, target)
 	h.setSetting(ctx, settingUpdateHelperStartedAt, time.Now().UTC().Format(time.RFC3339))
 
+	h.updateBeganAt.Store(time.Now().UnixNano())
+	h.publishUpdating(true)
+
 	go h.pullAndSpawnUpdateHelper(ctx, rt, targetImage, workingDir, target)
 
 	h.audit(r, "trigger_update", "platform", "", map[string]any{
@@ -201,6 +204,15 @@ func (h *Handler) pullAndSpawnUpdateHelper(ctx context.Context, rt runtime.Conta
 	fail := func(what string, err error) {
 		slog.Error(what, "image", targetImage, "error", err)
 		h.setSetting(ctx, settingUpdatePullError, updateFailureReason(what, err))
+		// Nothing was touched, so unlatch every client now rather than leaving
+		// them on "updating" until their next poll.
+		h.updateStarting.Store(false)
+		// Nothing else clears this: a later host-run update would otherwise
+		// anchor its elapsed time on this failed attempt. The success path needs
+		// no clear because it replaces this container, and the value dies with
+		// the process.
+		h.updateBeganAt.Store(0)
+		h.publishUpdating(false)
 	}
 
 	pullCtx, cancel := context.WithTimeout(ctx, updatePullTimeout)
@@ -222,6 +234,8 @@ func (h *Handler) pullAndSpawnUpdateHelper(ctx context.Context, rt runtime.Conta
 		fail("Could not start the update helper from "+targetImage, err)
 		return
 	}
+
+	h.updateProbe.markRunning(time.Now())
 
 	// Record the helper so GetSelfUpdateStatus can report on it afterwards.
 	// Without this a helper that dies on its first line is invisible: the
@@ -452,19 +466,26 @@ func (h *Handler) setSetting(ctx context.Context, key, value string) {
 // replaced, so nothing here is running anyway) or failed, and a failed update
 // must not lock the operator out of retrying from the dashboard.
 func updateHelperRunning(ctx context.Context, rt runtime.ContainerRuntime) (bool, error) {
+	_, running, err := findUpdateHelper(ctx, rt)
+	return running, err
+}
+
+// findUpdateHelper is updateHelperRunning's body, also returning the helper so
+// the public update flag can read when it was created.
+func findUpdateHelper(ctx context.Context, rt runtime.ContainerRuntime) (runtime.ContainerInfo, bool, error) {
 	all, err := rt.ListAllContainers(ctx)
 	if err != nil {
-		return false, err
+		return runtime.ContainerInfo{}, false, err
 	}
 	for _, c := range all {
 		if c.Labels[runtime.LabelUpdateHelper] != "true" {
 			continue
 		}
 		if c.Status == "running" || c.Status == "created" {
-			return true, nil
+			return c, true, nil
 		}
 	}
-	return false, nil
+	return runtime.ContainerInfo{}, false, nil
 }
 
 // settingValue reads one setting's trimmed value, or "" if it is unset or the

@@ -26,8 +26,19 @@ var wsAdminChannels = map[string]struct{}{
 	"requests:all": {}, // GET /api/requests
 }
 
+// wsOpenChannels are heard by every authenticated subscriber — Members and
+// project-pinned tokens included — because what they carry is already public.
+// "platform" announces that an update is underway, which is exactly what the
+// unauthenticated GET /api/version reports in its `updating` flag; the socket
+// only delivers it sooner. It must never carry more than that endpoint does
+// (the target version above all), and it is not a place to park other
+// platform-wide events: those need their own decision about who may hear them.
+var wsOpenChannels = map[string]struct{}{
+	"platform": {},
+}
+
 // wsResourceChannels maps a channel prefix to the check on the resource id that
-// follows it. A channel matching neither this nor wsAdminChannels is refused, so
+// follows it. A channel matching none of this, wsOpenChannels or wsAdminChannels is refused, so
 // a channel added to the server but not listed here is denied until someone
 // decides who may hear it — never open by default.
 var wsResourceChannels = []struct {
@@ -71,6 +82,9 @@ type wsChannelAuthorizer struct {
 func (a *wsChannelAuthorizer) AuthorizeChannel(ctx context.Context, channel string) bool {
 	if _, ok := wsAdminChannels[channel]; ok {
 		return wsAdminChannelAllowed(ctx, channel)
+	}
+	if _, ok := wsOpenChannels[channel]; ok {
+		return true
 	}
 	for _, rule := range wsResourceChannels {
 		rest, ok := strings.CutPrefix(channel, rule.prefix)

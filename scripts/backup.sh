@@ -71,9 +71,34 @@ if [[ -z "${BACKUP_ENCRYPTION_KEY}" && -f "${INSTALL_DIR}/.env" ]]; then
     | cut -d= -f2- | tr -d '"' || true)
 fi
 
-info()    { echo "  [info]  $*"; }
-success() { echo "  [ok]    $*"; }
-die()     { echo "  [err]   $*" >&2; record_finish "failed" 0 "" "$*"; exit 1; }
+# RUN_LOG accumulates what this run did, for backup_runs.log — the dashboard's
+# only view of a CLI run, and the updater's pre-update backup is one. Without it
+# a Failed row on the Backups panel could only say "exited with status 1".
+#
+# Each line is stamped in Belune's own console format
+#   2026-07-22 10:00:04 INFO  message
+# which is a contract, not decoration: consoleRe in pkg/loglevel and CONSOLE_RE
+# in apps/web/src/components/logs/parse.ts both key on it, and it is the only
+# way the viewer learns a line's level (plain text always renders as Info, and
+# so is invisible under the panel's Error filter). Don't simplify the prefix
+# away. The level must follow what actually happened — a --local-only-ok upload
+# failure is WARN, a fatal one ERROR — never a blanket mapping of "has an error".
+# UTC (date -u) because the viewer reads a zone-less stamp as UTC.
+RUN_LOG=""
+log_line() {
+  local level="$1" line
+  shift
+  # One stamped line per physical line, so a multi-line message (an upload's
+  # stderr) is levelled line by line rather than only on its first.
+  while IFS= read -r line; do
+    [[ -n "${line}" ]] || continue
+    RUN_LOG+="$(date -u '+%Y-%m-%d %H:%M:%S') $(printf '%-5s' "${level}") ${line}"$'\n'
+  done <<< "$*"
+}
+
+info()    { echo "  [info]  $*"; log_line INFO "$*"; }
+success() { echo "  [ok]    $*"; log_line INFO "$*"; }
+die()     { echo "  [err]   $*" >&2; log_line ERROR "$*"; record_finish "failed" 0 "" "$*"; exit 1; }
 
 # ── backup_runs recording (best-effort — a DB hiccup must never fail the
 # actual backup, which is the whole point of this being a host/offline path) ──
@@ -107,10 +132,11 @@ record_finish() {
   [[ -n "${BACKUP_RUN_ID}" && "${RUN_RECORDED}" == "0" ]] || return 0
   RUN_RECORDED=1
   local status="$1" size="${2:-0}" key="${3:-}" err="${4:-}" encrypted="${5:-false}"
-  local key_sql="NULL" err_sql="NULL"
+  local key_sql="NULL" err_sql="NULL" log_sql="NULL"
   [[ -n "${key}" ]] && key_sql="'$(sql_escape "${key}")'"
   [[ -n "${err}" ]] && err_sql="'$(sql_escape "${err}")'"
-  run_sql "UPDATE backup_runs SET finished_at = NOW(), status = '${status}', size_bytes = ${size}, remote_key = ${key_sql}, error = ${err_sql}, encrypted = ${encrypted} WHERE id = '${BACKUP_RUN_ID}';" >/dev/null
+  [[ -n "${RUN_LOG}" ]] && log_sql="'$(sql_escape "${RUN_LOG}")'"
+  run_sql "UPDATE backup_runs SET finished_at = NOW(), status = '${status}', size_bytes = ${size}, remote_key = ${key_sql}, error = ${err_sql}, log = ${log_sql}, encrypted = ${encrypted} WHERE id = '${BACKUP_RUN_ID}';" >/dev/null
 }
 
 # Any exit before the explicit "succeeded" record_finish call at the bottom —
@@ -119,6 +145,7 @@ record_finish() {
 on_exit() {
   local rc=$?
   if [[ ${rc} -ne 0 ]]; then
+    log_line ERROR "backup.sh exited with status ${rc}"
     record_finish "failed" 0 "" "backup.sh exited with status ${rc}"
   fi
 }
@@ -240,24 +267,34 @@ if [[ "$(read_remote_config BACKUP_REMOTE_ENABLED)" == "true" ]]; then
       [[ -f "${INSTALL_DIR}/.env" ]] && source "${INSTALL_DIR}/.env"
       set +a
       export BELUNE_DIR="${INSTALL_DIR}"
-      "${UPLOAD_BIN}" "${ARCHIVE}"
+      "${UPLOAD_BIN}" "${ARCHIVE}" 2>&1
     ); then
+      # 2>&1 because the binary reports WHY it failed on stderr (slog's default
+      # handler), which a bare $(...) drops — so the cause used to reach only
+      # the terminal. On success it prints just the "uploaded:" line to stdout
+      # and nothing to stderr, but pick that line out rather than trusting the
+      # whole capture, so a future startup log line cannot corrupt the key.
       echo "${UPLOAD_OUTPUT}"
-      REMOTE_KEY="${UPLOAD_OUTPUT#uploaded: }"
+      REMOTE_KEY=$(printf '%s\n' "${UPLOAD_OUTPUT}" | sed -n 's/^uploaded: //p' | tail -1)
       success "Remote upload complete."
     else
-      UPLOAD_FAILURE="remote upload failed (see output above)."
+      # Still on the terminal, where the operator running this by hand looked.
+      echo "${UPLOAD_OUTPUT}" >&2
+      # One line, bounded: it becomes the die message and the row's error.
+      UPLOAD_DETAIL=$(printf '%s' "${UPLOAD_OUTPUT}" | tr '\n' ' ' | cut -c1-400)
+      UPLOAD_FAILURE="remote upload failed: ${UPLOAD_DETAIL:-the uploader printed no error}. The archive was NOT copied offsite. Check the endpoint, bucket and credentials under Server → Backups → Remote Storage."
     fi
   fi
   if [[ -n "${UPLOAD_FAILURE}" ]]; then
     if [[ "${LOCAL_ONLY_OK}" == "1" ]]; then
       echo "  [warn]  ${UPLOAD_FAILURE} Continuing: the local archive ${ARCHIVE} was written." >&2
       # The row stays "succeeded" (a local archive exists) with an empty
-      # remote_key; the note keeps it from reading as an offsite copy. It shows
-      # in the panel only because CLI runs leave backup_runs.log empty (the UI
-      # prefers log over error) — don't pass this flag from the worker path
-      # without moving the note somewhere that survives.
+      # remote_key; the note keeps it from reading as an offsite copy. WARN, not
+      # ERROR: the backup did what this flag allows, and painting it red would
+      # tell the operator a good rollback point failed. It also lands in the log
+      # now (which the panel prefers over `error`), so the note survives there.
       REMOTE_NOTE="remote upload skipped: ${UPLOAD_FAILURE}"
+      log_line WARN "${REMOTE_NOTE} Continuing: the local archive ${ARCHIVE} was written."
     else
       die "${UPLOAD_FAILURE}"
     fi

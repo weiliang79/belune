@@ -11,6 +11,7 @@ import { ApiError } from "@/lib/api/client";
 import { RootErrorBoundary, NotFoundPage } from "@/lib/components/status-pages";
 import { ProgressProvider } from "@bprogress/react";
 import { RouteProgress } from "@/lib/components/route-progress";
+import { UpdateProgressNotice } from "@/components/update/update-progress-notice";
 
 export const Route = createRootRoute({
   errorComponent: RootErrorBoundary,
@@ -73,6 +74,7 @@ function RootLayout() {
         <RouteProgress />
         <Outlet />
         <Toaster />
+        <UpdateProgressNotice />
         {import.meta.env.DEV && (
           <>
             <TanStackRouterDevtools position="bottom-right" />

@@ -1,6 +1,7 @@
 import type { ErrorComponentProps } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import { isNotFoundError } from "@/lib/utils/query-error";
+import { isUpdateLatched, useUpdateProgress } from "@/lib/update-progress";
 
 /**
  * The error UI for a route whose data could not be read.
@@ -12,9 +13,32 @@ import { isNotFoundError } from "@/lib/utils/query-error";
  * failure to *reach* the answer, where retrying is the whole remedy.
  * Collapsing the second into the first is what made a brief API restart look
  * like "your project no longer exists".
+ *
+ * A third case: this tab knows an update is underway. main.tsx's throwOnError
+ * sends a query with no cached data here, so someone who NAVIGATES during an
+ * update lands on this boundary even though the platform is doing exactly what
+ * it should — and "Something went wrong" is the wrong thing to tell them while
+ * a toast elsewhere says it is updating. The update notice owns the blocking
+ * screen once the restart is confirmed; this covers the stretch before that.
  */
 export function RouteError({ error, reset }: ErrorComponentProps) {
   const notFound = isNotFoundError(error);
+  const updating = isUpdateLatched(useUpdateProgress());
+
+  if (updating && !notFound) {
+    return (
+      <div className="flex flex-col items-center justify-center py-16 text-center">
+        <p className="text-foreground mb-2 font-medium">Belune is updating</p>
+        <p className="text-muted-foreground mb-4 max-w-sm text-sm">
+          This page could not load while the platform restarts. It will work
+          again once the update finishes.
+        </p>
+        <Button variant="outline" size="sm" onClick={reset}>
+          Try again
+        </Button>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col items-center justify-center py-16 text-center">
