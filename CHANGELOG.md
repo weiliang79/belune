@@ -24,6 +24,57 @@ Belune is pre-1.0. The versioning contract while it stays there:
 Release notes for each version are also published on the
 [Releases page](https://github.com/weiliang79/belune/releases).
 
+## [0.1.13]
+
+### Updater fixes now reach the update that installs them
+
+Until this release, the code that performed an update was always the copy
+already sitting on your host — the version you were updating *from*. A fix to
+the updater therefore protected the release *after* the one that contained it,
+never the one you were applying.
+
+That is why the last three releases each had to carry a warning about updating
+*to* them. The 0.1.11 notes below are the clearest example: the fix for a
+broken update shipped **in** 0.1.11, so the update into 0.1.11 still ran the
+broken 0.1.10 script and had to be done by hand on the host.
+
+**From here, the updater that runs is the one shipped with the version you are
+installing.** A problem found in the update path can be fixed in the next
+release and that fix applies immediately, to the very update that delivers it.
+
+### What changed
+
+The updater now lives inside the Belune image rather than only as a script in
+your install directory. Applying an update pulls the target version's image
+first, then runs the updater out of it.
+
+`scripts/update.sh` is still there and still the way to update from a shell —
+`bash scripts/update.sh` behaves exactly as before, including taking a backup
+first and printing how to roll back. It is now a short launcher that hands the
+work to the target version's updater, so updating from the host and updating
+from the dashboard run the same code and are reported the same way. Anything
+you have scripted around it keeps working.
+
+Nothing about your projects, applications, databases, tokens or settings
+changes, and the update still backs up before it touches anything.
+
+### If an update cannot start
+
+When the target version's image cannot be pulled, the Server page now tells you
+the actual reason — a registry rate limit, a name that does not resolve, no
+disk space — instead of assuming the version does not exist. Nothing on your
+host has been touched when this happens, and you can retry once the cause is
+cleared.
+
+### Upgrading
+
+Apply this the usual way. No host action is needed and nothing you were doing
+stops working.
+
+One honest note on timing: **this update is still carried out by 0.1.12's
+updater**, because that is the code on your host when you start it. The change
+above takes effect from your next update onward.
+
 ## [0.1.12]
 
 ### A Member could read data the dashboard refused them
