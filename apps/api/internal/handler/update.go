@@ -207,6 +207,11 @@ func (h *Handler) pullAndSpawnUpdateHelper(ctx context.Context, rt runtime.Conta
 		// Nothing was touched, so unlatch every client now rather than leaving
 		// them on "updating" until their next poll.
 		h.updateStarting.Store(false)
+		// Nothing else clears this: a later host-run update would otherwise
+		// anchor its elapsed time on this failed attempt. The success path needs
+		// no clear because it replaces this container, and the value dies with
+		// the process.
+		h.updateBeganAt.Store(0)
 		h.publishUpdating(false)
 	}
 
