@@ -14,6 +14,7 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -245,6 +246,25 @@ func TestBackup_LocalOnlyOKFailureIsAWarningNotAnError(t *testing.T) {
 	assert.Regexp(t, `(?m)^\S+ \S+ WARN .*connection refused`, log)
 	assert.NotRegexp(t, `(?m)^\S+ \S+ ERROR`, log,
 		"a backup that did what --local-only-ok allows must not be painted red")
+}
+
+// The viewer appends "Z" to a zone-less stamp (parse.ts), so the log must be
+// stamped in UTC. The shape regex cannot tell `date` from `date -u`; this runs
+// under a zone 9h from UTC (Tokyo has no DST, so the gap never closes) and
+// reads the stamp back as UTC, exactly as the viewer will.
+func TestBackup_LogIsStampedInUTC(t *testing.T) {
+	sqlLog := filepath.Join(t.TempDir(), "sql")
+	before := time.Now().UTC().Add(-time.Minute)
+	out, code := runEnv(t, scriptPath(t, "backup.sh"), backupInstall(t, true),
+		[]string{"SQL_LOG=" + sqlLog, "TZ=Asia/Tokyo"}, "--local-only-ok")
+	require.Equal(t, 0, code, out)
+	b, _ := os.ReadFile(sqlLog)
+	log := logColumn(t, string(b))
+
+	stamp, err := time.Parse("2006-01-02 15:04:05", strings.SplitN(log, "\n", 2)[0][:19])
+	require.NoError(t, err)
+	assert.WithinDuration(t, time.Now().UTC(), stamp, 2*time.Minute,
+		"stamp read as UTC must be now; a local-time stamp would be 9h off (run began %s)", before)
 }
 
 func TestBackup_UploadKeyIgnoresStderrNoiseOnSuccess(t *testing.T) {
