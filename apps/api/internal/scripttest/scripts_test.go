@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
 	"testing"
@@ -68,6 +69,12 @@ exit 0
 [ -n "$DOCKER_LOG" ] && echo "$*" >> "$DOCKER_LOG"
 if [ "$1" = run ] && [ -n "$STAGED_LAUNCHER" ]; then cp "$STAGED_LAUNCHER" "$INSTALLED_LAUNCHER"; fi
 [ "$1" = pull ] && [ -n "$DOCKER_PULL_FAIL" ] && exit 1
+# SQL_LOG captures the statement backup.sh sends to psql to record a run's
+# outcome, so a test can read what would land in backup_runs.
+if [ "$1" = exec ] && [ -n "$SQL_LOG" ]; then
+  for last; do :; done
+  case "$last" in UPDATE*) printf '%s' "$last" > "$SQL_LOG" ;; esac
+fi
 case "$1 $2 $3" in
   "compose ps -q") [ "$4" = "postgres" ] && echo fakepg; exit 0 ;;
 esac
@@ -189,6 +196,66 @@ func TestBackup_LocalOnlyOKTurnsUploadFailureIntoWarning(t *testing.T) {
 			assert.Len(t, archives, 1, "the local archive must exist")
 		})
 	}
+}
+
+// recordedRun runs backup.sh and returns the UPDATE it sent to backup_runs.
+func recordedRun(t *testing.T, install string, args ...string) (out, sql string, code int) {
+	t.Helper()
+	sqlLog := filepath.Join(t.TempDir(), "sql")
+	out, code = runEnv(t, scriptPath(t, "backup.sh"), install, []string{"SQL_LOG=" + sqlLog}, args...)
+	b, _ := os.ReadFile(sqlLog)
+	return out, string(b), code
+}
+
+// consoleLine is the prefix the log viewer keys on (CONSOLE_RE in
+// components/logs/parse.ts). A line without it renders as Info.
+var consoleLine = regexp.MustCompile(`^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} (INFO |WARN |ERROR) `)
+
+// logColumn extracts the log column's lines from the recorded UPDATE and
+// asserts every one carries the console prefix.
+func logColumn(t *testing.T, sql string) string {
+	t.Helper()
+	_, after, ok := strings.Cut(sql, "log = '")
+	require.True(t, ok, "the UPDATE must write the log column: %s", sql)
+	body, _, ok := strings.Cut(after, "', encrypted")
+	require.True(t, ok, sql)
+	body = strings.TrimSpace(body)
+	for _, l := range strings.Split(body, "\n") {
+		assert.Regexp(t, consoleLine, l, "plain text renders as Info and hides under the Error filter")
+	}
+	return body
+}
+
+func TestBackup_FailedUploadRecordsTheRealCauseAsAnError(t *testing.T) {
+	out, sql, code := recordedRun(t, backupInstall(t, true))
+	require.NotEqual(t, 0, code, out)
+	assert.Contains(t, sql, "status = 'failed'")
+	log := logColumn(t, sql)
+	assert.Regexp(t, `(?m)^\S+ \S+ ERROR .*dial tcp: connection refused`, log,
+		"the uploader's stderr is the whole explanation; $(...) alone dropped it")
+	assert.NotContains(t, out+sql, "see output above", "there is no 'above' on the Backups panel")
+	assert.Contains(t, sql, "NOT copied offsite")
+}
+
+func TestBackup_LocalOnlyOKFailureIsAWarningNotAnError(t *testing.T) {
+	out, sql, code := recordedRun(t, backupInstall(t, true), "--local-only-ok")
+	require.Equal(t, 0, code, out)
+	assert.Contains(t, sql, "status = 'succeeded'")
+	log := logColumn(t, sql)
+	assert.Regexp(t, `(?m)^\S+ \S+ WARN .*connection refused`, log)
+	assert.NotRegexp(t, `(?m)^\S+ \S+ ERROR`, log,
+		"a backup that did what --local-only-ok allows must not be painted red")
+}
+
+func TestBackup_UploadKeyIgnoresStderrNoiseOnSuccess(t *testing.T) {
+	install := newInstall(t)
+	write(t, filepath.Join(install, "backup-remote.env"), "BACKUP_REMOTE_ENABLED=true\n", 0o644)
+	write(t, filepath.Join(install, "bin", "belune-backup-upload"),
+		"#!/bin/sh\necho 'starting up' >&2\necho 'uploaded: backups/x.tar.gz'\n", 0o755)
+	out, sql, code := recordedRun(t, install)
+	require.Equal(t, 0, code, out)
+	assert.Contains(t, sql, "remote_key = 'backups/x.tar.gz'")
+	logColumn(t, sql)
 }
 
 // The updater lives in the image now, so the swap loop no longer replaces the

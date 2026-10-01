@@ -95,6 +95,24 @@ describe("parseLogBlob — console format", () => {
   });
 });
 
+// scripts/backup.sh stamps backup_runs.log in this exact shape (padded level
+// included) so a CLI run's explanation is levelled by the viewer instead of
+// rendering as Info. If this fails, change backup.sh's log_line with it.
+describe("parseLogBlob — backup.sh run log", () => {
+  it("levels each stamped line, padding included", () => {
+    const blob = [
+      "2026-10-01 10:00:04 INFO  Uploading archive to remote storage...",
+      "2026-10-01 10:00:05 WARN  remote upload skipped: dial tcp: connection refused",
+      "2026-10-01 10:00:06 ERROR remote upload failed. The archive was NOT copied offsite.",
+    ].join("\n");
+    const entries = parseLogBlob(blob);
+    expect(entries.map((e) => e.level)).toEqual(["info", "warning", "error"]);
+    expect(entries[2].message).toBe(
+      "remote upload failed. The archive was NOT copied offsite.",
+    );
+  });
+});
+
 // The console format is opt-out: LOG_FORMAT=json still exists, and stored blob
 // logs (build/backup) have always been NDJSON.
 describe("parseLogBlob — JSON format still works", () => {
@@ -152,7 +170,9 @@ describe("parseLogBlob — continuation indent", () => {
 
   it("normalises indent regardless of what the producer used", () => {
     // postgres and friends indent with a tab, not 26 spaces.
-    const [entry] = parseLogBlob(["ERROR:  syntax error", "\t\tat character 8"].join("\n"));
+    const [entry] = parseLogBlob(
+      ["ERROR:  syntax error", "\t\tat character 8"].join("\n"),
+    );
     expect(entry.message.split("\n")[1]).toBe("  at character 8");
   });
 
