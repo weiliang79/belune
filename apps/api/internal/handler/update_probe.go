@@ -23,6 +23,9 @@ const platformChannel = "platform"
 // tab, while ListAllContainers takes no filter and lists the whole host.
 var updateProbeTTL = 5 * time.Second
 
+// updateProbeTimeout bounds one container listing for the public flag.
+const updateProbeTimeout = 3 * time.Second
+
 // updateProbe answers "is a self-update helper running, and since when" for the
 // public version endpoint, behind a short cache.
 //
@@ -57,6 +60,12 @@ func (p *updateProbe) helper(ctx context.Context, rt runtime.ContainerRuntime) (
 	if p.read && p.clock().Sub(p.readAt) < updateProbeTTL {
 		return p.running, p.since
 	}
+	// Its own context, not the request's: the answer is shared by every client,
+	// so one caller's closed tab or timeout must not be cached as "no update"
+	// for a TTL — and a wedged daemon must not hold the lock (and so every
+	// poller) for the route's whole 15s.
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), updateProbeTimeout)
+	defer cancel()
 	c, running, err := findUpdateHelper(ctx, rt)
 	if err != nil {
 		slog.Warn("update: could not list containers for the public update flag", "error", err)
@@ -88,6 +97,20 @@ func (h *Handler) updateState(ctx context.Context) (updating bool, elapsed time.
 	now := time.Now()
 	if rt, err := h.runtimes.Local(ctx); err == nil {
 		if running, since := h.updateProbe.helper(ctx, rt); running {
+			// The helper is created only AFTER the pull, so its CreatedAt alone
+			// would restart the clock at the handover — and a tab opened after
+			// it, with no earlier reading to keep, would be told a four-minute
+			// update had just begun. Prefer the pull's start when this process
+			// has one. Bounded by the pull timeout so a stale value left by an
+			// earlier failed attempt cannot inflate a later host-run update, and
+			// zero (never set, e.g. after the API container was replaced) falls
+			// back to CreatedAt alone.
+			if began := h.updateBeganAt.Load(); began != 0 {
+				b := time.Unix(0, began)
+				if b.Before(since) && since.Sub(b) <= updatePullTimeout {
+					since = b
+				}
+			}
 			return true, clampElapsed(now.Sub(since))
 		}
 	}
