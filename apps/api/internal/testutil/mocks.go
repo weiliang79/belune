@@ -53,6 +53,12 @@ type MockContainerRuntime struct {
 	// test can assert an update was (or was not) triggered without a real
 	// container ever starting.
 	SpawnUpdateHelperCalls []runtime.UpdateHelperConfig
+	// PullErr, when set, is returned by PullImage after recording the call.
+	PullErr error
+	// PullFunc, when set, runs inside PullImage (outside the mock's lock) and
+	// its error is returned — lets a test block a pull to prove it does not
+	// depend on the caller's context.
+	PullFunc func(ctx context.Context, image string) error
 	// SpawnUpdateHelperErr, when set, is returned by SpawnUpdateHelper instead
 	// of a fake container id.
 	SpawnUpdateHelperErr error
@@ -191,11 +197,15 @@ func (m *MockContainerRuntime) ResolveImageDigest(_ context.Context, ref string)
 	return m.ResolveImageDigest_, nil
 }
 
-func (m *MockContainerRuntime) PullImage(_ context.Context, image string) error {
+func (m *MockContainerRuntime) PullImage(ctx context.Context, image string) error {
 	m.mu.Lock()
-	defer m.mu.Unlock()
 	m.PullCalls = append(m.PullCalls, image)
-	return nil
+	fn, err := m.PullFunc, m.PullErr
+	m.mu.Unlock()
+	if fn != nil {
+		return fn(ctx, image)
+	}
+	return err
 }
 func (m *MockContainerRuntime) BuildImage(_ context.Context, _, _, _ string) error {
 	return nil

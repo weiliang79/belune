@@ -1,4 +1,5 @@
-// Package scripttest runs the real scripts/update.sh and scripts/backup.sh
+// Package scripttest runs the real scripts/belune-update.sh (the in-image
+// updater), scripts/update.sh (its host launcher) and scripts/backup.sh
 // against fake docker/curl/flock binaries. It proves the control flow (exit
 // codes, prompts, what is fatal) — NOT Docker, Postgres or S3 behaviour, which
 // only a real stack exercises.
@@ -59,7 +60,14 @@ if [ -n "$dest" ]; then
 fi
 exit 0
 `, 0o755)
+	// DOCKER_LOG, when set, records one line of argv per invocation. When
+	// STAGED_LAUNCHER is set, `docker run` overwrites INSTALLED_LAUNCHER with it,
+	// which is what the real updater does to scripts/update.sh while the
+	// operator's launcher is still waiting on it.
 	write(t, filepath.Join(dir, "docker"), `#!/bin/sh
+[ -n "$DOCKER_LOG" ] && echo "$*" >> "$DOCKER_LOG"
+if [ "$1" = run ] && [ -n "$STAGED_LAUNCHER" ]; then cp "$STAGED_LAUNCHER" "$INSTALLED_LAUNCHER"; fi
+[ "$1" = pull ] && [ -n "$DOCKER_PULL_FAIL" ] && exit 1
 case "$1 $2 $3" in
   "compose ps -q") [ "$4" = "postgres" ] && echo fakepg; exit 0 ;;
 esac
@@ -107,7 +115,7 @@ func TestUpdate_FailedBackupWithNoStdinAbortsWithRealCause(t *testing.T) {
 	write(t, filepath.Join(install, "scripts", "backup.sh"), "#!/bin/bash\necho 'backup boom' >&2\nexit 1\n", 0o755)
 	before, _ := os.ReadFile(filepath.Join(install, ".env"))
 
-	out, code := run(t, scriptPath(t, "update.sh"), install, "v0.1.11")
+	out, code := run(t, scriptPath(t, "belune-update.sh"), install, "v0.1.11")
 
 	assert.NotEqual(t, 0, code, out)
 	assert.Contains(t, out, "pre-update backup failed")
@@ -121,7 +129,7 @@ func TestUpdate_FailedBackupWithNoStdinAbortsWithRealCause(t *testing.T) {
 func TestUpdate_MissingBackupScriptWithNoStdinAbortsWithOwnMessage(t *testing.T) {
 	install := newInstall(t)
 
-	out, code := run(t, scriptPath(t, "update.sh"), install, "v0.1.11")
+	out, code := run(t, scriptPath(t, "belune-update.sh"), install, "v0.1.11")
 
 	assert.NotEqual(t, 0, code, out)
 	assert.Contains(t, out, "scripts/backup.sh was not found")
@@ -141,7 +149,7 @@ func TestUpdate_PassesLocalOnlyFlagOnlyWhenBackupScriptSupportsIt(t *testing.T) 
 		t.Run(name, func(t *testing.T) {
 			install := newInstall(t)
 			write(t, filepath.Join(install, "scripts", "backup.sh"), tc.body, 0o755)
-			out, _ := run(t, scriptPath(t, "update.sh"), install, "v0.1.11")
+			out, _ := run(t, scriptPath(t, "belune-update.sh"), install, "v0.1.11")
 			assert.Equal(t, tc.want, strings.Contains(out, "ARGS:--local-only-ok"), out)
 		})
 	}
@@ -183,41 +191,111 @@ func TestBackup_LocalOnlyOKTurnsUploadFailureIntoWarning(t *testing.T) {
 	}
 }
 
-// update.sh is one of its own infra files, so the swap loop overwrites the
-// script that is executing. Bash reads a script by byte offset, so a swap that
-// changes the length of anything BEFORE that point makes it resume mid-content
-// and run garbage (v0.1.11-rc1 executed a box-drawing banner as a command). The
-// old test suite could not see this: a swap of identical bytes is invisible,
-// which is exactly why it stayed hidden for three releases. So this test
-// installs the real script, stages a LONGER copy, and lets the swap replace it
-// while it runs.
-func TestUpdate_SurvivesOverwritingItselfMidRun(t *testing.T) {
+// The updater lives in the image now, so the swap loop no longer replaces the
+// script that is running it — but it still replaces scripts/update.sh, the
+// launcher, and an operator running that on the host has a bash waiting on it
+// while the updater (inside `docker run`) overwrites it. Bash reads a script by
+// byte offset, so an overwrite that changes the length of anything BEFORE that
+// point makes it resume mid-content and run garbage (v0.1.11-rc1 executed a
+// box-drawing banner as a command). Identical bytes hide this, which is how it
+// stayed invisible for three releases. So this installs the real launcher,
+// stages a LONGER copy, and has the fake `docker run` swap it in mid-run.
+func TestLauncher_SurvivesBeingOverwrittenWhileDockerRunIsInFlight(t *testing.T) {
 	real, err := os.ReadFile(scriptPath(t, "update.sh"))
 	require.NoError(t, err)
 
 	install := newInstall(t)
 	installed := filepath.Join(install, "scripts", "update.sh")
 	write(t, installed, string(real), 0o755)
-	write(t, filepath.Join(install, "scripts", "backup.sh"), "#!/bin/bash\nexit 0\n", 0o755)
 
-	// Same script plus a comment block right after the shebang: every byte the
-	// running shell has yet to read now sits at a different offset.
 	staged := filepath.Join(t.TempDir(), "update.sh")
 	padding := "\n# " + strings.Repeat("padding so the next release's update.sh has a different length ", 8) + "\n"
 	stagedBody := strings.Replace(string(real), "\n", padding+"\n", 1)
 	require.NotEqual(t, len(real), len(stagedBody))
 	write(t, staged, stagedBody, 0o755)
 
-	tmp := t.TempDir()
-	out, code := runEnv(t, installed, install, []string{"STAGED_UPDATE=" + staged, "TMPDIR=" + tmp}, "v0.1.11")
+	out, code := runEnv(t, installed, install,
+		[]string{"STAGED_LAUNCHER=" + staged, "INSTALLED_LAUNCHER=" + installed}, "v0.1.11")
 
 	require.Equal(t, 0, code, out)
-	assert.Contains(t, out, "Updated 0.1.10")
 	assert.NotContains(t, out, "command not found")
 	swapped, err := os.ReadFile(installed)
 	require.NoError(t, err)
-	assert.Equal(t, stagedBody, string(swapped), "the swap must actually have replaced the running script")
+	assert.Equal(t, stagedBody, string(swapped), "the swap must actually have replaced the running launcher")
+}
+
+// The launcher is the host-side half of a contract old code can never repair:
+// pull the target, run ITS /usr/local/bin/belune-update with the version as the
+// sole argument. This pins that shape, including the cleared Compose labels
+// (without which `docker compose up -d` may remove the helper mid-update) and
+// the v-stripped image tag.
+func TestLauncher_PullsTargetThenRunsItsUpdater(t *testing.T) {
+	install := newInstall(t)
+	log := filepath.Join(t.TempDir(), "docker.log")
+
+	out, code := runEnv(t, scriptPath(t, "update.sh"), install, []string{"DOCKER_LOG=" + log}, "v0.1.11")
+	require.Equal(t, 0, code, out)
+
+	raw, err := os.ReadFile(log)
+	require.NoError(t, err)
+	lines := strings.Split(strings.TrimSpace(string(raw)), "\n")
+	require.Len(t, lines, 2, string(raw))
+	assert.Equal(t, "pull ghcr.io/weiliang79/belune:0.1.11", lines[0])
+
+	run := lines[1]
+	assert.True(t, strings.HasPrefix(run, "run "), run)
+	assert.Contains(t, run, "--entrypoint /usr/local/bin/belune-update")
+	assert.True(t, strings.HasSuffix(run, " ghcr.io/weiliang79/belune:0.1.11 0.1.11"), run)
+	for _, want := range []string{
+		"--user 0:0", "--network host", "-e BELUNE_DIR=" + install,
+		"-v " + install + ":" + install, "-v /var/run/docker.sock:/var/run/docker.sock",
+		"--label belune-helper=true", "--label belune-update=true",
+		"--label com.docker.compose.project= ", "--label com.docker.compose.service= ",
+	} {
+		assert.Contains(t, run, want)
+	}
+	assert.NotContains(t, run, "scripts/", "the updater must not be run from the bind-mounted install dir")
+}
+
+func TestLauncher_FailedPullAbortsBeforeRunning(t *testing.T) {
+	install := newInstall(t)
+	log := filepath.Join(t.TempDir(), "docker.log")
+	out, code := runEnv(t, scriptPath(t, "update.sh"), install,
+		[]string{"DOCKER_LOG=" + log, "DOCKER_PULL_FAIL=1"}, "v9.9.9")
+
+	assert.NotEqual(t, 0, code, out)
+	assert.Contains(t, out, "Could not pull")
+	raw, _ := os.ReadFile(log)
+	assert.NotContains(t, string(raw), "run ", "nothing may run after a failed pull")
+}
+
+// The updater swaps scripts/update.sh (the launcher) from the target release.
+// With the updater no longer overwriting itself, this just proves that swap
+// still happens and that the launcher is not left non-executable.
+func TestUpdate_SwapsInTheLauncher(t *testing.T) {
+	install := newInstall(t)
+	write(t, filepath.Join(install, "scripts", "backup.sh"), "#!/bin/bash\nexit 0\n", 0o755)
+	staged := filepath.Join(t.TempDir(), "update.sh")
+	write(t, staged, "#!/bin/bash\n# staged launcher\n", 0o755)
+
+	tmp := t.TempDir()
+	out, code := runEnv(t, scriptPath(t, "belune-update.sh"), install, []string{"STAGED_UPDATE=" + staged, "TMPDIR=" + tmp}, "v0.1.11")
+
+	require.Equal(t, 0, code, out)
+	assert.Contains(t, out, "Updated 0.1.10")
+	got, err := os.ReadFile(filepath.Join(install, "scripts", "update.sh"))
+	require.NoError(t, err)
+	assert.Contains(t, string(got), "staged launcher")
+	fi, err := os.Stat(filepath.Join(install, "scripts", "update.sh"))
+	require.NoError(t, err)
+	assert.NotZero(t, fi.Mode()&0o111, "launcher must stay executable")
 	assertNoStagingLeft(t, tmp)
+}
+
+func TestUpdate_RequiresAVersion(t *testing.T) {
+	out, code := run(t, scriptPath(t, "belune-update.sh"), newInstall(t))
+	assert.NotEqual(t, 0, code, out)
+	assert.Contains(t, out, "No target version")
 }
 
 // A failure after the pin moved but before the restart used to leave .env and
@@ -234,7 +312,7 @@ func TestUpdate_FailureBeforeRestartRestoresPinAndInfra(t *testing.T) {
 	require.NoError(t, err)
 
 	tmp := t.TempDir()
-	out, code := runEnv(t, scriptPath(t, "update.sh"), install, []string{"TMPDIR=" + tmp}, "v0.1.11")
+	out, code := runEnv(t, scriptPath(t, "belune-update.sh"), install, []string{"TMPDIR=" + tmp}, "v0.1.11")
 
 	assert.NotEqual(t, 0, code, out)
 	assert.Contains(t, out, "restoring the previous pin")

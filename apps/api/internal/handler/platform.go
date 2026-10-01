@@ -173,7 +173,7 @@ func (h *Handler) selfContainer(ctx context.Context) (runtime.ContainerInfo, boo
 	return runtime.ContainerInfo{}, false
 }
 
-// selfWorkingDir returns the host path scripts/update.sh must run from —
+// selfWorkingDir returns the host path the update helper runs against —
 // docker-compose.yml, .env and scripts/ all live there — read off this
 // container's own compose project label. Errors when it can't be determined:
 // an update helper with nowhere to mount would silently do nothing, which is

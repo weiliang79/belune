@@ -21,9 +21,14 @@ import (
 	"github.com/weiliang79/belune/internal/worker"
 )
 
+// updateImageRepo is where release images live. Hardcoded to match
+// scripts/update.sh and install.sh rather than derived from the running image.
+const updateImageRepo = "ghcr.io/weiliang79/belune"
+
 // TriggerSelfUpdate applies the update the Server-page card is currently
-// showing, by spawning a detached helper container that runs
-// scripts/update.sh against the host install directory. The helper survives
+// showing, by pulling the target image and spawning a detached helper container
+// from it that runs its /usr/local/bin/belune-update against the host install
+// directory. The helper survives
 // this container being replaced — that IS the point: `docker compose up -d`
 // inside it is what stops this process partway through handling whatever
 // request comes after this one's response.
@@ -104,39 +109,49 @@ func (h *Handler) TriggerSelfUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	image := h.selfImage(r.Context())
-	if image == "" {
-		writeError(w, http.StatusInternalServerError, "could not determine this container's own image")
-		return
-	}
 	workingDir, err := h.selfWorkingDir(r.Context())
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
-	helperID, err := rt.SpawnUpdateHelper(r.Context(), runtime.UpdateHelperConfig{
-		Image:      image,
-		WorkingDir: workingDir,
-		Version:    target,
-	})
-	if err != nil {
-		writeError(w, http.StatusBadGateway, fmt.Sprintf("failed to start the update: %v", err))
+	// ⚠️ The helper runs the TARGET image's updater, so that image has to be
+	// local before the container can even be created — and pulling it can take
+	// minutes. This route sits inside the 15 s withTimeout group
+	// (routes.go), which cancels r.Context(), so the pull CANNOT run on the
+	// request: it would be cut off at 15 s, the operator would get a 503, and no
+	// update would ever start — intermittently, since a small layer delta pulls
+	// in seconds and only toolchain-bumping releases or fresh hosts hit it.
+	//
+	// So: answer 202 now and pull + spawn in the background on a context that
+	// outlives the request. A failed pull is a late failure like the helper
+	// dying on its first line, and is reported the same way — through
+	// GetSelfUpdateStatus — before anything on the host has been touched.
+	//
+	// The pull happens BEFORE the helper exists, so updateHelperRunning cannot
+	// see a second click that lands during it — hence the in-process guard. It is
+	// taken here and released by the background goroutine once the helper is
+	// started or the pull has failed, NOT when this handler returns. One API
+	// process owns this endpoint, so a flag is enough.
+	if !h.updateStarting.CompareAndSwap(false, true) {
+		writeError(w, http.StatusConflict, "an update is already in progress")
 		return
 	}
 
-	// Record the attempt so GetSelfUpdateStatus can report on it afterwards.
-	// Without this a helper that dies on its first line is invisible: this
-	// endpoint answers 202 the moment the container is CREATED, never waiting to
-	// see whether the script survived, so the dashboard would say "started" and
-	// then show nothing at all, forever.
-	//
-	// Deliberately absent from updatableSettings, like the update_latest_* cache
-	// it sits beside — a token must not be able to forge or erase the record of
-	// an update attempt.
-	h.setSetting(r.Context(), settingUpdateHelperID, helperID)
-	h.setSetting(r.Context(), settingUpdateHelperTarget, target)
-	h.setSetting(r.Context(), settingUpdateHelperStartedAt, time.Now().UTC().Format(time.RFC3339))
+	// Same construction as scripts/update.sh: image tags carry no leading v.
+	// Deliberately NOT derived from the running container's image — that would
+	// honour a mirrored registry, but it is a behaviour change on the most
+	// dangerous path in the product and not this change's subject.
+	targetImage := updateImageRepo + ":" + strings.TrimPrefix(target, "v")
+
+	// Start a fresh attempt record: a stale helper id or pull error from the
+	// previous attempt must not be reported as this one's.
+	ctx := context.WithoutCancel(r.Context())
+	h.clearUpdateAttempt(ctx)
+	h.setSetting(ctx, settingUpdateHelperTarget, target)
+	h.setSetting(ctx, settingUpdateHelperStartedAt, time.Now().UTC().Format(time.RFC3339))
+
+	go h.pullAndSpawnUpdateHelper(ctx, rt, targetImage, workingDir, target)
 
 	h.audit(r, "trigger_update", "platform", "", map[string]any{
 		"from": version.Version,
@@ -146,6 +161,53 @@ func (h *Handler) TriggerSelfUpdate(w http.ResponseWriter, r *http.Request) {
 		"status": "started",
 		"target": target,
 	})
+}
+
+// updatePullTimeout bounds the background pull. Generous — a cold host pulling
+// every layer over a slow link — but finite, so a wedged registry connection
+// frees the in-flight guard instead of blocking updates until a restart.
+const updatePullTimeout = 20 * time.Minute
+
+// pullAndSpawnUpdateHelper is TriggerSelfUpdate's background half: pull the
+// target image, then start the helper from it. ctx must NOT derive its
+// cancellation from the request. Owns releasing updateStarting.
+//
+// Failures are written to settingUpdatePullError for GetSelfUpdateStatus.
+// Nothing on the host has been touched by any of them — the helper is what
+// touches things.
+func (h *Handler) pullAndSpawnUpdateHelper(ctx context.Context, rt runtime.ContainerRuntime, targetImage, workingDir, target string) {
+	defer h.updateStarting.Store(false)
+
+	fail := func(msg string, err error) {
+		slog.Error(msg, "image", targetImage, "error", err)
+		h.setSetting(ctx, settingUpdatePullError, fmt.Sprintf("%s (%s). Nothing has changed.", msg, targetImage))
+	}
+
+	pullCtx, cancel := context.WithTimeout(ctx, updatePullTimeout)
+	defer cancel()
+	if err := rt.PullImage(pullCtx, targetImage); err != nil {
+		fail("Could not pull the update image — does that version exist?", err)
+		return
+	}
+
+	helperID, err := rt.SpawnUpdateHelper(ctx, runtime.UpdateHelperConfig{
+		TargetImage: targetImage,
+		WorkingDir:  workingDir,
+		Version:     target,
+	})
+	if err != nil {
+		fail("Could not start the update helper", err)
+		return
+	}
+
+	// Record the helper so GetSelfUpdateStatus can report on it afterwards.
+	// Without this a helper that dies on its first line is invisible: the
+	// dashboard would say "started" and then show nothing at all, forever.
+	//
+	// Deliberately absent from updatableSettings, like the update_latest_* cache
+	// it sits beside — a token must not be able to forge or erase the record of
+	// an update attempt.
+	h.setSetting(ctx, settingUpdateHelperID, helperID)
 }
 
 // TriggerUpdateCheck runs the manifest check on demand instead of waiting for
@@ -193,6 +255,10 @@ const (
 	settingUpdateHelperID        = "update_helper_id"
 	settingUpdateHelperTarget    = "update_helper_target"
 	settingUpdateHelperStartedAt = "update_helper_started_at"
+	// Why the background pull or helper start failed, when it did. Set only
+	// before any helper exists, so it and settingUpdateHelperID are never both
+	// present.
+	settingUpdatePullError = "update_pull_error"
 )
 
 // GetSelfUpdateStatus reports what became of the last update this dashboard
@@ -215,6 +281,24 @@ func (h *Handler) GetSelfUpdateStatus(w http.ResponseWriter, r *http.Request) {
 
 	helperID := h.settingValue(ctx, settingUpdateHelperID)
 	if helperID == "" {
+		// No helper yet: either the background pull is still going, it failed, or
+		// there has been no attempt at all. Only the first two carry a target.
+		pullErr := h.settingValue(ctx, settingUpdatePullError)
+		if pullErr == "" && !h.updateStarting.Load() {
+			// Idle — or the API restarted mid-pull, which left nothing behind.
+			writeJSON(w, http.StatusOK, resp)
+			return
+		}
+		resp["target"] = h.settingValue(ctx, settingUpdateHelperTarget)
+		if startedAt := h.settingValue(ctx, settingUpdateHelperStartedAt); startedAt != "" {
+			resp["started_at"] = startedAt
+		}
+		if pullErr != "" {
+			resp["state"] = "failed"
+			resp["reason"] = pullErr
+		} else {
+			resp["state"] = "running"
+		}
 		writeJSON(w, http.StatusOK, resp)
 		return
 	}
@@ -319,7 +403,7 @@ func updateHelperFailureReason(ctx context.Context, rt runtime.ContainerRuntime,
 }
 
 func (h *Handler) clearUpdateAttempt(ctx context.Context) {
-	for _, k := range []string{settingUpdateHelperID, settingUpdateHelperTarget, settingUpdateHelperStartedAt} {
+	for _, k := range []string{settingUpdateHelperID, settingUpdateHelperTarget, settingUpdateHelperStartedAt, settingUpdatePullError} {
 		h.setSetting(ctx, k, "")
 	}
 }
