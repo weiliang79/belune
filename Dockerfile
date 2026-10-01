@@ -125,6 +125,16 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build \
     -ldflags="-s -w" \
     -o /belune-backup-upload ./cmd/backup-upload
 
+# The in-image updater: /usr/local/bin/belune-update, which the dashboard and
+# scripts/update.sh both run out of the TARGET image. Unlike belune-backup-upload
+# it never runs on the host, so it has no host-glibc constraint; CGO_ENABLED=0 is
+# here only because this stage cross-compiles from $BUILDPLATFORM and has no C
+# toolchain for the target. It shells out to docker, curl and bash — all in the
+# prod stage via build-base — so it needs nothing linked in.
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build \
+    -ldflags="-s -w" \
+    -o /belune-update ./cmd/update
+
 # ── Stage: prod runtime ──────────────────────────────────────────────────────
 # Inherits the pinned build toolchain from build-base and adds the belune binary.
 FROM build-base AS prod
@@ -136,8 +146,7 @@ COPY --from=backend /belune-backup-upload /usr/local/bin/belune-backup-upload
 # bind-mounted into the helper at the same path, so anything under scripts/
 # resolves to the host's older copy — the blind spot this exists to remove.
 # The path is a frozen contract with every past launcher; do not move it.
-COPY scripts/belune-update.sh /usr/local/bin/belune-update
-RUN chmod +x /usr/local/bin/belune-update
+COPY --from=backend /belune-update /usr/local/bin/belune-update
 # Writable, persistable location for managed-database logical dumps. The default
 # DatabaseBackupDir (/opt/belune/backups/databases) is not creatable by the non-root
 # belune user, so point it at a dir we own here. Mount a volume on /data in
