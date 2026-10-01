@@ -8,7 +8,9 @@ import (
 	"net/http"
 	"os"
 	"regexp"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -65,11 +67,22 @@ func dockerLogFrames(lines ...string) string {
 func clearUpdateAttemptSettings(t *testing.T) {
 	t.Helper()
 	t.Cleanup(func() {
-		for _, k := range []string{"update_helper_id", "update_helper_target", "update_helper_started_at"} {
+		for _, k := range []string{"update_helper_id", "update_helper_target", "update_helper_started_at", "update_pull_error"} {
 			_, _ = env.Queries.UpsertSetting(context.Background(),
 				generated.UpsertSettingParams{Key: k, Value: ""})
 		}
 	})
+}
+
+// waitForHelperRecorded blocks until TriggerSelfUpdate's background goroutine has
+// finished its work (the helper id is the last thing it writes on success). The
+// pull and spawn happen after the 202, so assertions on them must wait.
+func waitForHelperRecorded(t *testing.T) {
+	t.Helper()
+	require.Eventually(t, func() bool {
+		got, err := env.Queries.GetSetting(context.Background(), "update_helper_id")
+		return err == nil && got.Value != ""
+	}, 5*time.Second, 10*time.Millisecond, "the helper was never started")
 }
 
 // withVersion overrides the running build's reported version for the duration
@@ -224,6 +237,7 @@ func TestTriggerSelfUpdate_SpawnsHelperWithResolvedTarget(t *testing.T) {
 	require.Equal(t, http.StatusAccepted, resp.StatusCode, "%v", body)
 	assert.Equal(t, "1.3.0", body["target"])
 
+	waitForHelperRecorded(t)
 	require.Len(t, env.Runtime.SpawnUpdateHelperCalls, 1)
 	call := env.Runtime.SpawnUpdateHelperCalls[0]
 	assert.Equal(t, "1.3.0", call.Version)
@@ -250,52 +264,127 @@ func TestTriggerSelfUpdate_SpawnsHelperWithResolvedTarget(t *testing.T) {
 	}
 }
 
-// TestTriggerSelfUpdate_FailedPullAbortsBeforeSpawning pins the ordering the
-// whole design leans on: a target that cannot be pulled (typo'd or unpublished
-// tag, registry down) must stop the request before a helper exists, with a
-// reason the operator can read — not 202 followed by a helper that dies on its
-// first line.
-func TestTriggerSelfUpdate_FailedPullAbortsBeforeSpawning(t *testing.T) {
+// updateTestSelf seeds the container that stands in for this one.
+func updateTestSelf(t *testing.T) {
+	t.Helper()
+	env.Runtime.ListAllContainers_ = []runtime.ContainerInfo{{
+		ID:     selfContainerIDForTest(t),
+		Image:  "ghcr.io/weiliang79/belune:v1.2.3",
+		Labels: map[string]string{"com.docker.compose.project.working_dir": "/opt/belune"},
+	}}
+	env.Runtime.PullCalls = nil
+	env.Runtime.SpawnUpdateHelperCalls = nil
+	t.Cleanup(func() {
+		env.Runtime.ListAllContainers_ = nil
+		env.Runtime.PullErr = nil
+		env.Runtime.PullFunc = nil
+		env.Runtime.SpawnUpdateHelperCalls = nil
+	})
+}
+
+func getUpdateStatus(t *testing.T, token string) map[string]any {
+	t.Helper()
+	resp := env.DoRequest(t, "GET", "/api/maintenance/update/status", nil, testutil.AuthHeader(token))
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	return testutil.ReadJSON(t, resp)
+}
+
+// TestTriggerSelfUpdate_PullOutlivesTheRequest is the regression for the bug
+// that would have shipped: this route sits inside the 15 s withTimeout group,
+// which cancels the request context, so a pull on r.Context() is cut off at 15 s
+// and NO update ever starts — only on hosts/releases where the pull is slow, so a
+// fast dev pull hides it. A mock that returns instantly cannot see this.
+//
+// Rather than sleeping past 15 s, this holds the pull open until AFTER the
+// response has been written — by which point both the request and the
+// TimeoutHandler's contexts are cancelled — and proves the pull's own context is
+// not, then lets it finish and expects the helper to start.
+func TestTriggerSelfUpdate_PullOutlivesTheRequest(t *testing.T) {
 	resetDB(t)
 	token := env.SetupAdmin(t, "admin@test.com", "password123")
 	withVersion(t, "v1.2.3")
 	setUpdateSetting(t, "update_latest_version", "1.3.0")
 	setUpdateSetting(t, "update_latest_requires_host_update", "false")
 	clearUpdateAttemptSettings(t)
+	updateTestSelf(t)
 
-	env.Runtime.ListAllContainers_ = []runtime.ContainerInfo{{
-		ID:     selfContainerIDForTest(t),
-		Image:  "ghcr.io/weiliang79/belune:v1.2.3",
-		Labels: map[string]string{"com.docker.compose.project.working_dir": "/opt/belune"},
-	}}
-	env.Runtime.PullErr = errors.New("manifest unknown")
-	env.Runtime.SpawnUpdateHelperCalls = nil
-	t.Cleanup(func() {
-		env.Runtime.ListAllContainers_ = nil
-		env.Runtime.PullErr = nil
-		env.Runtime.SpawnUpdateHelperCalls = nil
-	})
+	var mu sync.Mutex
+	var ctxErrAfterResponse error
+	pullStarted, release := make(chan struct{}), make(chan struct{})
+	env.Runtime.PullFunc = func(ctx context.Context, _ string) error {
+		close(pullStarted)
+		<-release
+		mu.Lock()
+		ctxErrAfterResponse = ctx.Err()
+		mu.Unlock()
+		return nil
+	}
 
 	resp := env.DoRequest(t, "POST", "/api/maintenance/update", map[string]string{
 		"password": "password123",
 	}, testutil.AuthHeader(token))
 	body := testutil.ReadJSON(t, resp)
+	require.Equal(t, http.StatusAccepted, resp.StatusCode, "%v", body)
+	<-pullStarted
 
-	require.Equal(t, http.StatusBadGateway, resp.StatusCode, "%v", body)
-	assert.Contains(t, body["error"], "ghcr.io/weiliang79/belune:1.3.0")
+	// While it pulls: no helper yet, a second click is refused, and the status
+	// says running rather than idle.
+	assert.Empty(t, env.Runtime.SpawnUpdateHelperCalls)
+	st := getUpdateStatus(t, token)
+	assert.Equal(t, "running", st["state"], "%v", st)
+	assert.Equal(t, "1.3.0", st["target"])
+	again := env.DoRequest(t, "POST", "/api/maintenance/update", map[string]string{
+		"password": "password123",
+	}, testutil.AuthHeader(token))
+	testutil.ReadJSON(t, again)
+	assert.Equal(t, http.StatusConflict, again.StatusCode, "the guard must hold for the whole pull, not just the handler")
+
+	close(release)
+	waitForHelperRecorded(t)
+	mu.Lock()
+	defer mu.Unlock()
+	assert.NoError(t, ctxErrAfterResponse, "the pull's context must not be cancelled when the request ends")
+	require.Len(t, env.Runtime.SpawnUpdateHelperCalls, 1)
+}
+
+// TestTriggerSelfUpdate_FailedPullIsReportedAndSpawnsNothing: a target that
+// cannot be pulled (typo'd or unpublished tag, registry down) must never start a
+// helper, and the operator must be told why — through the status endpoint, since
+// the 202 has long gone by the time the pull fails.
+func TestTriggerSelfUpdate_FailedPullIsReportedAndSpawnsNothing(t *testing.T) {
+	resetDB(t)
+	token := env.SetupAdmin(t, "admin@test.com", "password123")
+	withVersion(t, "v1.2.3")
+	setUpdateSetting(t, "update_latest_version", "1.3.0")
+	setUpdateSetting(t, "update_latest_requires_host_update", "false")
+	clearUpdateAttemptSettings(t)
+	updateTestSelf(t)
+	env.Runtime.PullErr = errors.New("manifest unknown")
+
+	resp := env.DoRequest(t, "POST", "/api/maintenance/update", map[string]string{
+		"password": "password123",
+	}, testutil.AuthHeader(token))
+	testutil.ReadJSON(t, resp)
+	require.Equal(t, http.StatusAccepted, resp.StatusCode)
+
+	var st map[string]any
+	require.Eventually(t, func() bool {
+		st = getUpdateStatus(t, token)
+		return st["state"] == "failed"
+	}, 5*time.Second, 10*time.Millisecond, "a failed pull must surface as a failed status: %v", st)
+	assert.Contains(t, st["reason"], "ghcr.io/weiliang79/belune:1.3.0")
+	assert.Contains(t, st["reason"], "Nothing has changed")
 	assert.Empty(t, env.Runtime.SpawnUpdateHelperCalls, "nothing may be spawned after a failed pull")
-	got, err := env.Queries.GetSetting(context.Background(), "update_helper_id")
-	if err == nil {
-		assert.Empty(t, got.Value, "a failed pull must not record an attempt")
-	}
 
-	// And it must not wedge the endpoint: the in-flight guard is released.
+	// Not wedged: the guard is released, and a retry clears the old failure.
 	env.Runtime.PullErr = nil
 	resp = env.DoRequest(t, "POST", "/api/maintenance/update", map[string]string{
 		"password": "password123",
 	}, testutil.AuthHeader(token))
 	testutil.ReadJSON(t, resp)
-	assert.Equal(t, http.StatusAccepted, resp.StatusCode)
+	require.Equal(t, http.StatusAccepted, resp.StatusCode)
+	waitForHelperRecorded(t)
+	assert.Len(t, env.Runtime.SpawnUpdateHelperCalls, 1)
 }
 
 // TestTriggerSelfUpdate_RefusesWhenAnUpdateIsAlreadyRunning covers the one gate
@@ -358,6 +447,10 @@ func TestTriggerSelfUpdate_RefusesWhenAnUpdateIsAlreadyRunning(t *testing.T) {
 			require.Equal(t, tc.want, resp.StatusCode, "%v", body)
 
 			// The status alone is not the guarantee — no helper may be spawned.
+			// A 202 spawns after the response, so wait for it; a 409 must not.
+			if tc.spawned > 0 {
+				waitForHelperRecorded(t)
+			}
 			assert.Len(t, env.Runtime.SpawnUpdateHelperCalls, tc.spawned)
 		})
 	}

@@ -55,8 +55,9 @@ type ReconcilerStatusProvider interface {
 }
 
 type Handler struct {
-	// updateStarting is set while TriggerSelfUpdate pulls the target image, the
-	// stretch in which no helper container exists yet for the 409 check to see.
+	// updateStarting is set from TriggerSelfUpdate's 202 until its background
+	// goroutine has started the helper or given up — the stretch in which no
+	// helper container exists yet for the 409 check to see.
 	updateStarting    atomic.Bool
 	cfg               *config.Config
 	db                *pgxpool.Pool
