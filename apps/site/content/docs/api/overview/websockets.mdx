@@ -59,6 +59,7 @@ The server sends:
 | `requests:all` | `request` | Every application's request traces | Admins |
 | `container-status:{applicationId}` | `status` | `{ application_id, status }` when an app's container changes state | Project access |
 | `database-status:{databaseId}` | `status` | `{ database_id, status }`, the database equivalent | Project access |
+| `platform` | `update` | `{ updating }` when a self-update starts or fails before touching the host | Any signed-in caller |
 
 `build-logs` is the only channel that terminates: it emits `done` with `data: null` when the build finishes. Everything else runs until you unsubscribe.
 
@@ -69,6 +70,7 @@ The server sends:
 Opening the socket does not entitle you to every channel. Each subscribe is checked against the same rules as the REST endpoint that serves the same data:
 
 - **`metrics:host` and `requests:all`** need an admin, exactly like `GET /api/metrics/host` and `GET /api/requests`.
+- **`platform`** is open to any authenticated caller, pinned tokens included. It carries only what the unauthenticated `GET /api/version` already reports in its `updating` flag, and the socket is just the faster way to hear it — treat `GET /api/version` as the source of truth.
 - **Every other channel** needs access to the project that owns the resource: its owner, any member when the project is shared, or an admin. For `container-logs`, the id may be an application or a database.
 - **A project-pinned token** is also limited to the projects it is pinned to. `requests:all` spans every project and cannot be narrowed to a pin, so a pinned token is never given it.
 - **Anything else is refused** — a channel not listed above, an id that does not exist, or an id that is not in the lowercase, hyphenated form the API returns.

@@ -293,6 +293,12 @@ func TestWebSocket_UnknownChannelsAreDenied(t *testing.T) {
 		// its own channel.
 		"container-status:" + strings.ToUpper(app),
 		"container-status:" + strings.ReplaceAll(app, "-", ""),
+		// The open channel is matched exactly: near-misses stay fail-closed, or
+		// "open" would quietly become a prefix anyone could widen.
+		"platform:",
+		"platform:logs",
+		"Platform",
+		"platform ",
 	}
 
 	for name, header := range map[string]http.Header{
@@ -305,6 +311,30 @@ func TestWebSocket_UnknownChannelsAreDenied(t *testing.T) {
 			for _, ch := range unknown {
 				h.wsRefused(t, conn, ch)
 			}
+		})
+	}
+}
+
+// "platform" announces that an update is underway to EVERY client, so unlike the
+// admin channels it must open for a Member, a PAT, and a project-pinned PAT —
+// a pin narrows what projects a token reaches, and this is not project data.
+// Pairs with TestWebSocket_UnknownChannelsAreDenied, which pins the other half:
+// being open must not have loosened the fail-closed default.
+func TestWebSocket_PlatformChannelIsOpenToEveryAuthenticatedCaller(t *testing.T) {
+	w := newWSWorld(t)
+
+	for name, header := range map[string]http.Header{
+		"admin":                bearer(w.adminToken),
+		"member":               bearer(w.strangerToken),
+		"read-scoped member":   bearer(mintScoped(t, w.strangerToken, []string{"read"})),
+		"member pinned":        bearer(createPinnedAPIToken(t, w.strangerID, w.strangerProjID, []string{"read"})),
+		"admin pinned":         bearer(createPinnedAPIToken(t, w.adminID, w.privateID, []string{"read"})),
+		"admin pinned nothing": bearer(createMultiPinnedAPIToken(t, w.adminID, []string{}, []string{"read"})),
+	} {
+		t.Run(name, func(t *testing.T) {
+			h := startWSHarness(t)
+			conn := h.dial(t, header)
+			h.wsAccepted(t, conn, "platform")
 		})
 	}
 }

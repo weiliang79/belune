@@ -58,7 +58,11 @@ type Handler struct {
 	// updateStarting is set from TriggerSelfUpdate's 202 until its background
 	// goroutine has started the helper or given up — the stretch in which no
 	// helper container exists yet for the 409 check to see.
-	updateStarting    atomic.Bool
+	updateStarting atomic.Bool
+	// updateBeganAt (unix nanos) is when updateStarting was last taken, for the
+	// public flag's elapsed time during the pull window.
+	updateBeganAt     atomic.Int64
+	updateProbe       updateProbe
 	cfg               *config.Config
 	db                *pgxpool.Pool
 	queries           *generated.Queries
