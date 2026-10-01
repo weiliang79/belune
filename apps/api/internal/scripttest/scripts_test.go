@@ -1,8 +1,8 @@
-// Package scripttest runs the real scripts/belune-update.sh (the in-image
-// updater), scripts/update.sh (its host launcher) and scripts/backup.sh
-// against fake docker/curl/flock binaries. It proves the control flow (exit
-// codes, prompts, what is fatal) — NOT Docker, Postgres or S3 behaviour, which
-// only a real stack exercises.
+// Package scripttest runs the real updater binary (cmd/update, built into the
+// image as /usr/local/bin/belune-update), scripts/update.sh (its host launcher)
+// and scripts/backup.sh against fake docker/curl/flock binaries. It proves the
+// control flow (exit codes, prompts, what is fatal) — NOT Docker, Postgres or S3
+// behaviour, which only a real stack exercises.
 package scripttest
 
 import (
@@ -12,7 +12,9 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -28,6 +30,53 @@ func scriptPath(t *testing.T, name string) string {
 	require.NoError(t, err)
 	return p
 }
+
+// The updater is a Go binary now, so these tests build the real thing once and
+// run it exactly as the image does: as an executable with the version as its sole
+// argument, finding docker/curl on PATH. CGO_ENABLED=0 matches the Dockerfile.
+var (
+	updaterOnce sync.Once
+	updaterDir  string
+	updaterPath string
+	updaterErr  error
+)
+
+func TestMain(m *testing.M) {
+	code := m.Run()
+	if updaterDir != "" {
+		_ = os.RemoveAll(updaterDir)
+	}
+	os.Exit(code)
+}
+
+func updaterBinary(t *testing.T) string {
+	t.Helper()
+	updaterOnce.Do(func() {
+		updaterDir, updaterErr = os.MkdirTemp("", "belune-update-test")
+		if updaterErr != nil {
+			return
+		}
+		_, here, _, _ := runtime.Caller(0)
+		out := filepath.Join(updaterDir, "belune-update")
+		build := exec.Command("go", "build", "-o", out, "./cmd/update")
+		build.Dir = filepath.Join(filepath.Dir(here), "..", "..")
+		build.Env = append(os.Environ(), "CGO_ENABLED=0")
+		if b, err := build.CombinedOutput(); err != nil {
+			updaterErr = &buildError{err: err, out: string(b)}
+			return
+		}
+		updaterPath = out
+	})
+	require.NoError(t, updaterErr)
+	return updaterPath
+}
+
+type buildError struct {
+	err error
+	out string
+}
+
+func (e *buildError) Error() string { return "building cmd/update: " + e.err.Error() + "\n" + e.out }
 
 func write(t *testing.T, path, content string, mode os.FileMode) {
 	t.Helper()
@@ -70,6 +119,15 @@ exit 0
 [ -n "$DOCKER_LOG" ] && echo "$*" >> "$DOCKER_LOG"
 if [ "$1" = run ] && [ -n "$STAGED_LAUNCHER" ]; then cp "$STAGED_LAUNCHER" "$INSTALLED_LAUNCHER"; fi
 [ "$1" = pull ] && [ -n "$DOCKER_PULL_FAIL" ] && exit 1
+# FAKE_ID_UID/FAKE_ID_GID answer the updater's 'docker run --entrypoint id' probe;
+# COMPOSE_UP_FAIL makes the restart fail.
+if [ "$1" = run ]; then
+  case "$*" in
+    *" id "*" -u") [ -n "$FAKE_ID_UID" ] && { echo "$FAKE_ID_UID"; exit 0; } ;;
+    *" id "*" -g") [ -n "$FAKE_ID_GID" ] && { echo "$FAKE_ID_GID"; exit 0; } ;;
+  esac
+fi
+[ "$1" = compose ] && [ "$2" = up ] && [ -n "$COMPOSE_UP_FAIL" ] && exit 1
 # SQL_LOG captures the statement backup.sh sends to psql to record a run's
 # outcome, so a test can read what would land in backup_runs.
 if [ "$1" = exec ] && [ -n "$SQL_LOG" ]; then
@@ -103,9 +161,19 @@ func run(t *testing.T, script string, install string, args ...string) (string, i
 
 func runEnv(t *testing.T, script string, install string, extraEnv []string, args ...string) (string, int) {
 	t.Helper()
-	cmd := exec.Command("bash", append([]string{script}, args...)...)
+	return runCmd(t, exec.Command("bash", append([]string{script}, args...)...), install, extraEnv)
+}
+
+// runUpdate runs the updater binary. With no stdin set it gets /dev/null, which
+// is what the dashboard's detached helper container has.
+func runUpdate(t *testing.T, install string, extraEnv []string, args ...string) (string, int) {
+	t.Helper()
+	return runCmd(t, exec.Command(updaterBinary(t), args...), install, extraEnv)
+}
+
+func runCmd(t *testing.T, cmd *exec.Cmd, install string, extraEnv []string) (string, int) {
+	t.Helper()
 	cmd.Env = append(append(os.Environ(), extraEnv...), "BELUNE_DIR="+install, "PATH="+fakeBin(t)+":"+os.Getenv("PATH"))
-	cmd.Stdin = nil // /dev/null: the dashboard's detached helper has no stdin
 	var out bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &out, &out
 	err := cmd.Run()
@@ -123,7 +191,7 @@ func TestUpdate_FailedBackupWithNoStdinAbortsWithRealCause(t *testing.T) {
 	write(t, filepath.Join(install, "scripts", "backup.sh"), "#!/bin/bash\necho 'backup boom' >&2\nexit 1\n", 0o755)
 	before, _ := os.ReadFile(filepath.Join(install, ".env"))
 
-	out, code := run(t, scriptPath(t, "belune-update.sh"), install, "v0.1.11")
+	out, code := runUpdate(t, install, nil, "v0.1.11")
 
 	assert.NotEqual(t, 0, code, out)
 	assert.Contains(t, out, "pre-update backup failed")
@@ -137,7 +205,7 @@ func TestUpdate_FailedBackupWithNoStdinAbortsWithRealCause(t *testing.T) {
 func TestUpdate_MissingBackupScriptWithNoStdinAbortsWithOwnMessage(t *testing.T) {
 	install := newInstall(t)
 
-	out, code := run(t, scriptPath(t, "belune-update.sh"), install, "v0.1.11")
+	out, code := runUpdate(t, install, nil, "v0.1.11")
 
 	assert.NotEqual(t, 0, code, out)
 	assert.Contains(t, out, "scripts/backup.sh was not found")
@@ -157,7 +225,7 @@ func TestUpdate_PassesLocalOnlyFlagOnlyWhenBackupScriptSupportsIt(t *testing.T) 
 		t.Run(name, func(t *testing.T) {
 			install := newInstall(t)
 			write(t, filepath.Join(install, "scripts", "backup.sh"), tc.body, 0o755)
-			out, _ := run(t, scriptPath(t, "belune-update.sh"), install, "v0.1.11")
+			out, _ := runUpdate(t, install, nil, "v0.1.11")
 			assert.Equal(t, tc.want, strings.Contains(out, "ARGS:--local-only-ok"), out)
 		})
 	}
@@ -400,7 +468,7 @@ func TestUpdate_SwapsInTheLauncher(t *testing.T) {
 	write(t, staged, "#!/bin/bash\n# staged launcher\n", 0o755)
 
 	tmp := t.TempDir()
-	out, code := runEnv(t, scriptPath(t, "belune-update.sh"), install, []string{"STAGED_UPDATE=" + staged, "TMPDIR=" + tmp}, "v0.1.11")
+	out, code := runUpdate(t, install, []string{"STAGED_UPDATE=" + staged, "TMPDIR=" + tmp}, "v0.1.11")
 
 	require.Equal(t, 0, code, out)
 	assert.Contains(t, out, "Updated 0.1.10")
@@ -414,7 +482,7 @@ func TestUpdate_SwapsInTheLauncher(t *testing.T) {
 }
 
 func TestUpdate_RequiresAVersion(t *testing.T) {
-	out, code := run(t, scriptPath(t, "belune-update.sh"), newInstall(t))
+	out, code := runUpdate(t, newInstall(t), nil)
 	assert.NotEqual(t, 0, code, out)
 	assert.Contains(t, out, "No target version")
 }
@@ -433,7 +501,7 @@ func TestUpdate_FailureBeforeRestartRestoresPinAndInfra(t *testing.T) {
 	require.NoError(t, err)
 
 	tmp := t.TempDir()
-	out, code := runEnv(t, scriptPath(t, "belune-update.sh"), install, []string{"TMPDIR=" + tmp}, "v0.1.11")
+	out, code := runUpdate(t, install, []string{"TMPDIR=" + tmp}, "v0.1.11")
 
 	assert.NotEqual(t, 0, code, out)
 	assert.Contains(t, out, "restoring the previous pin")
@@ -442,6 +510,91 @@ func TestUpdate_FailureBeforeRestartRestoresPinAndInfra(t *testing.T) {
 	compose, _ := os.ReadFile(filepath.Join(install, "docker-compose.yml"))
 	assert.Equal(t, "services: {old: {}}\n", string(compose), "the swapped compose file must be put back")
 	assertNoStagingLeft(t, tmp)
+}
+
+// The order is the contract with the operator's host: everything fetched before
+// anything is touched, a FULL `up -d` (a refreshed compose may change any
+// service, which --no-deps belune would skip), and the helper extracted from the
+// TARGET image only once the stack is up.
+func TestUpdate_RunsTheStepsInOrder(t *testing.T) {
+	install := newInstall(t)
+	write(t, filepath.Join(install, "scripts", "backup.sh"), "#!/bin/bash\nexit 0\n", 0o755)
+	log := filepath.Join(t.TempDir(), "docker.log")
+
+	out, code := runUpdate(t, install, []string{"DOCKER_LOG=" + log}, "v0.1.11")
+	require.Equal(t, 0, code, out)
+
+	raw, err := os.ReadFile(log)
+	require.NoError(t, err)
+	img := "ghcr.io/weiliang79/belune:0.1.11"
+	assert.Equal(t, []string{
+		"pull " + img,
+		"run --rm --entrypoint id " + img + " -u",
+		"run --rm --entrypoint id " + img + " -g",
+		"compose up -d",
+		"run --rm --entrypoint= " + img + " cat /usr/local/bin/belune-backup-upload",
+	}, strings.Split(strings.TrimSpace(string(raw)), "\n"))
+}
+
+// The revert window ends at `docker compose up -d`: by then containers may be
+// recreated and migrations applied, and reverting the image over a migrated
+// schema is worse than the printed rollback. So a failed restart leaves the new
+// pin in place and tells the operator how to roll back.
+func TestUpdate_FailedRestartIsNotReverted(t *testing.T) {
+	install := newInstall(t)
+	write(t, filepath.Join(install, "scripts", "backup.sh"), "#!/bin/bash\nexit 0\n", 0o755)
+	tmp := t.TempDir()
+
+	out, code := runUpdate(t, install, []string{"COMPOSE_UP_FAIL=1", "TMPDIR=" + tmp}, "v0.1.11")
+
+	assert.NotEqual(t, 0, code, out)
+	assert.Contains(t, out, "To roll back to 0.1.10:")
+	assert.Contains(t, out, "Failed to start 0.1.11.")
+	assert.NotContains(t, out, "restoring")
+	env, _ := os.ReadFile(filepath.Join(install, ".env"))
+	assert.Contains(t, string(env), "BELUNE_IMAGE=ghcr.io/weiliang79/belune:0.1.11")
+	assertNoStagingLeft(t, tmp)
+}
+
+// backup.sh runs as root — the host CLI, and the pre-update backup inside this
+// very helper — so a lock it created is root-owned and 0644, and the non-root
+// worker can then never open it: every dashboard backup reports "already in
+// progress", blaming a run that does not exist. The chown that repairs the
+// directory is not recursive, so the updater repairs the lock itself. (v0.1.14.)
+//
+// The ids the updater chowns to are the current user's, so this needs no root;
+// the ownership half is asserted in cmd/update's own tests, where it can use ids
+// that differ.
+func TestUpdate_RepairsARootCreatedBackupLock(t *testing.T) {
+	install := newInstall(t)
+	write(t, filepath.Join(install, "scripts", "backup.sh"), "#!/bin/bash\nexit 0\n", 0o755)
+	write(t, filepath.Join(install, "backups", ".lock"), "", 0o644)
+
+	out, code := runUpdate(t, install, []string{
+		"FAKE_ID_UID=" + strconv.Itoa(os.Getuid()), "FAKE_ID_GID=" + strconv.Itoa(os.Getgid()),
+	}, "v0.1.11")
+	require.Equal(t, 0, code, out)
+
+	fi, err := os.Stat(filepath.Join(install, "backups", ".lock"))
+	require.NoError(t, err)
+	assert.Equal(t, os.FileMode(0o666), fi.Mode().Perm(), "a lock shared across uids must be writable by both")
+	rem, err := os.Stat(filepath.Join(install, "backup-remote.env"))
+	require.NoError(t, err)
+	assert.Equal(t, os.FileMode(0o600), rem.Mode().Perm())
+}
+
+// A child of the shell updater inherited its stdin, and Go would hand it
+// /dev/null instead unless told otherwise. backup.sh is the child that matters.
+func TestUpdate_ChildrenInheritStdin(t *testing.T) {
+	install := newInstall(t)
+	write(t, filepath.Join(install, "scripts", "backup.sh"), "#!/bin/bash\nread -r line\necho \"STDIN:$line\"\n", 0o755)
+
+	cmd := exec.Command(updaterBinary(t), "v0.1.11")
+	cmd.Stdin = strings.NewReader("hello\n")
+	out, code := runCmd(t, cmd, install, nil)
+
+	require.Equal(t, 0, code, out)
+	assert.Contains(t, out, "STDIN:hello")
 }
 
 // assertNoStagingLeft catches a second EXIT trap replacing the one that removes
