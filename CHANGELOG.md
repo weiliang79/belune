@@ -24,6 +24,74 @@ Belune is pre-1.0. The versioning contract while it stays there:
 Release notes for each version are also published on the
 [Releases page](https://github.com/weiliang79/belune/releases).
 
+## [0.1.14]
+
+### Every page now shows you when the platform is updating
+
+Applying an update used to leave everyone else in the dark. Their pages kept
+working, then stopped answering, then came back on the new version — with
+nothing in between to say why.
+
+Now every open page follows along, whoever is looking at it:
+
+- **While the update prepares** — pulling the new version and taking its
+  pre-update backup, which is most of the wall clock — a small notice counts up
+  the time elapsed. The dashboard still works throughout, so nothing is blocked.
+- **When the platform restarts**, the notice says so and the page waits.
+- **When it comes back**, a short countdown runs and the page reloads itself.
+
+The time shown is always **elapsed, never a prediction**. Nothing can know how
+long a backup of your database will take, so nothing pretends to.
+
+This reaches **every** signed-in person, not just the administrator who pressed
+the button, and it covers an update run with `scripts/update.sh` over SSH just
+as well as one started from the dashboard.
+
+### Backups taken by Belune itself could stop working after an update
+
+**On an install that had applied an update, the dashboard's "Back up now" and —
+more importantly — your scheduled daily control-plane backup could fail every
+time with "a control-plane backup is already in progress", while no backup was
+running at all.** Nothing cleared it, so it stayed that way until someone
+intervened on the host. If you rely on the in-app schedule for your control
+plane, check the Backups panel after upgrading and take one by hand if the
+recent runs are failures.
+
+The cause: backups taken from the host — including the one every update takes
+before it starts — run as `root` and left the lock file they share with the
+dashboard readable but not writable by anyone else. The dashboard runs as an
+unprivileged user, so it could never open that file again, and it reported the
+failure as a conflicting run rather than as the permission problem it was.
+
+Updating to this release repairs the lock file on your install, and backups now
+create it so that both users can open it.
+
+Backups taken on the host were never affected — `scripts/backup.sh` and the
+pre-update backup each run as `root`, which can open the file either way. So an
+install whose backups all came from the host, or whose schedule happened to run
+before its first update, never saw this. Nothing was lost where it did happen:
+the archives that did get written are intact, and the failures were recorded as
+failed runs rather than passing silently.
+
+### A failed backup now tells you what went wrong
+
+When a remote upload fails, the Backups panel shows **the actual reason** — a
+refused connection, a rejected credential, a missing bucket — instead of
+"remote upload failed (see output above)", which referred to output that only
+ever existed in a terminal nobody was looking at. It also says plainly that the
+archive was not copied offsite, and where to check the settings.
+
+Backups run from the host or by an update now record their log too, so the panel
+can explain them at all; previously only in-app backups did. And a run's notes
+carry the right severity: a backup that deliberately kept going without its
+offsite copy reads as a **warning**, not an error, and no longer hides under the
+panel's error filter as information.
+
+### Upgrading
+
+Apply this the usual way. Nothing about your projects, applications, databases,
+tokens or settings changes, and no host action is needed.
+
 ## [0.1.13]
 
 ### Updater fixes now reach the update that installs them
