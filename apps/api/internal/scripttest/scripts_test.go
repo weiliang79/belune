@@ -257,6 +257,23 @@ func TestBackup_LocalOnlyOKFailureIsAWarningNotAnError(t *testing.T) {
 // archive" reads, on the Backups panel, like a backup that was cut off partway
 // — exactly the confusion the log column exists to remove. Found on a live run
 // during the v0.1.14 drill, where the panel showed no completion line.
+// The lock is shared between two DIFFERENT users: this script runs as root (host
+// CLI, and the pre-update backup inside the root helper container) while the
+// worker runs as a non-root uid. A root-created 0644 lock cannot be opened
+// O_RDWR by that uid, so the worker fails at the open and every dashboard backup
+// reports "already in progress" forever, blaming a run that does not exist.
+// Found on a live install, 2026-10-01: .lock was root:root 0644.
+func TestBackup_LockIsWritableByBothUsers(t *testing.T) {
+	install := backupInstall(t, true)
+	out, code := run(t, scriptPath(t, "backup.sh"), install, "--local-only-ok")
+	require.Equal(t, 0, code, out)
+
+	fi, err := os.Stat(filepath.Join(install, "backups", ".lock"))
+	require.NoError(t, err, "the run must leave a lock file behind")
+	assert.Equal(t, os.FileMode(0o666), fi.Mode().Perm(),
+		"a lock shared across uids must be group- and other-writable, or the non-root worker is locked out permanently")
+}
+
 func TestBackup_LogRecordsItsOwnCompletion(t *testing.T) {
 	sqlLog := filepath.Join(t.TempDir(), "sql")
 	out, code := runEnv(t, scriptPath(t, "backup.sh"), backupInstall(t, true),

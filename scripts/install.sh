@@ -366,6 +366,13 @@ info "Preparing the backups directory..."
 mkdir -p "${INSTALL_DIR}/backups"
 if [[ -n "${FM_UID}" && -n "${FM_GID}" ]]; then
   chown "${FM_UID}:${FM_GID}" "${INSTALL_DIR}/backups"
+  # The lock file too when one exists (a reinstall over an existing dir): the
+  # chown above is not recursive, and a root-owned .lock locks the non-root
+  # worker out of every dashboard backup. See scripts/backup.sh for why 0666.
+  if [[ -e "${INSTALL_DIR}/backups/.lock" ]]; then
+    chown "${FM_UID}:${FM_GID}" "${INSTALL_DIR}/backups/.lock" || true
+    chmod 0666 "${INSTALL_DIR}/backups/.lock" || true
+  fi
   success "Backups directory ready (owner ${FM_UID}:${FM_GID})."
 else
   info "Could not detect the belune container uid — set ${INSTALL_DIR}/backups writable by it if in-app backups fail."

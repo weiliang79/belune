@@ -167,6 +167,14 @@ mkdir -p "${BACKUP_DIR}"
 # lock via the bind-mounted ./backups directory, so a concurrent worker run
 # and CLI run can never write over each other's archive.
 exec 200>"${LOCK_FILE}"
+# ⚠️ 0666, because this lock is shared between two DIFFERENT users: this script
+# runs as root (host CLI, and the pre-update backup inside the root helper
+# container), while the worker runs as the non-root `belune` uid. A root-created
+# 0644 lock cannot be opened O_RDWR by that uid, so the worker's flock fails at
+# the OPEN — and every dashboard backup afterwards reports "already in progress"
+# forever, blaming a run that does not exist. Found on a live install, 2026-10-01.
+# Best-effort: a non-root run cannot chmod a root-owned file, and does not need to.
+chmod 0666 "${LOCK_FILE}" 2>/dev/null || true
 flock -n 200 || die "a backup is already in progress (${LOCK_FILE} is locked)"
 
 mkdir -p "${WORK_DIR}"

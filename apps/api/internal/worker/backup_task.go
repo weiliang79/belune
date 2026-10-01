@@ -57,7 +57,7 @@ func (h *TaskHandler) HandleBackupNowTask(ctx context.Context, t *asynq.Task) er
 	lockPath := filepath.Join(h.Config.ControlPlaneBackupDir, controlPlaneLockName)
 	lock, err := acquireFileLock(lockPath)
 	if err != nil {
-		return h.failBackupNow(ctx, span, run.ID, lg, errors.New("a control-plane backup is already in progress"), start)
+		return h.failBackupNow(ctx, span, run.ID, lg, BackupLockFailure(err, lockPath), start)
 	}
 	defer lock.release()
 

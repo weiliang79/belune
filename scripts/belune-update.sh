@@ -273,6 +273,16 @@ main() {
   mkdir -p "${INSTALL_DIR}/backups"
   if [[ -n "${FM_UID}" && -n "${FM_GID}" ]]; then
     chown "${FM_UID}:${FM_GID}" "${INSTALL_DIR}/backups"
+    # ⚠️ The lock file INSIDE it too, not just the directory. The chown above is
+    # not recursive, so an install whose .lock was created by a root backup (the
+    # host CLI, or the pre-update backup in the root helper) keeps it root-owned
+    # — and the non-root worker then cannot open it, so every dashboard backup
+    # reports "already in progress" forever. Repairs installs that already have
+    # one; new ones get 0666 from backup.sh. Harmless when absent.
+    if [[ -e "${INSTALL_DIR}/backups/.lock" ]]; then
+      chown "${FM_UID}:${FM_GID}" "${INSTALL_DIR}/backups/.lock" || true
+      chmod 0666 "${INSTALL_DIR}/backups/.lock" || true
+    fi
   fi
 
   # Same for the remote-storage config file (Q1): a FILE bind mount, so `touch`
