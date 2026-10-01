@@ -53,6 +53,8 @@ type MockContainerRuntime struct {
 	// test can assert an update was (or was not) triggered without a real
 	// container ever starting.
 	SpawnUpdateHelperCalls []runtime.UpdateHelperConfig
+	// PullErr, when set, is returned by PullImage after recording the call.
+	PullErr error
 	// SpawnUpdateHelperErr, when set, is returned by SpawnUpdateHelper instead
 	// of a fake container id.
 	SpawnUpdateHelperErr error
@@ -195,7 +197,7 @@ func (m *MockContainerRuntime) PullImage(_ context.Context, image string) error 
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.PullCalls = append(m.PullCalls, image)
-	return nil
+	return m.PullErr
 }
 func (m *MockContainerRuntime) BuildImage(_ context.Context, _, _, _ string) error {
 	return nil

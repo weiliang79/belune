@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"sync/atomic"
 
 	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -54,6 +55,9 @@ type ReconcilerStatusProvider interface {
 }
 
 type Handler struct {
+	// updateStarting is set while TriggerSelfUpdate pulls the target image, the
+	// stretch in which no helper container exists yet for the 409 check to see.
+	updateStarting    atomic.Bool
 	cfg               *config.Config
 	db                *pgxpool.Pool
 	queries           *generated.Queries

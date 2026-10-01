@@ -12,8 +12,9 @@ ARG PACK_VERSION=0.35.1
 # match the host's exactly (the Docker CLI is compatible across daemon versions).
 ARG DOCKER_CLI_VERSION=27.5.1
 # compose CLI plugin (pinned) — client only, same reasoning as the docker CLI
-# above. The self-update helper (worker/../runtime SpawnUpdateHelper) reuses
-# this image to run scripts/update.sh, which shells out to `docker compose`;
+# above. The self-update helper (worker/../runtime SpawnUpdateHelper) runs the
+# TARGET release's copy of this image as /usr/local/bin/belune-update, which
+# shells out to `docker compose`;
 # the static docker CLI tarball above does not bundle it.
 ARG COMPOSE_VERSION=5.5.1
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -130,6 +131,13 @@ FROM build-base AS prod
 RUN groupadd -r belune && useradd -r -g belune -m -d /home/belune belune
 COPY --from=backend /belune /usr/local/bin/belune
 COPY --from=backend /belune-backup-upload /usr/local/bin/belune-backup-upload
+# The updater the dashboard and scripts/update.sh both run, out of the TARGET
+# image. It must live here and not under scripts/: the install dir is
+# bind-mounted into the helper at the same path, so anything under scripts/
+# resolves to the host's older copy — the blind spot this exists to remove.
+# The path is a frozen contract with every past launcher; do not move it.
+COPY scripts/belune-update.sh /usr/local/bin/belune-update
+RUN chmod +x /usr/local/bin/belune-update
 # Writable, persistable location for managed-database logical dumps. The default
 # DatabaseBackupDir (/opt/belune/backups/databases) is not creatable by the non-root
 # belune user, so point it at a dir we own here. Mount a volume on /data in

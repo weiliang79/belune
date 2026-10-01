@@ -228,9 +228,9 @@ type ContainerRuntime interface {
 	// Used for cold volume tar snapshot/restore against a stopped database's
 	// volume (the helper mounts the volume and runs tar). Returns the exit code.
 	RunHelper(ctx context.Context, cfg ContainerConfig, stdin io.Reader, stdout, stderr io.Writer) (int, error)
-	// SpawnUpdateHelper launches a detached container that runs
-	// `scripts/update.sh <version>` against the host install directory, then
-	// exits on its own. Unlike RunHelper it is NOT attached to or waited on —
+	// SpawnUpdateHelper launches a detached container from the TARGET
+	// image that runs `/usr/local/bin/belune-update <version>` against the host
+	// install directory, then exits on its own. Unlike RunHelper it is NOT attached to or waited on —
 	// it must outlive the caller, because `docker compose up -d` inside it is
 	// what replaces the calling (belune) container. Returns the helper's
 	// container ID immediately after it starts. Labelled LabelHelper, same as
@@ -242,17 +242,21 @@ type ContainerRuntime interface {
 // UpdateHelperConfig configures the detached self-update helper started by
 // SpawnUpdateHelper.
 type UpdateHelperConfig struct {
-	// Image is Belune's own image — the helper reuses it (bash, curl, the
-	// docker CLI and compose plugin are already there), so nothing needs
-	// pulling. Same reasoning as the host-shell helper's image choice.
-	Image string
+	// TargetImage is the image of the release being installed, NOT Belune's
+	// current one: the helper runs the updater baked into it, so a fix to the
+	// updater reaches the very update that installs it. The caller must have
+	// pulled it already — container creation fails on an absent image, and a
+	// failed pull has to abort before anything on the host is touched.
+	TargetImage string
 	// WorkingDir is the host's compose project directory — where
 	// docker-compose.yml, .env and scripts/ live — read off this container's
 	// own com.docker.compose.project.working_dir label. Bind-mounted into the
-	// helper at the SAME path, so scripts/update.sh's relative paths resolve
-	// exactly as they would running directly on the host.
+	// helper at the SAME path, so the updater's relative paths resolve exactly
+	// as they would running directly on the host. The updater itself is NOT
+	// under this mount (it is /usr/local/bin/belune-update in the image), which
+	// is what stops it resolving to the host's older copy.
 	WorkingDir string
-	// Version is the target release, passed to scripts/update.sh as its sole
+	// Version is the target release, passed to belune-update as its sole
 	// argument. Always resolved from the cached manifest ahead of time, never
 	// re-resolved inside the helper — the operator updates to exactly the
 	// version the Server-page card showed them, not whatever happens to be

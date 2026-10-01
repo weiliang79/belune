@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
+	"errors"
 	"net/http"
 	"os"
 	"regexp"
@@ -203,6 +204,7 @@ func TestTriggerSelfUpdate_SpawnsHelperWithResolvedTarget(t *testing.T) {
 	setUpdateSetting(t, "update_latest_version", "1.3.0")
 	setUpdateSetting(t, "update_latest_requires_host_update", "false")
 	clearUpdateAttemptSettings(t)
+	env.Runtime.PullCalls = nil
 
 	env.Runtime.ListAllContainers_ = []runtime.ContainerInfo{
 		{
@@ -226,7 +228,11 @@ func TestTriggerSelfUpdate_SpawnsHelperWithResolvedTarget(t *testing.T) {
 	call := env.Runtime.SpawnUpdateHelperCalls[0]
 	assert.Equal(t, "1.3.0", call.Version)
 	assert.Equal(t, "/opt/belune", call.WorkingDir)
-	assert.Equal(t, "ghcr.io/weiliang79/belune:v1.2.3", call.Image)
+	// The TARGET image, v-stripped like update.sh builds it — not the running
+	// container's ("…:v1.2.3" above), which would run the OLD updater.
+	assert.Equal(t, "ghcr.io/weiliang79/belune:1.3.0", call.TargetImage)
+	// …and it was pulled first: container creation fails on an absent image.
+	assert.Equal(t, []string{"ghcr.io/weiliang79/belune:1.3.0"}, env.Runtime.PullCalls)
 
 	// The attempt is recorded, which is what lets GetSelfUpdateStatus report on
 	// a helper that dies immediately instead of the dashboard claiming forever
@@ -242,6 +248,54 @@ func TestTriggerSelfUpdate_SpawnsHelperWithResolvedTarget(t *testing.T) {
 		require.NoError(t, err, "%s must be recorded", k)
 		assert.NotEmpty(t, got.Value, "%s must be recorded", k)
 	}
+}
+
+// TestTriggerSelfUpdate_FailedPullAbortsBeforeSpawning pins the ordering the
+// whole design leans on: a target that cannot be pulled (typo'd or unpublished
+// tag, registry down) must stop the request before a helper exists, with a
+// reason the operator can read — not 202 followed by a helper that dies on its
+// first line.
+func TestTriggerSelfUpdate_FailedPullAbortsBeforeSpawning(t *testing.T) {
+	resetDB(t)
+	token := env.SetupAdmin(t, "admin@test.com", "password123")
+	withVersion(t, "v1.2.3")
+	setUpdateSetting(t, "update_latest_version", "1.3.0")
+	setUpdateSetting(t, "update_latest_requires_host_update", "false")
+	clearUpdateAttemptSettings(t)
+
+	env.Runtime.ListAllContainers_ = []runtime.ContainerInfo{{
+		ID:     selfContainerIDForTest(t),
+		Image:  "ghcr.io/weiliang79/belune:v1.2.3",
+		Labels: map[string]string{"com.docker.compose.project.working_dir": "/opt/belune"},
+	}}
+	env.Runtime.PullErr = errors.New("manifest unknown")
+	env.Runtime.SpawnUpdateHelperCalls = nil
+	t.Cleanup(func() {
+		env.Runtime.ListAllContainers_ = nil
+		env.Runtime.PullErr = nil
+		env.Runtime.SpawnUpdateHelperCalls = nil
+	})
+
+	resp := env.DoRequest(t, "POST", "/api/maintenance/update", map[string]string{
+		"password": "password123",
+	}, testutil.AuthHeader(token))
+	body := testutil.ReadJSON(t, resp)
+
+	require.Equal(t, http.StatusBadGateway, resp.StatusCode, "%v", body)
+	assert.Contains(t, body["error"], "ghcr.io/weiliang79/belune:1.3.0")
+	assert.Empty(t, env.Runtime.SpawnUpdateHelperCalls, "nothing may be spawned after a failed pull")
+	got, err := env.Queries.GetSetting(context.Background(), "update_helper_id")
+	if err == nil {
+		assert.Empty(t, got.Value, "a failed pull must not record an attempt")
+	}
+
+	// And it must not wedge the endpoint: the in-flight guard is released.
+	env.Runtime.PullErr = nil
+	resp = env.DoRequest(t, "POST", "/api/maintenance/update", map[string]string{
+		"password": "password123",
+	}, testutil.AuthHeader(token))
+	testutil.ReadJSON(t, resp)
+	assert.Equal(t, http.StatusAccepted, resp.StatusCode)
 }
 
 // TestTriggerSelfUpdate_RefusesWhenAnUpdateIsAlreadyRunning covers the one gate

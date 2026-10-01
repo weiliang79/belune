@@ -21,9 +21,14 @@ import (
 	"github.com/weiliang79/belune/internal/worker"
 )
 
+// updateImageRepo is where release images live. Hardcoded to match
+// scripts/update.sh and install.sh rather than derived from the running image.
+const updateImageRepo = "ghcr.io/weiliang79/belune"
+
 // TriggerSelfUpdate applies the update the Server-page card is currently
-// showing, by spawning a detached helper container that runs
-// scripts/update.sh against the host install directory. The helper survives
+// showing, by pulling the target image and spawning a detached helper container
+// from it that runs its /usr/local/bin/belune-update against the host install
+// directory. The helper survives
 // this container being replaced — that IS the point: `docker compose up -d`
 // inside it is what stops this process partway through handling whatever
 // request comes after this one's response.
@@ -104,21 +109,49 @@ func (h *Handler) TriggerSelfUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	image := h.selfImage(r.Context())
-	if image == "" {
-		writeError(w, http.StatusInternalServerError, "could not determine this container's own image")
-		return
-	}
 	workingDir, err := h.selfWorkingDir(r.Context())
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
+	// ⚠️ The helper runs the TARGET image's updater, so that image has to be
+	// local before the container can even be created. Pulled here, in the
+	// request, rather than left to the helper: a failed pull then aborts before
+	// anything on the host is touched, and the operator gets the reason in the
+	// response instead of a helper that dies on its first line.
+	//
+	// The pull can take minutes, but no timeout applies to this route (it is not
+	// wrapped in withTimeout and the server's WriteTimeout is 0), so the only way
+	// it is cut short is the client going away — which aborts cleanly with
+	// nothing changed. Detaching the pull (202 now, pull in the background) was
+	// rejected: it would turn this into a fire-and-forget whose failures only
+	// surface through the status endpoint, and widen the window below.
+	//
+	// The pull happens BEFORE the helper exists, so updateHelperRunning cannot
+	// see a second click that lands during it — hence the in-process guard.
+	// One API process owns this endpoint, so a flag is enough.
+	if !h.updateStarting.CompareAndSwap(false, true) {
+		writeError(w, http.StatusConflict, "an update is already in progress")
+		return
+	}
+	defer h.updateStarting.Store(false)
+
+	// Same construction as scripts/update.sh: image tags carry no leading v.
+	// Deliberately NOT derived from the running container's image — that would
+	// honour a mirrored registry, but it is a behaviour change on the most
+	// dangerous path in the product and not this change's subject.
+	targetImage := updateImageRepo + ":" + strings.TrimPrefix(target, "v")
+	if err := rt.PullImage(r.Context(), targetImage); err != nil {
+		slog.Error("pulling update target image", "image", targetImage, "error", err)
+		writeError(w, http.StatusBadGateway, fmt.Sprintf("could not pull %s — does that version exist? Nothing has changed.", targetImage))
+		return
+	}
+
 	helperID, err := rt.SpawnUpdateHelper(r.Context(), runtime.UpdateHelperConfig{
-		Image:      image,
-		WorkingDir: workingDir,
-		Version:    target,
+		TargetImage: targetImage,
+		WorkingDir:  workingDir,
+		Version:     target,
 	})
 	if err != nil {
 		writeError(w, http.StatusBadGateway, fmt.Sprintf("failed to start the update: %v", err))

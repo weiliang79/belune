@@ -15,8 +15,8 @@ import (
 // ⚠️ Why this needs a test rather than a comment. A container inherits its
 // IMAGE's labels, and an image built by `docker compose build` carries
 // com.docker.compose.project/service — this repo's own devcontainer image does,
-// with project=infra, service=api. The helper reuses Belune's image, and
-// update.sh runs `docker compose up -d`, which may remove the excess containers
+// with project=infra, service=api. The helper runs a Belune image, and
+// the updater runs `docker compose up -d`, which may remove the excess containers
 // of a service it is recreating. That would kill the updater mid-update, right
 // after it has rewritten .env.
 //
