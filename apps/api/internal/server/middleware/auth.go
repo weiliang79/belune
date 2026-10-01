@@ -201,6 +201,12 @@ func TokenIDFromContext(ctx context.Context) string {
 	return v
 }
 
+// ContextWithScopes is the setter counterpart of ScopesFromContext, for tests
+// of code that gates on scope without running the Auth middleware.
+func ContextWithScopes(ctx context.Context, scopes []string) context.Context {
+	return context.WithValue(ctx, ctxScopes, scopes)
+}
+
 // ScopesFromContext returns the authenticating PAT's scopes, or nil for a
 // session JWT (a session implies every scope — callers should treat a nil
 // slice from a JWT request as "unrestricted", not "no scopes").
