@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -15,6 +16,7 @@ import (
 	"github.com/hibiken/asynq"
 	"golang.org/x/mod/semver"
 
+	"github.com/weiliang79/belune/internal/pkg/redact"
 	"github.com/weiliang79/belune/internal/runtime"
 	"github.com/weiliang79/belune/internal/store/generated"
 	"github.com/weiliang79/belune/internal/version"
@@ -168,6 +170,19 @@ func (h *Handler) TriggerSelfUpdate(w http.ResponseWriter, r *http.Request) {
 // frees the in-flight guard instead of blocking updates until a restart.
 const updatePullTimeout = 20 * time.Minute
 
+// updateFailureReason builds the operator-facing line for a failed pull or
+// helper start: what was being done, the (redacted, bounded) cause, and the
+// reassurance that matters — the helper is what touches the host, and it never
+// ran.
+func updateFailureReason(what string, err error) string {
+	const maxCause = 300
+	cause := redact.Error(err.Error())
+	if len(cause) > maxCause {
+		cause = cause[:maxCause] + "…"
+	}
+	return fmt.Sprintf("%s: %s. Nothing has changed.", what, cause)
+}
+
 // pullAndSpawnUpdateHelper is TriggerSelfUpdate's background half: pull the
 // target image, then start the helper from it. ctx must NOT derive its
 // cancellation from the request. Owns releasing updateStarting.
@@ -178,15 +193,23 @@ const updatePullTimeout = 20 * time.Minute
 func (h *Handler) pullAndSpawnUpdateHelper(ctx context.Context, rt runtime.ContainerRuntime, targetImage, workingDir, target string) {
 	defer h.updateStarting.Store(false)
 
-	fail := func(msg string, err error) {
-		slog.Error(msg, "image", targetImage, "error", err)
-		h.setSetting(ctx, settingUpdatePullError, fmt.Sprintf("%s (%s). Nothing has changed.", msg, targetImage))
+	// fail records WHY, not a guess at why: a pull fails for rate limiting, DNS,
+	// a full disk, a registry 5xx or our own timeout as readily as for a missing
+	// tag, and a fixed "does that version exist?" would send the operator to
+	// check a version that is fine. Redacted because a registry error can carry
+	// a host or credential-shaped text, and truncated so it stays a status line.
+	fail := func(what string, err error) {
+		slog.Error(what, "image", targetImage, "error", err)
+		h.setSetting(ctx, settingUpdatePullError, updateFailureReason(what, err))
 	}
 
 	pullCtx, cancel := context.WithTimeout(ctx, updatePullTimeout)
 	defer cancel()
 	if err := rt.PullImage(pullCtx, targetImage); err != nil {
-		fail("Could not pull the update image — does that version exist?", err)
+		if errors.Is(pullCtx.Err(), context.DeadlineExceeded) {
+			err = fmt.Errorf("timed out after %s", updatePullTimeout)
+		}
+		fail("Could not pull "+targetImage, err)
 		return
 	}
 
@@ -196,7 +219,7 @@ func (h *Handler) pullAndSpawnUpdateHelper(ctx context.Context, rt runtime.Conta
 		Version:     target,
 	})
 	if err != nil {
-		fail("Could not start the update helper", err)
+		fail("Could not start the update helper from "+targetImage, err)
 		return
 	}
 

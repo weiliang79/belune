@@ -359,7 +359,7 @@ func TestTriggerSelfUpdate_FailedPullIsReportedAndSpawnsNothing(t *testing.T) {
 	setUpdateSetting(t, "update_latest_requires_host_update", "false")
 	clearUpdateAttemptSettings(t)
 	updateTestSelf(t)
-	env.Runtime.PullErr = errors.New("manifest unknown")
+	env.Runtime.PullErr = errors.New("toomanyrequests: rate limit exceeded token=abc123")
 
 	resp := env.DoRequest(t, "POST", "/api/maintenance/update", map[string]string{
 		"password": "password123",
@@ -374,6 +374,10 @@ func TestTriggerSelfUpdate_FailedPullIsReportedAndSpawnsNothing(t *testing.T) {
 	}, 5*time.Second, 10*time.Millisecond, "a failed pull must surface as a failed status: %v", st)
 	assert.Contains(t, st["reason"], "ghcr.io/weiliang79/belune:1.3.0")
 	assert.Contains(t, st["reason"], "Nothing has changed")
+	// The real cause, not a guess — and redacted.
+	assert.Contains(t, st["reason"], "rate limit exceeded")
+	assert.NotContains(t, st["reason"], "abc123")
+	assert.NotContains(t, st["reason"], "does that version exist")
 	assert.Empty(t, env.Runtime.SpawnUpdateHelperCalls, "nothing may be spawned after a failed pull")
 
 	// Not wedged: the guard is released, and a retry clears the old failure.
