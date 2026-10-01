@@ -302,8 +302,14 @@ if [[ "$(read_remote_config BACKUP_REMOTE_ENABLED)" == "true" ]]; then
 fi
 
 SIZE_BYTES=$(stat -c%s "${ARCHIVE}" 2>/dev/null || echo 0)
-record_finish "succeeded" "${SIZE_BYTES}" "${REMOTE_KEY}" "${REMOTE_NOTE}" "${ENCRYPTED}"
 
+# Log the completion BEFORE recording the row. record_finish writes RUN_LOG as
+# it stands, so a success line added afterwards never reaches the log column —
+# leaving every succeeded run with a log that stops at "Creating archive" and
+# reads, to the operator looking at the Backups panel, like a backup that was
+# cut off partway. Found on a live run during the v0.1.14 drill.
 echo ""
 success "Backup complete: ${ARCHIVE}"
 echo ""
+
+record_finish "succeeded" "${SIZE_BYTES}" "${REMOTE_KEY}" "${REMOTE_NOTE}" "${ENCRYPTED}"

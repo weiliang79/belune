@@ -252,6 +252,23 @@ func TestBackup_LocalOnlyOKFailureIsAWarningNotAnError(t *testing.T) {
 // stamped in UTC. The shape regex cannot tell `date` from `date -u`; this runs
 // under a zone 9h from UTC (Tokyo has no DST, so the gap never closes) and
 // reads the stamp back as UTC, exactly as the viewer will.
+// record_finish writes RUN_LOG as it stands, so anything logged after it never
+// reaches the log column. A succeeded run whose stored log stops at "Creating
+// archive" reads, on the Backups panel, like a backup that was cut off partway
+// — exactly the confusion the log column exists to remove. Found on a live run
+// during the v0.1.14 drill, where the panel showed no completion line.
+func TestBackup_LogRecordsItsOwnCompletion(t *testing.T) {
+	sqlLog := filepath.Join(t.TempDir(), "sql")
+	out, code := runEnv(t, scriptPath(t, "backup.sh"), backupInstall(t, true),
+		[]string{"SQL_LOG=" + sqlLog}, "--local-only-ok")
+	require.Equal(t, 0, code, out)
+	b, _ := os.ReadFile(sqlLog)
+	log := logColumn(t, string(b))
+
+	assert.Contains(t, log, "Backup complete:",
+		"the stored log must record the run finishing, not stop at the last step before it")
+}
+
 func TestBackup_LogIsStampedInUTC(t *testing.T) {
 	sqlLog := filepath.Join(t.TempDir(), "sql")
 	before := time.Now().UTC().Add(-time.Minute)
