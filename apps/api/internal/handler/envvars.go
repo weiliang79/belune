@@ -1,10 +1,12 @@
 package handler
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"regexp"
+	"sort"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -71,6 +73,38 @@ func prepareEnvVars(vars []envVarInput, existing map[string][]byte, encrypt func
 		out = append(out, preparedEnvVar{key: v.Key, encrypted: encrypted, isSecret: v.IsSecret})
 	}
 	return out, ""
+}
+
+// envChangeDetails names the keys a whole-set replace created, rewrote and
+// removed, for the audit log. Key names only: the log is the record of what
+// happened to a secret set, and must not become a second copy of it.
+//
+// "updated" means the row was submitted with a value and so was re-encrypted;
+// an Unchanged row reuses its stored ciphertext verbatim and is listed in
+// neither. Removed keys matter most — a delete reaches the database only as
+// "absent from the replacement set", so without this nothing would record it.
+func envChangeDetails(existing map[string][]byte, prepared []preparedEnvVar) map[string]any {
+	created, updated, removed := []string{}, []string{}, []string{}
+	kept := make(map[string]struct{}, len(prepared))
+	for _, p := range prepared {
+		kept[p.key] = struct{}{}
+		old, had := existing[p.key]
+		switch {
+		case !had:
+			created = append(created, p.key)
+		case !bytes.Equal(old, p.encrypted):
+			updated = append(updated, p.key)
+		}
+	}
+	for k := range existing {
+		if _, ok := kept[k]; !ok {
+			removed = append(removed, k)
+		}
+	}
+	sort.Strings(created)
+	sort.Strings(updated)
+	sort.Strings(removed)
+	return map[string]any{"created": created, "updated": updated, "removed": removed}
 }
 
 // keysOf returns the keys to retain, for the delete-what-was-not-submitted step.
@@ -271,6 +305,8 @@ func (h *Handler) UpdateEnvVars(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.markConfigChanged(r.Context(), applicationUUID)
+
+	h.audit(r, "update_env_vars", "env_var", applicationID, envChangeDetails(existing, prepared))
 
 	writeJSON(w, http.StatusOK, map[string]string{"status": "updated"})
 }

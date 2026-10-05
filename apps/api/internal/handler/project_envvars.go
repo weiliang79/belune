@@ -173,5 +173,7 @@ func (h *Handler) UpdateProjectEnvVars(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	h.audit(r, "update_env_vars", "project_env_var", projectID, envChangeDetails(existing, prepared))
+
 	writeJSON(w, http.StatusOK, map[string]string{"status": "updated"})
 }
