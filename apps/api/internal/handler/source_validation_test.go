@@ -58,7 +58,9 @@ func TestCreateApplication_RejectsIncoherentSource(t *testing.T) {
 }
 
 // Clearing the image on an image application used to be accepted, stored as
-// NULL, and only surface much later as a failed pull.
+// NULL, and only surface much later as a failed pull. The clear is requested
+// explicitly: this test originally sent only a name and relied on an omitted
+// key reading as "clear", which was the partial-PUT bug itself.
 func TestUpdateApplication_RejectsClearingSourceImage(t *testing.T) {
 	resetDB(t)
 	token := env.SetupAdmin(t, "admin@test.com", "password123")
@@ -72,7 +74,7 @@ func TestUpdateApplication_RejectsClearingSourceImage(t *testing.T) {
 
 	resp := env.DoRequest(t, "PUT",
 		fmt.Sprintf("/api/projects/%s/applications/%s", projectID, appID),
-		map[string]any{"name": "Image App"}, testutil.AuthHeader(token))
+		map[string]any{"name": "Image App", "source_image": ""}, testutil.AuthHeader(token))
 	defer resp.Body.Close()
 	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
 
