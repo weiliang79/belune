@@ -24,6 +24,38 @@ Belune is pre-1.0. The versioning contract while it stays there:
 Release notes for each version are also published on the
 [Releases page](https://github.com/weiliang79/belune/releases).
 
+## [0.1.15]
+
+### The updater is now a program, not a shell script
+
+**Nothing changes about how you update.** The thing that performs an update — resolving
+the target, taking the pre-update backup, moving the pinned image, swapping the
+version-matched infra files and restarting the stack — is now a compiled program shipped
+in the same image, instead of a shell script. The steps, their order, and what aborts the
+update are deliberately identical.
+
+**Why it was worth doing.** Three separate bugs in one week came from shell idioms rather
+than from logic: a confirmation prompt with nowhere to read an answer from when the update
+runs unattended, a command substitution that aborted the script without saying so, and a
+script corrupting itself by being overwritten while it was still running. The last of those
+was addressed in 0.1.13 by moving the updater into the image; this release takes the shell
+out of that path altogether.
+
+**The one thing you might notice** is the wording when an update fails. Messages about files
+and directories now read like the standard command-line tools they replaced, so a failure
+shown on the Server page may be phrased differently from before. What it tells you, and the
+point at which it stops, are unchanged — including that a failure before the restart puts
+your pinned version and infra files back exactly as they were.
+
+`scripts/update.sh` is unchanged and still the way to update from a shell. It continues to
+hand the work to the target version's updater, so updating from the host and from the
+dashboard run the same code and are reported the same way.
+
+### Upgrading
+
+Apply this the usual way. Nothing about your projects, applications, databases, tokens or
+settings changes, and no host action is needed.
+
 ## [0.1.14]
 
 ### Every page now shows you when the platform is updating
