@@ -179,6 +179,7 @@ func New(
 			Audit:    mcpAuditor(auditSvc),
 			Deploys:  deployQueue,
 			Apps:     appSvc,
+			Env:      service.NewEnvVarService(db, queries, cfg.Keyring, appSvc),
 		}),
 	}
 }
