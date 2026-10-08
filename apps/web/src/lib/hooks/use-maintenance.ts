@@ -58,9 +58,21 @@ export function useRestartService() {
 }
 
 export function useTriggerSelfUpdate() {
+  const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ password, code }: { password: string; code?: string }) =>
       maintenanceApi.triggerSelfUpdate(password, code),
+    // ⚠️ Without this the card cannot report a failure. useSelfUpdateStatus
+    // only polls while the state is ALREADY "running", so the query keeps its
+    // mount-time answer ("idle") forever and the failure panel never gets the
+    // data it renders — a failed update was invisible until the operator
+    // refreshed the page, which is how it shipped from v0.1.8 onwards.
+    //
+    // One refetch is enough either way: landing during the pull it reads
+    // "running" and the 5s interval takes over to catch the transition;
+    // landing after a fast failure it reads "failed" directly.
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: queryKeys.maintenanceUpdateStatus }),
   });
 }
 
