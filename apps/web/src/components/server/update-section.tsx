@@ -26,6 +26,7 @@ import {
 import { useTotpStatus } from "@/lib/hooks/use-totp";
 import { useVersion } from "@/lib/hooks/use-version";
 import { formatRelativeTime } from "@/lib/utils/format";
+import { dispatchUpdateEvent } from "@/lib/update-progress";
 
 /**
  * Current vs latest published version, sourced from the daily update-check
@@ -115,12 +116,22 @@ export function UpdateSection() {
       triggerUpdate.mutate(
         { password: value.password, code: value.code || undefined },
         {
-          onSuccess: (res) => {
+          onSuccess: () => {
             closeConfirm();
-            toast.success(
-              `Update to v${res.target} started — the dashboard will disconnect briefly while it restarts.`,
-              { duration: 10_000 },
-            );
+            // Latch the progress notice here rather than announcing success.
+            //
+            // ⚠️ A toast at this point is created SECOND, after the one the
+            // `platform` broadcast already raised, and sonner renders every
+            // non-front toast's contents at opacity 0 while the stack is
+            // collapsed — so it hid the very clock it duplicated, and the
+            // operator who clicked was the one client that could not see the
+            // update's progress. It also predicted a restart that a failed
+            // pull never performs.
+            //
+            // Dispatching locally (rather than relying on the socket's
+            // announce) is what guarantees the clicker sees it: this page is
+            // one of the two with no socket of its own.
+            dispatchUpdateEvent({ type: "announce" });
           },
           onError: (err) => {
             toast.error(
