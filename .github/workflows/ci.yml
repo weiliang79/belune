@@ -71,6 +71,13 @@ jobs:
         run: node scripts/generate-api-pages.mjs
 
       - name: Fail if the API reference is stale
+        # Must run from the repo root: the job's default working-directory is
+        # apps/api, and the pathspecs below are repo-relative. From apps/api
+        # they resolve to apps/api/apps/site/..., which does not exist, so git
+        # prints a warning to stderr, reports nothing on stdout and exits 0 —
+        # the step passed whatever the tree looked like, and the spec went
+        # stale unnoticed.
+        working-directory: ${{ github.workspace }}
         # git diff only inspects TRACKED files, so it misses new files —
         # exactly what one-page-per-operation generates far more of, and a
         # renamed operationId (a dependency bump, an edit to the page

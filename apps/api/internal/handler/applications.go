@@ -36,6 +36,16 @@ func parseOptionalUUID(s string) pgtype.UUID {
 	return u
 }
 
+// resolveOptionalString applies keep/clear/set semantics for a nullable text
+// column on update: nil (key absent) keeps the stored value; a non-nil pointer,
+// including to "", is the new value ("" clears it).
+func resolveOptionalString(in *string, current pgtype.Text) string {
+	if in == nil {
+		return current.String
+	}
+	return *in
+}
+
 // resolveOptionalUUID applies preserve/clear/set semantics for an optional FK on
 // update: nil pointer (key absent) preserves the current value; an empty string
 // clears it to NULL; a UUID string sets it.
@@ -697,19 +707,25 @@ func (h *Handler) failDeploymentEnqueue(ctx context.Context, deploymentID pgtype
 	}
 }
 
+// The source fields are pointers so an omitted key (nil: keep the stored value)
+// is different from an empty string (clear it). Decoding them as plain strings
+// made every omitted key look like a request to clear, and the service stores
+// "" as NULL — so a partial PUT silently wiped whatever it did not mention, with
+// a 200. name, git_token and the fields the service ignores keep their
+// existing "empty means unchanged" reading.
 type updateApplicationRequest struct {
 	Name              string  `json:"name"`
-	SourceRepo        string  `json:"source_repo"`
-	SourceImage       string  `json:"source_image"`
-	DockerfilePath    string  `json:"dockerfile_path"`
-	BuildTypeOverride string  `json:"build_type_override"`
-	BuilderImage      string  `json:"builder_image"`
+	SourceRepo        *string `json:"source_repo"`
+	SourceImage       *string `json:"source_image"`
+	DockerfilePath    *string `json:"dockerfile_path"`
+	BuildTypeOverride *string `json:"build_type_override"`
+	BuilderImage      *string `json:"builder_image"`
 	CPULimit          float64 `json:"cpu_limit"`
 	MemoryLimit       int64   `json:"memory_limit"`
 	GitToken          string  `json:"git_token"`         // PAT for private repos; encrypted server-side; empty = preserve existing
 	HealthCheckPath   string  `json:"health_check_path"` // HTTP path to poll after deploy; empty = clear
-	Branch            string  `json:"branch"`            // ref to build; empty = repository default
-	RootDirectory     string  `json:"root_directory"`    // subdirectory to build from; empty = repo root
+	Branch            *string `json:"branch"`            // ref to build; absent = keep, empty = repository default
+	RootDirectory     *string `json:"root_directory"`    // subdirectory to build from; absent = keep, empty = repo root
 	// GitIntegrationID: pointer so we can tell "absent" (preserve) from ""
 	// (clear) from a UUID (set the connected provider account).
 	GitIntegrationID *string `json:"git_integration_id"`
@@ -744,12 +760,22 @@ func (h *Handler) UpdateApplication(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !validBranchName(req.Branch) {
+	// Resolved against the stored row up front so validation and the write see
+	// the same effective values.
+	sourceRepo := resolveOptionalString(req.SourceRepo, current.SourceRepo)
+	sourceImage := resolveOptionalString(req.SourceImage, current.SourceImage)
+	dockerfilePath := resolveOptionalString(req.DockerfilePath, current.DockerfilePath)
+	buildTypeOverride := resolveOptionalString(req.BuildTypeOverride, current.BuildTypeOverride)
+	builderImage := resolveOptionalString(req.BuilderImage, current.BuilderImage)
+	branch := resolveOptionalString(req.Branch, current.Branch)
+	rootDirectory := resolveOptionalString(req.RootDirectory, current.RootDirectory)
+
+	if !validBranchName(branch) {
 		writeError(w, http.StatusBadRequest, "invalid branch name")
 		return
 	}
 
-	if !validRootDirectory(req.RootDirectory) {
+	if !validRootDirectory(rootDirectory) {
 		writeError(w, http.StatusBadRequest, "invalid root directory")
 		return
 	}
@@ -772,10 +798,10 @@ func (h *Handler) UpdateApplication(w http.ResponseWriter, r *http.Request) {
 	if err := validateSource(sourceFields{
 		Type:              current.Type,
 		BuildType:         current.BuildType,
-		BuildTypeOverride: req.BuildTypeOverride,
-		DockerfilePath:    req.DockerfilePath,
-		SourceRepo:        req.SourceRepo,
-		SourceImage:       req.SourceImage,
+		BuildTypeOverride: buildTypeOverride,
+		DockerfilePath:    dockerfilePath,
+		SourceRepo:        sourceRepo,
+		SourceImage:       sourceImage,
 	}); err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
@@ -783,18 +809,18 @@ func (h *Handler) UpdateApplication(w http.ResponseWriter, r *http.Request) {
 
 	app, err := h.appService.Update(r.Context(), applicationUUID, current, service.UpdateApplicationParams{
 		Name:              req.Name,
-		SourceRepo:        req.SourceRepo,
-		SourceImage:       req.SourceImage,
-		DockerfilePath:    req.DockerfilePath,
-		BuildTypeOverride: req.BuildTypeOverride,
-		BuilderImage:      req.BuilderImage,
+		SourceRepo:        sourceRepo,
+		SourceImage:       sourceImage,
+		DockerfilePath:    dockerfilePath,
+		BuildTypeOverride: buildTypeOverride,
+		BuilderImage:      builderImage,
 		CPULimit:          req.CPULimit,
 		MemoryLimit:       req.MemoryLimit,
 		GitToken:          req.GitToken,
 		HealthCheckPath:   req.HealthCheckPath,
 		GitIntegrationID:  gitIntegrationID,
-		Branch:            req.Branch,
-		RootDirectory:     req.RootDirectory,
+		Branch:            branch,
+		RootDirectory:     rootDirectory,
 	})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to update application")

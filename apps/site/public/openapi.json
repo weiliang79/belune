@@ -18208,19 +18208,31 @@
       "updateApplicationRequest": {
         "properties": {
           "branch": {
-            "type": "string"
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "build_type_override": {
-            "type": "string"
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "builder_image": {
-            "type": "string"
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "cpu_limit": {
             "type": "number"
           },
           "dockerfile_path": {
-            "type": "string"
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "git_integration_id": {
             "type": [
@@ -18241,13 +18253,22 @@
             "type": "string"
           },
           "root_directory": {
-            "type": "string"
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "source_image": {
-            "type": "string"
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "source_repo": {
-            "type": "string"
+            "type": [
+              "string",
+              "null"
+            ]
           }
         },
         "type": "object"
@@ -18504,6 +18525,20 @@
       "verifyEnrollmentRequest": {
         "properties": {
           "code": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "versionResponse": {
+        "properties": {
+          "updating": {
+            "type": "boolean"
+          },
+          "updating_for": {
+            "type": "integer"
+          },
+          "version": {
             "type": "string"
           }
         },
