@@ -141,18 +141,22 @@ export function ApplicationSettingsForm({
       toast.promise(
         updateApplication.mutateAsync({
           name: value.name || undefined,
-          source_repo: isGit ? value.source_repo || undefined : undefined,
-          source_image: isGit ? undefined : value.source_image || undefined,
-          dockerfile_path: isGit
-            ? value.dockerfile_path || undefined
-            : undefined,
-          root_directory: isGit ? value.root_directory || undefined : undefined,
-          // Sent even when blank: blank means "the repository's default ref",
-          // which must be able to clear a previously set branch.
+          // ⚠️ Every source field is sent AS TYPED, blank included, and the
+          // other type's fields are sent as "" rather than omitted.
+          //
+          // The API distinguishes absent (keep the stored value) from empty
+          // (clear it). Blank is a real choice for most of these — no
+          // Dockerfile path, build from the repo root, let the builder decide —
+          // so omitting a field the user had just cleared would discard the
+          // edit and still report "Settings saved". This form renders the whole
+          // source configuration, so it is the authority on all of it; only
+          // `branch` used to get this right.
+          source_repo: isGit ? value.source_repo : "",
+          source_image: isGit ? "" : value.source_image,
+          dockerfile_path: isGit ? value.dockerfile_path : "",
+          root_directory: isGit ? value.root_directory : "",
           branch: value.branch,
-          build_type_override: isGit
-            ? value.build_type_override || undefined
-            : undefined,
+          build_type_override: isGit ? value.build_type_override : "",
           // A token only applies to the public-URL path; a connected account
           // carries its own credentials.
           git_token:
