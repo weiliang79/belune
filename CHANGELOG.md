@@ -24,6 +24,75 @@ Belune is pre-1.0. The versioning contract while it stays there:
 Release notes for each version are also published on the
 [Releases page](https://github.com/weiliang79/belune/releases).
 
+## [0.1.16]
+
+### Updating an application through the API no longer clears settings you left out
+
+**If you edit an application with a script or an API client, this release stops it
+from silently wiping configuration.** `PUT /api/projects/{id}/applications/{id}`
+wrote every source column on every call, so a request that sent only the field it
+wanted to change cleared the rest — repository, branch, root directory, Dockerfile
+path, builder image. The application kept running, and the loss only surfaced at
+the next deployment, when it built from the wrong place or stopped building at all.
+
+It now reads the stored application first and keeps each value you did not send.
+Sending a field as an empty string still clears it, deliberately — the difference
+between "leave this alone" and "make this empty" is now real instead of accidental.
+
+The dashboard's application settings form now sends the whole source configuration
+it renders, blank fields included, so clearing a Dockerfile path or a root directory
+there does exactly what it says.
+
+### A failed update tells you so, without reloading the page
+
+**When an update could not start, the Server page went quiet.** It reported that
+the update had begun and then showed nothing further — the reason was recorded and
+displayed correctly, but only to someone who happened to reload the page. An
+operator watching the screen saw a successful start and no outcome.
+
+The failure, and the reason for it, now appear on their own.
+
+### The update progress clock is visible to the person who started the update
+
+**Every other open tab showed a running "Belune is updating" notice; the one that
+clicked the button did not.** A confirmation message raised at the same moment sat
+on top of it and hid it from view for ten seconds. On a quick failure that was the
+entire update, so the only thing the operator ever saw was a message predicting a
+restart that never happened.
+
+The confirmation is gone and the progress notice shows immediately instead. It
+reports elapsed time and nothing else — never an estimate of how long is left.
+
+### Environment variable changes are recorded in the audit log
+
+**Replacing an application's or project's environment variables produced no audit
+entry at all.** It now records one, listing the **names** of the variables added,
+changed and removed. Values are never written to the audit log, and neither are
+the contents of a secret.
+
+Removals are listed too, because a variable disappearing is the change most likely
+to break a deployment and the one hardest to spot afterwards.
+
+### Corrections to the published API reference
+
+The check meant to keep [the API reference](https://belune.dev/docs/api) in step
+with the code had not been running since 0.1.7, so the published reference had
+drifted. Two corrections land with this release:
+
+- `GET /api/version` now documents its `updating` and `updating_for` fields, which
+  have been returned since 0.1.14 but were missing from the reference entirely.
+- Seven optional fields on the update-application request are now correctly
+  documented as nullable: `source_repo`, `source_image`, `branch`,
+  `root_directory`, `dockerfile_path`, `build_type_override` and `builder_image`.
+
+No endpoint moved and no behaviour changed — the reference now matches what the
+API has been doing.
+
+### Upgrading
+
+Apply this the usual way. Nothing about your projects, applications, databases,
+tokens or backups changes, and no host action is needed.
+
 ## [0.1.15]
 
 ### The updater is now a program, not a shell script
