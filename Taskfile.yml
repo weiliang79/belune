@@ -149,6 +149,13 @@ tasks:
     dir: '{{.WEB_DIR}}'
     cmd: npm run test
 
+  test:browser:
+    desc: Boot the production stack and drive the dashboard in a real browser
+    # Deliberately NOT part of `task test`: it builds the image and boots five
+    # containers. Needs Docker. Extra flags reach Playwright, e.g.
+    # `task test:browser -- --headed`.
+    cmd: ./scripts/smoke-browser.sh {{.CLI_ARGS}}
+
   test:
     desc: Run all tests
     cmds:

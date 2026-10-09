@@ -24,3 +24,10 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Playwright (scripts/smoke-browser.sh). Traces and screenshots are kept only
+# for failures, and the browser binaries live outside the repo.
+/test-results
+/playwright-report
+/blob-report
+/.playwright
