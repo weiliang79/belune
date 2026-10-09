@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { toast } from "sonner";
 import { useQuery } from "@tanstack/react-query";
+import { dashboardTLSPollMs } from "./dashboard-tls-poll";
 import {
   KeyRoundIcon,
   RefreshCw,
@@ -35,7 +36,11 @@ interface DashboardTLS {
 // The same three modes an application domain offers — the dashboard is served by
 // the same proxy and has no business behaving differently.
 const SSL_MODES = [
-  { value: "automatic", label: "Automatic (Let's Encrypt)", Icon: ShieldCheckIcon },
+  {
+    value: "automatic",
+    label: "Automatic (Let's Encrypt)",
+    Icon: ShieldCheckIcon,
+  },
   { value: "custom", label: "Custom Certificate", Icon: KeyRoundIcon },
   { value: "off", label: "Off (plain HTTP)", Icon: ShieldOffIcon },
 ] as const;
@@ -109,8 +114,9 @@ export function DashboardDomainSection() {
   const mode = draft?.mode ?? savedMode;
   const certID = draft?.certID ?? savedCertID;
 
-  const patch = (next: Partial<{ domain: string; mode: string; certID: string }>) =>
-    setDraft({ domain, mode, certID, ...next });
+  const patch = (
+    next: Partial<{ domain: string; mode: string; certID: string }>,
+  ) => setDraft({ domain, mode, certID, ...next });
 
   const dirty =
     domain.trim() !== savedDomain ||
@@ -130,9 +136,13 @@ export function DashboardDomainSection() {
     queryKey: ["dashboard-tls", savedDomain, savedMode, savedCertID],
     queryFn: () => api.get<DashboardTLS>("/server/dashboard-tls"),
     // A certificate normally lands within a minute of the DNS being right, so
-    // poll while the operator is watching rather than making them refresh.
-    refetchInterval: savedDomain ? 15000 : false,
-    enabled: Boolean(savedDomain),
+    // poll while the operator is watching rather than making them refresh —
+    // but only while it can still change. See dashboardTLSPollMs.
+    refetchInterval: (query) =>
+      dashboardTLSPollMs(
+        query.state.data?.tls_status,
+        query.state.dataUpdateCount,
+      ),
   });
 
   // The endpoint probes the live certificate on every call, so the button really
@@ -249,7 +259,10 @@ export function DashboardDomainSection() {
             onValueChange={(v) => patch({ certID: v ?? "" })}
             disabled={certificatesLoading}
           >
-            <SelectTrigger id="dashboard-certificate" className="w-full min-w-0">
+            <SelectTrigger
+              id="dashboard-certificate"
+              className="w-full min-w-0"
+            >
               {/* Name only: the default echoes the whole item — name and every
                   subject — into the trigger, which a wildcard or Origin CA
                   certificate overflows. Subjects stay in the dropdown. */}
@@ -357,9 +370,9 @@ export function DashboardDomainSection() {
       {mode === "off" && (
         <p className="text-muted-foreground max-w-2xl text-xs">
           The dashboard will be served over plain HTTP, and the HTTP→HTTPS
-          redirect is removed with it. Your session cookie and password cross the
-          network unencrypted — only reasonable behind a proxy that terminates TLS
-          for you, or on a private network.
+          redirect is removed with it. Your session cookie and password cross
+          the network unencrypted — only reasonable behind a proxy that
+          terminates TLS for you, or on a private network.
         </p>
       )}
 

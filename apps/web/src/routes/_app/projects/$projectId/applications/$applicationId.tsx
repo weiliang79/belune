@@ -75,7 +75,17 @@ function ApplicationLayout() {
   const { data: project } = useProject(projectId);
   const { data: deployments } = useDeployments(projectId, applicationId);
   const { data: domains } = useDomains(projectId, applicationId);
-  const { data: projectMetrics } = useProjectMetrics(projectId);
+  // ⚠️ 30s, not the hook's 5s default. On this route the whole project-metrics
+  // snapshot is read for ONE field — uptime_seconds, below — and formatUptime
+  // renders minutes above a minute ("5h 12m", "3d 4h"), so 11 of every 12
+  // fetches at 5s changed nothing on screen. It is also the heaviest query in
+  // the app, and this layout wraps every application tab including Settings,
+  // Env Vars and Mounts, which show no live numbers at all. Measured: 12
+  // requests/min of a 33/min page, the worst in the dashboard.
+  //
+  // The project overview keeps the 5s default — it draws live CPU and memory
+  // per service, which is what the cadence was for.
+  const { data: projectMetrics } = useProjectMetrics(projectId, 30_000);
   // Only subscribe while the container is up. Metrics describe a running
   // process; for a stopped app the stream would sit idle and the last values
   // would stay frozen on screen, reading as current.
