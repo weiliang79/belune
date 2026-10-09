@@ -220,7 +220,11 @@ func TestRun_VersionHandling(t *testing.T) {
 		h := newHarness(t)
 		h.handler = func(c cmd) (bool, error) { return c.name == "docker" && c.args[0] == "pull", io.EOF }
 		assert.Equal(t, 1, h.run("vv0.1.11"))
-		assert.Contains(t, h.out.String(), "Could not pull ghcr.io/weiliang79/belune:v0.1.11. Does that version exist?")
+		assert.Contains(t, h.out.String(), "Could not pull ghcr.io/weiliang79/belune:v0.1.11.")
+		// The launcher already pulled the image to run us, so a failure here is
+		// almost never a missing tag; the message must not send the operator to
+		// check the version.
+		assert.NotContains(t, h.out.String(), "Does that version exist?")
 	})
 	t.Run("current version is what follows the last colon", func(t *testing.T) {
 		h := newHarness(t)
@@ -743,7 +747,37 @@ func TestRun_Systemd(t *testing.T) {
 		h := setup(t, map[string]string{"belune.service": "old\n", "belune-backup.service": "old\n"})
 		require.Equal(t, 0, h.run("v0.1.11"), h.out.String())
 		assert.Equal(t, 1, strings.Count(h.out.String(), hint))
-		assert.Contains(t, h.out.String(), "      sudo cp infra/systemd/*.service /etc/systemd/system/\n      sudo systemctl daemon-reload\n")
+		// The harness installs into a t.TempDir(), i.e. NOT /opt/belune, so the
+		// remediation must be the rewriting form — a plain `cp` would install
+		// units pointing at a directory that does not exist on this host.
+		assert.Contains(t, h.out.String(), `      sudo sed "s|/opt/belune|`+h.install+`|g" infra/systemd/belune.service > /etc/systemd/system/belune.service`)
+		assert.Contains(t, h.out.String(), "      sudo systemctl daemon-reload\n")
+		assert.NotContains(t, h.out.String(), "sudo cp infra/systemd/*.service")
+	})
+
+	// ⚠️ The bug this guards: install.sh rewrites /opt/belune to the real install
+	// dir, so comparing the repo copy verbatim reported drift on EVERY update of
+	// a non-default install — and told the operator to run a cp that would break
+	// it. Both units are staged carrying the default path; the installed copies
+	// carry the rewritten one, which is "unchanged", not drift.
+	t.Run("a rewritten unit on a non-default install dir is not drift", func(t *testing.T) {
+		h := newHarness(t)
+		h.handler = func(c cmd) (bool, error) {
+			if c.name != "curl" {
+				return false, nil
+			}
+			for i, a := range c.args {
+				if a == "-o" && strings.HasSuffix(c.args[i+1], ".service") {
+					return true, os.WriteFile(c.args[i+1], []byte("WorkingDirectory=/opt/belune\n"), 0o644)
+				}
+			}
+			return false, nil
+		}
+		for _, unit := range []string{"belune.service", "belune-backup.service"} {
+			writeFile(t, filepath.Join(h.u.systemdDir, unit), "WorkingDirectory="+h.install+"\n", 0o644)
+		}
+		require.Equal(t, 0, h.run("v0.1.11"), h.out.String())
+		assert.NotContains(t, h.out.String(), hint)
 	})
 	t.Run("an unreadable unit counts as changed", func(t *testing.T) {
 		h := setup(t, map[string]string{"belune.service": "staged\n"}) // belune-backup.service missing

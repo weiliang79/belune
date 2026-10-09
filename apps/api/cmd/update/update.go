@@ -269,9 +269,16 @@ func (u *updater) Run(args []string) (err error) {
 	// The launcher already pulled this (it had to, to run us out of it), so this is
 	// normally a no-op. Kept so a direct run of this binary stays safe; the cost is
 	// one registry round trip.
+	//
+	// ⚠️ No "does that version exist?" here, unlike the bash original. Because the
+	// launcher already pulled this image to run us, a failure at this point almost
+	// never means a missing tag — it means the registry became unreachable in the
+	// seconds since. Asking about the version would send the operator to check a
+	// tag whose own updater is printing the question. Docker's own error is
+	// inherited to stderr immediately above, so the cause is already on screen.
 	u.info("Pulling %s...", u.targetImage)
 	if u.inherit("docker", "pull", u.targetImage) != nil {
-		return u.die("Could not pull %s. Does that version exist?", u.targetImage)
+		return u.die("Could not pull %s.", u.targetImage)
 	}
 
 	// ── Fetch version-pinned infra files ───────────────────────────────────────
@@ -527,10 +534,17 @@ func (u *updater) Run(args []string) (err error) {
 		}
 
 		for _, unit := range []string{"belune.service", "belune-backup.service"} {
-			if !sameContent("infra/systemd/"+unit, u.systemdDir+"/"+unit) {
+			if !u.sameInstalledUnit(unit) {
 				say(u.stdout, "")
 				u.warn("systemd units changed in this release. To apply them:")
-				say(u.stdout, "      sudo cp infra/systemd/*.service /etc/systemd/system/")
+				if u.installDir == defaultInstallDir {
+					say(u.stdout, "      sudo cp infra/systemd/*.service /etc/systemd/system/")
+				} else {
+					// A plain cp would install units pointing at /opt/belune, which
+					// does not exist here — the same rewrite install.sh does.
+					say(u.stdout, "      sudo sed \"s|%s|%s|g\" infra/systemd/belune.service > /etc/systemd/system/belune.service", defaultInstallDir, u.installDir)
+					say(u.stdout, "      sudo sed \"s|%s|%s|g\" infra/systemd/belune-backup.service > /etc/systemd/system/belune-backup.service", defaultInstallDir, u.installDir)
+				}
 				say(u.stdout, "      sudo systemctl daemon-reload")
 				break
 			}
@@ -538,6 +552,30 @@ func (u *updater) Run(args []string) (err error) {
 	}
 	say(u.stdout, "")
 	return nil
+}
+
+// sameInstalledUnit reports whether the installed copy of a systemd unit matches
+// the one this release ships.
+//
+// ⚠️ It compares against the unit as install.sh WRITES it, not as the repo holds
+// it. install.sh rewrites /opt/belune to the real install dir (install.sh:460),
+// so on any install that does not live at the default path a verbatim comparison
+// is false forever — the drift warning fired on every single update, and the
+// `cp` it printed would have repointed WorkingDirectory and ExecStart at a
+// directory that does not exist on that host.
+func (u *updater) sameInstalledUnit(unit string) bool {
+	want, err := os.ReadFile("infra/systemd/" + unit)
+	if err != nil {
+		return false
+	}
+	if u.installDir != defaultInstallDir {
+		want = bytes.ReplaceAll(want, []byte(defaultInstallDir), []byte(u.installDir))
+	}
+	got, err := os.ReadFile(u.systemdDir + "/" + unit)
+	if err != nil {
+		return false
+	}
+	return bytes.Equal(want, got)
 }
 
 // currentImage is the first BELUNE_IMAGE= line of .env, everything after the
