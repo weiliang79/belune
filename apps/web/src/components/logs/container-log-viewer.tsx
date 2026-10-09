@@ -5,6 +5,7 @@ import {
   type LevelFilterValue,
 } from "@/components/logs/level-filter";
 import { LogView } from "@/components/logs/log-view";
+import { mergeLogEntries } from "@/components/logs/merge";
 import { stripAnsi, type LogEntry } from "@/components/logs/parse";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -174,9 +175,14 @@ export function ContainerLogViewer({
     return map;
   }, [sessions]);
 
-  // History is most-recent first; reverse to chronological, then append live.
+  // History is most-recent first; reverse it to chronological, then merge the
+  // live buffer in. Merging rather than appending matters because the collector
+  // persists a line before it publishes it, so a refetch of history returns
+  // lines the live buffer still holds — see mergeLogEntries.
   // History is already filtered server-side; live lines are filtered here
   // (including by the selected session, which the server applies to history).
+  // Both sides run their message through stripAnsi, which is what lets the two
+  // representations of one line compare equal.
   const entries = useMemo<LogEntry[]>(() => {
     const historical: LogEntry[] = history
       ? [...history].reverse().map((e) => ({
@@ -196,7 +202,7 @@ export function ContainerLogViewer({
       if (session === SESSION_NONE) return key === null;
       return key === session;
     });
-    const merged = [...historical, ...live];
+    const merged = mergeLogEntries(historical, live);
 
     // Only interleave session dividers in the "all sessions" view; when one
     // session is selected the whole surface is already that one run.
