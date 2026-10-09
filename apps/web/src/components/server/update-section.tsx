@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useForm } from "@tanstack/react-form";
 import { z } from "zod";
 import { ExternalLinkIcon } from "lucide-react";
@@ -67,6 +67,38 @@ export function UpdateSection() {
   // so without this a helper that dies on its first line leaves the card
   // claiming an update is under way forever — which is exactly what it did.
   const { data: attempt } = useSelfUpdateStatus(Boolean(latestVersion));
+
+  // Report a failure where the operator's attention already is. The panel below
+  // is the durable record, but it only reaches someone still looking at this
+  // page — click Update, move to a project, and the failure would pass unseen.
+  //
+  // ⚠️ Its own toast id, NOT the progress toast's: UpdateProgressNotice dismisses
+  // that id when the stage leaves "updating", which would race this and could
+  // swallow it. Nothing needs coordinating this way — the clock unlatches on
+  // `updating: false`, then this arrives with the reason.
+  //
+  // Only a failure this page WATCHED happen is announced. A stale attempt from
+  // hours ago is already on screen in the panel, and toasting it on every load
+  // would be nagging about something the operator has read.
+  const sawLiveAttempt = useRef(false);
+  const announced = useRef("");
+  useEffect(() => {
+    if (!attempt?.state) return;
+    if (attempt.state !== "failed") {
+      sawLiveAttempt.current = true;
+      announced.current = "";
+      return;
+    }
+    if (!sawLiveAttempt.current) return;
+    const signature = `${attempt.target}|${attempt.reason ?? ""}`;
+    if (announced.current === signature) return;
+    announced.current = signature;
+    toast.error(`Update to v${attempt.target} did not start`, {
+      id: "platform-update-failed",
+      description: attempt.reason,
+      duration: 12_000,
+    });
+  }, [attempt?.state, attempt?.target, attempt?.reason]);
 
   const runCheck = () => {
     toast.promise(checkNow.mutateAsync(), {
