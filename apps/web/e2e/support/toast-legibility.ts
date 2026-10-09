@@ -2,8 +2,13 @@ import type { Page } from "@playwright/test";
 
 /** What the probe observed about every toast title the page raised. */
 export interface ToastObservation {
-  /** The highest EFFECTIVE opacity (multiplied up the ancestor chain) the
-   *  title's text ever reached on screen. */
+  /** The highest opacity the title's text reached RELATIVE TO ITS TOAST —
+   *  multiplied up to, but not including, the `[data-sonner-toast]` element, so
+   *  the toast's own 400ms enter/exit fade is excluded. 1 means "not hidden
+   *  inside the toast"; it says nothing about how long the toast lived.
+   *
+   *  ⛔ Being a MAXIMUM, this cannot detect a toast that was legible briefly and
+   *  then pushed behind another — use `obscuredSamples` for that. */
   maxOpacity: number;
   /** Samples in which this toast was on screen but not the front of the stack —
    *  which is sonner's definition of "its contents are hidden". */
@@ -36,9 +41,17 @@ export interface ToastObservation {
  *
  * Three details are load-bearing:
  *
- *  - Opacity is EFFECTIVE, multiplied up the ancestor chain. The sonner rule
- *    above puts `opacity: 0` on the toast's CHILD, not the toast, so reading the
- *    `[data-sonner-toast]` element alone reports 1 and the bug walks through.
+ *  - Opacity is EFFECTIVE, multiplied up the chain — but only AS FAR AS the
+ *    `[data-sonner-toast]` element, exclusive. The sonner rule above puts
+ *    `opacity: 0` on the toast's CHILD, so reading the toast element alone
+ *    reports 1 and the bug walks through; including the toast element reads its
+ *    enter and exit animation (`transition: opacity 400ms`) as though that were
+ *    the defect. ⚠️ That cost a false red on CI: a run where the registry
+ *    refused the pull quickly enough left the clock on screen for under a
+ *    second, so its fade-in never completed and the peak was 0.851 — correct
+ *    code, failing because a CSS animation had not finished. What this measures
+ *    is whether the toast's CONTENTS are hidden WITHIN the toast, which is the
+ *    defect and is independent of how long the toast lived.
  *
  *  - It counts how often a toast was on screen but NOT the front of the stack,
  *    which is the discrete form of the same fact. That matters because opacity
@@ -77,9 +90,13 @@ export async function installToastProbe(page: Page): Promise<void> {
     >();
     (window as unknown as { __toastProbe: typeof seen }).__toastProbe = seen;
 
-    const effectiveOpacity = (el: Element): number => {
+    // Opacity of `el` relative to the toast it sits in: multiply up to, and
+    // including, the direct child of `[data-sonner-toast]`, then stop. Going one
+    // level further would fold in the toast's own enter/exit fade, which is an
+    // animation rather than a defect.
+    const contentOpacity = (el: Element, toast: Element): number => {
       let opacity = 1;
-      for (let n: Element | null = el; n; n = n.parentElement) {
+      for (let n: Element | null = el; n && n !== toast; n = n.parentElement) {
         const value = parseFloat(getComputedStyle(n).opacity);
         if (!Number.isNaN(value)) opacity *= value;
       }
@@ -100,7 +117,10 @@ export async function installToastProbe(page: Page): Promise<void> {
           obscuredSamples: 0,
           samples: 0,
         };
-        entry.maxOpacity = Math.max(entry.maxOpacity, effectiveOpacity(title));
+        entry.maxOpacity = Math.max(
+          entry.maxOpacity,
+          contentOpacity(title, toast),
+        );
 
         const onScreen =
           toast.getAttribute("data-mounted") === "true" &&

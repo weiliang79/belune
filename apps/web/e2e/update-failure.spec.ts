@@ -213,13 +213,32 @@ test("a self-update that cannot pull its image says so, visibly", async ({
     `${obscured.length} toast(s) spent longer than ${OBSCURED_BUDGET_MS}ms stacked behind another, which renders their contents at opacity 0 — something is raising two toasts at once. Toasts seen: ${seen}`,
   ).toEqual([]);
 
-  // The backstop, and the one that is about compositing rather than stacking:
-  // the clock's text actually reached full opacity on screen. The assertion
-  // above is the one that catches a second toast; this one catches everything
-  // else that could leave the clock unreadable — a container that never fades
-  // in, a stacking context, an ancestor someone put an opacity on.
+  // A narrow backstop, and it is worth being exact about how narrow.
+  //
+  // It asserts that the clock's text reached full opacity INSIDE its own toast
+  // at some point — so it catches the content being rendered invisible by
+  // something within the toast (an opacity on [data-content] or [data-title], a
+  // future sonner release hiding a stacked toast by a different mechanism) and,
+  // with the sample count above, the clock never being raised at all.
+  //
+  // ⛔ It does NOT catch v0.1.16's defect, and must not be read as doing so.
+  // It is a MAXIMUM over the toast's life, and a toast that is briefly front
+  // before a second one pushes it behind reaches full opacity in that window —
+  // so the peak is 1 while the operator still could not read it. The assertion
+  // above, on `data-front` over time, is the one that catches that; this one is
+  // deliberately a different question.
+  //
+  // ⚠️ Both halves of that were learned the hard way, in the same hour.
+  // Measuring opacity ABSOLUTELY (up the whole ancestor chain, including the
+  // toast's own 400ms fade) made this assertion flake red on CI against correct
+  // code — a fast registry refusal left the clock on screen for under a second,
+  // its fade-in never finished, and the peak was 0.851. Measuring it relative
+  // to the toast fixes that, and in doing so revealed that its apparent ability
+  // to catch the stacking defect had only ever been the element fade capping
+  // the peak at 0.24. Proven both ways against a real image with the defect put
+  // back: the assertion above fails it, this one does not.
   expect(
     maxOpacity(report, /^Belune is updating/),
-    `the elapsed clock never became legible. Toasts seen: ${seen}`,
+    `the elapsed clock's text never reached full opacity inside its toast. Toasts seen: ${seen}`,
   ).toBeGreaterThan(0.99);
 });
