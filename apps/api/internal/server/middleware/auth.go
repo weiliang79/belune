@@ -201,6 +201,27 @@ func TokenIDFromContext(ctx context.Context) string {
 	return v
 }
 
+// ContextWithUserID and ContextWithTokenID put an identity into a context the
+// way Auth does. The keys are unexported, so without these the only way to
+// reach code that reads them is through Auth itself — a real JWT, a real token
+// row and a database — which is far too much apparatus for something that only
+// needs to know WHICH KIND of caller it is looking at. rateLimitByCaller's test
+// is the first consumer; see internal/server/rate_limit_test.go.
+//
+// ⚠️ These grant nothing on their own. Authorization is decided by the
+// middleware chain (RequireRole, RequireScope, RequireSession), which reads
+// role and scopes, not by the presence of an id — so a handler reached without
+// Auth in front of it is unreachable through the router whatever context it is
+// handed.
+func ContextWithUserID(ctx context.Context, userID string) context.Context {
+	return context.WithValue(ctx, ctxUserID, userID)
+}
+
+// ContextWithTokenID is ContextWithUserID for a PAT's id.
+func ContextWithTokenID(ctx context.Context, tokenID string) context.Context {
+	return context.WithValue(ctx, ctxTokenID, tokenID)
+}
+
 // ScopesFromContext returns the authenticating PAT's scopes, or nil for a
 // session JWT (a session implies every scope — callers should treat a nil
 // slice from a JWT request as "unrestricted", not "no scopes").

@@ -18,6 +18,77 @@ const (
 	handlerTimeout   = 15 * time.Second
 )
 
+// Requests per minute on the authenticated surface. An interactive session and
+// an automated token get SEPARATE budgets, because they have nothing in common
+// but the key function — and a single shared number has to be either too small
+// for a dashboard or too large for a script.
+//
+// ⚠️ Measured, 2026-10-09, one Chromium tab against a real production stack,
+// counting only what reaches this group, as the peak inside a 60s sliding
+// window (which is what httprate computes):
+//
+//	Application detail      33    Projects (landing)   15
+//	Application settings    31    Server → Overview    10
+//	Server → Configuration  28    Docker                8
+//	Project detail          25    Requests, Certs       7
+//
+// plus 5–16 for every navigation and 16 for a full reload. rateLimitKey
+// resolves a browser session to user:<id>, so EVERY TAB OF EVERY WINDOW SHARES
+// ONE BUCKET: three tabs on an application page is ~99/min before the operator
+// touches anything. That is how a routine v0.1.16 update drill — one operator,
+// a couple of tabs, repeated reloads while watching an update — hit 429 on a
+// dashboard doing nothing unusual.
+//
+// 600 is ~2x the plausible worst case (six heavy tabs plus navigation churn)
+// and still only 10 req/s, orders of magnitude below what a runaway client
+// does. The token budget stays where it was: a script needing more than 100/min
+// is polling, and should be told so rather than quietly granted a human's
+// allowance.
+//
+// ⛔ Do NOT "fix" a future 429 by raising the shared number — there no longer is
+// one, and that is the point. Measure which caller is hitting it first:
+// scripts/smoke-browser.sh has the drill.
+const (
+	sessionRateLimit = 600
+	tokenRateLimit   = 100
+)
+
+// rateLimitByCaller applies tokenRateLimit to a PAT-authenticated request and
+// sessionRateLimit to everything else, keeping the two counters separate.
+//
+// Each caller kind reaches only its own limiter, so a token can never spend a
+// session's allowance or the reverse — which rateLimitKey already guaranteed
+// for the KEY, and this now guarantees for the SIZE.
+func rateLimitByCaller() func(http.Handler) http.Handler {
+	limit := func(n int) func(http.Handler) http.Handler {
+		return httprate.Limit(n, time.Minute,
+			httprate.WithKeyFuncs(rateLimitKey),
+			httprate.WithLimitHandler(rateLimitExceeded))
+	}
+	session, token := limit(sessionRateLimit), limit(tokenRateLimit)
+	return func(next http.Handler) http.Handler {
+		// Wrapped once here, not per request: each httprate.Limit closes over
+		// its own counter, and that state has to outlive a single request to
+		// count anything at all.
+		sessionNext, tokenNext := session(next), token(next)
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if middleware.TokenIDFromContext(r.Context()) != "" {
+				tokenNext.ServeHTTP(w, r)
+				return
+			}
+			sessionNext.ServeHTTP(w, r)
+		})
+	}
+}
+
+// rateLimitExceeded replaces httprate's plain-text http.Error with the API's
+// own error shape — see handler.WriteRateLimited. The window is a minute, which
+// is also what httprate itself puts in Retry-After.
+func rateLimitExceeded(w http.ResponseWriter, _ *http.Request) {
+	handler.WriteRateLimited(w,
+		"too many requests — wait a minute and retry", time.Minute)
+}
+
 // rateLimitKey keys rate limiting by the authenticating PAT's id first, then
 // falls back to the session user id, then to IP for unauthenticated requests.
 // Token id takes priority over user id so a runaway script on one token
@@ -159,7 +230,7 @@ func registerRoutes(r chi.Router, h *handler.Handler, auth *service.AuthService,
 		r.Use(middleware.Auth(auth, tokens))
 		r.Use(middleware.CSRF())
 		if !disableRateLimit {
-			r.Use(httprate.Limit(100, time.Minute, httprate.WithKeyFuncs(rateLimitKey)))
+			r.Use(rateLimitByCaller())
 		}
 
 		// Standard JSON routes: 1 MB body limit + 15 s timeout.
