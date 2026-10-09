@@ -208,11 +208,22 @@ func TokenIDFromContext(ctx context.Context) string {
 // needs to know WHICH KIND of caller it is looking at. rateLimitByCaller's test
 // is the first consumer; see internal/server/rate_limit_test.go.
 //
-// ⚠️ These grant nothing on their own. Authorization is decided by the
-// middleware chain (RequireRole, RequireScope, RequireSession), which reads
-// role and scopes, not by the presence of an id — so a handler reached without
-// Auth in front of it is unreachable through the router whatever context it is
-// handed.
+// ⚠️⚠️ Be precise about WHY this is safe, because the obvious answer is wrong.
+// It is NOT that the gates downstream re-check everything: RequireScope and
+// RequireScopeByMethod pass unconditionally when ScopesFromContext is nil (a
+// session implies every scope), and PinAllows returns true for a nil pin set —
+// so a context built here carries an unpinned, unrestricted-scope identity. It
+// has no role, and nothing here can give it one.
+//
+// What makes it safe is narrower and stronger: nothing in production calls
+// these (the only callers are in rate_limit_test.go), and every route runs Auth
+// first, which layers its own values over whatever context arrived. The one
+// value Auth's session branch does NOT set is ctxTokenID, so a planted token id
+// would survive — and that fails CLOSED, because RequireSession then rejects
+// the request as a token.
+//
+// ⛔ So do not reach for these in production code to "present an identity".
+// Authorization here is a property of the middleware chain, not of the context.
 func ContextWithUserID(ctx context.Context, userID string) context.Context {
 	return context.WithValue(ctx, ctxUserID, userID)
 }
