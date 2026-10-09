@@ -111,7 +111,17 @@ jobs:
           TAG: ${{ github.ref_name }}
         run: |
           set -euo pipefail
-          PREV=$(git describe --tags --abbrev=0 "${TAG}^" 2>/dev/null || true)
+          # The previous STABLE release, not merely the nearest tag. An rc is a
+          # tag too, so a plain `git describe` on a release line that had rcs
+          # resolves to the last rc and truncates the range to the few commits
+          # since it: v0.1.16's notes were built from 2 commits out of 10, and 6
+          # of the 17 releases to date were truncated this way. --match keeps
+          # non-release tags out (there is a `belune-hoist-archive`) and
+          # --exclude drops both `-rc` and the archived `-alpha` line.
+          #
+          # The same derivation is repeated in the versions.json step below,
+          # where it decides the manifest flags. Fix both or neither.
+          PREV=$(git describe --tags --abbrev=0 --match 'v[0-9]*' --exclude '*-*' "${TAG}^" 2>/dev/null || true)
           RANGE="${TAG}"
           [ -n "$PREV" ] && RANGE="${PREV}..${TAG}"
 
@@ -232,14 +242,26 @@ jobs:
           esac
 
           VERSION="${TAG#v}"
-          PREV=$(git describe --tags --abbrev=0 "${TAG}^" 2>/dev/null || true)
+          # Previous STABLE release — see the release-notes step above for why a
+          # plain `git describe` is wrong here. It matters more at this site than
+          # it does there: a truncated range makes BOTH flags below lie. A
+          # breaking change merged before the final rc would ship
+          # `breaking: false`, and an infra change before it would ship
+          # `requires_host_update: false`, which tells a self-hoster a plain
+          # `docker compose up -d` is enough while the systemd unit has moved.
+          PREV=$(git describe --tags --abbrev=0 --match 'v[0-9]*' --exclude '*-*' "${TAG}^" 2>/dev/null || true)
           RANGE="${TAG}"
           [ -n "${PREV}" ] && RANGE="${PREV}..${TAG}"
 
           # Same signal "Build release notes" above already keys its own
           # "Breaking changes" section off: a Conventional Commits `!` before
-          # the colon. Verified against every released version.json entry to
-          # date (v0.1.0 through v0.1.7) — matches the hand-set flag every time.
+          # the colon. Checked against every released versions.json entry from
+          # v0.1.0 to v0.1.16 and it agrees with the flag that shipped — but
+          # note the signal is only as good as the subject line it reads. A
+          # breaking change whose squash/merge subject carries no `!` derives
+          # as false no matter how correct the range is, which is how v0.1.12
+          # came to need its flag set by hand in the manifest PR. Derived, not
+          # guaranteed: the PR body below asks for both flags to be checked.
           BREAKING=false
           if git log --no-merges --pretty=format:'%s' "${RANGE}" \
                | grep -qE '^[a-z]+(\(.+\))?!: '; then
