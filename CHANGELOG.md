@@ -52,7 +52,9 @@ operator watching the screen saw a successful start and no outcome.
 
 The failure now announces itself twice over: a notice appears with the reason, and
 the Server page keeps a record of it until the next attempt. The elapsed-time notice
-that runs during an update clears itself first, so the two never overlap.
+that runs during an update clears itself first, so the two never overlap — and the
+reason is fetched the moment the update stops rather than on the next poll, so there
+is no quiet gap between the two.
 
 ### The update progress clock is visible to the person who started the update
 
