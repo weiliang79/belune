@@ -21,10 +21,7 @@ import type { LogEntry } from "@/components/logs/parse";
 //     line reads `…123456789Z` live and `…123457Z` from history.
 //
 // So a line is identified by its content at millisecond resolution, which is
-// the precision both representations survive down to. Two genuinely distinct
-// lines that share a millisecond are kept; only an exact repeat of the same
-// stream and message within one millisecond collapses, and that is a pair a
-// reader could not have told apart on screen anyway. The opposite trade — a
+// the precision both representations survive down to. The opposite trade — a
 // high-water mark on the newest historical timestamp — would instead discard
 // *different* text that happened to land on the boundary instant, which is a
 // silent loss rather than a cosmetic one.
@@ -42,18 +39,30 @@ export function mergeLogEntries(
   historical: LogEntry[],
   live: LogEntry[],
 ): LogEntry[] {
-  // History first, so when a line is present in both the surviving copy is the
-  // persisted one — it carries the real row id, which is what React keys on.
-  const combined = [...historical, ...live];
-
+  // ⚠️ CROSS-SOURCE only: `seen` is seeded from history, and only `live` is
+  // filtered against it.
+  //
+  // Deduping the two concatenated would also collapse two identical lines that
+  // HISTORY ITSELF returned — a container in a retry loop printing the same
+  // message several times inside one millisecond — and for a repeated error the
+  // count is the information. Nothing about a history refetch justifies that:
+  // the duplicate this exists to remove only ever arises one way round, because
+  // the collector persists a line before it publishes it, so a live line is
+  // already in the database and it is the refetch that returns the second copy.
+  //
+  // History is kept whole and first, so when a line is present in both, the
+  // copy that survives is the persisted one — it carries the real row id, which
+  // is what React keys on.
   const seen = new Set<string>();
-  const unique: LogEntry[] = [];
-  for (const entry of combined) {
+  for (const entry of historical) {
     const key = dedupeKey(entry);
-    if (key !== null) {
-      if (seen.has(key)) continue;
-      seen.add(key);
-    }
+    if (key !== null) seen.add(key);
+  }
+
+  const unique: LogEntry[] = [...historical];
+  for (const entry of live) {
+    const key = dedupeKey(entry);
+    if (key !== null && seen.has(key)) continue;
     unique.push(entry);
   }
 
