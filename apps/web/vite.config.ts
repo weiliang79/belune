@@ -1,4 +1,4 @@
-import { defineConfig } from "vite";
+import { defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import { tanstackRouter } from "@tanstack/router-plugin/vite";
@@ -44,6 +44,40 @@ export default defineConfig({
         changeOrigin: true,
       },
     },
+  },
+  test: {
+    // Two projects rather than one jsdom environment for everything, so the
+    // pure-logic tests — which are the majority and the fastest — do not pay
+    // jsdom's startup per file, and so DOM globals cannot quietly become
+    // available to a test that was meant to prove something about a pure
+    // function.
+    //
+    // The split is by EXTENSION, not by an exclude pattern: overriding
+    // `exclude` would also discard vitest's own defaults, node_modules among
+    // them. A test that renders anything needs JSX and is therefore .tsx
+    // already, which makes the two include globs naturally disjoint.
+    //
+    // Consequence worth knowing: a DOM test written as plain .ts lands in the
+    // `unit` project and fails for want of a `document`. Name it .tsx.
+    projects: [
+      {
+        extends: true,
+        test: {
+          name: "unit",
+          environment: "node",
+          include: ["src/**/*.test.ts"],
+        },
+      },
+      {
+        extends: true,
+        test: {
+          name: "dom",
+          environment: "jsdom",
+          include: ["src/**/*.test.tsx"],
+          setupFiles: ["./src/test/setup-dom.ts"],
+        },
+      },
+    ],
   },
   build: {
     outDir: "build",
