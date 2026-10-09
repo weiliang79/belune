@@ -2,6 +2,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { RouterProvider, createRouter } from "@tanstack/react-router";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { shouldRetryQuery } from "./lib/query-retry";
 import { routeTree } from "./routeTree.gen";
 import { initFavicon } from "./lib/favicon";
 import { RouteSkeleton } from "./lib/components/route-skeleton";
@@ -14,7 +15,9 @@ const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       staleTime: 1000 * 60,
-      retry: 1,
+      // The rule, and why, live in query-retry.ts — it is a decision worth
+      // testing rather than a line of config.
+      retry: shouldRetryQuery,
       // Surface a failed read as an error, not as absence. Without this a
       // query that errors leaves `data` undefined while `isLoading` goes
       // false, so every `if (!project) return "not found"` / `if (!items)

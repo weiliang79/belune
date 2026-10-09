@@ -53,3 +53,31 @@ func TestRequireRoleCallsAgreeOnRoleSet(t *testing.T) {
 		t.Errorf("middleware.RequireRole(...) called with no role argument")
 	}
 }
+
+// TestTheKeyedRateLimitIsTheSplitOne guards the wiring the tests in
+// rate_limit_test.go cannot see. They exercise rateLimitByCaller directly, so
+// replacing `r.Use(rateLimitByCaller())` with a plain
+// `httprate.Limit(n, ...)` would leave all of them green while putting a
+// dashboard and a script back on one shared budget — the exact regression the
+// split exists to prevent, and the one a future 429 will tempt someone into.
+//
+// Matched on source because the alternative is reaching registerRoutes with a
+// real Handler, AuthService and TokenService, i.e. a database, to assert one
+// middleware is present.
+//
+// `httprate.LimitByIP(` does not match: the per-IP limiters on the public
+// routes are a different thing, keyed by address and sized per endpoint.
+func TestTheKeyedRateLimitIsTheSplitOne(t *testing.T) {
+	src, err := os.ReadFile("routes.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := string(src)
+
+	if n := strings.Count(body, "r.Use(rateLimitByCaller())"); n != 1 {
+		t.Errorf("expected exactly one r.Use(rateLimitByCaller()) in routes.go, found %d — the authenticated group must get its budget from the caller-aware limiter", n)
+	}
+	if n := strings.Count(body, "httprate.Limit("); n != 1 {
+		t.Errorf("found %d httprate.Limit( calls in routes.go, expected the 1 inside rateLimitByCaller — a second keyed limiter means some callers are counted by a budget that is not theirs", n)
+	}
+}

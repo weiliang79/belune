@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"sync/atomic"
+	"time"
 
 	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -210,6 +212,26 @@ func writeJSON(w http.ResponseWriter, status int, data any) {
 // writeError writes a JSON error response.
 func writeError(w http.ResponseWriter, status int, message string) {
 	writeJSON(w, status, map[string]string{"error": message})
+}
+
+// WriteRateLimited answers a rate-limited request in the API's own shape.
+//
+// Exported for internal/server's limiter, which produces the only response in
+// the API that no handler writes. httprate's default is http.Error — plain text
+// "Too Many Requests" — and that is the one body the SPA cannot read as
+// {"error": …}, so a rate-limited dashboard surfaced a bare string with nothing
+// in it to act on. Deliberately the same shape as writeLockedResponse, the
+// other 429 this app can produce, so the client needs no second case.
+func WriteRateLimited(w http.ResponseWriter, message string, retryAfter time.Duration) {
+	secs := int(retryAfter.Seconds())
+	if secs < 1 {
+		secs = 1
+	}
+	w.Header().Set("Retry-After", strconv.Itoa(secs))
+	writeJSON(w, http.StatusTooManyRequests, map[string]any{
+		"error":       message,
+		"retry_after": secs,
+	})
 }
 
 // pinnedProjectUUIDs resolves the request's token pin set, if any, to
