@@ -27,7 +27,12 @@ const PASSWORD = process.env.BELUNE_E2E_PASSWORD!;
 const PROJECT = "22222222-2222-2222-2222-222222222222";
 const APP = "33333333-3333-3333-3333-333333333333";
 
-/** Routes that sit OUTSIDE the 100/min bucket — the public group and the
+/** ⚠️ Keep in step with sessionRateLimit in internal/server/routes.go. Only the
+ *  denominator the report prints; the per-page ceiling below is deliberately a
+ *  different, fixed number. */
+const SESSION_BUDGET = 600;
+
+/** Routes that sit OUTSIDE the rate-limited group — the public group and the
  *  WebSocket group (see internal/server/routes.go). */
 const OUTSIDE = [
   "/healthz",
@@ -87,9 +92,9 @@ function report(label: string, hits: Hit[], windowMs: number) {
   const rows = [...byPath.entries()].sort((a, b) => b[1] - a[1]);
   console.log(
     `\n=== ${label} — ${(windowMs / 1000).toFixed(0)}s observed ===\n` +
-      `counted (in the 100/min bucket): ${counted.length}\n` +
+      `counted (in the rate-limited group): ${counted.length}\n` +
       `not counted (public + ws):       ${hits.length - counted.length}\n` +
-      `peak in any 60s window:          ${peak60s(hits)}  / 100\n` +
+      `peak in any 60s window:          ${peak60s(hits)}  / ${SESSION_BUDGET}\n` +
       rows.map(([p, n]) => `  ${String(n).padStart(3)}  ${p}`).join("\n"),
   );
 }
@@ -233,4 +238,12 @@ test("budget: a full page reload", async () => {
   await page.waitForTimeout(6_000);
   on = false;
   report("one reload of Server - Configuration (6s)", hits, Date.now() - start);
+
+  // A reload re-mounts every root query, so this is the largest single burst
+  // the dashboard produces and the one an operator repeats while watching an
+  // update. Measured at 16.
+  expect(
+    hits.filter((h) => h.counted).length,
+    "a reload costs more than a quarter of the old 100/min budget in one go",
+  ).toBeLessThanOrEqual(25);
 });
