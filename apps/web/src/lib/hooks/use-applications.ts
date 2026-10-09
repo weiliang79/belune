@@ -45,12 +45,14 @@ export function useUpdateApplication(projectId: string, applicationId: string) {
   return useMutation({
     mutationFn: (data: Parameters<typeof applicationsApi.updateApplication>[2]) =>
       applicationsApi.updateApplication(projectId, applicationId, data),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: queryKeys.applications.all(projectId) });
-      qc.invalidateQueries({
-        queryKey: queryKeys.applications.detail(projectId, applicationId),
-      });
-    },
+    // ⚠️ One call, not two. invalidateQueries matches by PREFIX, and `all` is
+    // ["projects", p, "applications"] — a prefix of `detail` and of every key
+    // nested under it (deployments, domains, cache). So this already covers
+    // them; adding `detail` re-marked those four while the first batch was
+    // still in flight and fetched each of them a second time. Measured on a
+    // real save: 1 PUT + 9 GETs, four of them pure waste.
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: queryKeys.applications.all(projectId) }),
     onError: (error) => toast.error(error.message),
   });
 }

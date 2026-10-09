@@ -125,46 +125,45 @@ export function useDeleteDatabase(projectId: string) {
 // list so the row status updates without waiting for the next poll.
 function useDatabaseLifecycle(
   projectId: string,
-  databaseId: string,
   mutationFn: () => Promise<unknown>,
 ) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn,
-    // Await both refetches so the mutation stays `isPending` until the row's
-    // status reflects the change — otherwise the action buttons briefly flash
-    // the wrong state (e.g. Stop/Restart) between the spinner and Start.
+    // Awaited so the mutation stays `isPending` until the row's status reflects
+    // the change — otherwise the action buttons briefly flash the wrong state
+    // (e.g. Stop/Restart) between the spinner and Start.
+    //
+    // ⚠️ `all` alone is correct AND sufficient: invalidateQueries matches by
+    // PREFIX, and ["projects", p, "databases"] prefixes `detail` and every key
+    // under it (volume, credentials, backups, restores, backup-configs,
+    // deletion-impact). Invalidating `detail` too fetched all of those twice.
     onSuccess: () =>
-      Promise.all([
-        qc.invalidateQueries({
-          queryKey: queryKeys.databases.detail(projectId, databaseId),
-        }),
-        qc.invalidateQueries({ queryKey: queryKeys.databases.all(projectId) }),
-      ]),
+      qc.invalidateQueries({ queryKey: queryKeys.databases.all(projectId) }),
     onError: (error: Error) => toast.error(error.message),
   });
 }
 
 export function useStopDatabase(projectId: string, databaseId: string) {
-  return useDatabaseLifecycle(projectId, databaseId, () =>
+  return useDatabaseLifecycle(projectId, () =>
     databasesApi.stopDatabase(projectId, databaseId),
   );
 }
 
 export function useStartDatabase(projectId: string, databaseId: string) {
-  return useDatabaseLifecycle(projectId, databaseId, () =>
+  return useDatabaseLifecycle(projectId, () =>
     databasesApi.startDatabase(projectId, databaseId),
   );
 }
 
 export function useRestartDatabase(projectId: string, databaseId: string) {
-  return useDatabaseLifecycle(projectId, databaseId, () =>
+  return useDatabaseLifecycle(projectId, () =>
     databasesApi.restartDatabase(projectId, databaseId),
   );
 }
 
 export function useReloadDatabase(projectId: string, databaseId: string) {
-  return useDatabaseLifecycle(projectId, databaseId, () =>
+  return useDatabaseLifecycle(projectId, () =>
     databasesApi.reloadDatabase(projectId, databaseId),
   );
 }
