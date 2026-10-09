@@ -32,6 +32,15 @@ export default defineConfig([
     },
   },
   {
+    // The Playwright drills run in node, not the browser: they read process.env
+    // and import from @playwright/test. Their page.evaluate callbacks are
+    // browser code, so both global sets apply rather than either one.
+    files: ["e2e/**/*.ts", "playwright.config.ts"],
+    languageOptions: {
+      globals: { ...globals.browser, ...globals.node },
+    },
+  },
+  {
     // eslint-plugin-react-hooks v7 folded the React Compiler's ruleset in as
     // errors. Belune does not use the React Compiler, so these are not blocking
     // requirements — but they are genuine "rules of React" (a pure render, refs

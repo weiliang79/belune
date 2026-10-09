@@ -66,4 +66,6 @@ Frontend mirrors it: `src/lib/api/<resource>.ts` (fetch) → `src/lib/hooks/use-
 
 **Touching deploys, databases, backups, or Caddy routing** → mocks do not catch Docker or Caddy behavior. Say so, and smoke-test against a real dev stack before claiming it works.
 
+**Changing what the operator SEES** → a green Vitest run is not proof the UI renders. The `dom` project runs in jsdom, which has no layout engine and only a partial `getComputedStyle`, so a toast composited at `opacity: 0` satisfies every assertion — `toBeVisible()` included, in Playwright too — while a human sees nothing. v0.1.16 shipped exactly that. Real rendering is covered by `task test:browser` (`scripts/smoke-browser.sh`), which boots the production stack and drives it with Playwright from `apps/web/e2e`; it is part of CI's `Production smoke drill` job, which runs on pull requests as well as pushes.
+
 **Editing `apps/site/content/docs/*.mdx`** → every `##`/`###`/`####` heading is Title Case.
