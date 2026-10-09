@@ -24,6 +24,72 @@ Belune is pre-1.0. The versioning contract while it stays there:
 Release notes for each version are also published on the
 [Releases page](https://github.com/weiliang79/belune/releases).
 
+## [0.1.17]
+
+Nothing in this release changes your install's topology or asks anything of your
+host: run `update.sh` and you are done. There is no migration and no infra
+restart.
+
+### Container logs no longer show the same line twice
+
+**Leave an application's log viewer open, switch to another tab, come back, and
+lines you had already read appeared again** — sometimes out of order, mixed into
+the newest output. The viewer reads from two places at once: the stored history
+and the live stream. Returning to the tab refetched the history, and because a
+line is written to the database *before* it is sent to the viewer, every line
+still on screen came back a second time. It was never a race — a refetch was
+guaranteed to duplicate.
+
+The two sources are now merged rather than concatenated, matching a line by its
+content and the millisecond it was recorded, which is the only thing the two
+representations share. A repeated line that the container genuinely printed more
+than once is kept, because for a repeated error the count is the message.
+
+Present since the log viewer was built, not introduced by a recent release.
+
+### The dashboard no longer runs out of its own request allowance
+
+**Working normally in two or three tabs could make the dashboard start failing
+with "too many requests".** The API limits how much one caller may ask for per
+minute, and a signed-in operator counted as one caller no matter how many tabs
+they had open — sharing a budget sized for an automated script. A single tab
+costs between 7 and 33 requests a minute depending on the page, plus a burst on
+every navigation, so three tabs on a busy page reached the limit before anyone
+touched anything.
+
+An interactive session now has its own allowance, separate from the one personal
+access tokens get, and sized against what the dashboard actually spends. Token
+limits are unchanged.
+
+If you do hit a limit, the message now explains itself instead of arriving as a
+bare "Too Many Requests", and the dashboard no longer immediately retries a
+request that was refused for being over the limit — which previously made the
+wait longer.
+
+### The dashboard asks your server for less
+
+Three things it polled for turned out not to be worth their cost, measured
+against a real install:
+
+- the per-service runtime snapshot was refetched every five seconds on every
+  application tab, including ones that show no live figures, to render a single
+  "Up 3d 4h" label that changes once a minute at most;
+- the dashboard's own certificate status was re-probed every fifteen seconds for
+  as long as the page stayed open, including long after the certificate was
+  issued and could not change;
+- a failed request was retried even when the answer could not change.
+
+None of this was visible to you. It is less work for the machine Belune runs on,
+which on a small server is the point.
+
+### Release notes now describe the whole release
+
+**A release that had release candidates got notes covering only the commits since
+the last candidate**, rather than since the last real release — v0.1.16's own
+notes listed 2 of its 10 changes. The same truncated range decided two flags that
+`update.sh` reads to tell you whether a release contains breaking changes or needs
+a host action, so those could have been wrong; they never were, by luck.
+
 ## [0.1.16]
 
 ### Updating an application through the API no longer clears settings you left out

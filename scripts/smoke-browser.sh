@@ -46,7 +46,16 @@ BELUNE_URL=http://127.0.0.1:18081
 TARGET="${BELUNE_E2E_TARGET:-0.1.99}"
 
 # Generated per run, handed to smoke-prod.sh to create the first admin with, and
-# passed to Playwright to sign in with. It exists only in this process tree.
+# passed to Playwright to sign in with. It exists only in this process tree: it
+# is never written to .env.smoke, never echoed, and the stack is bound to
+# 127.0.0.1 and torn down on the way out.
+#
+# ⚠️ Do NOT override SMOKE_ADMIN_PASSWORD with a password you use anywhere else.
+# Playwright keeps a trace of a FAILING run (trace: retain-on-failure), a trace
+# records request bodies including the login POST, and CI uploads that directory
+# as an artifact. For the generated value that is harmless — it belongs to an
+# account that no longer exists by the time the artifact does. A real password
+# put there would be downloadable for the artifact's retention window.
 export SMOKE_ADMIN_EMAIL="${SMOKE_ADMIN_EMAIL:-admin@belune.invalid}"
 export SMOKE_ADMIN_PASSWORD="${SMOKE_ADMIN_PASSWORD:-$(openssl rand -hex 16)}"
 

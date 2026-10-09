@@ -140,9 +140,16 @@ export function DashboardDomainSection() {
     // but only while it can still change. See dashboardTLSPollMs.
     refetchInterval: (query) =>
       dashboardTLSPollMs(
+        savedDomain,
         query.state.data?.tls_status,
         query.state.dataUpdateCount,
       ),
+    // ⛔ Do not remove. Without a domain there is nothing to probe, and the
+    // endpoint answers 200 "unknown" rather than an error — so dropping this
+    // starts a poll instead of stopping one. dashboardTLSPollMs checks the same
+    // thing, and that half has a test; this is what keeps the FIRST fetch from
+    // happening too.
+    enabled: Boolean(savedDomain),
   });
 
   // The endpoint probes the live certificate on every call, so the button really

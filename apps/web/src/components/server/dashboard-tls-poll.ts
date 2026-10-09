@@ -41,13 +41,29 @@ const UNSETTLED = ["pending", "failed", "unknown"];
  * until the operator presses Recheck, where the wrong default the other way
  * costs every open tab 4 requests a minute, which is how this got here.
  *
+ * ⚠️⚠️ An install with NO dashboard domain configured must poll zero times, and
+ * that is checked here rather than only at the call site — where it used to
+ * live as `enabled: Boolean(savedDomain)`, and where a careless edit deleted
+ * it. The deletion was invisible, because the endpoint answers 200 with
+ * `tls_status: "unknown"` when no domain is set (`handler/tls_status.go`), and
+ * "unknown" is unsettled — so a fresh install went from zero requests to 41
+ * over ten minutes, for a value that cannot change until a domain is saved and
+ * a badge that is not rendered. Found in review, on the page whose cost the
+ * change was meant to reduce.
+ *
+ * `enabled` is still set at the call site, so the first fetch does not happen
+ * either. This is the half that has a test.
+ *
+ * @param domain  the SAVED dashboard domain — "" when none is configured
  * @param status  tls_status from the last answer, or undefined before the first
  * @param polls   successful fetches so far — React Query's dataUpdateCount
  */
 export function dashboardTLSPollMs(
+  domain: string,
   status: string | undefined,
   polls: number,
 ): number | false {
+  if (!domain) return false;
   if (status === undefined || !UNSETTLED.includes(status)) return false;
   return polls < MAX_UNSETTLED_POLLS ? POLL_MS : false;
 }

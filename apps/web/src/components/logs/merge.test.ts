@@ -45,7 +45,11 @@ describe("mergeLogEntries", () => {
       "2026-10-09T06:00:00.123457Z",
       "8f3b1c22-0000-4000-8000-000000000001",
     );
-    const fromSocket = liveLine("ready", "2026-10-09T06:00:00.123456789Z", "live-7");
+    const fromSocket = liveLine(
+      "ready",
+      "2026-10-09T06:00:00.123456789Z",
+      "live-7",
+    );
 
     expect(fromHistory.id).not.toBe(fromSocket.id);
     expect(fromHistory.recordedAt).not.toBe(fromSocket.recordedAt);
@@ -83,9 +87,39 @@ describe("mergeLogEntries", () => {
     ]);
   });
 
-  it("collapses an exact repeat within one millisecond — the accepted trade", () => {
-    // Documents the one case that loses a line. Both copies render identically,
-    // so the loss is cosmetic; the alternative drops different text.
+  it("collapses a cross-source repeat within one millisecond — the accepted trade", () => {
+    // The one case that loses a line: history and live disagree by less than a
+    // millisecond about the same text, so they cannot be told apart and the
+    // live copy goes. Both render identically, so the loss is cosmetic.
+    const result = mergeLogEntries(
+      [historical("tick", "2026-10-09T06:00:00.200000Z", "row-1")],
+      [liveLine("tick", "2026-10-09T06:00:00.200000Z", "live-1")],
+    );
+
+    expect(result).toHaveLength(1);
+    expect(result[0]?.id).toBe("row-1");
+  });
+
+  it("keeps a line history returned twice, because the count is the message", () => {
+    // ⚠️ Dedupe is cross-source ONLY. A container in a retry loop prints the
+    // same text several times inside one millisecond, and history returns every
+    // copy — collapsing those would throw away the one thing a repeated error
+    // tells the reader, which is how often it happened. Caught in review: the
+    // first version of this module deduped the concatenated list and lost them.
+    const result = mergeLogEntries(
+      [
+        historical("connection refused", "2026-10-09T06:00:00.200111Z", "r-1"),
+        historical("connection refused", "2026-10-09T06:00:00.200222Z", "r-2"),
+        historical("connection refused", "2026-10-09T06:00:00.200333Z", "r-3"),
+      ],
+      [],
+    );
+
+    expect(result).toHaveLength(3);
+    expect(result.map((e) => e.id)).toEqual(["r-1", "r-2", "r-3"]);
+  });
+
+  it("keeps a repeat the live socket delivers twice, for the same reason", () => {
     const result = mergeLogEntries(
       [],
       [
@@ -94,15 +128,21 @@ describe("mergeLogEntries", () => {
       ],
     );
 
-    expect(result).toHaveLength(1);
+    expect(result).toHaveLength(2);
   });
 
   it("separates the same message on different streams", () => {
     const result = mergeLogEntries(
       [],
       [
-        { ...liveLine("done", "2026-10-09T06:00:00.300000Z", "live-1"), stream: "stdout" },
-        { ...liveLine("done", "2026-10-09T06:00:00.300000Z", "live-2"), stream: "stderr" },
+        {
+          ...liveLine("done", "2026-10-09T06:00:00.300000Z", "live-1"),
+          stream: "stdout",
+        },
+        {
+          ...liveLine("done", "2026-10-09T06:00:00.300000Z", "live-2"),
+          stream: "stderr",
+        },
       ],
     );
 
@@ -137,7 +177,10 @@ describe("mergeLogEntries", () => {
       [liveLine("from socket", "2026-10-09T06:00:00.000000Z")],
     );
 
-    expect(result.map((e) => e.message)).toEqual(["from history", "from socket"]);
+    expect(result.map((e) => e.message)).toEqual([
+      "from history",
+      "from socket",
+    ]);
   });
 
   it("never collapses two dividers, which are positional furniture", () => {
@@ -149,7 +192,10 @@ describe("mergeLogEntries", () => {
       message: "",
       divider: "Earlier logs",
     };
-    const result = mergeLogEntries([divider, { ...divider, id: "divider-2" }], []);
+    const result = mergeLogEntries(
+      [divider, { ...divider, id: "divider-2" }],
+      [],
+    );
 
     expect(result).toHaveLength(2);
   });
@@ -160,7 +206,12 @@ describe("mergeLogEntries", () => {
     const result = mergeLogEntries(
       [
         historical("first", "2026-10-09T06:00:01.000000Z"),
-        { id: "no-ts", level: "info", message: "continuation", recordedAt: null },
+        {
+          id: "no-ts",
+          level: "info",
+          message: "continuation",
+          recordedAt: null,
+        },
         historical("last", "2026-10-09T06:00:09.000000Z"),
       ],
       [],
