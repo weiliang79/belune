@@ -23,6 +23,9 @@
 #   ./scripts/smoke-prod.sh              # builds the image, runs the drill
 #   BELUNE_IMAGE=belune:trial ./scripts/smoke-prod.sh   # reuse an existing image
 #   KEEP=1 ./scripts/smoke-prod.sh       # leave the stack up for poking at
+#
+# KEEP=1 is what scripts/smoke-browser.sh builds on: it runs this drill, then
+# drives the surviving stack in a real browser.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -53,6 +56,30 @@ ADMIN_URL=http://127.0.0.1:12019
 # proxy: an app or dashboard hostname force-redirects HTTP→HTTPS (correct for a
 # login form), which would mask what the check is actually about.
 BELUNE_URL=http://127.0.0.1:18081
+
+# The install's first admin, created through the real setup endpoint below.
+#
+# The password is generated per run and never leaves this process: the stack is
+# bound to 127.0.0.1, torn down on the way out, and exported only to whatever
+# this script hands off to (scripts/smoke-browser.sh). Overridable so a caller
+# that needs to sign in can choose it.
+ADMIN_EMAIL="${SMOKE_ADMIN_EMAIL:-admin@belune.invalid}"
+ADMIN_PASSWORD="${SMOKE_ADMIN_PASSWORD:-$(openssl rand -hex 16)}"
+
+# ⚠️ The version the image reports, and it has to be real semver.
+#
+# The Dockerfile defaults VERSION to "dev", and "dev" is not a version the
+# dashboard can compare against — the Updates card hides itself entirely rather
+# than offer an update it cannot reason about, and /api/version's consumers all
+# treat it as "unstamped, do nothing". So a drill that wants to exercise
+# anything version-shaped must stamp the build. Deliberately LOW, so a seeded
+# "latest" is always newer whatever it is. The leading "v" matches what the
+# release workflow stamps (`v0.1.16`, as a published image reports); both sides
+# strip it before comparing, so it is convention rather than requirement.
+#
+# Only applies when this script does the build. A caller passing BELUNE_IMAGE
+# owns its own build args — see the prod-smoke job in .github/workflows/ci.yml.
+SMOKE_VERSION="${SMOKE_VERSION:-v0.1.0}"
 
 PASS=0
 FAIL=0
@@ -112,8 +139,14 @@ EOF
 
 if [[ -z "${BELUNE_IMAGE:-}" ]]; then
   info "Building $IMAGE (pass BELUNE_IMAGE=... to skip)"
-  docker build -t "$IMAGE" . >/dev/null
+  docker build --build-arg "VERSION=$SMOKE_VERSION" -t "$IMAGE" . >/dev/null
 fi
+
+# ⚠️ Clear anything a previous KEEP=1 run left behind, volumes included. Compose
+# would happily reuse the containers, and a surviving database already has an
+# admin — so the setup call below returns 409 and the drill fails on its own
+# leftovers, several runs after the one that caused it.
+"${COMPOSE[@]}" down -v --remove-orphans >/dev/null 2>&1 || true
 
 info "Starting the production stack"
 # stderr is NOT suppressed: a compose failure here (a container that cannot even
@@ -137,15 +170,30 @@ belune_logs() { "${COMPOSE[@]}" logs belune 2>&1; }
 # produce a request_logs row and an assertion built on it would be testing
 # nothing. ssl_mode=off keeps Caddy from chasing a certificate for a name that
 # does not resolve.
+#
+# The admin comes first, and through the REAL setup endpoint rather than an
+# INSERT. Two reasons. It exercises the first-admin bootstrap, which every
+# install in existence runs exactly once and nothing else here covers — a broken
+# setup wizard bricks a new install while every other assertion stays green. And
+# it produces a usable password: an INSERT would have to carry a hash, and a
+# fabricated one (this drill used to seed 'x') cannot be signed in with, so
+# nothing could drive the dashboard.
+info "Creating the first admin through POST /api/auth/setup"
+setup_body="$(curl -fsS -X POST "$BELUNE_URL/api/auth/setup" \
+  -H 'Content-Type: application/json' \
+  -d "{\"email\":\"$ADMIN_EMAIL\",\"password\":\"$ADMIN_PASSWORD\",\"username\":\"admin\",\"instance_name\":\"Smoke\"}" 2>&1)" || {
+  echo "setup failed: $setup_body"
+  echo "POST /api/auth/setup did not create the first admin — a new install cannot be bootstrapped."
+  exit 1
+}
+
 "${COMPOSE[@]}" exec -T postgres psql -U belune -d belune -v ON_ERROR_STOP=1 -q <<SQL
 INSERT INTO settings (key, value) VALUES ('dashboard_domain', '$DASHBOARD_HOST')
   ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value;
 
-INSERT INTO users (id, email, password_hash)
-  VALUES ('11111111-1111-1111-1111-111111111111', 'smoke@belune.invalid', 'x');
 INSERT INTO projects (id, name, slug, user_id, server_id)
   VALUES ('22222222-2222-2222-2222-222222222222', 'smoke', 'smoke',
-          '11111111-1111-1111-1111-111111111111',
+          (SELECT id FROM users WHERE email = '$ADMIN_EMAIL'),
           (SELECT id FROM servers WHERE is_local));
 INSERT INTO applications (id, project_id, name, slug, type, build_type)
   VALUES ('33333333-3333-3333-3333-333333333333',
@@ -317,6 +365,40 @@ elif belune_logs | grep -q "no container carries belune-system=caddy"; then
   fail "Caddy was not discovered" "the belune-system=caddy label is missing from the proxy — app networks will never be joined"
 else
   fail "no Caddy discovery log line" "$(belune_logs | grep -m1 -i caddy || echo 'nothing mentioning caddy')"
+fi
+
+info "12. An admin can actually sign in"
+# New coverage rather than a past bug: everything above probes the API and the
+# proxy, and none of it would notice that the dashboard is unreachable to a
+# human. It is also the precondition the browser drill depends on, so a broken
+# session or cookie fails attributably here instead of as "the login form did
+# not go away".
+#
+# SECURE_COOKIES=false is in the drill's env, which is what makes a session over
+# plain HTTP work at all.
+login="$(curl -fsS -X POST "$BELUNE_URL/api/auth/login" \
+  -H 'Content-Type: application/json' \
+  -d "{\"email\":\"$ADMIN_EMAIL\",\"password\":\"$ADMIN_PASSWORD\"}" 2>&1 || true)"
+if grep -q '"email"' <<<"$login"; then
+  pass "the first admin can sign in (the dashboard is reachable to a human)"
+else
+  fail "POST /api/auth/login did not return a session" "$login"
+fi
+
+info "13. The build reports a real version"
+# ⚠️ Not cosmetic. "dev" is the Dockerfile's default and means "unstamped", and
+# the dashboard treats it as "nothing to compare against" — the Updates card
+# hides itself, so an unstamped image makes every update-shaped drill silently
+# pass by having nothing to click. Attributable here, once, rather than as a
+# missing button in a browser test.
+# A released image reports "v0.1.16", WITH the prefix — matched optionally
+# rather than demanded, since the prefix is the release workflow's convention
+# and every consumer strips it.
+ver="$(curl -fsS "$BELUNE_URL/api/version" 2>/dev/null || echo '{}')"
+if grep -qE '"version":"v?[0-9]' <<<"$ver"; then
+  pass "/api/version reports a stamped version ($(sed -n 's/.*"version":"\([^"]*\)".*/\1/p' <<<"$ver"))"
+else
+  fail "the image reports no stamped version" "got: $ver — pass --build-arg VERSION=<semver> when building it"
 fi
 
 # --- result ------------------------------------------------------------------
