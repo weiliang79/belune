@@ -50,7 +50,9 @@ the update had begun and then showed nothing further — the reason was recorded
 displayed correctly, but only to someone who happened to reload the page. An
 operator watching the screen saw a successful start and no outcome.
 
-The failure, and the reason for it, now appear on their own.
+The failure now announces itself twice over: a notice appears with the reason, and
+the Server page keeps a record of it until the next attempt. The elapsed-time notice
+that runs during an update clears itself first, so the two never overlap.
 
 ### The update progress clock is visible to the person who started the update
 
@@ -72,6 +74,35 @@ the contents of a secret.
 
 Removals are listed too, because a variable disappearing is the change most likely
 to break a deployment and the one hardest to spot afterwards.
+
+### Installs outside /opt/belune no longer get a bogus warning after every update
+
+**If you installed Belune somewhere other than `/opt/belune`, every update ended by
+telling you the systemd units had changed when they had not** — and the commands it
+offered would have broken your install. `install.sh` rewrites the install path into
+those unit files, so the updater was comparing a rewritten copy against an
+unrewritten one and could never see a match. Following its advice would have pointed
+`WorkingDirectory` and `ExecStart` at `/opt/belune`, a directory that does not exist
+on such a host.
+
+The comparison now accounts for the rewrite, so the warning appears only when the
+units really did change — and when they have, the commands it prints are the ones
+that are correct for your install path. Installs at the default location were never
+affected.
+
+### A failed update no longer asks whether the version exists
+
+When a pull failed, the updater asked "Does that version exist?". By that point the
+version demonstrably does exist — the updater shipped inside that very image and had
+to be fetched to run at all — so the question sent people to check the one thing that
+could not be wrong. The message now reports the failure and leaves Docker's own
+explanation, printed directly above it, to say why.
+
+### The dashboard makes fewer requests
+
+Saving an application or acting on a database refreshed the same set of data twice
+over, roughly doubling the requests each action cost. Noticeable mainly as the
+dashboard occasionally reporting "Too many requests" during a run of rapid changes.
 
 ### Corrections to the published API reference
 
