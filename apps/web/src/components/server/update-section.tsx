@@ -16,6 +16,10 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { CopyButton } from "@/lib/components/copy-button";
+import {
+  INITIAL_ANNOUNCE_STATE,
+  nextAnnounce,
+} from "@/components/server/update-announce";
 import { useUpdateSettings } from "@/lib/hooks/use-settings";
 import { useUpdateAvailable } from "@/lib/hooks/use-update-available";
 import {
@@ -80,25 +84,27 @@ export function UpdateSection() {
   // Only a failure this page WATCHED happen is announced. A stale attempt from
   // hours ago is already on screen in the panel, and toasting it on every load
   // would be nagging about something the operator has read.
-  const sawLiveAttempt = useRef(false);
-  const announced = useRef("");
+  //
+  // The two facts that decide it — whether a live attempt was seen, and which
+  // failure has already been announced — are a small state machine over the
+  // sequence of readings, so they live in nextAnnounce where that sequence can
+  // be asserted directly.
+  const announceState = useRef(INITIAL_ANNOUNCE_STATE);
   useEffect(() => {
-    if (!attempt?.state) return;
-    if (attempt.state !== "failed") {
-      sawLiveAttempt.current = true;
-      announced.current = "";
-      return;
-    }
-    if (!sawLiveAttempt.current) return;
-    const signature = `${attempt.target}|${attempt.reason ?? ""}`;
-    if (announced.current === signature) return;
-    announced.current = signature;
+    const { state, announce } = nextAnnounce(announceState.current, attempt);
+    announceState.current = state;
+    if (!announce || !attempt) return;
     toast.error(`Update to v${attempt.target} did not start`, {
       id: "platform-update-failed",
       description: attempt.reason,
       duration: 12_000,
     });
-  }, [attempt?.state, attempt?.target, attempt?.reason]);
+    // `attempt` whole, not its fields: the reducer reads the object, and React
+    // Query's structural sharing keeps its identity stable until the content
+    // actually changes, so this runs no more often than naming the three
+    // fields did. A spurious run would be harmless anyway — re-reading the
+    // same failure announces nothing.
+  }, [attempt]);
 
   const runCheck = () => {
     toast.promise(checkNow.mutateAsync(), {

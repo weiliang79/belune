@@ -31,6 +31,7 @@ import {
   SegmentedControlItem,
 } from "@/components/ui/segmented-control";
 import { IntegrationRepoPicker } from "@/components/applications/integration-repo-picker";
+import { buildUpdatePayload } from "@/components/applications/update-payload";
 import {
   useUpdateApplication,
   useChangeApplicationSource,
@@ -133,45 +134,15 @@ export function ApplicationSettingsForm({
         return;
       }
 
-      // Unchanged type: the ordinary update. Only the fields belonging to this
-      // type are sent — the server rejects a mix, and the other type's inputs
-      // are not rendered, so echoing a stale value back would produce a
-      // rejection the user has no field to fix.
+      // Unchanged type: the ordinary update. Which fields are sent, and
+      // whether a blank one means "clear it" or "leave it alone", is the whole
+      // of buildUpdatePayload — both directions of that choice have been live
+      // bugs, so the reasoning and its tests live together there.
       const isGit = selectedType === "git";
       toast.promise(
-        updateApplication.mutateAsync({
-          name: value.name || undefined,
-          // ⚠️ Every source field is sent AS TYPED, blank included, and the
-          // other type's fields are sent as "" rather than omitted.
-          //
-          // The API distinguishes absent (keep the stored value) from empty
-          // (clear it). Blank is a real choice for most of these — no
-          // Dockerfile path, build from the repo root, let the builder decide —
-          // so omitting a field the user had just cleared would discard the
-          // edit and still report "Settings saved". This form renders the whole
-          // source configuration, so it is the authority on all of it; only
-          // `branch` used to get this right.
-          source_repo: isGit ? value.source_repo : "",
-          source_image: isGit ? "" : value.source_image,
-          dockerfile_path: isGit ? value.dockerfile_path : "",
-          root_directory: isGit ? value.root_directory : "",
-          branch: value.branch,
-          build_type_override: isGit ? value.build_type_override : "",
-          // A token only applies to the public-URL path; a connected account
-          // carries its own credentials.
-          git_token:
-            isGit && gitSource === "url"
-              ? value.git_token || undefined
-              : undefined,
-          // Set the integration on the connection path, and clear it ("" =
-          // clear) when the app is edited onto a plain URL. Omitted for image
-          // apps so it is preserved.
-          git_integration_id: isGit
-            ? gitSource === "connection"
-              ? gitIntegrationId
-              : ""
-            : undefined,
-        }),
+        updateApplication.mutateAsync(
+          buildUpdatePayload(value, { isGit, gitSource, gitIntegrationId }),
+        ),
         {
           loading: "Saving...",
           success: "Settings saved",
