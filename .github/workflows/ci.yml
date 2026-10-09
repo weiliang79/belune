@@ -256,8 +256,24 @@ jobs:
     name: Production smoke drill
     runs-on: ubuntu-latest
     needs: [backend, frontend, migrations, restore-drill]
-    if: github.event_name == 'push'
-
+    # Runs on pull requests as well as pushes, deliberately.
+    #
+    # It used to be `if: github.event_name == 'push'`, and push only fires on
+    # main — so the only job that builds the image and boots a stack ran AFTER
+    # merge. No Dockerfile change, and nothing this drill asserts, was ever
+    # verified on a pull request: a PR went green, merged, and turned main red.
+    # For a repository whose releases are cut from main that is backwards.
+    #
+    # The cost is small and was measured before changing it: 1m with a warm
+    # build cache, ~3m when the web or Go tree changed. It is also the tail of
+    # the pipeline (it needs the four jobs above), so it adds that much to a PR
+    # and nothing to the critical path of the others.
+    #
+    # ⚠️ It must stay OUT of the branch ruleset's required-checks list. The
+    # earlier harm was the inverse of this one: it was required while never
+    # running, so every PR showed an unsatisfied check that could not be
+    # satisfied (removed from the list 2026-09-22). Visible before merge,
+    # advisory, is the combination that works.
     steps:
       - uses: actions/checkout@v4
 
@@ -272,9 +288,58 @@ jobs:
           tags: belune:ci
           # Load into the local daemon so the drill can actually run it.
           load: true
+          # ⚠️ Stamped, and it has to be. VERSION defaults to "dev" in the
+          # Dockerfile, and "dev" means "unstamped" to the dashboard — the
+          # Updates card hides itself rather than compare against it, so an
+          # unstamped image makes every update-shaped assertion silently pass by
+          # having nothing to click. Deliberately low, so a seeded "latest" is
+          # always newer. Mirrors SMOKE_VERSION in scripts/smoke-prod.sh, which
+          # is what stamps a build this script does itself; assertion 13 there
+          # fails attributably if either is lost.
+          build-args: |
+            VERSION=v0.1.0
           cache-from: type=gha
-          cache-to: type=gha,mode=max
+          # Written only on push. A pull_request build's cache is scoped to that
+          # PR's own ref, so nothing else can ever read it — it would consume the
+          # repository's cache quota to warm a cache for one branch, and from a
+          # fork the cache service rejects the write outright.
+          cache-to: ${{ github.event_name == 'push' && 'type=gha,mode=max' || '' }}
 
-      - name: Boot the production stack and assert the features are alive
-        run: BELUNE_IMAGE=belune:ci ./scripts/smoke-prod.sh
+      # For the browser half below. The frontend job installs these too, but
+      # jobs do not share a filesystem.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+
+      - name: Install dependencies
+        working-directory: apps/web
+        run: npm ci
+
+      - name: Install Chromium
+        working-directory: apps/web
+        # --with-deps pulls the system libraries headless Chromium needs on a
+        # bare runner; without them it installs fine and then fails to launch.
+        run: npx playwright install --with-deps chromium
+
+      - name: Boot the production stack and drill it, by API and by browser
+        # One step, because the browser drill boots the stack through
+        # smoke-prod.sh (KEEP=1) and depends on everything it asserts. A failure
+        # in the API half therefore stops here rather than being reported as a
+        # missing button in a browser test.
+        run: BELUNE_IMAGE=belune:ci ./scripts/smoke-browser.sh
+
+      - name: Keep the browser drill's evidence
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-drill-trace
+          # A screenshot and a Playwright trace of the failing page, kept only
+          # for failures — a trace of a passing run is megabytes of nothing.
+          # The stack is torn down on the way out, so this is the only thing
+          # left to look at.
+          path: apps/web/test-results
+          if-no-files-found: ignore
+          retention-days: 7
 
