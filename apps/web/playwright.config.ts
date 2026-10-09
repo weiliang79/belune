@@ -21,6 +21,12 @@ import { defineConfig, devices } from "@playwright/test";
  */
 export default defineConfig({
   testDir: "./e2e",
+  // The request-budget drill holds each page open for a full rate-limit window,
+  // so it takes about ten minutes — too long to sit in the prod-smoke job on
+  // every push and pull request. Run it deliberately with BELUNE_E2E_BUDGET=1.
+  testIgnore: process.env.BELUNE_E2E_BUDGET
+    ? []
+    : ["**/request-budget.spec.ts"],
   // One shared stack, and the drills mutate install-wide settings. Parallel
   // workers would be editing each other's install.
   workers: 1,

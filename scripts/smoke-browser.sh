@@ -18,6 +18,9 @@
 #   BELUNE_IMAGE=ghcr.io/weiliang79/belune:0.1.16 ./scripts/smoke-browser.sh
 #   ./scripts/smoke-browser.sh --headed             # watch it happen
 #   KEEP=1 ./scripts/smoke-browser.sh               # leave the stack up
+#   BELUNE_E2E_BUDGET=1 ./scripts/smoke-browser.sh --grep budget
+#       # ...and the request-budget drill, which is excluded by default because
+#       # it holds each page open for a full rate-limit window (~10 minutes).
 #
 # ⚠️ BELUNE_IMAGE must be an image stamped with a real VERSION. Pointing it at
 # an unstamped build is caught by assertion 13 in smoke-prod.sh, because
@@ -114,5 +117,6 @@ info "Driving the dashboard in a real browser"
   BELUNE_E2E_EMAIL="$SMOKE_ADMIN_EMAIL" \
   BELUNE_E2E_PASSWORD="$SMOKE_ADMIN_PASSWORD" \
   BELUNE_E2E_TARGET="$TARGET" \
+  BELUNE_E2E_BUDGET="${BELUNE_E2E_BUDGET:-}" \
     npx playwright test "$@"
 )
