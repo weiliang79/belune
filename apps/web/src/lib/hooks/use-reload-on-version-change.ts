@@ -79,6 +79,10 @@ export function useReloadOnVersionChange() {
   const reloading = useRef(false);
   const inFlight = useRef(false);
   const lastCheck = useRef(0);
+  const wasLatched = useRef(false);
+  // Gates the update-status refetch below. Read here rather than inside the
+  // check so it follows the same render as the closure that uses it.
+  const isAdmin = useAuthStore((s) => s.user?.role === "admin");
 
   // One idempotent check shared by every trigger. Safe to call any number of
   // times: it reads, compares against the page's baseline, and either does
@@ -129,6 +133,30 @@ export function useReloadOnVersionChange() {
       updating: fresh.updating,
       updatingFor: fresh.updating_for,
     });
+
+    // Latched → idle means the update just ended. What became of it lives in the
+    // admin-only update status, which polls at 5s and only while it already reads
+    // "running" — so without this the clock vanishes the instant the server says
+    // "not updating" and the outcome arrives up to 5s later, leaving a window
+    // where the operator has been told "updating" and then told nothing at all.
+    //
+    // Safe to read it the moment we hear this: pullAndSpawnUpdateHelper's fail()
+    // writes the reason BEFORE it broadcasts, so it is already persisted.
+    //
+    // ⚠️ Admin-gated. The endpoint is admin + session, and this hook runs for
+    // every signed-in user. invalidateQueries only refetches ACTIVE queries, so a
+    // Member who never mounted it would be a no-op anyway — but the gate is a
+    // guarantee rather than an inference about library behaviour.
+    //
+    // Hooked to the transition, not to the socket event, so the 2s fallback poll
+    // covers a client whose socket never came up.
+    const latched = isUpdateLatched(getUpdateProgress());
+    if (wasLatched.current && !latched && isAdmin) {
+      void qc.invalidateQueries({
+        queryKey: queryKeys.maintenanceUpdateStatus,
+      });
+    }
+    wasLatched.current = latched;
   };
 
   // Baseline, poll, and tab-focus — the triggers that exist on every page.
