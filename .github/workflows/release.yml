@@ -120,10 +120,24 @@ jobs:
           # --exclude drops both `-rc` and the archived `-alpha` line.
           #
           # The same derivation is repeated in the versions.json step below,
-          # where it decides the manifest flags. Fix both or neither.
+          # where it decides the manifest flags. Fix both or neither — which is
+          # why the empty-PREV guard below is duplicated too, even though this
+          # step runs first and would already have stopped the release.
+          #
+          # ⚠️ That guard replaces a FALLBACK, and the fallback was the worse
+          # option. `RANGE="${TAG}"` looks like a safe degradation and is not:
+          # `git log "$TAG"` walks the whole of history, while
+          # `git diff --quiet "$TAG"` compares the tag against a working tree
+          # that IS that tag, so the two flags come out wrong in opposite
+          # directions and nothing says so. Refusing to guess is the only
+          # honest behaviour, and this is the one branch CI can never exercise
+          # — release.yml runs on a tag push and nowhere else.
           PREV=$(git describe --tags --abbrev=0 --match 'v[0-9]*' --exclude '*-*' "${TAG}^" 2>/dev/null || true)
-          RANGE="${TAG}"
-          [ -n "$PREV" ] && RANGE="${PREV}..${TAG}"
+          if [ -z "${PREV}" ]; then
+            echo "::error::No stable tag is an ancestor of ${TAG}, so the release range cannot be derived. Everything below would be computed against the whole of history: the notes would list every commit ever made, the breaking flag would almost certainly find a Conventional Commits bang somewhere and ship true, and requires_host_update would compare the tag against an identical working tree and ship false. Wrong in both directions, silently. The one legitimate case is the first stable release of a fresh history, which is a by-hand job."
+            exit 1
+          fi
+          RANGE="${PREV}..${TAG}"
 
           {
             echo "## What's changed"
@@ -250,8 +264,11 @@ jobs:
           # `requires_host_update: false`, which tells a self-hoster a plain
           # `docker compose up -d` is enough while the systemd unit has moved.
           PREV=$(git describe --tags --abbrev=0 --match 'v[0-9]*' --exclude '*-*' "${TAG}^" 2>/dev/null || true)
-          RANGE="${TAG}"
-          [ -n "${PREV}" ] && RANGE="${PREV}..${TAG}"
+          if [ -z "${PREV}" ]; then
+            echo "::error::No stable tag is an ancestor of ${TAG}, so the release range cannot be derived. Everything below would be computed against the whole of history: the notes would list every commit ever made, the breaking flag would almost certainly find a Conventional Commits bang somewhere and ship true, and requires_host_update would compare the tag against an identical working tree and ship false. Wrong in both directions, silently. The one legitimate case is the first stable release of a fresh history, which is a by-hand job."
+            exit 1
+          fi
+          RANGE="${PREV}..${TAG}"
 
           # Same signal "Build release notes" above already keys its own
           # "Breaking changes" section off: a Conventional Commits `!` before
