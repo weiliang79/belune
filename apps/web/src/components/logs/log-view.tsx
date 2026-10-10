@@ -25,7 +25,9 @@ function LogLine({
     return (
       <div className="flex items-center gap-2 py-1 text-zinc-500 select-none">
         <span className="h-px flex-1 bg-zinc-700" />
-        <span className="shrink-0 tracking-wide uppercase">{entry.divider}</span>
+        <span className="shrink-0 tracking-wide uppercase">
+          {entry.divider}
+        </span>
         <span className="h-px flex-1 bg-zinc-700" />
       </div>
     );
@@ -104,7 +106,9 @@ export function LogView({
       ref={scrollRef}
       className={cn(
         "bg-terminal-bg overflow-auto p-4 font-mono text-xs text-zinc-200",
-        wrap ? "whitespace-pre-wrap [overflow-wrap:anywhere]" : "whitespace-pre",
+        wrap
+          ? "[overflow-wrap:anywhere] whitespace-pre-wrap"
+          : "whitespace-pre",
         className,
       )}
     >
@@ -115,15 +119,37 @@ export function LogView({
       ) : entries.length === 0 ? (
         <span className="text-zinc-500">{emptyMessage}</span>
       ) : (
-        entries.map((entry) => (
-          <LogLine
-            key={entry.id}
-            entry={entry}
-            showTimestamp={showTimestamp}
-            showLevel={showLevel}
-            wrap={wrap}
-          />
-        ))
+        // ⚠️ A scroll-content box, and the rows must be inside it.
+        //
+        // Each row is a block whose backgrounds — the per-level tint and the
+        // hover highlight — paint across its own box. Directly inside the
+        // scroller that box is the VISIBLE width, while `whitespace-pre` lets
+        // the text run past it, so scrolling right left the text sitting on
+        // bare terminal background with its level colour and hover gone.
+        // Measured on a real stack: 104px of dead strip at full scroll.
+        //
+        // `w-max` makes this box as wide as the widest row's content, so every
+        // row stretches to that one width and every background spans the whole
+        // scrollable area. Putting `w-max min-w-full` on the ROWS instead does
+        // not work: `min-width: 100%` resolves against the scroller's visible
+        // width, so every row narrower than the widest is still cut short —
+        // checked in the browser before writing this.
+        //
+        // ⛔ Only when not wrapping. `whitespace-pre-wrap` inside a
+        // `width: max-content` box lays out against the longest unbroken line
+        // and never wraps, which is the opposite of what the Wrap toggle asks
+        // for.
+        <div className={cn("min-w-full", wrap ? "w-full" : "w-max")}>
+          {entries.map((entry) => (
+            <LogLine
+              key={entry.id}
+              entry={entry}
+              showTimestamp={showTimestamp}
+              showLevel={showLevel}
+              wrap={wrap}
+            />
+          ))}
+        </div>
       )}
     </pre>
   );
