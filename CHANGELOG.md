@@ -24,6 +24,41 @@ Belune is pre-1.0. The versioning contract while it stays there:
 Release notes for each version are also published on the
 [Releases page](https://github.com/weiliang79/belune/releases).
 
+## [0.1.18]
+
+Two log viewer fixes, both found by using it on a real install. Nothing changes
+your install's topology or asks anything of your host: run `update.sh` and you
+are done. There is no migration and no infra restart.
+
+### Logs no longer go missing after an application restarts
+
+**Restart an application, watch the logs run from shutting down to starting up,
+leave the Logs tab and come back — and everything after the restart was gone.**
+The pane ended at the old container's last line, and only a full page refresh
+brought the rest back.
+
+Two things combined. The live stream is held by the page, so leaving the tab
+discarded it; and the stored history was being served from a cache up to a
+minute old, which meant the copy taken *before* the restart. Neither source then
+had the new container's output. A refresh worked because it skips the cache
+entirely, which is exactly what made this look like a display problem rather
+than a fetching one.
+
+Log history is no longer cached. The pane keeps showing what it already has
+while it re-reads, so returning to it costs a request rather than a blank
+screen.
+
+### Log line colours no longer stop halfway along a long line
+
+**Scroll a long log line sideways and its colouring disappeared** — the red of
+an error row, the yellow of a warning, the highlight under the pointer — leaving
+the text on bare background from roughly the width of the pane onwards.
+
+Each line was only ever as wide as the visible pane, while its text was free to
+run past that. The colour had nothing to sit on beyond the edge. Lines are now
+as wide as the longest one in view, so the colouring reaches the end of the text
+wherever you scroll to. Wrapping is unaffected.
+
 ## [0.1.17]
 
 Nothing in this release changes your install's topology or asks anything of your

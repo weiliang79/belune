@@ -274,6 +274,21 @@ jobs:
     # running, so every PR showed an unsatisfied check that could not be
     # satisfied (removed from the list 2026-09-22). Visible before merge,
     # advisory, is the combination that works.
+    #
+    # The one exception is the manifest PR that release.yml opens for itself.
+    # Its branch name is built in that workflow as "bump-versions-json-${TAG}",
+    # it is authored by app/github-actions, and by construction it contains a
+    # single file: apps/site/public/versions.json, which is not in the image's
+    # build context at all. Building the image and booting a stack for it is
+    # provably pointless, and it is the only site-only PR that recurs.
+    #
+    # ⛔ Deliberately NOT a general "skip when only apps/site changed" filter.
+    # That needs a diff against the base and a job to compute it, and if the
+    # logic is ever wrong it silently stops running the one check that covers
+    # the image — which is exactly the blind spot this job was switched to
+    # pull_request to close. A branch-name match can only ever skip the shape
+    # release.yml creates, and the cost of being wrong is one wasted build.
+    if: ${{ !startsWith(github.head_ref, 'bump-versions-json-') }}
     steps:
       - uses: actions/checkout@v4
 
